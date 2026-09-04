@@ -26,7 +26,7 @@
  * change the bytes produced — so the two halves are fused here.
  *
  * Verified byte-for-byte against a MAME capture of the real board: see
- * tools/test-colors.mjs.
+ * stf-tools/test-colors.mjs.
  */
 
 /* Sizes as the hardware presents them, so a build and a capture are

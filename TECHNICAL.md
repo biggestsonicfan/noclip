@@ -27,10 +27,16 @@ js/
                  arms and the minion's head
   viewer.js      three.js scene, shader, orbit + noclip cameras
   app.js         UI wiring
-tools/           dev server, headless screenshots, ROM inspection,
-                 i960dis.mjs (read the program ROM's own routines),
-                 mame-dump-texram.lua (texture RAM capture)
 ```
+
+The tools this document keeps citing are not in the tree. They live in
+[stf-tools](https://github.com/biggestsonicfan/stf-tools) — the dev server, the
+headless screenshots, the ROM inspection, `i960dis.mjs` (read the program ROM's
+own routines), `mame-dump-texram.lua` (texture RAM capture) and every
+`test-*.mjs` named below. That repository carries this one as a submodule and
+decodes the ROM through the `js/` modules above, so a check there measures this
+code rather than a copy of it. A `stf-tools/x` path below is a file at the root
+of that repository.
 
 Nothing is vendored and there is no build step. `index.html`'s import map pins
 three.js to cdnjs and its one addon, OrbitControls, to jsDelivr, and gives a
@@ -132,7 +138,7 @@ was drawn behind it, which took the right-hand side of the mouth away. So
 `js/model.js` cuts a quad whose four corners have been emitted before the way
 that one was cut. Nothing else changes — same corners, same winding, the same
 UVs on the same corners — and it took the number of triangles with an exact twin
-from 4346 to 7216. `tools/test-zsort.mjs` pins both the count and the mouth.
+from 4346 to 7216. `stf-tools/test-zsort.mjs` pins both the count and the mouth.
 
 Bit 15 is the other one: **checker**. The polygon is drawn on every other screen
 pixel and whatever is behind shows through the rest — the board's half
@@ -188,7 +194,7 @@ by, and the vertex shader replaces the interpolated depth with the one the whole
 face resolves to. A face asking for the previous polygon's z inherits that
 polygon's corners; the first face of a model that asks would be inheriting from
 whatever the board drew before it, which the ROM cannot say, so it takes its own
-nearest corner and the rule leaves it alone. `tools/test-zsort.mjs` pins the mode
+nearest corner and the rule leaves it alone. `stf-tools/test-zsort.mjs` pins the mode
 resolution and the emerald against `model2_v.cpp` rather than against the shader.
 
 **And only in front of the lens.** The substitute depth is carried as `z/w`
@@ -265,7 +271,7 @@ plates took 1,975,304 of the island's 30,490,191 pixels and now take 202,172 —
 and what is left is the stipple edge of the island's own shadow plate, which is
 modelled in the sea's plane, drawn after it, and comes back with the rock. Across
 the sixteen stages at six cameras each the change is 5,234 pixels, all of it
-water meeting something standing in it. `tools/test-zsort.mjs` pins the two
+water meeting something standing in it. `stf-tools/test-zsort.mjs` pins the two
 halves of the argument: that every face of both plates really is deeper than the
 bound at a camera that showed the artifact, and that the island's own recede
 stays inside the bound they concede.
@@ -303,7 +309,7 @@ the sea 555 carries four quads of its own over exactly the same ground — not
 merely coplanar, but sorted on the **same four corners**, so they resolve to one
 z at every camera that exists. All four of the floor's sort groups are tied that
 way. No depth test anywhere can separate them; only the submission order can, and
-`tools/dl-order.mjs` reads that order off a display-list capture rather than
+`stf-tools/dl-order.mjs` reads that order off a display-list capture rather than
 guessing at it.
 
 The board settles it without ever comparing the two. A bucket is rasterized
@@ -557,7 +563,7 @@ stage position, scale 1.6 — and asking it to transform that point (`0x14802929
 model→world). The 1.6 is the quirk: the draw itself never applies one, so the
 head is aimed as though it stood 1.6× further out than where it is drawn, and
 lags what it is aiming at by as much as 162° as the carpet passes closest.
-`tools/test-carpet.mjs` pins both halves — that some fixed axis of the model
+`stf-tools/test-carpet.mjs` pins both halves — that some fixed axis of the model
 follows the look-at exactly (it is the model's `+Z`), and how far that look-at
 then falls behind the arena.
 
@@ -682,7 +688,7 @@ What the routines do, in the same terms as the frame tables above:
 | Giant Wing's propellers | `ang_z` at `0xD80` a frame, the blade drawn on alternate frames | 19 frames |
 | its clouds | six Z positions walking in at 12.5 or 7.5 a frame, restarted at the far limit | 960 / 800 frames |
 
-`tools/test-objects.mjs` checks those rates, that the values that walk a range
+`stf-tools/test-objects.mjs` checks those rates, that the values that walk a range
 come back to where they started, and that every model the routines name carries
 geometry.
 
@@ -846,7 +852,7 @@ stage that puts it at four thousand units and throws the Earth away entirely.
 plane covers those. Precision is governed by the near plane rather than the far
 one, so this costs nothing that shows.
 
-`tools/test-objects.mjs` checks the card's transform and that it is a card, that
+`stf-tools/test-objects.mjs` checks the card's transform and that it is a card, that
 the block is the plate's own point count, and that `u` steps four texels every
 eighth frame and comes back inside the tile.
 
@@ -892,7 +898,7 @@ by a **thirtieth** of the segment it is running.
 Thirty, not thirty-two, and it is worth pinning down rather than assuming: 32
 there and 32 here would cancel to exactly the Catmull-Rom spline the keys look
 like they are asking for, and that is not what the board does. Solving for the
-scale against a recording of `stage_xpos` — `tools/mame-canyon-path.py`, which
+scale against a recording of `stage_xpos` — `stf-tools/mame-canyon-path.py`, which
 drives MAME into the stage and writes down what the game itself puts in the
 prologue — gives 30.00 on every segment, to every digit the capture has. The
 tangents come out a fifteenth long and the curve bows that much wider: with 32 in
@@ -967,12 +973,12 @@ else, so the horizon turns with the boat but travels with it. It has to: the boa
 crosses six hundred units of canyon, and a ring left standing at the world's
 origin would be off to one side by the end of the run.
 
-`tools/test-canyon.mjs` checks that the tables read as the routines index them,
+`stf-tools/test-canyon.mjs` checks that the tables read as the routines index them,
 that the curve passes through every key it is not falling through, that the speed
 across a key does not jump — a kink there is the one way the Hermite's two
 scalings could have come apart — that the loop rejoins where `canyon_init` snaps
 back to, and that the world prologue really is the boat's frame inverted, the
-same check `tools/test-carpet.mjs` makes of the other stage that flies.
+same check `stf-tools/test-carpet.mjs` makes of the other stage that flies.
 
 #### Two framings, and a checkbox between them
 
@@ -1093,7 +1099,7 @@ the cast on Sonic's.
 The record's own `+0x04` is not a substitute for the type-0 entry either. It
 agrees for most of the cast and not for **Knuckles**, whose record points at
 Sonic's skeleton at `0xC2558` while his type-0 entry is his own, `0xC2AF8` —
-narrower hips, and every offset rounded differently. `tools/test-motion.mjs`
+narrower hips, and every offset rounded differently. `stf-tools/test-motion.mjs`
 pins that one by name, since a rig built from the record alone looks right and
 is somebody else's.
 
@@ -1358,12 +1364,12 @@ segment lies along `normalise(bias + gravity)` for its own length.
 
 #### Holding the chains against the machine
 
-`tools/mame-osage.py` breakpoints the return of `os_set_osage` in a real fight
+`stf-tools/mame-osage.py` breakpoints the return of `os_set_osage` in a real fight
 and reads the chain state at every segment of every frame; run it with `HOLD`
 set to a `:IN1` field and the fighter is walking while it samples, which is the
 only way the question can be answered — a chain with momentum looks exactly
 like one without it when its owner stands still.
-`tools/test-osage-mame.mjs` checks the capture in `osage-honey-motion.json`,
+`stf-tools/test-osage-mame.mjs` checks the capture in `osage-honey-motion.json`,
 36 frames of Honey walking across two motions:
 
 | | |
@@ -1609,10 +1615,10 @@ borrowed motion take their quarter turn back about. `js/eggrobo.js` reads
 `egg_robo_anims` rather than assuming the order, so a table edited in the ROM is
 followed rather than the four routines being hardcoded in sequence.
 
-There is no capture of either to check against — `tools/` has nothing that
+There is no capture of either to check against — `stf-tools/` has nothing that
 drives a machine to a boss or a minion — so what stands in for one is the
-instruction stream itself. `tools/test-motion.mjs` walks both routines with
-`tools/i960dis.mjs` and holds the port's constants against the operands the
+instruction stream itself. `stf-tools/test-motion.mjs` walks both routines with
+`stf-tools/i960dis.mjs` and holds the port's constants against the operands the
 board's own code carries: the shift and mask that step each cycle, the window
 bits, the clamp, the spin's step and its direction bit, the two character
 indices, and the `ang_z` op word. The three tables are pinned without an
@@ -1627,7 +1633,7 @@ guards branch to when the robot is not the minion at all.
 
 ### Holding it against the machine
 
-`tools/mame-motion.py` drives a real fight under MAME and records every word the
+`stf-tools/mame-motion.py` drives a real fight under MAME and records every word the
 i960 writes to the coprocessor, with the motion number (`p1_motion_num`) and the
 motion frame (`p1_motion_coma`, which starts at 1) beside each frame's slice.
 The `0x62` and `0x6B` arguments in that stream *are* the sampled channels, so
@@ -1644,7 +1650,7 @@ match outright. That is the check on the whole format at once: a Hermite channel
 only lands on the same 16-bit angle every frame if the header walk, the key
 streams, the interpolation and the tangent scale are all right.
 
-`tools/motion-pose.csv` is one such recording, kept so the check runs without a
+`stf-tools/motion-pose.csv` is one such recording, kept so the check runs without a
 MAME, exactly as `canyon-path.csv` is for Canyon Cruise.
 
 ### What a motion leaves out
@@ -1722,7 +1728,7 @@ so it asks the same question with screen-space derivatives instead: how many
 texels does this pixel cover, at the resolution actually being drawn. With that
 in, the same measurement runs 27 to 36 rather than 24 to 52.
 
-`node tools/test-texram.mjs` checks the port against a MAME capture of the real
+`node stf-tools/test-texram.mjs` checks the port against a MAME capture of the real
 board, and it reproduces all 2 MB byte for byte. The capture itself is not in
 the tree — see [Checking against the board without carrying its
 data](#checking-against-the-board-without-carrying-its-data) below. (Set 16 has
@@ -1803,7 +1809,7 @@ the twin's own block has a black row 0. That is the board's answer rather than
 an approximation of it, and it is why the viewer uploads one character rather
 than two.
 
-`node tools/test-colors.mjs` checks both tables against the same capture, row by
+`node stf-tools/test-colors.mjs` checks both tables against the same capture, row by
 row — which is the unit every one of its comparisons was already made in, so
 holding it to hashes rather than to the capture costs it nothing. Luma RAM
 matches byte for byte, and so now does every colorxlat entry bar the two rows
@@ -1850,7 +1856,7 @@ this repository any more than a ROM does.
 
 What the checks actually need from those bytes is not the bytes. It is the
 statement *the board held exactly this*, and a hash makes that statement in 32
-bytes without being the data. So `tools/texram-ref.json` holds SHA-256 over the
+bytes without being the data. So `stf-tools/texram-ref.json` holds SHA-256 over the
 capture, cut at the granularity each comparison is made at:
 
 | slice | why that unit |
@@ -1862,7 +1868,7 @@ capture, cut at the granularity each comparison is made at:
 | colorxlat per row over luma 0..63 | the fighter rows, which are searched over all 52 characters |
 | each cycled row's 16-slot palette band | searched over all 16 rotations, so it is hashed apart from its row |
 
-`tools/texref.mjs` defines those slices once and both the manifest writer and
+`stf-tools/texref.mjs` defines those slices once and both the manifest writer and
 the two checks import them, so the two can never drift into hashing different
 things. The result is 4 kB in place of 2.2 MB, and it asserts exactly what it
 did before: a single wrong texel fails. What is lost is only the byte offset in
@@ -1881,14 +1887,14 @@ the reference too, agreeing perfectly.
 So the two paths are kept apart and the boundary is enforced rather than
 documented:
 
-- **`tools/extract-texram.mjs`** rebuilds the binaries from a ROM set. This is
+- **`stf-tools/extract-texram.mjs`** rebuilds the binaries from a ROM set. This is
   the honest use of the port: about 85% of the pages are compressed, so a ROM
   plus these routines is the only way to get readable sheets short of an
-  emulator. It is what `tools/dump-atlas.mjs` reads and what the **Textures**
+  emulator. It is what `stf-tools/dump-atlas.mjs` reads and what the **Textures**
   panel accepts. It writes a `PROVENANCE.txt` beside its output saying what made
   it, and it writes to a temp directory rather than into the checkout, so 2.2 MB
   of the game's data is never sitting where a stray `git add -A` can sweep it up.
-- **`tools/make-texref.mjs`** builds the manifest, and **refuses any directory
+- **`stf-tools/make-texref.mjs`** builds the manifest, and **refuses any directory
   carrying that `PROVENANCE.txt`**. A reference can only come from a real
   capture.
 
@@ -1910,13 +1916,13 @@ a real machine — including whatever a previous scene left resident. A dump tha
 brings `lumaram.bin` and `colorxlat.bin` pins those too; one that brings only
 the sheets leaves the ROM-built tables in place.
 
-**`tools/mame-dump-texram.lua`** captures from MAME:
+**`stf-tools/mame-dump-texram.lua`** captures from MAME:
 
 ```
 cd <mame>
 TEXRAM_OUT=<any directory outside the checkout> \
   ./mame.exe sfight -rompath <dir-with-only-the-zips> -nodrc \
-             -autoboot_script <noclip>/tools/mame-dump-texram.lua \
+             -autoboot_script <stf-tools>/mame-dump-texram.lua \
              -video none -sound none -nothrottle -skip_gameinfo
 ```
 
@@ -1932,7 +1938,7 @@ looks fine and is from the wrong place:
   error status" screen having uploaded nothing. Interpreting the SHARC is much
   slower, so capture early rather than driving the game deep into a match.
 
-For a chosen stage, **`tools/mame-drive.py`** is the one that works: it drives
+For a chosen stage, **`stf-tools/mame-drive.py`** is the one that works: it drives
 MAME live over claude_mame's bridge, coining up and walking character select
 into a real fight, then dumps from inside Lua. STF keeps its stage textures
 resident, so the set it captures is the same one the boot screens use — only the
@@ -1949,7 +1955,7 @@ chosen arena:
 ```
 TEXRAM_OUT=<any directory> TEXRAM_KEY=KEYCODE_F12 \
   ./mame.exe sfight -rompath <dir-with-only-the-zips> -nodrc \
-             -autoboot_script <noclip>/tools/mame-dump-texram.lua
+             -autoboot_script <stf-tools>/mame-dump-texram.lua
 ```
 
 Drop the resulting files onto **Textures** in the sidebar. Four are recognised
@@ -1966,7 +1972,7 @@ Either way the fill shader runs MAME's own pipeline (`model2rd.ipp`): the 4-bit
 texel indexes the lumaram band named by the face's `lumabase`, that is scaled by
 the face's lighting term, clamped to 6 bits, and used to index colorxlat per
 channel against the face's 5-bit palette colour. The tables the dump brings and
-the tables `js/colors.js` builds agree, which is what `tools/test-colors.mjs`
+the tables `js/colors.js` builds agree, which is what `stf-tools/test-colors.mjs`
 asserts — the dump is worth loading for the sheets, and as a check.
 
 The **luma** slider is now a debug multiplier on the computed luma rather than a

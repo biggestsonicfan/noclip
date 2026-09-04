@@ -719,7 +719,7 @@ export class Viewer {
          * floor plate 517 and the sea 555 carry the same four quads over the
          * same ground — not merely coplanar but sorted on the *same four
          * corners*, so they resolve to one z at every camera that exists and no
-         * depth test anywhere can separate them (tools/dl-order.mjs). Which of
+         * depth test anywhere can separate them (stf-tools/dl-order.mjs). Which of
          * them showed was three.js's answer rather than the board's: the opaque
          * sort keys on the geometry's bounding-sphere centre, and the sea's
          * plate is lopsided enough — x -94.5..318.8 against the floor's ±24 —

@@ -6,10 +6,10 @@
 # Only the four site paths are staged. That is the same rule the container's
 # bind mounts carried, and it is what keeps a ROM out of the deploy: the zips
 # are gitignored, so they are not in the checkout this workflow runs against,
-# and even if one were, it is not in the list below. tools/serve.mjs refuses a
-# .zip per request because a local checkout genuinely has them sitting beside
-# it; here the guarantee is structural instead — the artifact cannot serve a
-# file it does not contain.
+# and even if one were, it is not in the list below. The dev server in stf-tools
+# refuses a .zip per request because a local checkout genuinely has them sitting
+# beside it; here the guarantee is structural instead — the artifact cannot
+# serve a file it does not contain.
 name: Deploy to GitHub Pages
 
 on:

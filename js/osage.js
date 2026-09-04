@@ -62,7 +62,7 @@
  * it. A populated table of real speeds and amplitudes sits unreferenced at
  * 0x68A04: the wind was authored and then switched off.
  *
- * `tools/test-osage-mame.mjs` holds all of that against a capture of a real
+ * `stf-tools/test-osage-mame.mjs` holds all of that against a capture of a real
  * fight. Over 36 frames of Honey walking, across two motions, her chest bone
  * moves 0.388 and her head 0.124 while every one of those chain values stays
  * bit-identical. So the rest pose here is not an approximation of a simulation

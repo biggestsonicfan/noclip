@@ -77,29 +77,43 @@ Championship (`schamp`), so a combined set is the least fuss:
   from the first, the data ROMs from the second.
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
 
+Then serve the directory over HTTP — the page is ES modules, so opening
+`index.html` off the filesystem will not work. The dev server moved out with the
+rest of the tooling, into
+[stf-tools](https://github.com/biggestsonicfan/stf-tools), which carries this
+repository as a submodule and serves it:
+
 ```
-npm start                      # http://localhost:8173
+git clone --recursive https://github.com/biggestsonicfan/stf-tools.git
+cd stf-tools && npm start      # http://localhost:8173
 ```
+
+That serves the explorer commit stf-tools is pinned to. To see the checkout you
+are editing, point it there — `STF_SITE=/path/to/noclip npm start`.
+
+Any static server will serve the site, but that one refuses a `.zip` per
+request, and a working checkout is exactly where the zips sit — so a plain
+`python -m http.server` in this directory would hand your ROM to anything that
+asks for it. Serve it from something that will not.
 
 There is no build step and no dependency install, and nothing of three.js is
 carried here: the library comes from cdnjs and its one addon from jsDelivr, both
 pinned to a version and integrity-checked by the import map, so what arrives is
-the build named there or nothing at all. `npm install` is only needed to run
-the headless tools. The page therefore wants a network on first load; a checkout
-that has to run air-gapped can point those two import-map entries back at local
-copies.
+the build named there or nothing at all. The page therefore wants a network on
+first load; a checkout that has to run air-gapped can point those two import-map
+entries back at local copies.
 
 The ROM set is always supplied by you. The page never fetches one, and
-`tools/serve.mjs` refuses `.zip` outright — a working checkout does have the
-zips sitting in it, so the dev server is told in as many words never to hand one
-out. A ROM sitting in this directory is not something the app can reach. Zips
+stf-tools' `serve.mjs` refuses `.zip` outright — a working checkout does have
+the zips sitting in it, so the dev server is told in as many words never to hand
+one out. A ROM sitting in this directory is not something the app can reach. Zips
 are read with `FileReader` and decoded in the tab; nothing is uploaded anywhere.
 
 Nor is any of the game's data carried here. The checks that hold the decoders to
 a real machine used to measure against 2.2 MB of captured texture RAM kept in
-the tree; they now measure against `tools/texram-ref.json`, SHA-256 over that
-capture, which asserts the same thing — a single wrong texel still fails —
-without being the game's bytes. `node tools/extract-texram.mjs` rebuilds the
+the tree; they now measure against `stf-tools/texram-ref.json`, SHA-256 over
+that capture, which asserts the same thing — a single wrong texel still fails —
+without being the game's bytes. stf-tools' `extract-texram.mjs` rebuilds the
 binaries from your own ROM set when they are wanted, and writes them outside the
 checkout. The reasoning, and the trap of letting a port grade itself, are in
 [TECHNICAL.md](TECHNICAL.md#checking-against-the-board-without-carrying-its-data).
@@ -130,15 +144,15 @@ certificate for the name. Moving the site to another hostname is those two
 things and nothing else.
 
 What ends up public is the viewer and nothing else. The workflow names four
-paths, so nothing else in the checkout can be served even by accident — not
-`tools/`, not a dump some tool has left lying about, and not a ROM: the zips are
+paths, so nothing else in the checkout can be served even by accident — not a
+dump some tool has left lying about, and not a ROM: the zips are
 gitignored, so they are not in the checkout the workflow runs against, and an
 artifact cannot serve a file it does not carry. Visitors bring their own, read
 in their own tab.
 
-That is the one thing the deploy no longer needs `tools/serve.mjs` for. Locally
-it still refuses a `.zip` per request, and still should — a working checkout is
-exactly where the zips do sit.
+That is the one thing the deploy needs no server of ours for. Locally
+stf-tools' `serve.mjs` still refuses a `.zip` per request, and still should — a
+working checkout is exactly where the zips do sit.
 
 ## How it works
 
@@ -163,7 +177,8 @@ it knows about the board and the game comes from them:
 The outside work this leans on is MAME, whose Model 2 driver is the ground truth
 the two of them are checked against — the fill path in `model2rd.ipp` and the
 geometry lighting in `geo_parse_np_ns` are what the shader here reproduces, and
-`tools/` drives MAME to capture texture RAM and to diff against a real machine.
+[stf-tools](https://github.com/biggestsonicfan/stf-tools) drives MAME to capture
+texture RAM and to diff against a real machine.
 Rendering is [three.js](https://threejs.org), loaded at a pinned version with
 its hashes in the import map rather than kept in the tree — the library from
 cdnjs, OrbitControls from jsDelivr.
@@ -180,7 +195,7 @@ commit and the per-commit record stays where it was written.
 
 **What AI did.** All 35 commits, 2026-08-31 through 2026-09-03, carry a
 `Co-Authored-By: Claude Opus 5` trailer — there is not one that does not. Every
-line of `js/`, the shader, the scripts under `tools/` and both of these
+line of `js/`, the shader, the scripts now in stf-tools and both of these
 documents was written in a Claude Code session. The subjects show the shape of
 it: porting decoders (*Sample the mip chain instead of the full-size level*),
 chasing rendering bugs to their cause (*Make the per-face varyings flat*, an
@@ -202,8 +217,8 @@ is AI-written, and only the layer under it is not.
   that; take it away and there is no viewer.
 - *The verdict on whether any of it is right.* MAME is the arbiter, not the
   model. Texture RAM and both colour tables are compared byte-exact against a
-  running machine; `tools/` holds thirteen `test-*.mjs` plus `dl-verify.mjs` and
-  `verify-stage.mjs`, which check the viewer's draw list against display lists
+  running machine; stf-tools holds thirteen `test-*.mjs` plus `dl-verify.mjs`
+  and `verify-stage.mjs`, which check the viewer's draw list against display lists
   captured off the board. The log is partly a record of that catching things —
   *Put the sphynx head where its own probe says it goes*, *Put the ground chunks
   at 1.6*, *Draw South Island's sea at the 1.6 the rest of the ground pass

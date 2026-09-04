@@ -29,7 +29,7 @@
  * carries the negation of the Z the display list emits. See ANGLE_DEG for the
  * rotation half of the same argument.
  *
- * tools/verify-stage.mjs holds this file against a display list captured off
+ * stf-tools/verify-stage.mjs holds this file against a display list captured off
  * the board, part by part, which is how the scales and offsets here are known
  * rather than inferred.
  *
@@ -1038,7 +1038,7 @@ export function readCanyonFlight(rom) {
  * i960 divides each slope by a *thirty-second* of the frames it measured over
  * (below), and 32 there and 32 here would cancel to exactly the Catmull-Rom
  * spline the shape is. It does not: solving for the scale against a recording
- * of stage_xpos off the board — tools/mame-canyon-path.py — gives 30.00 on
+ * of stage_xpos off the board — stf-tools/mame-canyon-path.py — gives 30.00 on
  * every segment, to every digit the capture has, and the tangents come out a
  * fifteenth long. The curve bows that much wider than a Catmull-Rom would: with
  * 32 in its place the boat is up to half a unit off the board's own position
