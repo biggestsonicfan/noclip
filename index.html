@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sonic The Fighters — 3D Explorer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%234fd0ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css">
+<!-- Nothing of three.js is carried in this repository. Both entries are pinned
+     to one version and hashed, so what arrives is the build named here or
+     nothing at all.
+
+     three.js itself comes from cdnjs; three.module.min.js pulls
+     three.core.min.js in beside it, resolved against the same origin, so one
+     entry brings both. The addons are not on cdnjs at any version — it
+     publishes the four core builds and the WebGPU ones and nothing else — so
+     OrbitControls comes from jsDelivr, which serves the npm package whole. It
+     is the same file either way: what jsDelivr returns for 0.185.1 is byte for
+     byte what the package ships. It imports the bare specifier "three", which
+     the map below sends to cdnjs like any other importer.
+
+     The integrity map is what SRI would be for a plain script tag: a browser
+     that understands it refuses a file that is not the one pinned here, and
+     one that does not ignores the key. The three.js hashes are cdnjs's own and
+     the addon hash was taken from the bytes jsDelivr serves; all three were
+     checked against what actually came back. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.185.1/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+  },
+  "integrity": {
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.185.1/three.module.min.js": "sha512-I68i240tOgV4+XEaWOhSb6g0DSYHBZvh5xV/OD4r8gMQLzMlCiGLKJMv2cLv/NSSclI/1OOqBQbcCa2GtLKToQ==",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.185.1/three.core.min.js": "sha512-WzP39n+gKzHN+GRInj+FL4+JPbBPkGQiJf8oCBXqaqlqc57jW+sPYFn48ds+slQBe18f4Mctw5c+RAEVrhCO3g==",
+    "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/controls/OrbitControls.js": "sha512-Gdb8o7IHNkrc9czIHt0k2eCQLi1mMNzIk9+JQiRlGYvj1qdnQU5ndViRi1kZ/uC9meTDyYDziTlQS3TUYKfAYA=="
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-box">
+    <h1>Sonic The Fighters</h1>
+    <p class="sub">Model 2 &mdash; interactive 3D explorer</p>
+
+    <div class="romnote">
+      <p>The viewer builds its regions from <b>Sonic The Fighters</b>' own program
+         EPROMs &mdash; <code>epr-19001</code>&ndash;<code>epr-19004</code> &mdash; and from the
+         mask ROMs <code>mpr-19005</code>&ndash;<code>mpr-19020</code>, which MAME shares with the
+         parent set, <b>Sonic Championship</b> (<code>schamp</code>). A split set keeps those two
+         halves in separate zips, so a combined set is the easiest thing to drop:</p>
+      <ul>
+        <li><b>Non-merged</b> &mdash; <code>sfight.zip</code> on its own; it carries everything.</li>
+        <li><b>Split</b> &mdash; <code>sfight.zip</code> <i>and</i> <code>schamp.zip</code> together:
+            the program EPROMs come from the first, the data ROMs from the second.</li>
+        <li><b>Merged</b> &mdash; <code>schamp.zip</code> on its own; the clone's EPROMs are inside it.</li>
+      </ul>
+    </div>
+
+    <label class="ack"><input type="checkbox" id="loader-ack">
+      <span>I understand that assistive AI was used in the generation of this project.</span></label>
+
+    <label id="loader-drop" class="disabled" for="loader-file">
+      <div class="drop-icon" aria-hidden="true">&#8681;</div>
+      <div class="drop-title">Drop your ROM set here</div>
+      <p class="drop-sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
+      <span class="drop-btn">Choose files&hellip;</span>
+      <span class="lock-note">Tick the acknowledgement above to enable</span>
+      <input type="file" id="loader-file" accept=".zip,application/zip" multiple hidden disabled>
+    </label>
+
+    <div id="loader-progress" hidden>
+      <div id="loader-status"></div>
+      <div class="bar"><div id="loader-bar"></div></div>
+    </div>
+    <p id="loader-error" class="err" hidden></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <aside id="sidebar">
+    <header>
+      <div class="title">Sonic The Fighters</div>
+      <nav id="tabs">
+        <button data-tab="stage" class="active">Stages</button>
+        <button data-tab="model">Models</button>
+        <button data-tab="anim">Animation</button>
+      </nav>
+    </header>
+
+    <section class="tabpanel" data-tab="stage">
+      <div class="field">
+        <label>Stage</label>
+        <select id="stage-select"></select>
+      </div>
+      <div id="stage-meta" class="meta"></div>
+      <div class="field">
+        <label>Layers</label>
+        <div id="stage-layers" class="layers"></div>
+      </div>
+      <div class="field">
+        <label>Parts <span id="stage-part-count" class="dim"></span></label>
+        <div id="stage-parts" class="partlist"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tab="model" hidden>
+      <div class="field">
+        <input type="search" id="model-search" placeholder="Model index or range (e.g. 500-520)">
+      </div>
+      <div class="field row">
+        <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
+      </div>
+      <div id="model-count" class="dim"></div>
+      <div id="model-list" class="modellist"></div>
+      <div id="model-info" class="meta-block"></div>
+    </section>
+
+    <section class="tabpanel" data-tab="anim" hidden>
+      <div class="field">
+        <label>Fighter</label>
+        <select id="char-select"></select>
+      </div>
+      <div id="char-meta" class="meta"></div>
+      <div class="field row">
+        <label class="check"><input type="checkbox" id="char-skel" checked> skeleton</label>
+        <label class="check"><input type="checkbox" id="char-squish"> hammer squished</label>
+      </div>
+      <div class="field">
+        <label>Motion</label>
+        <select id="motion-select"></select>
+      </div>
+      <div id="motion-meta" class="meta"></div>
+      <div class="field row">
+        <button id="motion-play" class="btn">Pause</button>
+        <label class="axis grow"><input type="range" id="motion-frame" min="1" max="1" step="1">
+          <span id="motion-frame-val" class="axis-val">—</span></label>
+      </div>
+      <div class="field" id="tails-field" hidden>
+        <label>Tails' tails</label>
+        <div id="tails-readout" class="mono dim"></div>
+      </div>
+      <div class="field" id="exhaust-field" hidden>
+        <label>Metal Sonic's jet</label>
+        <label class="check"><input type="checkbox" id="exhaust-open" checked> vent open</label>
+        <div id="exhaust-readout" class="mono dim"></div>
+      </div>
+      <div class="field" id="osage-field" hidden>
+        <label>Sway frame &mdash; pigtails, tails, feathers</label>
+        <div id="osage-turn" class="jointlist"></div>
+        <div id="osage-readout" class="mono dim"></div>
+      </div>
+      <div class="field">
+        <label>Skeleton slots</label>
+        <div id="slot-list" class="jointlist"></div>
+      </div>
+      <div class="note">
+        A motion id indexes <code>offset_list_motions</code> at
+        <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects
+        &times; 3 axes &mdash; of constant, linear or cubic-Hermite keyframes;
+        twelve objects are joint angles and eight are the points the pose is
+        solved towards. The rig is not a plain chain: the chest and head aim at
+        a target, and each limb is a two-bone IK chain reaching for one, exactly
+        as <code>calc_rob_angle_cont</code> drives the coprocessor. See
+        <a href="https://github.com/biggestsonicfan/noclip/blob/master/TECHNICAL.md#animation" target="_blank" rel="noopener">Animation</a>.
+      </div>
+    </section>
+
+    <footer>
+      <div class="field">
+        <label>Camera</label>
+        <div class="seg" id="camera-mode">
+          <button data-mode="orbit" class="active">Orbit</button>
+          <button data-mode="fly">Noclip</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Shading</label>
+        <select id="shade-mode">
+          <option value="0">Lit palette</option>
+          <option value="1">Flat palette</option>
+          <option value="3">Texture tile id</option>
+          <option value="2">Normals</option>
+        </select>
+      </div>
+      <div class="field">
+        <label title="sRGB transfer applied to the shaded colour. Off is the verified default — the fill path is already display-referred.">Colour transfer</label>
+        <select id="transfer-mode">
+          <option value="0">Off &mdash; display-referred</option>
+          <option value="1">Linear &rarr; gamma</option>
+          <option value="2">Gamma &rarr; linear</option>
+        </select>
+      </div>
+      <div class="field row">
+        <label class="check" title="Step the stage's frame tables at the board's 60 Hz: the palms, the carpet, its flames and rope, the fence, the drifting horizon, the palette rows the sea scrolls with and the texture running along Aurora Icefield's curtain &mdash; and fly the two stages that fly: the Flying Carpet round its circle, with the desert and the sphynx head going past it, and Canyon Cruise's boat down its canyon"><input type="checkbox" id="opt-anim" checked> animate</label>
+        <label class="check"><input type="checkbox" id="opt-wire"> wireframe</label>
+      </div>
+      <div class="field row">
+        <label class="check"><input type="checkbox" id="opt-grid"> grid</label>
+        <label class="check"><input type="checkbox" id="opt-cull"> backface cull</label>
+      </div>
+      <div class="field row">
+        <label class="check"><input type="checkbox" id="opt-axes"> axes</label>
+      </div>
+      <div class="field row" id="ride-field" hidden>
+        <label class="check" title="Show the stage in the board's own frame instead of the world's: the arena stands still and the world wheels past it, which is how the machine draws these two &mdash; its camera rides the carpet. The same stage either way, one rigid transform apart, so nothing moves relative to anything else. Switching it on frames the camera on the arena that has just come to rest, from the angle you were already looking; switching it off puts you back where you were standing. Use it to hold a moving arena still and read it &mdash; the carpet's ripple, say, which a fixed camera cannot chase round a 2048-frame lap"><input type="checkbox" id="opt-ride"> <span id="ride-label">ride the arena</span></label>
+      </div>
+      <div class="field">
+        <label>Textures</label>
+        <label class="check" id="tex-drop">
+          <input type="file" id="tex-file" accept=".bin,.dmp,application/octet-stream" multiple hidden>
+          <span id="tex-status">Load a texture-RAM dump&hellip;</span>
+        </label>
+        <label class="axis" id="tex-luma-row" hidden>
+          <span title="Debug multiplier on the per-polygon luma the geometry engine computes; 1.00 is the board&apos;s own value">luma</span>
+          <input type="range" id="tex-luma" min="0.15" max="1.4" step="0.05" value="1">
+          <span class="axis-val" id="tex-luma-val">1.00</span>
+        </label>
+      </div>
+      <div id="stats" class="stats"></div>
+    </footer>
+  </aside>
+
+  <main>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+    <div id="fly-hint" hidden>Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Esc</b> release</div>
+  </main>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

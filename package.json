@@ -1,0 +1,31 @@
+{
+  "name": "stf-explorer",
+  "version": "1.0.0",
+  "description": "Interactive 3D explorer for Sonic The Fighters (Sega Model 2)",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test:decode": "node tools/test-decode.mjs",
+    "extract:texram": "node tools/extract-texram.mjs",
+    "test:texram": "node tools/test-texram.mjs",
+    "test:colors": "node tools/test-colors.mjs",
+    "test:texaddr": "node tools/test-texaddr.mjs",
+    "test:carpet": "node tools/test-carpet.mjs",
+    "test:objects": "node tools/test-objects.mjs",
+    "test:eggman": "node tools/test-eggman.mjs",
+    "test:motion": "node tools/test-motion.mjs",
+    "test:motion-mame": "node tools/test-motion-mame.mjs",
+    "test:osage-mame": "node tools/test-osage-mame.mjs",
+    "test:canyon": "node tools/test-canyon.mjs",
+    "test:zsort": "node tools/test-zsort.mjs",
+    "test": "npm run test:decode && npm run test:texram && npm run test:colors && npm run test:texaddr && npm run test:carpet && npm run test:objects && npm run test:eggman && npm run test:motion && npm run test:motion-mame && npm run test:osage-mame && npm run test:canyon && npm run test:zsort"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "puppeteer-core": "^25.9.0",
+    "three": "^0.185.1"
+  },
+  "private": true
+}

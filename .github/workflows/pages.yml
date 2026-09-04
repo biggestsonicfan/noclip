@@ -1,0 +1,58 @@
+# The explorer is a static site — the ROM decoding, polygon decoding and
+# rendering all happen in the browser — so publishing it is just a copy. There
+# is no build: no bundler, no dependency install, no generated file. What is
+# served is what is in the tree.
+#
+# Only the four site paths are staged. That is the same rule the container's
+# bind mounts carried, and it is what keeps a ROM out of the deploy: the zips
+# are gitignored, so they are not in the checkout this workflow runs against,
+# and even if one were, it is not in the list below. tools/serve.mjs refuses a
+# .zip per request because a local checkout genuinely has them sitting beside
+# it; here the guarantee is structural instead — the artifact cannot serve a
+# file it does not contain.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  # So the site can be republished without a commit — after changing the custom
+  # domain, say, or to redeploy a run that failed on GitHub's side.
+  workflow_dispatch:
+
+# The three the deploy needs and nothing else: read the checkout, write to
+# Pages, and mint the OIDC token deploy-pages authenticates with.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. Not cancel-in-progress: a run that is already uploading
+# should finish rather than leave the site half-published, and the next push
+# will overwrite it in a moment anyway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # CNAME goes in the artifact, not just the repo: Pages reads it from the
+      # published site to know the custom domain.
+      - name: Stage the site
+        run: |
+          mkdir _site
+          cp index.html style.css CNAME _site/
+          cp -r js _site/js
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
