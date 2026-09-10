@@ -67,6 +67,15 @@ Tick the acknowledgement on the loading screen — the project was generated wit
 assistive AI, and the page asks you to say you know that before it will take a
 ROM set — and drop the zips on.
 
+On a phone or tablet the page lays itself out for one instead: the view fills
+the screen and the panel becomes a sheet along the bottom of it — tap a tab or
+the handle to open it, drag on the view to orbit, and tap a part to identify it.
+The noclip camera is a stick and two lift buttons there, with a drag on the
+view to look. It is the user agent that decides, not the window's width, so a
+narrow desktop window keeps its sidebar; `?mobile` and `?desktop` on the URL
+force one or the other, and the link at the foot of the panel switches in place
+without dropping the ROM.
+
 Which zips depends on how your set is organised. The viewer reads Sonic The
 Fighters' own program EPROMs (`epr-19001`–`epr-19004`) and the mask ROMs
 (`mpr-19005`–`mpr-19020`) that MAME shares with the parent set, Sonic

@@ -29,6 +29,7 @@ import {
 } from './exhaust.js';
 import { decodeMotion, sampleMotion, listMotions } from './motion.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, THREE } from './viewer.js';
+import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
@@ -45,6 +46,9 @@ const state = {
     rom: null,
     stages: [],
     viewer: null,
+    /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
+    sheet: null,
+    touchFly: null,
     tab: 'stage',
     stageIndex: 0,
     modelIndex: 517,
@@ -2016,7 +2020,7 @@ function updateHud() {
             + (m.decoded ? `motion ${m.decoded.id}` : 'no motion');
     }
     $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? 'noclip' : 'orbit'} camera`
-        + (v.mode === 'orbit' ? ' · click a part to identify it' : '');
+        + (v.mode === 'orbit' ? ` · ${isMobile() ? 'tap' : 'click'} a part to identify it` : '');
 }
 
 /* ---- Picking -------------------------------------------------------------- */
@@ -2036,6 +2040,8 @@ const PICK_SLOP = 4;
 function revealModel(idx) {
     state.modelIndex = idx;
     switchTab('model');
+    /* On the phone the sheet may be down, with the answer inside it. */
+    state.sheet.open();
     $('#model-search').value = String(idx);
     renderModelList();
     const row = [...$('#model-list').children].find((r) => +r.dataset.index === idx);
@@ -2085,11 +2091,19 @@ function switchTab(tab) {
 function wireOptions() {
     const v = state.viewer;
 
+    /* The phone site's sheet and stick are wired on both sites, so the layout
+     * switch below can flip between them in place rather than reloading. */
+    state.sheet = wireSheet();
+    state.touchFly = wireTouchFly(v.fly);
+    const syncTouchFly = () => state.touchFly.show(isMobile() && v.mode === 'fly');
+
     wirePicking();
 
     $('#tabs').addEventListener('click', (e) => {
         const b = e.target.closest('button');
-        if (b) switchTab(b.dataset.tab);
+        if (!b) return;
+        switchTab(b.dataset.tab);
+        state.sheet.open();
     });
 
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
@@ -2145,6 +2159,7 @@ function wireOptions() {
         for (const x of $('#camera-mode').children) x.classList.toggle('active', x === b);
         v.setMode(b.dataset.mode);
         $('#fly-hint').hidden = b.dataset.mode !== 'fly';
+        syncTouchFly();
         updateHud();
     });
 
@@ -2188,6 +2203,18 @@ function wireOptions() {
 
     v.onPointerLockChange = (locked) => { $('#fly-hint').hidden = locked || v.mode !== 'fly'; };
 
+    /* Between the sidebar and the sheet, in place: the ROM stays loaded and
+     * the camera stays where it is. The canvas changes size under the viewer,
+     * and the fly rig changes from pointer lock to the stick. */
+    $('#layout-switch').addEventListener('click', (e) => {
+        e.preventDefault();
+        setMobile(!isMobile());
+        v.touch = isMobile();
+        v.resize();
+        syncTouchFly();
+        updateHud();
+    });
+
     document.addEventListener('keydown', (e) => {
         if (e.target.matches('input, select, textarea')) return;
         if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(MODEL_TABLE_COUNT - 1, state.modelIndex + 1));
@@ -2206,7 +2233,7 @@ function start() {
     /* Build the viewer before swapping panels, so a renderer failure still has
      * the loading screen to report itself on. */
     $('#app').hidden = false;
-    state.viewer = new Viewer($('#view'));
+    state.viewer = new Viewer($('#view'), { touch: isMobile() });
     state.stages = readStageTable(state.rom);
     state.frames = readFrameTables(state.rom);
     $('#loader').hidden = true;
