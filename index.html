@@ -2,8 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sonic The Fighters — 3D Explorer</title>
+<!-- Which site this is — the sidebar, or the sheet along the bottom of the
+     view — is decided here, ahead of the stylesheet, so a phone never paints
+     the desktop layout first. A phone is one whose user agent says so: the
+     usual tokens, the Client Hints flag where a browser sends one, and the
+     iPad, which has called itself a Mac since iPadOS 13 and is told apart by
+     its touch points. It is the agent that decides and not the window's width,
+     so a narrow desktop window keeps its sidebar. ?mobile and ?desktop on the
+     URL override it either way; the link at the foot of the panel sets those.
+     The rules in style.css and the code in js/mobile.js key on the class. -->
+<script>
+(function () {
+  var q = location.search;
+  var force = /[?&]mobile\b/.test(q) ? true : /[?&]desktop\b/.test(q) ? false : null;
+  var ua = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini|Mobile|Silk/i.test(navigator.userAgent)
+    || (navigator.userAgentData && navigator.userAgentData.mobile === true)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  document.documentElement.classList.toggle('mobile', force === null ? !!ua : force);
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%234fd0ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="./style.css">
 <!-- Nothing of three.js is carried in this repository. Both entries are pinned
@@ -64,7 +83,7 @@
 
     <label id="loader-drop" class="disabled" for="loader-file">
       <div class="drop-icon" aria-hidden="true">&#8681;</div>
-      <div class="drop-title">Drop your ROM set here</div>
+      <div class="drop-title"><span class="desktop-only">Drop your ROM set here</span><span class="mobile-only">Choose your ROM set</span></div>
       <p class="drop-sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
       <span class="drop-btn">Choose files&hellip;</span>
       <span class="lock-note">Tick the acknowledgement above to enable</span>
@@ -220,13 +239,24 @@
         </label>
       </div>
       <div id="stats" class="stats"></div>
+      <div id="layout-switch"><a href="#">Switch to the <span class="desktop-only">phone</span><span class="mobile-only">desktop</span> layout</a></div>
     </footer>
   </aside>
 
   <main>
     <canvas id="view"></canvas>
     <div id="hud"></div>
-    <div id="fly-hint" hidden>Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Esc</b> release</div>
+    <div id="fly-hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
+    <!-- The noclip rig on a touchscreen: shown by app.js on the phone site in
+         fly mode, wired in js/mobile.js, and standing clear of the sheet by
+         the --peek height the sheet publishes. -->
+    <div id="touch-fly" hidden>
+      <div id="stick" aria-label="Move"><div class="knob"></div></div>
+      <div class="vert">
+        <button type="button" data-up="1" aria-label="Up">&#9650;</button>
+        <button type="button" data-up="-1" aria-label="Down">&#9660;</button>
+      </div>
+    </div>
   </main>
 </div>
 

@@ -546,9 +546,11 @@ export function buildEdgeGeometry(decoded) {
 /* ---- Fly (noclip) camera ------------------------------------------------- */
 
 /**
- * Pointer-lock fly camera: WASD to move, mouse to look, Q/E for down/up,
- * shift to sprint, ctrl to crawl. Speed is exposed so the stage view can scale
- * it to the arena.
+ * Fly camera: WASD to move, mouse to look under pointer lock, Q/E for down/up,
+ * shift to sprint, ctrl to crawl. On a touchscreen the same rig is driven by
+ * `pad` — an analog stick and a lift that js/mobile.js wires up — and a
+ * one-finger drag on the view turns the camera. Speed is exposed so the stage
+ * view can scale it to the arena.
  */
 class FlyControls {
     constructor(camera, domElement) {
@@ -560,15 +562,17 @@ class FlyControls {
         this.pitch = 0;
         this.keys = new Set();
         this.sensitivity = 0.0022;
+        /* A finger travels less than a mouse does for the same turn. */
+        this.touchSensitivity = 0.005;
+        /* The touch rig's input. `move` is the stick — x right and y down, as
+         * on the screen, unit length at full throw; `up` is -1, 0 or 1. */
+        this.pad = { move: new THREE.Vector2(), up: 0 };
+        this._look = null;
         this._velocity = new THREE.Vector3();
 
         this._onMouseMove = (e) => {
             if (!this.enabled || document.pointerLockElement !== this.dom) return;
-            this.yaw -= e.movementX * this.sensitivity;
-            this.pitch -= e.movementY * this.sensitivity;
-            const lim = Math.PI / 2 - 0.001;
-            this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
-            this._apply();
+            this._turn(e.movementX * this.sensitivity, e.movementY * this.sensitivity);
         };
         this._onKeyDown = (e) => {
             if (!this.enabled) return;
@@ -580,10 +584,44 @@ class FlyControls {
         this._onKeyUp = (e) => this.keys.delete(e.code);
         this._onBlur = () => this.keys.clear();
 
+        /* The look drag. A mouse is the pointer-lock path above; a finger or
+         * a pen turns the camera by how far it moved. One at a time — a second
+         * finger is left alone. The orbit rig is disabled whenever this one is
+         * enabled, so the two never fight over a touch. */
+        this._onPointerDown = (e) => {
+            if (!this.enabled || e.pointerType === 'mouse' || this._look) return;
+            this._look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+            this.dom.setPointerCapture(e.pointerId);
+        };
+        this._onPointerMove = (e) => {
+            const l = this._look;
+            if (!l || e.pointerId !== l.id) return;
+            this._turn((e.clientX - l.x) * this.touchSensitivity,
+                (e.clientY - l.y) * this.touchSensitivity);
+            l.x = e.clientX;
+            l.y = e.clientY;
+        };
+        this._onPointerUp = (e) => {
+            if (this._look && e.pointerId === this._look.id) this._look = null;
+        };
+
         document.addEventListener('mousemove', this._onMouseMove);
         document.addEventListener('keydown', this._onKeyDown);
         document.addEventListener('keyup', this._onKeyUp);
         window.addEventListener('blur', this._onBlur);
+        domElement.addEventListener('pointerdown', this._onPointerDown);
+        domElement.addEventListener('pointermove', this._onPointerMove);
+        domElement.addEventListener('pointerup', this._onPointerUp);
+        domElement.addEventListener('pointercancel', this._onPointerUp);
+    }
+
+    /** Turn by so many radians, keeping the pitch short of straight up or down. */
+    _turn(dYaw, dPitch) {
+        this.yaw -= dYaw;
+        this.pitch -= dPitch;
+        const lim = Math.PI / 2 - 0.001;
+        this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
+        this._apply();
     }
 
     /** Adopt the current camera orientation so switching rigs does not snap. */
@@ -601,7 +639,7 @@ class FlyControls {
 
     update(dt) {
         if (!this.enabled) return;
-        const k = this.keys;
+        const k = this.keys, p = this.pad;
         let f = 0, r = 0, u = 0;
         if (k.has('KeyW')) f += 1;
         if (k.has('KeyS')) f -= 1;
@@ -609,6 +647,10 @@ class FlyControls {
         if (k.has('KeyA')) r -= 1;
         if (k.has('KeyE') || k.has('Space')) u += 1;
         if (k.has('KeyQ')) u -= 1;
+        /* Stick up is forward, and screen y grows downward. */
+        f -= p.move.y;
+        r += p.move.x;
+        u += p.up;
         if (f === 0 && r === 0 && u === 0) {
             this._velocity.multiplyScalar(Math.exp(-dt * 14));
         } else {
@@ -620,9 +662,12 @@ class FlyControls {
             const target = new THREE.Vector3()
                 .addScaledVector(fwd, f)
                 .addScaledVector(right, r)
-                .add(new THREE.Vector3(0, u, 0))
-                .normalize()
-                .multiplyScalar(this.speed * mult);
+                .add(new THREE.Vector3(0, u, 0));
+            /* Clamped to full speed rather than normalised to it: keys are all
+             * or nothing and land there either way, but the stick's throw is
+             * its speed. */
+            if (target.lengthSq() > 1) target.normalize();
+            target.multiplyScalar(this.speed * mult);
             this._velocity.lerp(target, 1 - Math.exp(-dt * 12));
         }
         this.camera.position.addScaledVector(this._velocity, dt);
@@ -634,14 +679,21 @@ class FlyControls {
         document.removeEventListener('keydown', this._onKeyDown);
         document.removeEventListener('keyup', this._onKeyUp);
         window.removeEventListener('blur', this._onBlur);
+        this.dom.removeEventListener('pointerdown', this._onPointerDown);
+        this.dom.removeEventListener('pointermove', this._onPointerMove);
+        this.dom.removeEventListener('pointerup', this._onPointerUp);
+        this.dom.removeEventListener('pointercancel', this._onPointerUp);
     }
 }
 
 /* ---- Viewer -------------------------------------------------------------- */
 
 export class Viewer {
-    constructor(canvas) {
+    constructor(canvas, { touch = false } = {}) {
         this.canvas = canvas;
+        /* On a touchscreen the fly rig is driven by the stick and a look drag
+         * rather than pointer lock, which a tap could not release. */
+        this.touch = touch;
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
         /* The fill shader is GLSL ES 3.00 — it integer-indexes the luma and
@@ -817,7 +869,9 @@ export class Viewer {
         this.resize();
 
         canvas.addEventListener('click', () => {
-            if (this.mode === 'fly' && document.pointerLockElement !== canvas) this.fly.lock();
+            if (this.mode === 'fly' && !this.touch && document.pointerLockElement !== canvas) {
+                this.fly.lock();
+            }
         });
         document.addEventListener('pointerlockchange', () => {
             this._pointerLocked = document.pointerLockElement === canvas;
