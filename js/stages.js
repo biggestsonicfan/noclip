@@ -13,6 +13,8 @@
  */
 
 export const STAGE_DATA_ADDR = 0x0008f3d0;
+import { xtraResolve } from './romset.js';
+
 export const STAGE_STRIDE = 256;
 export const STAGE_COUNT = 16;
 
@@ -78,6 +80,12 @@ const F = {
  * rate. display.js models each routine at the clock it actually sees.
  */
 function readStageObjects(rom, base) {
+    /* Both halves of this — the object list and the colour cycles below — are
+     * program-ROM pointers followed into program ROM. A game whose records live
+     * somewhere else has its own object list at the same field, but nothing
+     * here knows how to walk it, so it is left empty rather than read against
+     * the wrong ROM. */
+    if (rom.game.stageTable.source !== 'maincpu') return [];
     const dv = rom.mainCpuView;
     const ptr = dv.getUint32(base + F.setup, true);
     if (ptr + 4 > rom.maincpu.length) return [];
@@ -101,6 +109,7 @@ function readStageObjects(rom, base) {
  * stage colour block rotated by (frame_counter >> shift) & 15 — which is the
  * scrolling water and the waterfall. See colors.js for the rewrite itself. */
 function readColorCycles(rom, base) {
+    if (rom.game.stageTable.source !== 'maincpu') return [];
     const dv = rom.mainCpuView;
     const ptr = dv.getUint32(base + F.colorCycle, true);
     const cycles = [];
@@ -117,7 +126,7 @@ function readColorCycles(rom, base) {
  * stage SLOT (the `stage_num` byte the draw functions compare against), not off
  * stage_NUM. Slots the listing does not name are shown as their slot number —
  * add a line here once one is positively identified. */
-const STAGE_NAMES = {
+const SFIGHT_STAGE_NAMES = {
     0: 'South Island',
     1: 'Flying Carpet',
     2: 'Aurora Icefield',
@@ -189,40 +198,69 @@ export function stageLight(bright, vecterX, vecterY) {
  */
 const SHARED_TEX_SET = 1;
 
-function resolveTexSets(texA) {
+function resolveTexSets(rom, texA, texB) {
+    /* The pair is only a puzzle in the game the note above is about, where g1
+     * carries nothing of its own. Fighting Vipers hands change_scene's two
+     * numbers straight to send_tex_stage and they are two different sets — 20
+     * and 1 on its first stage — so there both are uploaded as they stand. */
+    if (rom.game.stageTable.texPair === 'literal') {
+        return [...new Set([texB, texA])].filter((n) => n > 0);
+    }
     return texA === SHARED_TEX_SET ? [texA] : [SHARED_TEX_SET, texA];
 }
 
-/** Read every stage record out of the program ROM. */
+/*
+ * A stage record, wherever the game keeps it.
+ *
+ * One game holds the table in the program ROM at a fixed address; the other
+ * holds it in a second data bank reached through the XTRA_DATA window, where a
+ * pointer has to be resolved before it can be read. Both are one base plus a
+ * stride, so a reader that takes a view and an offset covers the two.
+ */
+function recordAt(rom, addr) {
+    if (rom.game.stageTable.source === 'xtra') {
+        const r = xtraResolve(rom, addr);
+        return { view: r.view, u8: r.data, base: r.off };
+    }
+    return { view: rom.mainCpuView, u8: rom.maincpu, base: addr };
+}
+
+/** Read every stage record the game has. */
 export function readStageTable(rom) {
-    const dv = rom.mainCpuView;
-    const u8 = rom.maincpu;
+    const T = rom.game.stageTable;
     const stages = [];
 
-    for (let s = 0; s < STAGE_COUNT; s++) {
-        const b = STAGE_DATA_ADDR + s * STAGE_STRIDE;
-        if (b + STAGE_STRIDE > u8.length) break;
+    for (let s = 0; s < T.count; s++) {
+        const rec = recordAt(rom, T.at + s * T.stride);
+        const dv = rec.view, u8 = rec.u8, b = rec.base;
+        if (b + T.stride > u8.length) break;
 
-        const parts = [];
-        for (let i = 0; i < 16; i++) parts.push(dv.getUint16(b + F.parts + i * 2, true));
-        const cage = [];
-        for (let i = 0; i < 24; i++) cage.push(dv.getUint16(b + F.cage + i * 2, true));
-        const sky = [];
-        for (let i = 0; i < 4; i++) sky.push(dv.getUint16(b + F.sky + i * 2, true));
+        /* The lists a record carries, and how long each is, are per-game — one
+         * has a sky shell the other does not, and one has a second ground list
+         * the other has no equivalent for. */
+        const list = (key) => {
+            const spec = T.lists[key];
+            if (!spec) return [];
+            const out = [];
+            for (let i = 0; i < spec[1]; i++) out.push(dv.getUint16(b + spec[0] + i * 2, true));
+            return out;
+        };
+        const parts = list('ground');
+        const cage = list('cage');
+        const sky = list('sky');
+        const upper = list('upper');
 
         const num = u8[b + F.num];
-        const named = STAGE_NAMES[s];
+        /* The names are one game's, keyed off its own slot numbers, so they
+         * are only applied to it. Another game's stages are shown by the
+         * stage_NUM in their record until someone identifies them. */
+        const named = T.source === 'maincpu' ? SFIGHT_STAGE_NAMES[s] : undefined;
 
         const bright = dv.getFloat32(b + F.bright, true);
         /* Kept raw as well as built, because one stage rewrites VECTER_Y every
          * frame and the light has to be rebuilt from the record around it. */
         const vecter = [dv.getInt16(b + F.vecterX, true), dv.getInt16(b + F.vecterY, true)];
-        const materials = [];
-        const table = dv.getUint32(MATERIAL_TABLE_PTRS + s * 4, true);
-        for (let i = 0; i < MATERIAL_COUNT; i++) {
-            const w = dv.getUint32(table + i * 4, true);
-            materials.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
-        }
+        const materials = readMaterials(rom, s);
 
         stages.push({
             slot: s,
@@ -247,13 +285,15 @@ export function readStageTable(rom) {
             /* The record's own pair, kept for the panel; texSets is what to
              * upload. See resolveTexSets. */
             texSet: [dv.getUint16(b + F.texA, true), dv.getUint16(b + F.texB, true)],
-            texSets: resolveTexSets(dv.getUint16(b + F.texA, true)),
+            texSets: resolveTexSets(rom, dv.getUint16(b + F.texA, true),
+                dv.getUint16(b + F.texB, true)),
             colorCycles: readColorCycles(rom, b),
             /* The routines object_control runs for this stage; display.js
              * dispatches on the disp address. */
             objects: readStageObjects(rom, b),
             /* Grouped so the viewer can toggle each layer independently. */
             layers: {
+                upper: upper.filter((m) => m !== 0),
                 ground: parts.filter((m) => m !== 0),
                 floor: [dv.getUint16(b + F.floor, true)].filter((m) => m !== 0),
                 platform: [dv.getUint16(b + F.platform, true)].filter((m) => m !== 0),
@@ -267,4 +307,35 @@ export function readStageTable(rom) {
     return stages;
 }
 
-export const LAYER_ORDER = ['sky', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles'];
+export const LAYER_ORDER = ['sky', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles'];
+
+/*
+ * The 32 material slots a stage uploads.
+ *
+ * One game keeps the pointer array in the program ROM beside the stage table,
+ * the other in the second data bank, but a slot is packed the same either way:
+ * diffuse in bits 0-7, ambient in 8-15, then specular and mirror. The debug
+ * material editor in the second game names every field of one as it builds it,
+ * which is where that reading is confirmed.
+ */
+function readMaterials(rom, slot) {
+    const M = rom.game.stageTable.materials;
+    const out = [];
+    let table = null;
+    if (M.source === 'xtra') {
+        const p = xtraResolve(rom, M.ptrs);
+        const ptr = p.view.getUint32(p.off + slot * 4, true);
+        if (ptr >= 0x06000000 && ptr < 0x07000000) table = xtraResolve(rom, ptr);
+    } else {
+        const at = rom.mainCpuView.getUint32(M.ptrs + slot * 4, true);
+        if (at + MATERIAL_COUNT * 4 <= rom.maincpu.length) {
+            table = { view: rom.mainCpuView, off: at };
+        }
+    }
+    for (let i = 0; i < MATERIAL_COUNT; i++) {
+        if (!table) { out.push({ diffuse: 255, ambient: 0 }); continue; }
+        const w = table.view.getUint32(table.off + i * 4, true);
+        out.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
+    }
+    return out;
+}

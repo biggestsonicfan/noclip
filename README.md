@@ -6,7 +6,7 @@ and renders the game's geometry with three.js. Drop a set on it and it works out
 which game it is from the program ROM inside.
 
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
-views below are its. *Fighting Vipers* has the model explorer — see
+views below are its. *Fighting Vipers* has stages and models — see
 [Fighting Vipers](#fighting-vipers).
 
 Three views:
@@ -69,53 +69,35 @@ Three views:
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
-Models tab and nothing else — 5413 table entries, 3601 of which carry geometry,
-textured from the ROM. The panel says which game is up and the tabs it has no
-tables for are not shown.
+Stages and Models tabs — sixteen arenas and 5413 table entries, 3601 of which
+carry geometry, textured and lit from the ROM.
 
-It works because the two games are built on the same Sega library. Fighting
-Vipers' program ROM carries the same official labels, and its `set_obj` reaches
-for the model table the same way Sonic The Fighters' does —
-`lda unk_20E0004[g0*16], g0`, which is data offset `0x0E0004` on a 16-byte
-stride in both. The mesh pointer is encoded identically, and the global face
-palette is the labelled `unk_2100000` at data offset `0x100000`. So the polygon
-decoder, the texture headers and the palette read straight across; only the ROM
-chip assignments and the table's length had to be worked out, and those are in
-[`js/games.js`](js/games.js) with the reasoning written down beside them.
+It works because the two games are built on the same Sega library, and that went
+further than the model table. Fighting Vipers' program ROM carries the same
+official labels, its `set_obj` reaches for the model table the same way, and the
+palette, the texture pipeline and the colour tables are all the same machinery
+at different addresses. The reasoning for each is written down beside the
+profile in [`js/games.js`](js/games.js) and in [TECHNICAL.md](TECHNICAL.md).
 
-The textures carried across whole. Every routine `js/texture.js` ports is in
-this program ROM under the same official label, and the data header is at the
-same place; only the page grid moved. What does not carry across is the thing
-that says *which* texture set to unpack, because that is what a stage record
-names and there is no stage table. So the model is asked instead: a face names a
-32-pixel tile, and the set whose pages cover those tiles is the one the game
-would have had resident. That search is arithmetic on the page lists, not 100
-decompressions, so it is instant. The picker in the panel overrides it.
+The stage records went furthest of all: `stage_data` is a label in this program
+ROM, and every field the other game's reader knows is at the same offset — the
+flags word, the brightness and two rotations that build the light vector, the
+texture pair, the four single models, the sixteen parts, the cage and the object
+list pointer. They were checked one at a time against the routine that reads
+each. The records live in a second data bank, which is what ROM sockets .5 and
+.6 turn out to be for, reached only through the top half of the mirror window.
 
-Colour and lighting carried across too, and by the same route. The colour
-tables are built by the same code for both games: `send_tex_col_go` here is
-instruction for instruction the other game's `send_tex_col_loop`, the ramp uses
-the same fixed rational, and the intensity curve has the same pivot and divisor.
-The shipped settings are even the same numbers. What differs is that Fighting
-Vipers names each colour table by address rather than through a pointer block,
-and gives a fighter seven rows a side instead of five.
+Two differences change what the viewer does with them. The geometry is already
+in world space: where the other game scales its arena and gives the cage, poles
+and platform a transform each, this one hands each list to `area_clip`, which is
+a cull and not a transform — it reads a visibility bitmap and calls `set_obj`
+with no matrix. So the draw list is the lists themselves. And a stage here
+stands still: the object list a record points at is what animates, and walking
+it is not written yet.
 
-The lighting comes out of a scene table in a second data bank — what ROM
-sockets .5 and .6 turn out to be for, reached only through the top half of the
-mirror window. A record there carries the brightness and two rotations that
-build the geometry engine's light vector, the two texture numbers, and the
-per-channel trim the colour tables are built through; a parallel table gives the
-32 material slots, and a polygon's attribute word names one of them. That pair
-of numbers, diffuse and ambient, is what turns a normal into the luma the colour
-table is then read at — without it every surface lights identically and the
-deliberately flat ones are wrong in both directions.
-
-This is not stage support. What a stage is made of, its draw list, is a
-different table and has not been found. What the sixteen scene records give is
-everything needed to light and colour a lone model the way a scene would, and
-the panel lets you pick which scene and which fighter to read it against —
-because a model on its own does not say which it belonged to. The Stages and
-Animation tabs stay hidden, and the motion tables are still to be found.
+What else is missing: the character rigs and the motion tables, so there is no
+Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
+its own record until someone identifies it.
 
 ## Running it
 

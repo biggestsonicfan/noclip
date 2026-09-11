@@ -13,7 +13,6 @@ js/
   zip.js         zip central-directory reader + inflate
   games.js       per-game ROM recipes and table addresses
   romset.js      MAME region assembly, model table, address translation
-  scenes.js      a second game's scene records: light, materials, tint
   model.js       index-array polygon decoder
   stages.js      stage_data reader
   display.js     per-stage draw list: what gets scaled, rotated, offset
@@ -184,10 +183,46 @@ bits 0-7, ambient in 8-15, specular in 16-23, mirror in 24-31.
 The light vector needs no new code: it is `(0, 0, bright)` turned by the same two
 rotations, which is the board's formula and already in `stageLight`.
 
-None of this is stage support. What a stage is made of — which models are drawn
-where, and what animates — is a separate table and has not been found. A model
-shown on its own also does not say which scene it belonged to, so which scene to
-read against is a choice in the panel, as the texture set is.
+### The stage records
+
+They are the other game's records exactly. `stage_data` is a label in this
+program ROM at `0x06CE1048`, and `change_scene` indexes it with
+`shlo 8, r12, r4` — the same `0x100` stride. Every field `js/stages.js` already
+knew is at the same offset, and each was confirmed against the routine that
+reads it: `change_scene` for the brightness, rotations and texture pair,
+`stage_disp` for the trim, `pole_disp` for `0x1C`, `cage_sub_disp` for `0x1E`,
+`cage_clip_m` for the cage at `0x84`, `ground_upper_disp` for a list at `0x24`
+the other game has no equivalent for, and `object_init` for the pointer at
+`0xB4`. Every single-model field resolves to a table entry carrying geometry.
+
+So `readStageTable` is one reader with the addresses in the profile, and the one
+new thing it needs is that a record may live behind the mirror window rather
+than in the program ROM.
+
+The draw list, though, is not the same at all, and it is simpler. The other
+game's `buildStageDisplayList` is mostly about transforms — the 1.6 scale on the
+arena, a matrix each for the cage, its posts, the ring ramp and the platform.
+This one pushes the stage position once and then hands each list to `area_clip`,
+and `area_clip` is a cull:
+
+```
+area_clip:  ldos  (g2), r5          ; count
+            ...                     ; four indices into a visibility bitmap
+            and   r9, r10, r10
+            cmpobne 0, r10, skip
+            ldos  (g3)[r6*2], r13   ; the model
+            mov   0, g1
+            call  set_obj           ; no matrix
+```
+
+Four bytes of clip-region indices per model decide whether it is drawn, and
+nothing transforms it. The geometry is already in world space, so the draw list
+is the lists themselves at the identity, and `buildFlatDisplayList` is the whole
+of it. The layers are a grouping for the sidebar rather than a claim about
+transforms.
+
+What is missing is motion. The object list at `0xB4` is what animates a stage,
+and walking it is not written, so a stage here stands still.
 
 ### Polygon decoding (`js/model.js`)
 

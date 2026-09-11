@@ -5,9 +5,8 @@
 import { loadRomSet, readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight } from './stages.js';
-import { readScenes } from './scenes.js';
 import {
-    buildStageDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
+    buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
     stageLightYaw, stageMaterials, stageWorldFrame,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
@@ -95,8 +94,10 @@ const state = {
      * scene rows of colorxlat, which character's blocks fill the part and skin
      * rows, and the light vector, since none of the three is in a table the
      * viewer can read. -1 for the fighter leaves those rows at zero. */
-    scenes: [],
-    sceneIndex: 0,
+    /* Whose part and skin colours to fill colorxlat's fighter rows with, for a
+     * game the viewer has no roster for. A stage record does not say who is
+     * standing in it, so it is a choice on the panel; -1 leaves those rows at
+     * zero, which is what a scene with nobody in it shows. */
     colorFighter: 0,
     frames: null,       /* the animation frame tables, read once per ROM set */
     animate: true,
@@ -441,63 +442,20 @@ async function loadTexramFiles(files) {
     }
 }
 
+/*
+ * The draw list for the loaded stage.
+ *
+ * A game whose geometry is already in world space takes the flat builder; the
+ * long one is about the transforms the other game's draw functions apply, and
+ * there are none to apply here.
+ */
+function stageDisplayList(stage) {
+    return state.rom.game.stageTable.flat
+        ? buildFlatDisplayList(stage)
+        : buildStageDisplayList(stage, state.frames);
+}
+
 /* ---- Colour and light for a game with no stage table --------------------- */
-
-/*
- * The colour tables for the selected scene.
- *
- * A scene decides which of the scene colour blocks fills colorxlat rows 14..27
- * and what per-channel trim every entry is built through; which character fills
- * the part and skin rows is a separate choice, because a scene does not say who
- * is standing in it. Both are written every time, since a model names rows in
- * one range or the other and nothing says in advance which.
- *
- * The colour block is the scene's second texture number, which is what
- * stage_disp hands the upload in the other game too.
- */
-function currentScene() {
-    return state.scenes[state.sceneIndex] || null;
-}
-
-function useSceneColorLuts() {
-    const sc = currentScene();
-    const key = `${state.sceneIndex}:${state.colorFighter}`;
-    if (state.lutsPinned || key === state.lutKey) {
-        if (state.cxlat) state.viewer.material.uniforms.uUseRamp.value = 1;
-        return;
-    }
-    setLumaTables(buildLumaram(state.rom), buildColorxlat(state.rom, {
-        colorSet: sc ? sc.texSets[1] : 0,
-        tint: sc ? sc.tint : [1, 1, 1],
-        fighters: state.colorFighter < 0 ? [] : [state.colorFighter],
-    }));
-    state.lutKey = key;
-}
-
-/*
- * The geometry engine's two lighting inputs, from the same record.
- *
- * The light is (0, 0, bright) turned by the scene's two rotations — the board's
- * own formula, shared with the other game — and the materials are the 32 slots
- * sub_24878 uploads. A polygon's attribute word names one of those slots, and
- * the pair it holds is what turns the normal's dot product into the luma the
- * colour table is then read at. Without them every surface lights the same, and
- * the flat-shaded ones — the ones a scene deliberately gives no diffuse at all
- * — come out wrong in both directions.
- */
-function applySceneShading() {
-    const u = state.viewer.material.uniforms;
-    const sc = currentScene();
-    u.uLight.value.set(...(sc ? sc.light : [0, 1, 0]));
-    for (let i = 0; i < 32; i++) {
-        const m = sc ? sc.materials[i] : { diffuse: 255, ambient: 0 };
-        u.uMaterial.value[i].set(m.diffuse, m.ambient);
-    }
-    /* The trim is already in the colour table, so it must not be applied twice
-     * — the same reason applyStageShading leaves it at unity unless pinned. */
-    u.uTint.value.set(1, 1, 1);
-    u.uBright.value = sc && sc.bright > 0 && sc.bright < 8 ? sc.bright : 1;
-}
 
 /* ---- Texture set for a lone model ---------------------------------------- */
 
@@ -764,7 +722,7 @@ function modelScenes() {
         else owner.set(model, [slot]);
     };
     state.stages.forEach((stage, slot) => {
-        for (const m of modelsInDisplayList(buildStageDisplayList(stage, state.frames))) {
+        for (const m of modelsInDisplayList(stageDisplayList(stage))) {
             add(m, slot);
         }
     });
@@ -782,7 +740,13 @@ function modelScenes() {
  * zero a scene with nobody in it leaves them. */
 function modelFighter(idx) {
     modelScenes();
-    return state.rigOwners.get(idx) ?? null;
+    const owner = state.rigOwners.get(idx);
+    if (owner !== undefined) return owner;
+    /* With no roster to say which fighter carries a part, the panel says. */
+    if (state.rom.game.stageTable.flat) {
+        return state.colorFighter >= 0 ? state.colorFighter : null;
+    }
+    return null;
 }
 
 /*
@@ -823,37 +787,24 @@ function useModelScene(idx) {
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
 
-    /*
-     * A game with no stage table has no scene to stand the model in, but it
-     * still has sheets: the texture pipeline is the board's and both games
-     * unpack through the same routines. What is missing is only the thing that
-     * would say *which* texture number to unpack, since that is what a stage
-     * record names. So the model is asked instead — a face names a 32-pixel
-     * tile, and the set whose pages cover those tiles is the set the game would
-     * have had resident. The picker below overrides it.
-     *
-     * The colour ramp stays off: that table is filled from data this game keeps
-     * somewhere the repo has not found, so a face reads its own palette entry.
-     */
-    if (!state.stages.length) {
-        u.uTint.value.set(1, 1, 1);
-        u.uBright.value = 1;
-        const set = modelTextureSet(idx);
-        if (set == null) u.uUseAtlas.value = 0;
-        else useRomTexram([set]);
-        useSceneColorLuts();
-        /* The ramp is the board's answer and the texel fallback is a stand-in
-         * for not having it, so they are never both on. */
-        u.uUseRamp.value = state.cxlat ? 1 : 0;
-        u.uFlatTexel.value = state.cxlat ? 0 : 1;
-        applySceneShading();
-        return;
-    }
-
     const slots = modelScenes().get(idx);
     if (!slots || slots[0] === SCENE_ANY) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
+        /*
+         * Which sheets to stand a model on that no stage draws.
+         *
+         * The other game answers this with the loaded stage, because every one
+         * of its scenes holds the fighters' set. A game whose stages name a
+         * hundred sets between them does not have that property, so the model
+         * is asked instead: a face names a 32-pixel tile, and the set whose
+         * pages cover those tiles is the one the game would have had resident.
+         * The picker on the panel overrides it.
+         */
+        if (state.rom.game.stageTable.flat) {
+            const set = modelTextureSet(idx);
+            if (set != null) useRomTexram([set]);
+        }
         /* A fighter takes whichever scene is loaded, since every scene holds
          * its sheets. A model no scene claims takes it too, and for the same
          * reason the ramp exists: the colour it shows is not a colour but a row
@@ -897,7 +848,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
     useRomTexram(stage.texSets);
     useRomColorLuts(stage, null);
 
-    const list = buildStageDisplayList(stage, state.frames);
+    const list = stageDisplayList(stage);
     const visible = [];   /* everything but the sky shells frames the camera */
     const drawn = [];     /* and everything at all, which the far plane covers */
     /* And the arena on its own — the surface fought on and the ring round it.
@@ -2427,12 +2378,6 @@ function renderTextureSetPicker() {
         state.lutKey = null;
         loadModel(state.modelIndex, { keepCamera: true });
     };
-    const scene = fill('#model-scene', state.scenes.length, 'scene');
-    scene.value = String(state.sceneIndex);
-    scene.addEventListener('change', () => {
-        state.sceneIndex = Number(scene.value);
-        rebuild();
-    });
     const fighter = fill('#model-fighter', C.part.blocks, 'fighter', 'none');
     fighter.value = String(state.colorFighter);
     fighter.addEventListener('change', () => {
@@ -2460,7 +2405,6 @@ function start() {
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
     const on = applyGameFeatures();
     if (on.stage) state.stages = readStageTable(state.rom);
-    else state.scenes = readScenes(state.rom);
     if (on.anim) state.frames = readFrameTables(state.rom);
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
@@ -2476,7 +2420,9 @@ function start() {
     $('#loader').hidden = true;
 
     if (on.stage) renderStageSelect();
-    else renderTextureSetPicker();
+    /* The texture picker is for models no stage draws — see useModelScene. A
+     * game whose stages carry every set between them does not need it. */
+    if (state.rom.game.stageTable.flat) renderTextureSetPicker();
     if (on.anim) renderCharacterSelect();
     renderModelList();
     wireOptions();

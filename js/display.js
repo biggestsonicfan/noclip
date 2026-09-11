@@ -1387,6 +1387,35 @@ const OBJECT_ROUTINES = new Map([
  * @param {object} frames from readFrameTables(); without it a stage is built
  *                        at rest, with every animated draw held on frame 0.
  */
+/*
+ * The draw list of a stage whose geometry is already in world space.
+ *
+ * Sonic The Fighters scales its arena by 1.6 and gives the cage, the poles, the
+ * ring ramp and the platform a transform each, which is what the long function
+ * below is mostly about. Fighting Vipers does none of that: change_scene pushes
+ * the stage position once and then hands each list to `area_clip`, which is a
+ * cull and not a transform — it reads four indices per model out of a
+ * visibility bitmap and calls set_obj with no matrix at all. The single models
+ * at 0x18 and 0x1A go through set_obj the same way.
+ *
+ * So the draw list is the lists themselves, at the identity, and the layers are
+ * a grouping for the sidebar rather than a statement about transforms. What is
+ * missing is the object list at 0xB4, which animates: a stage built here is the
+ * stage standing still.
+ */
+export function buildFlatDisplayList(stage) {
+    const out = [];
+    for (const layer of ['upper', 'ground', 'floor', 'platform', 'extra']) {
+        for (const m of stage.layers[layer] ?? []) out.push({ model: m, layer, ops: [] });
+    }
+    /* The cage list repeats one ring of panels three times over; the record
+     * holds all 24 and the repeats are the rows, so they are kept as they are
+     * rather than de-duplicated. */
+    for (const m of stage.layers.cage ?? []) out.push({ model: m, layer: 'cage', ops: [] });
+    if (stage.cagePole) out.push({ model: stage.cagePole, layer: 'poles', ops: [] });
+    return out;
+}
+
 export function buildStageDisplayList(stage, frames = null) {
     const out = [];
     const flags = stage.flags;
@@ -1741,7 +1770,7 @@ export function describeOps(ops) {
 }
 
 export const DISPLAY_LAYER_ORDER =
-    ['sky', 'water', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects'];
+    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further

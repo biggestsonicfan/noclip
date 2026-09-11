@@ -108,6 +108,15 @@ const sfight = {
     },
     /* Stage records here are read by js/stages.js out of the program ROM, and
      * carry the draw list too, so there is no separate scene table. */
+    /* Where the stage records are and how they are shaped. This game keeps
+     * them in the program ROM at a fixed address and the material tables
+     * beside them; the field offsets inside a record are the same for both
+     * games and live in js/stages.js. */
+    stageTable: {
+        source: 'maincpu', at: 0x0008f3d0, stride: 256, count: 16,
+        lists: { ground: [0x64, 16], cage: [0x84, 24], sky: [0xc0, 4] },
+        materials: { source: 'maincpu', ptrs: 0x000909e0 },
+    },
     scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
@@ -281,17 +290,46 @@ const fvipers = {
      * stage is made of is a draw list, and that has not been located. It is
      * enough to light and colour a model the way a scene would.
      */
-    scenes: {
-        base: 0x06ce1000, stride: 0x100, count: 16,
-        fields: {
-            bright: 0x4c, vecterX: 0x50, vecterY: 0x52,
-            tex0: 0x54, tex1: 0x56, red: 0x58, green: 0x59, blue: 0x5a,
-        },
-        materials: { ptrs: 0x06ce33a4, count: 32 },
+    /*
+     * The stage records, which are the other game's record exactly.
+     *
+     * `stage_data` is a label in this program ROM, at 0x06CE1048 in the second
+     * bank, and change_scene indexes it with `shlo 8, r12, r4` off stage_num.
+     * Every field the other game's reader knows is at the same offset: the
+     * flags word at 0, the brightness at 4, the two rotations at 8 and 0x0A,
+     * the texture pair at 0x0C, the trim at 0x10, the four single models from
+     * 0x18, the sixteen parts at 0x64, the cage at 0x84 and the object list
+     * pointer at 0xB4. They were checked one at a time against the routine that
+     * reads each — change_scene, stage_disp, pole_disp, cage_clip_m,
+     * ground_upper_disp, object_init — and every single-model field resolves to
+     * a table entry that carries geometry.
+     *
+     * The one list the other game has no equivalent for is the 32 entries at
+     * 0x24, which ground_upper_disp draws.
+     */
+    stageTable: {
+        source: 'xtra', at: 0x06ce1048, stride: 256, count: 16,
+        lists: { upper: [0x24, 32], ground: [0x64, 16], cage: [0x84, 24] },
+        materials: { source: 'xtra', ptrs: 0x06ce33a4 },
+        /* change_scene hands both numbers to send_tex_stage. */
+        texPair: 'literal',
+        /*
+         * Every model in a list is drawn where it already is.
+         *
+         * The other game scales its arena by 1.6 and gives the cage, the poles
+         * and the platform a transform each. This one pushes the stage position
+         * once and then hands `area_clip` a list, and area_clip is a cull and
+         * not a transform: it reads four indices per model out of a visibility
+         * bitmap and calls set_obj with no matrix at all. So the geometry is
+         * already in world space and the draw list is the lists themselves.
+         */
+        flat: true,
     },
-    /* Stages, rigs and motions are still this game's own and not located — a
-     * scene record above is not a stage, only what a stage shades with. */
-    features: { stages: false, characters: false, motions: false },
+    scenes: null,
+    /* The stage table is read, so the Stages tab is on. Rigs and motions are
+     * still this game's own and not located, and neither is the object list a
+     * record points at — a stage here stands still. */
+    features: { stages: true, characters: false, motions: false },
 };
 
 export const GAMES = [sfight, fvipers];
