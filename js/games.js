@@ -62,6 +62,10 @@ const sfight = {
             ],
         },
     },
+    /* The XTRA_DATA window at 0x06000000. This game mirrors one bank through
+     * the whole of it — the last megabyte of the data region — repeated every
+     * megabyte, so there is nothing to select between. */
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     modelTable: { offset: 0x000e0004, count: 5103, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
@@ -76,6 +80,35 @@ const sfight = {
          * overwrite its deepest mip levels. */
         residentSet: 16,
     },
+    /* Where each colour upload reads from. `at` is a main_data offset, and
+     * `indirect` says it holds a pointer to the table rather than being it —
+     * this game keeps a pointer block at 0x101000 and loads every table out of
+     * it. `split` is the character number at which the part and skin tables
+     * fold onto a second block. See js/colors.js for the shapes these fill. */
+    colors: {
+        luma: { count: 0x0d0008, data: 0x0d000c },
+        add: [22, 22, 22],
+        mul: [54, 54, 54],
+        bright: 31,
+        stage: { at: 0x101010, indirect: true, row0: 14, rows: 14, block: 0x540, blocks: 17 },
+        /* Rows 5..6 and 12..13, written once at boot from two tables of their
+         * own — the rows this game's other uploads leave alone. */
+        fixed: [
+            { at: 0x101014, indirect: true, row0: 5, rows: 2 },
+            { at: 0x101018, indirect: true, row0: 12, rows: 2 },
+        ],
+        part: {
+            at: 0x101008, atHi: 0x10100c, indirect: true,
+            block: 0x2a0, rows: 5, row0: [0, 7], split: 26, blocks: 34,
+        },
+        skin: {
+            at: 0x101000, indirect: true,
+            block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
+        },
+    },
+    /* Stage records here are read by js/stages.js out of the program ROM, and
+     * carry the draw list too, so there is no separate scene table. */
+    scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
@@ -145,6 +178,14 @@ const fvipers = {
                 [0x800000, 'mpr-18618.19', 0xadab589f, 'mpr-18621.23', 0xf5eeaa95],
             ],
         },
+        /* The second data bank, and what sockets .5 and .6 are for. It is not
+         * part of the data region the i960 sees at 0x02000000 — it is reached
+         * only through the top half of the XTRA_DATA window, which is where the
+         * per-stage material table and the tables around it live. */
+        xtraBank: {
+            size: 0x100000,
+            parts: [[0x00000, 'epr-18608d.5', 0x5bc11881, 'epr-18609d.6', 0xcd426035]],
+        },
         /* Two pairs at the same two offsets the other game uses, which on 2MB
          * chips leaves 0x400000-0x800000 empty. Nothing points into it. */
         textures: {
@@ -154,6 +195,22 @@ const fvipers = {
                 [0x800000, 'mpr-18627.28', 0x946175a0, 'mpr-18625.26', 0x182fd572],
             ],
         },
+    },
+    /*
+     * The XTRA_DATA window, which this game splits in two.
+     *
+     * The low half mirrors the last megabyte of the data region, as the other
+     * game's whole window does. The high half — anything with 0x800000 set —
+     * mirrors the second bank instead, and both halves repeat every megabyte.
+     * The split was read off the board's own addresses: `lda unk_64266E0` for
+     * luma lands in the low half and matches the data region byte for byte,
+     * while `ld off_6CE33A4[r12*4]` for the material table lands in the high
+     * half and matches the .5/.6 pair, which nothing else in the set uses.
+     */
+    xtra: {
+        window: 0x100000,
+        select: 0x800000,
+        banks: [{ region: 'mainData', base: 0x1000000 }, { region: 'xtraBank', base: 0 }],
     },
     modelTable: { offset: 0x000e0004, count: 5413, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
@@ -171,8 +228,69 @@ const fvipers = {
          * so nothing is forced in ahead of the chosen one. */
         residentSet: null,
     },
-    /* Nothing but the model explorer yet: the stage, rig and motion tables are
-     * this game's own and have not been located. */
+    /*
+     * The colour tables, which turned out to be the same machinery again.
+     * send_tex_col_go here is instruction for instruction the other game's
+     * send_tex_col_loop, the ramp in chg_pol_color_req uses the same 0x1C/0x12,
+     * and sub_74C builds the intensity curve on the same pivot and divisor
+     * (`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37). check_sram_all ships
+     * add 22, multiply 54 and brightness 31, which are the other game's numbers
+     * too, though this one keeps a pair per channel at 0x500234..0x500239
+     * rather than one for all three.
+     *
+     * What differs is naming and rows. There is no pointer block: each upload
+     * names its table outright — `lda unk_2109700` for the scene's,
+     * `lda unk_2105800` and `lda unk_2107780` for a fighter's parts, and
+     * `lda unk_2101000` for skin. And the parts take seven rows a side rather
+     * than five, so rows 0..6 and 7..13 are both spoken for and there is no gap
+     * left for the pair of boot-time tables the other game needs.
+     */
+    colors: {
+        /* essential_color_handling reads these through the XTRA_DATA mirror as
+         * unk_64266DC and unk_64266E0, which fold to these data offsets. */
+        luma: { count: 0x10266dc, data: 0x10266e0 },
+        add: [22, 22, 22],
+        mul: [54, 54, 54],
+        bright: 31,
+        /* Nine scene blocks carry colours and the rest are empty, which is
+         * the arena count; thirteen character blocks do, which is the roster.
+         * Both counts are what the blocks hold, not a number the program
+         * states — they are here so the panel can offer the real range. */
+        stage: { at: 0x109700, indirect: false, row0: 14, rows: 14, block: 0x540, blocks: 9 },
+        fixed: [],
+        part: {
+            at: 0x105800, atHi: 0x107780, indirect: false,
+            block: 0x2a0, rows: 7, row0: [0, 7], split: 13, blocks: 13,
+        },
+        skin: {
+            at: 0x101000, indirect: false,
+            block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
+        },
+    },
+    /*
+     * The scene records, which carry everything about a scene except its draw
+     * list. change_scene indexes them with `shlo 8, r12, r4` off stage_num, so
+     * the stride is 0x100 like the other game's, and the fields below are the
+     * ones it and stage_disp read out: the brightness and the two rotations
+     * that build the light vector, the pair of texture numbers it hands
+     * send_tex_stage, and the three bytes stage_disp copies to 0x5000E0 as the
+     * per-channel trim. The material table is a second array indexed the same
+     * way — sub_24878 walks 32 slots out of `off_6CE33A4[stage_num*4]`.
+     *
+     * Sixteen records read as real scenes. This is not stage support: what a
+     * stage is made of is a draw list, and that has not been located. It is
+     * enough to light and colour a model the way a scene would.
+     */
+    scenes: {
+        base: 0x06ce1000, stride: 0x100, count: 16,
+        fields: {
+            bright: 0x4c, vecterX: 0x50, vecterY: 0x52,
+            tex0: 0x54, tex1: 0x56, red: 0x58, green: 0x59, blue: 0x5a,
+        },
+        materials: { ptrs: 0x06ce33a4, count: 32 },
+    },
+    /* Stages, rigs and motions are still this game's own and not located — a
+     * scene record above is not a stage, only what a stage shades with. */
     features: { stages: false, characters: false, motions: false },
 };
 

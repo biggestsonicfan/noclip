@@ -13,6 +13,7 @@ js/
   zip.js         zip central-directory reader + inflate
   games.js       per-game ROM recipes and table addresses
   romset.js      MAME region assembly, model table, address translation
+  scenes.js      a second game's scene records: light, materials, tint
   model.js       index-array polygon decoder
   stages.js      stage_data reader
   display.js     per-stage draw list: what gets scaled, rotated, offset
@@ -136,25 +137,57 @@ tiles it covers. Over 3550 textured models that picks a fully-covering set for
 all but one, in about half a second for the whole table; unpacking all 100 sets
 to find out would have cost seconds per model.
 
-What did not carry across is colour. A face names a row of a colour table the
-game fills in RAM per scene (see [Colour tables](#colour-tables-jscolorsjs)),
-and Sonic The Fighters' is read out of a pointer block at data offset
-`0x101000`. Fighting Vipers' `send_tex_col_skin` mentions the same address, but
-what is there is palette data, not pointers, and its luma block at `0x0D0008` is
-zero. So that table is genuinely elsewhere. Two pieces of it are located and written
-down here for whoever picks it up: `essential_color_handling` fills luma RAM
-from `unk_64266E0` with a count at `unk_64266DC`, which through the XTRA_DATA
-mirror is data offset `0x10266DC`; and `chg_pol_color_send` writes colorxlat at
-`0x1800000 + 0x10000` in three `0x4000` channels, which is the same layout the
-other game uses. The sources the uploads read from are at data offsets
-`0x101000`, `0x105800`, `0x107780` and `0x109700`, named directly rather than
-through a pointer block.
+### Colour and light for a second game
 
-Until that is done, a model whose faces name only rows would draw black —
-multiplying a decoded texel by a palette entry that is black throws the sheet
-away. The viewer shows the texel's own value for those faces instead, so the
-texture is visible in monochrome. It is not what the board puts out and the
-panel says so. Models naming real palette colours come out right.
+The colour tables carried across as completely as the textures did.
+`send_tex_col_go` in Fighting Vipers is instruction for instruction the other
+game's `send_tex_col_loop` — the same `0x200` row stride, the same `0x60` group,
+the same sixteen colours over luma 48..63 with channels `0x20` apart. The ramp
+in `chg_pol_color_req` uses the same `0x1C`/`0x12` rational and starts its row
+loop at 1, leaving row 0 and luma 0 zero exactly as the other does. `sub_74C`
+builds the intensity curve on the same pivot and divisor, written as
+`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37. And `check_sram_all` ships add
+22, multiply 54 and brightness 31, which are the other game's numbers, though
+this one keeps a pair per channel at `0x500234`..`0x500239` rather than one for
+all three. So `js/colors.js` is one implementation with the addresses lifted out
+into the profile.
+
+Two things differ. There is no pointer block: each upload names its table
+outright, `lda unk_2109700` for the scene's and `lda unk_2105800` for a
+fighter's parts. And a fighter takes seven colorxlat rows a side rather than
+five, so rows 0..6 and 7..13 are both spoken for and there is no gap left for
+the pair of boot-time tables the other game needs.
+
+### The second data bank
+
+The lighting is in a place the ROM layout did not originally have. Sockets .5
+and .6 are not part of the data region the i960 sees at `0x02000000`; they are a
+second bank reached only through the XTRA_DATA window, and the window is split
+in two. Anything with `0x800000` set mirrors that bank, anything without mirrors
+the last megabyte of the data region, and both halves repeat every megabyte. The
+split was read off the board's own addresses: `lda unk_64266E0` for luma RAM
+lands in the low half and matches the data region byte for byte, while
+`ld off_6CE33A4[r12*4]` for the material table lands in the high half and
+matches the .5/.6 pair, which nothing else in the set uses.
+
+In that bank is a scene table, indexed by `change_scene` with `shlo 8, r12, r4`
+off `stage_num` — the same `0x100` stride the other game's stage record has. The
+fields the viewer reads are the ones `change_scene` and `stage_disp` read:
+brightness and the two rotations that build the light vector, the pair of
+texture numbers handed to `send_tex_stage`, and three bytes copied to `0x5000E0`
+as the per-channel trim. A second array gives the materials: `sub_24878` walks
+32 slots out of `off_6CE33A4[stage_num*4]` and pushes them at the geometry
+engine behind command `0x606`. The debug editor at `sub_56694` names every field
+of a slot as it builds one, which is how the packing was confirmed — diffuse in
+bits 0-7, ambient in 8-15, specular in 16-23, mirror in 24-31.
+
+The light vector needs no new code: it is `(0, 0, bright)` turned by the same two
+rotations, which is the board's formula and already in `stageLight`.
+
+None of this is stage support. What a stage is made of — which models are drawn
+where, and what animates — is a separate table and has not been found. A model
+shown on its own also does not say which scene it belonged to, so which scene to
+read against is a choice in the panel, as the texture set is.
 
 ### Polygon decoding (`js/model.js`)
 

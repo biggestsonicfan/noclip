@@ -83,10 +83,11 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
     onProgress(`${game.name} ROM set ready`, 1);
 
     out.warnings = warnings;
-    out.mainDataView = new DataView(out.mainData.buffer);
-    out.mainCpuView = new DataView(out.maincpu.buffer);
-    out.polygonsView = new DataView(out.polygons.buffer);
-    out.texturesView = new DataView(out.textures.buffer);
+    /* A view per region, named for it, so a profile that adds one — Fighting
+     * Vipers' second bank — gets a view without this list being touched.
+     * mainCpuView keeps its old spelling because the callers use it. */
+    for (const [key] of regions) out[`${key}View`] = new DataView(out[key].buffer);
+    out.mainCpuView = out.maincpuView;
     return out;
 }
 
@@ -132,4 +133,24 @@ export const XTRA_DATA_BASE = 0x06000000;
 
 export function xtraToMainData(addr) {
     return 0x01000000 + ((addr - XTRA_DATA_BASE) & 0x000fffff);
+}
+
+/**
+ * Resolve an XTRA_DATA address to the region it mirrors and an offset in it.
+ *
+ * The window is a mirror, not storage: a bank is repeated across it every
+ * megabyte, and a game may put more than one bank in the window and pick
+ * between them with an address bit. Sonic The Fighters mirrors one bank through
+ * the whole window; Fighting Vipers mirrors the data region's last megabyte in
+ * the low half and a second bank of its own in the high half.
+ *
+ * @returns {{data: Uint8Array, view: DataView, off: number}}
+ */
+export function xtraResolve(rom, addr) {
+    const x = rom.game.xtra;
+    const rel = (addr - XTRA_DATA_BASE) >>> 0;
+    const bank = x.select ? x.banks[(rel & x.select) ? 1 : 0] : x.banks[0];
+    const off = bank.base + (rel & (x.window - 1));
+    const data = rom[bank.region];
+    return { data, view: rom[`${bank.region}View`], off };
 }

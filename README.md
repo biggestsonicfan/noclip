@@ -92,16 +92,30 @@ names and there is no stage table. So the model is asked instead: a face names a
 would have had resident. That search is arithmetic on the page lists, not 100
 decompressions, so it is instant. The picker in the panel overrides it.
 
-What is still missing is colour. A Model 2 face does not usually name a colour —
-it names a row of a colour table the game fills in RAM on every scene change,
-and where that table comes from is each game's own business. Sonic The Fighters'
-is read out of a pointer block the repo located; Fighting Vipers keeps its
-somewhere else. A model naming real palette colours comes out right — the title
-logo in gold, Candy's skateboard on its wood deck and white wheels. A model
-naming only rows would draw black, so those are shown as the texel's own value
-instead: the sheet is visible, in monochrome, which is not what the board puts
-out and is marked as such. The stage and motion tables are likewise still to be
-found.
+Colour and lighting carried across too, and by the same route. The colour
+tables are built by the same code for both games: `send_tex_col_go` here is
+instruction for instruction the other game's `send_tex_col_loop`, the ramp uses
+the same fixed rational, and the intensity curve has the same pivot and divisor.
+The shipped settings are even the same numbers. What differs is that Fighting
+Vipers names each colour table by address rather than through a pointer block,
+and gives a fighter seven rows a side instead of five.
+
+The lighting comes out of a scene table in a second data bank — what ROM
+sockets .5 and .6 turn out to be for, reached only through the top half of the
+mirror window. A record there carries the brightness and two rotations that
+build the geometry engine's light vector, the two texture numbers, and the
+per-channel trim the colour tables are built through; a parallel table gives the
+32 material slots, and a polygon's attribute word names one of them. That pair
+of numbers, diffuse and ambient, is what turns a normal into the luma the colour
+table is then read at — without it every surface lights identically and the
+deliberately flat ones are wrong in both directions.
+
+This is not stage support. What a stage is made of, its draw list, is a
+different table and has not been found. What the sixteen scene records give is
+everything needed to light and colour a lone model the way a scene would, and
+the panel lets you pick which scene and which fighter to read it against —
+because a model on its own does not say which it belonged to. The Stages and
+Animation tabs stay hidden, and the motion tables are still to be found.
 
 ## Running it
 

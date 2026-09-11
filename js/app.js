@@ -5,6 +5,7 @@
 import { loadRomSet, readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight } from './stages.js';
+import { readScenes } from './scenes.js';
 import {
     buildStageDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -90,6 +91,13 @@ const state = {
      * set the user chose. `texSetCache` memoises the worked-out answer. */
     texSetChoice: null,
     texSetCache: new Map(),
+    /* For a game with no stage record: which scene colour block fills the
+     * scene rows of colorxlat, which character's blocks fill the part and skin
+     * rows, and the light vector, since none of the three is in a table the
+     * viewer can read. -1 for the fighter leaves those rows at zero. */
+    scenes: [],
+    sceneIndex: 0,
+    colorFighter: 0,
     frames: null,       /* the animation frame tables, read once per ROM set */
     animate: true,
     /* Which of the two framings the moving stages are shown in — see
@@ -433,6 +441,64 @@ async function loadTexramFiles(files) {
     }
 }
 
+/* ---- Colour and light for a game with no stage table --------------------- */
+
+/*
+ * The colour tables for the selected scene.
+ *
+ * A scene decides which of the scene colour blocks fills colorxlat rows 14..27
+ * and what per-channel trim every entry is built through; which character fills
+ * the part and skin rows is a separate choice, because a scene does not say who
+ * is standing in it. Both are written every time, since a model names rows in
+ * one range or the other and nothing says in advance which.
+ *
+ * The colour block is the scene's second texture number, which is what
+ * stage_disp hands the upload in the other game too.
+ */
+function currentScene() {
+    return state.scenes[state.sceneIndex] || null;
+}
+
+function useSceneColorLuts() {
+    const sc = currentScene();
+    const key = `${state.sceneIndex}:${state.colorFighter}`;
+    if (state.lutsPinned || key === state.lutKey) {
+        if (state.cxlat) state.viewer.material.uniforms.uUseRamp.value = 1;
+        return;
+    }
+    setLumaTables(buildLumaram(state.rom), buildColorxlat(state.rom, {
+        colorSet: sc ? sc.texSets[1] : 0,
+        tint: sc ? sc.tint : [1, 1, 1],
+        fighters: state.colorFighter < 0 ? [] : [state.colorFighter],
+    }));
+    state.lutKey = key;
+}
+
+/*
+ * The geometry engine's two lighting inputs, from the same record.
+ *
+ * The light is (0, 0, bright) turned by the scene's two rotations — the board's
+ * own formula, shared with the other game — and the materials are the 32 slots
+ * sub_24878 uploads. A polygon's attribute word names one of those slots, and
+ * the pair it holds is what turns the normal's dot product into the luma the
+ * colour table is then read at. Without them every surface lights the same, and
+ * the flat-shaded ones — the ones a scene deliberately gives no diffuse at all
+ * — come out wrong in both directions.
+ */
+function applySceneShading() {
+    const u = state.viewer.material.uniforms;
+    const sc = currentScene();
+    u.uLight.value.set(...(sc ? sc.light : [0, 1, 0]));
+    for (let i = 0; i < 32; i++) {
+        const m = sc ? sc.materials[i] : { diffuse: 255, ambient: 0 };
+        u.uMaterial.value[i].set(m.diffuse, m.ambient);
+    }
+    /* The trim is already in the colour table, so it must not be applied twice
+     * — the same reason applyStageShading leaves it at unity unless pinned. */
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = sc && sc.bright > 0 && sc.bright < 8 ? sc.bright : 1;
+}
+
 /* ---- Texture set for a lone model ---------------------------------------- */
 
 /*
@@ -772,11 +838,15 @@ function useModelScene(idx) {
     if (!state.stages.length) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
-        u.uUseRamp.value = 0;
-        u.uFlatTexel.value = 1;
         const set = modelTextureSet(idx);
         if (set == null) u.uUseAtlas.value = 0;
         else useRomTexram([set]);
+        useSceneColorLuts();
+        /* The ramp is the board's answer and the texel fallback is a stand-in
+         * for not having it, so they are never both on. */
+        u.uUseRamp.value = state.cxlat ? 1 : 0;
+        u.uFlatTexel.value = state.cxlat ? 0 : 1;
+        applySceneShading();
         return;
     }
 
@@ -2331,6 +2401,45 @@ function renderTextureSetPicker() {
         loadModel(state.modelIndex, { keepCamera: true });
     });
     $('#model-texset-field').hidden = false;
+
+    /* Scene colours and whose parts to read, the two a stage record would name.
+     * Both are written on every rebuild, since a model names rows in one range
+     * or the other and nothing says in advance which. */
+    const C = state.rom.game.colors;
+    const fill = (id, n, label, first) => {
+        const s = $(id);
+        s.innerHTML = '';
+        if (first) {
+            const o = el('option');
+            o.value = '-1';
+            o.textContent = first;
+            s.appendChild(o);
+        }
+        for (let i = 0; i < n; i++) {
+            const o = el('option');
+            o.value = String(i);
+            o.textContent = `${label} ${i}`;
+            s.appendChild(o);
+        }
+        return s;
+    };
+    const rebuild = () => {
+        state.lutKey = null;
+        loadModel(state.modelIndex, { keepCamera: true });
+    };
+    const scene = fill('#model-scene', state.scenes.length, 'scene');
+    scene.value = String(state.sceneIndex);
+    scene.addEventListener('change', () => {
+        state.sceneIndex = Number(scene.value);
+        rebuild();
+    });
+    const fighter = fill('#model-fighter', C.part.blocks, 'fighter', 'none');
+    fighter.value = String(state.colorFighter);
+    fighter.addEventListener('change', () => {
+        state.colorFighter = Number(fighter.value);
+        rebuild();
+    });
+    $('#model-colour-field').hidden = false;
 }
 
 function applyGameFeatures() {
@@ -2351,6 +2460,7 @@ function start() {
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
     const on = applyGameFeatures();
     if (on.stage) state.stages = readStageTable(state.rom);
+    else state.scenes = readScenes(state.rom);
     if (on.anim) state.frames = readFrameTables(state.rom);
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
