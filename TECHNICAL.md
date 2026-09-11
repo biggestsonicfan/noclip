@@ -1,7 +1,9 @@
 # Technical notes
 
-How the *Sonic The Fighters* explorer reads the ROM set and turns it into what
-you see. For running and deploying the viewer, see [README.md](README.md).
+How the explorer reads a Sega Model 2 ROM set and turns it into what you see.
+Most of what follows is *Sonic The Fighters*, the game it goes deepest on; the
+parts that are not its alone say so. For running and deploying the viewer, see
+[README.md](README.md).
 
 ## Layout
 
@@ -9,6 +11,7 @@ you see. For running and deploying the viewer, see [README.md](README.md).
 index.html  style.css
 js/
   zip.js         zip central-directory reader + inflate
+  games.js       per-game ROM recipes and table addresses
   romset.js      MAME region assembly, model table, address translation
   model.js       index-array polygon decoder
   stages.js      stage_data reader
@@ -53,12 +56,74 @@ is the way out.
 
 ## How it works
 
-### ROM assembly (`js/zip.js`, `js/romset.js`)
+### ROM assembly (`js/zip.js`, `js/romset.js`, `js/games.js`)
 
 The zip members are inflated in the browser via `DecompressionStream` and
 interleaved into MAME's region layout (`ROM_LOAD32_WORD`: two 16-bit halves into
 32-bit words). Four regions are assembled — the program ROM, the main data ROM
 (model table, face palette, motion tables), the polygon ROM and the texture ROM.
+
+Which chips make up each region, and where the tables sit once it is built, is
+per-game and lives in `js/games.js`. `loadRomSet` identifies the set from its
+member names rather than being told, and hangs the profile it chose on the ROM
+set as `rom.game`, so the decoders read their numbers off the set they were
+handed. Nothing downstream carries a game's address as a module constant.
+
+### Working out a second game's layout
+
+Adding *Fighting Vipers* meant deriving a layout for a set whose MAME recipe was
+not to hand, and the method is worth recording because it needs no recipe.
+
+The program ROM settles the tables. Both games are built on Sega's Model 2
+library and Fighting Vipers' program ROM carries the same official labels, so
+`set_obj` is where it always is and reaches for the model table the same way:
+
+```
+set_obj:  ld   off_501018, r4
+          ...
+          lda  unk_20E0004[g0*16], g0
+          ldq  (g0), r8
+```
+
+`MAIN_DATA` is based at `0x02000000`, so that is data offset `0x0E0004` on a
+16-byte stride — the same as Sonic The Fighters, and the `ldq` confirms the
+16-byte entry. The face palette is the labelled `unk_2100000`, data offset
+`0x100000`, and reading it back shows a linear BGR555 grey ramp, which is what a
+palette that starts at black and walks to white looks like.
+
+The chips settle themselves, given something to score them against. Each region
+is a small number of candidate pairings, and a wrong one is not subtly wrong —
+it is floating-point garbage. Two tests separate them:
+
+- **Polygons.** Every 40-byte record ends in the polygon's normal, and the board
+  stores it unit length. Build a candidate, decode a few hundred meshes, and
+  count how many open on normals whose length is 1. The right pairing scores
+  across the whole region; a wrong one collapses in the 4MB band it got wrong.
+- **Textures.** A material record's first half-word gives the tile size as two
+  three-bit fields, and the UV stream is texel coordinates in eighths. A
+  candidate that yields tile sizes over 512, or UVs in the thousands, is not the
+  texture ROM. Because a record's bytes alternate between the two chips, the low
+  chip is scored on the header and the high chip on the UVs.
+
+The pointer ranges size the regions before any of that: the largest mesh pointer
+in the table is at 9.9MB, which no two 2MB pairs can hold, so the polygon ROM
+has three; the UV pointers stop below 12MB with a 4MB hole in the middle, which
+is two pairs at the same offsets Sonic The Fighters uses.
+
+The table's length is the one thing the program does not state. Entries run in
+banks separated by runs of zeros, so the end is not the first zero — it is where
+entries stop being *plausible*. Every entry up to 5412 has a mesh pointer inside
+the polygon ROM and uv/material pointers inside the texture ROM; nothing above
+8190 does. That upper stretch is other data that happens to follow the table.
+
+What did not carry across is colour. A face names a row of a colour table the
+game fills in RAM per scene (see [Colour tables](#colour-tables-jscolorsjs)),
+and Sonic The Fighters' is read out of a pointer block at data offset
+`0x101000`. Fighting Vipers' `send_tex_col_skin` mentions the same address, but
+what is there is palette data, not pointers, and its luma block at `0x0D0008` is
+zero. So that table is genuinely elsewhere, and until it is found a model whose
+faces name only rows draws in the raw palette entry — black, for character
+parts. Models naming real palette colours come out right.
 
 ### Polygon decoding (`js/model.js`)
 

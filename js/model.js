@@ -21,10 +21,7 @@
  * not the triangle's plane, and the two are not the same on anything curved.
  */
 
-import {
-    readModelEntry, MODEL_TABLE_COUNT,
-    MESH_PTR_SUBTRACT, MESH_PTR_ADD, PALETTE_OFFSET,
-} from './romset.js';
+import { readModelEntry, meshOffsetOf } from './romset.js';
 
 const VERTEX_PAIR_SIZE = 40;
 const MAX_VERTEX_PAIRS = 4096;
@@ -50,7 +47,7 @@ function bgr555(cw, out) {
  * @returns {null|object}   null when the table entry has no mesh
  */
 export function decodeModel(rom, modelIdx, points = null) {
-    if (modelIdx < 0 || modelIdx >= MODEL_TABLE_COUNT) return null;
+    if (modelIdx < 0 || modelIdx >= rom.game.modelTable.count) return null;
     const entry = readModelEntry(rom, modelIdx);
     if (entry.meshPtr === 0) return null;
 
@@ -59,8 +56,8 @@ export function decodeModel(rom, modelIdx, points = null) {
     const textures = rom.textures;
     const mainData = rom.mainData;
 
-    let meshOffset = (entry.meshPtr * 4 - MESH_PTR_SUBTRACT + MESH_PTR_ADD) >>> 0;
-    if (meshOffset + VERTEX_PAIR_SIZE > polygons.length) return null;
+    let meshOffset = meshOffsetOf(rom, entry);
+    if (meshOffset < 0 || meshOffset + VERTEX_PAIR_SIZE > polygons.length) return null;
 
     /* Material stream: one 8-byte record per EMITTED face at matPtr*2.
      * UV stream: nv (pv,pu) 16-bit pairs per face-loop ITERATION at uvPtr*2. */
@@ -351,7 +348,7 @@ export function decodeModel(rom, modelIdx, points = null) {
                 tw = textured ? texw : 0;
                 th = texh;
                 const matidx = (th3 >> 6) & 0x3ff;   /* colorbase -> global palette */
-                const pal = PALETTE_OFFSET + matidx * 2;
+                const pal = rom.game.paletteOffset + matidx * 2;
                 if (pal + 2 <= mainData.length) {
                     bgr555(mainData[pal] | (mainData[pal + 1] << 8), rgb);
                 }

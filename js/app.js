@@ -2,7 +2,7 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, MODEL_TABLE_COUNT, readModelEntry } from './romset.js';
+import { loadRomSet, readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight } from './stages.js';
 import {
@@ -157,7 +157,7 @@ async function bootWithBuffers(buffers) {
     try {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
     } catch (err) {
-        return failToLoad(err, 'check that these are the sfight / schamp ROM zips');
+        return failToLoad(err, 'check that these are the sfight, schamp or fvipers ROM zips');
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
      * problem, and swapping to the app shell first would hide the message. */
@@ -426,6 +426,12 @@ async function loadTexramFiles(files) {
 
 /* ---- Model cache --------------------------------------------------------- */
 
+/* How many entries the loaded game's model table has. Read through a call
+ * rather than imported, because it is not known until a ROM set is in hand. */
+function modelCount() {
+    return state.rom ? state.rom.game.modelTable.count : 0;
+}
+
 function getModel(idx) {
     if (state.modelCache.has(idx)) return state.modelCache.get(idx);
     const m = decodeModel(state.rom, idx);
@@ -590,6 +596,10 @@ function modelsInDisplayList(list) {
  */
 function rigModels() {
     const out = new Map();
+    /* The roster and every table it leads to are one game's. Read against
+     * another's ROMs the pointers land wherever they land, so a game without
+     * them has no rig models rather than a mapful of wrong ones. */
+    if (!state.rom.game.features.characters) return out;
     const add = (m, index) => { if (m && !out.has(m)) out.set(m, index); };
     for (const { index } of CHARACTERS) {
         const c = readCharacter(state.rom, index);
@@ -714,6 +724,17 @@ function useModelScene(idx) {
     const u = state.viewer.material.uniforms;
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+
+    /* A game whose stage and colour tables have not been located has no scene
+     * to stand the model in — no sheets to bind, and no ramp to read a row
+     * through. The flat approximation is the whole of it, and it is the honest
+     * one: what it shows is the model's own face palette out of the ROM. */
+    if (!state.stages.length) {
+        u.uTint.value.set(1, 1, 1);
+        u.uBright.value = 1;
+        u.uUseRamp.value = 0;
+        return;
+    }
 
     const slots = modelScenes().get(idx);
     if (!slots || slots[0] === SCENE_ANY) {
@@ -1731,19 +1752,19 @@ function renderModelList() {
     const q = $('#model-search').value.trim();
     const onlyMesh = $('#model-only-mesh').checked;
 
-    let lo = 0, hi = MODEL_TABLE_COUNT - 1;
+    let lo = 0, hi = modelCount() - 1;
     const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
     const single = q.match(/^(\d+)$/);
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
-    lo = Math.max(0, lo); hi = Math.min(MODEL_TABLE_COUNT - 1, hi);
+    lo = Math.max(0, lo); hi = Math.min(modelCount() - 1, hi);
 
     const rows = [];
     for (let i = lo; i <= hi && rows.length < 1500; i++) {
         if (onlyMesh && readModelEntry(state.rom, i).meshPtr === 0) continue;
         rows.push(i);
     }
-    $('#model-count').textContent = `${rows.length} shown of ${MODEL_TABLE_COUNT} table entries`;
+    $('#model-count').textContent = `${rows.length} shown of ${modelCount()} table entries`;
 
     list.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -1798,6 +1819,9 @@ function renderModelInfo(idx, d) {
 function describeModelScene(idx) {
     const slots = modelScenes().get(idx);
     if (!slots) {
+        /* With no stage table located there is no scene to name and no ramp in
+         * play, so say what is actually on screen: the model's own palette. */
+        if (!state.stages.length) return 'shaded flat, on the face palette in the ROM';
         const stage = state.stages[state.stageIndex];
         return `drawn by no stage — shaded against ${stage ? stage.name : 'the loaded stage'}'s tables`;
     }
@@ -2217,7 +2241,7 @@ function wireOptions() {
 
     document.addEventListener('keydown', (e) => {
         if (e.target.matches('input, select, textarea')) return;
-        if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(MODEL_TABLE_COUNT - 1, state.modelIndex + 1));
+        if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(modelCount() - 1, state.modelIndex + 1));
         if (state.tab === 'model' && e.code === 'BracketLeft') selectModel(Math.max(0, state.modelIndex - 1));
         if (e.code === 'KeyF') {
             if (state.tab === 'stage') loadStage(state.stageIndex);
@@ -2229,20 +2253,52 @@ function wireOptions() {
 
 /* ---- Boot ---------------------------------------------------------------- */
 
+/*
+ * Show only the tabs the loaded game has tables for.
+ *
+ * The stage list, the rigs and the motions are each read out of a table located
+ * in one game's program ROM, and a second game keeps its own somewhere else. So
+ * a title the repo has only the model table for gets the Models tab and nothing
+ * else, rather than three panels where two are empty or, worse, full of another
+ * game's addresses read against these ROMs.
+ */
+function applyGameFeatures() {
+    const f = state.rom.game.features;
+    $('#game-title').textContent = state.rom.game.name;
+    document.title = `${state.rom.game.name} — 3D Explorer`;
+    const on = { stage: f.stages, model: true, anim: f.characters && f.motions };
+    for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
+    /* One tab left is not a choice; the panel says which game is loaded. */
+    $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
+    return on;
+}
+
 function start() {
     /* Build the viewer before swapping panels, so a renderer failure still has
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.stages = readStageTable(state.rom);
-    state.frames = readFrameTables(state.rom);
+    const on = applyGameFeatures();
+    if (on.stage) state.stages = readStageTable(state.rom);
+    if (on.anim) state.frames = readFrameTables(state.rom);
+    /* The model the panel opens on is a hand-picked one, and it is only
+     * hand-picked for the game it was picked in — in another the same index is
+     * as likely to be one of the table's empty entries, which opens the viewer
+     * on nothing at all. Fall forward to the first index that draws something.
+     * A pointer is not enough to go on: the first entries of both tables carry
+     * one and still decode to no geometry. */
+    if (!getModel(state.modelIndex)?.positions.length) {
+        for (let i = 0; i < Math.min(modelCount(), 512); i++) {
+            if (getModel(i)?.positions.length) { state.modelIndex = i; break; }
+        }
+    }
     $('#loader').hidden = true;
 
-    renderStageSelect();
-    renderCharacterSelect();
+    if (on.stage) renderStageSelect();
+    if (on.anim) renderCharacterSelect();
     renderModelList();
     wireOptions();
-    switchTab('stage');
+    switchTab(on.stage ? 'stage' : 'model');
     state.viewer.resize();
 
     let frames = 0;

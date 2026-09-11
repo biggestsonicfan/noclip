@@ -1,8 +1,13 @@
-# Sonic The Fighters — 3D Explorer
+# Sega Model 2 — 3D Explorer
 
-A browser-based explorer for *Sonic The Fighters* (Sega Model 2B). It reads the
-arcade ROM set directly in the page — no server-side conversion, no pre-baked
-asset dump — and renders the game's geometry with three.js.
+A browser-based explorer for Sega Model 2 arcade games. It reads the arcade ROM
+set directly in the page — no server-side conversion, no pre-baked asset dump —
+and renders the game's geometry with three.js. Drop a set on it and it works out
+which game it is from the program ROM inside.
+
+*Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
+views below are its. *Fighting Vipers* has the model explorer — see
+[Fighting Vipers](#fighting-vipers).
 
 Three views:
 
@@ -61,6 +66,31 @@ Three views:
   exhaust](TECHNICAL.md#metal-sonics-jet-exhaust) and [The Egg robots' timed
   animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs).
 
+## Fighting Vipers
+
+Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
+Models tab and nothing else — 5413 table entries, 3601 of which carry geometry.
+The panel says which game is up and the tabs it has no tables for are not shown.
+
+It works because the two games are built on the same Sega library. Fighting
+Vipers' program ROM carries the same official labels, and its `set_obj` reaches
+for the model table the same way Sonic The Fighters' does —
+`lda unk_20E0004[g0*16], g0`, which is data offset `0x0E0004` on a 16-byte
+stride in both. The mesh pointer is encoded identically, and the global face
+palette is the labelled `unk_2100000` at data offset `0x100000`. So the polygon
+decoder, the texture headers and the palette read straight across; only the ROM
+chip assignments and the table's length had to be worked out, and those are in
+[`js/games.js`](js/games.js) with the reasoning written down beside them.
+
+What it does not have is colour. A Model 2 face does not usually name a colour —
+it names a row of a colour table the game fills in RAM on every scene change,
+and where that table comes from is each game's own business. Sonic The Fighters'
+is read out of a pointer block the repo located; Fighting Vipers keeps its
+somewhere else, so a model whose faces name nothing but rows draws in whatever
+the raw palette entry holds, which for character parts is black. Models that
+name real palette colours — the title logo, most scenery — come out right. The
+stage and motion tables are likewise still to be found.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -85,6 +115,8 @@ Championship (`schamp`), so a combined set is the least fuss:
 - **split** — `sfight.zip` *and* `schamp.zip` together: the program EPROMs come
   from the first, the data ROMs from the second.
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
+
+For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
 Then serve the directory over HTTP — the page is ES modules, so opening
 `index.html` off the filesystem will not work. The dev server moved out with the
