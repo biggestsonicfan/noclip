@@ -213,6 +213,9 @@ const FRAG_SHADER = /* glsl */`
     uniform sampler2D uCxlat;
     uniform float uUseRamp;
     uniform float uLumaScale;
+    // Set for a game whose colour tables have not been located: see the note in
+    // the untextured branch below.
+    uniform float uFlatTexel;
     uniform vec3 uLight;         // the stage's light vector, world space
     uniform vec2 uMaterial[32];  // per slot: (diffuse, ambient), 0..255
     uniform int uTransfer;      // 0 = none, 1 = linear->gamma, 2 = gamma->linear
@@ -439,7 +442,20 @@ const FRAG_SHADER = /* glsl */`
                 rgb *= uTint * uBright;
             } else {
                 rgb = base * shade;
-                if (al > 0.0) rgb = clamp(base * al * 2.0 * shade, 0.0, 1.0);
+                if (al > 0.0) {
+                    rgb = clamp(base * al * 2.0 * shade, 0.0, 1.0);
+                    // A face does not have to name a colour: it can name a row
+                    // of the colour table, and that row reads black until the
+                    // game fills it. Multiplying the texel by black throws away
+                    // a sheet that unpacked perfectly, so where there is no
+                    // colour table to fill the row, show the texel's own value
+                    // instead. This is not what the board puts out -- the real
+                    // colour is in colorxlat and is not being read -- it is the
+                    // only way to see the texture at all until it is.
+                    if (uFlatTexel > 0.5 && dot(base, vec3(1.0)) < 0.02) {
+                        rgb = vec3(al * shade);
+                    }
+                }
             }
         } else {
             rgb = base * shade;
@@ -510,6 +526,7 @@ export function createModelMaterial() {
             uCxlat: { value: placeholderTexture() },
             uUseRamp: { value: 0 },
             uLumaScale: { value: 1.0 },
+            uFlatTexel: { value: 0 },
             uLight: { value: new THREE.Vector3(0, 1, 0) },
             uMaterial: { value: Array.from({ length: 32 }, () => new THREE.Vector2(0, 255)) },
             uTransfer: { value: 0 },

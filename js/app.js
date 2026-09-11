@@ -31,7 +31,7 @@ import { decodeMotion, sampleMotion, listMotions } from './motion.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
-import { buildTexram } from './texture.js';
+import { buildTexram, bestTextureSet } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -85,6 +85,11 @@ const state = {
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
+    /* The Models tab's texture picker, for a game with no stage table to name
+     * a texture number. null is "work it out from the model"; a number is the
+     * set the user chose. `texSetCache` memoises the worked-out answer. */
+    texSetChoice: null,
+    texSetCache: new Map(),
     frames: null,       /* the animation frame tables, read once per ROM set */
     animate: true,
     /* Which of the two framings the moving stages are shown in — see
@@ -312,7 +317,11 @@ function useRomTexram(texSets) {
     const key = texSets.join(',');
     if (key === state.texramKey) return;
 
-    const { sheet0, sheet1 } = buildTexram(state.rom, [16, ...texSets]);
+    /* Which set sits behind the named ones is the game's own arrangement, so it
+     * comes off the profile; a game with none named just gets what was asked. */
+    const resident = state.rom.game.texture.residentSet;
+    const queue = resident == null ? texSets : [resident, ...texSets];
+    const { sheet0, sheet1 } = buildTexram(state.rom, queue);
     setAtlasSheets(sheet0, sheet1);
     state.texramKey = key;
 
@@ -422,6 +431,29 @@ async function loadTexramFiles(files) {
         console.error(err);
         status.textContent = `could not read that dump: ${err.message || err}`;
     }
+}
+
+/* ---- Texture set for a lone model ---------------------------------------- */
+
+/*
+ * Which texture number to unpack for a model, when no stage record names one.
+ *
+ * `null` from the picker means work it out from the model; any other value is
+ * the set the user chose and is used as given, including when it covers
+ * nothing — seeing a model against the wrong sheets is a legitimate thing to
+ * want to do while working out which sheets are the right ones.
+ *
+ * The answer is cached per model because the search walks every set's page
+ * list, which is cheap but not free, and clicking down the list would repeat it
+ * on every row.
+ */
+function modelTextureSet(idx) {
+    if (state.texSetChoice !== null) return state.texSetChoice;
+    if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
+    const found = bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets);
+    const set = found ? found.set : null;
+    state.texSetCache.set(idx, set);
+    return set;
 }
 
 /* ---- Model cache --------------------------------------------------------- */
@@ -725,14 +757,26 @@ function useModelScene(idx) {
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
 
-    /* A game whose stage and colour tables have not been located has no scene
-     * to stand the model in — no sheets to bind, and no ramp to read a row
-     * through. The flat approximation is the whole of it, and it is the honest
-     * one: what it shows is the model's own face palette out of the ROM. */
+    /*
+     * A game with no stage table has no scene to stand the model in, but it
+     * still has sheets: the texture pipeline is the board's and both games
+     * unpack through the same routines. What is missing is only the thing that
+     * would say *which* texture number to unpack, since that is what a stage
+     * record names. So the model is asked instead — a face names a 32-pixel
+     * tile, and the set whose pages cover those tiles is the set the game would
+     * have had resident. The picker below overrides it.
+     *
+     * The colour ramp stays off: that table is filled from data this game keeps
+     * somewhere the repo has not found, so a face reads its own palette entry.
+     */
     if (!state.stages.length) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
         u.uUseRamp.value = 0;
+        u.uFlatTexel.value = 1;
+        const set = modelTextureSet(idx);
+        if (set == null) u.uUseAtlas.value = 0;
+        else useRomTexram([set]);
         return;
     }
 
@@ -2262,6 +2306,33 @@ function wireOptions() {
  * else, rather than three panels where two are empty or, worse, full of another
  * game's addresses read against these ROMs.
  */
+/* The Models tab's texture picker. Shown only when no stage record is going to
+ * name a texture number, which is the same condition that hides the Stages tab.
+ * "From the model" is the default and is what the auto search does. */
+function renderTextureSetPicker() {
+    const sel = $('#model-texset');
+    sel.innerHTML = '';
+    const auto = el('option');
+    auto.value = 'auto';
+    auto.textContent = 'From the model (auto)';
+    sel.appendChild(auto);
+    for (let s = 0; s < state.rom.game.texture.sets; s++) {
+        const o = el('option');
+        o.value = String(s);
+        o.textContent = `set ${s}`;
+        sel.appendChild(o);
+    }
+    sel.value = 'auto';
+    sel.addEventListener('change', () => {
+        state.texSetChoice = sel.value === 'auto' ? null : Number(sel.value);
+        /* The sheets are keyed on the set, so a change has to invalidate that
+         * key or the rebuild is skipped as a repeat. */
+        state.texramKey = null;
+        loadModel(state.modelIndex, { keepCamera: true });
+    });
+    $('#model-texset-field').hidden = false;
+}
+
 function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
@@ -2295,6 +2366,7 @@ function start() {
     $('#loader').hidden = true;
 
     if (on.stage) renderStageSelect();
+    else renderTextureSetPicker();
     if (on.anim) renderCharacterSelect();
     renderModelList();
     wireOptions();

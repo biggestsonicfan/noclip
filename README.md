@@ -69,8 +69,9 @@ Three views:
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
-Models tab and nothing else — 5413 table entries, 3601 of which carry geometry.
-The panel says which game is up and the tabs it has no tables for are not shown.
+Models tab and nothing else — 5413 table entries, 3601 of which carry geometry,
+textured from the ROM. The panel says which game is up and the tabs it has no
+tables for are not shown.
 
 It works because the two games are built on the same Sega library. Fighting
 Vipers' program ROM carries the same official labels, and its `set_obj` reaches
@@ -82,14 +83,25 @@ decoder, the texture headers and the palette read straight across; only the ROM
 chip assignments and the table's length had to be worked out, and those are in
 [`js/games.js`](js/games.js) with the reasoning written down beside them.
 
-What it does not have is colour. A Model 2 face does not usually name a colour —
+The textures carried across whole. Every routine `js/texture.js` ports is in
+this program ROM under the same official label, and the data header is at the
+same place; only the page grid moved. What does not carry across is the thing
+that says *which* texture set to unpack, because that is what a stage record
+names and there is no stage table. So the model is asked instead: a face names a
+32-pixel tile, and the set whose pages cover those tiles is the one the game
+would have had resident. That search is arithmetic on the page lists, not 100
+decompressions, so it is instant. The picker in the panel overrides it.
+
+What is still missing is colour. A Model 2 face does not usually name a colour —
 it names a row of a colour table the game fills in RAM on every scene change,
 and where that table comes from is each game's own business. Sonic The Fighters'
 is read out of a pointer block the repo located; Fighting Vipers keeps its
-somewhere else, so a model whose faces name nothing but rows draws in whatever
-the raw palette entry holds, which for character parts is black. Models that
-name real palette colours — the title logo, most scenery — come out right. The
-stage and motion tables are likewise still to be found.
+somewhere else. A model naming real palette colours comes out right — the title
+logo in gold, Candy's skateboard on its wood deck and white wheels. A model
+naming only rows would draw black, so those are shown as the texel's own value
+instead: the sheet is visible, in monochrome, which is not what the board puts
+out and is marked as such. The stage and motion tables are likewise still to be
+found.
 
 ## Running it
 

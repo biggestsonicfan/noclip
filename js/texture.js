@@ -36,17 +36,12 @@ const SHEET0 = 0;
 const SHEET1 = SHEET_BYTES;
 const ROW_PAIR = 0x400;
 
-/* main_data header at 0x300000. +0x08 and +0x0C are pointers to the
+/* main_data header, 0x300000 in both games. +0x08 and +0x0C are pointers to the
  * destination-list and page-list arrays; +0x10 is the 256-entry literal table
- * the Huffman symbols below 0x100 index. */
-const TEX_HEADER = 0x300000;
-const LUT_OFFSET = TEX_HEADER + 0x10;
+ * the Huffman symbols below 0x100 index. Both games reach it the same way —
+ * `ld off_230000C, r4` in unp_send_tex_para_sub — so it is not per-game, but it
+ * is read off the profile with everything else rather than kept here. */
 const MAIN_DATA_BASE = 0x02000000;
-
-/* Page origins in logical sheet coordinates, from the table at 0x4B394 in the
- * program ROM: 24 pages of 256x256, as (y, x) pairs. Read from the ROM rather
- * than hard-coded, since that is where the game reads it. */
-const PAGE_TABLE = 0x4b394;
 
 /* Symbol-space partition used when the code table is built (unpack_lod_data
  * +0x28C). Below LITERAL the symbol indexes the 256-entry ROM table; the four
@@ -505,6 +500,101 @@ function readWord(b, i) {
  * @param {number|number[]} texSets texture number(s), each 0..0x11
  * @returns {{sheet0: Uint8Array, sheet1: Uint8Array, pages: number}}
  */
+/*
+ * Where a texture set's full-size pages land, without unpacking any of them.
+ *
+ * Every page is 256x256 at a known place on a known sheet, and that is decided
+ * by the origin word and the page grid alone — the codec never enters into it.
+ * So which set holds the tiles a model asks for can be answered by arithmetic,
+ * which matters because a game whose stage table is not known has nothing to
+ * say which set to load, and unpacking all of them to find out costs seconds.
+ *
+ * Coordinates are the logical atlas ones a face's tx/ty are already in: x runs
+ * 0..2047 across the sheet, y runs 0..1023 within it, and sheet 1 sits at
+ * y + 1024. A page folded into the lower half carries no full-size level and is
+ * left out, since nothing samples it at full size.
+ *
+ * @returns {{x:number, y:number}[]} page origins in atlas space
+ */
+export function texturePages(rom, texSet) {
+    const md = rom.mainData;
+    const dv = rom.mainDataView;
+    const cv = rom.mainCpuView;
+    const off = (a) => a - MAIN_DATA_BASE;
+    const TEX_HEADER = rom.game.texture.header;
+    const PAGE_TABLE = rom.game.texture.pageTable;
+    const ptrOk = (p, need = 4) => p >= MAIN_DATA_BASE && off(p) + need <= md.length;
+
+    const destTable = dv.getUint32(TEX_HEADER + 0x08, true);
+    const pageTable = dv.getUint32(TEX_HEADER + 0x0c, true);
+
+    const out = [];
+    const setAddr = off(pageTable) + texSet * 4;
+    if (texSet < 0 || setAddr + 4 > md.length) return out;
+    const setPtr = dv.getUint32(setAddr, true);
+    if (!ptrOk(setPtr)) return out;
+
+    const listIdx = dv.getUint32(off(setPtr), true);
+    const listAddr = off(destTable) + listIdx * 4;
+    if (listAddr + 4 > md.length) return out;
+    const listPtr = dv.getUint32(listAddr, true);
+    if (!ptrOk(listPtr)) return out;
+    const count = dv.getUint32(off(listPtr), true);
+
+    for (let i = 0; i < count; i++) {
+        if (!ptrOk(setPtr + 4 + i * 4) || !ptrOk(listPtr + 4 + i * 4)) break;
+        if (!ptrOk(dv.getUint32(off(setPtr) + 4 + i * 4, true))) continue;
+        const origin = dv.getUint32(off(listPtr) + 4 + i * 4, true);
+        const slot = (origin & 0xffff) >>> 1;
+        if (PAGE_TABLE + slot * 4 + 4 > rom.maincpu.length) continue;
+        const y = cv.getInt16(PAGE_TABLE + slot * 4, true) + (origin >>> 24);
+        const x = cv.getInt16(PAGE_TABLE + slot * 4 + 2, true) + ((origin >>> 16) & 0xff);
+        if ((x & 0x400) && (y & 0x200)) continue;   /* mips only, no full size */
+        out.push({ x, y: y + ((origin & 1) ? 0 : 1024) });
+    }
+    return out;
+}
+
+/**
+ * Which texture set best covers the tiles a decoded model samples.
+ *
+ * A face names a 32-pixel tile in the atlas; a set either uploads a page
+ * covering that tile or it does not. Scoring every set on how many of the
+ * model's tiles it covers picks the one the game would have had resident, and
+ * costs a walk of the page lists rather than 99 Huffman decodes.
+ *
+ * @returns {{set:number, covered:number, tiles:number}|null} null if untextured
+ */
+export function bestTextureSet(rom, decoded, setCount) {
+    if (!decoded || !decoded.tiles.length) return null;
+    const want = [];
+    const seen = new Set();
+    for (let i = 0; i < decoded.tiles.length; i += 4) {
+        if (!decoded.tiles[i + 2]) continue;           /* untextured face */
+        const tx = decoded.tiles[i], ty = decoded.tiles[i + 1];
+        const key = ty * 4096 + tx;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        want.push(tx, ty);
+    }
+    if (!want.length) return null;
+
+    let best = -1, bestN = -1;
+    for (let s = 0; s < setCount; s++) {
+        const pages = texturePages(rom, s);
+        if (!pages.length) continue;
+        let n = 0;
+        for (let i = 0; i < want.length; i += 2) {
+            const tx = want[i], ty = want[i + 1];
+            for (const p of pages) {
+                if (tx >= p.x && tx < p.x + 256 && ty >= p.y && ty < p.y + 256) { n++; break; }
+            }
+        }
+        if (n > bestN) { bestN = n; best = s; }
+    }
+    return best < 0 ? null : { set: best, covered: bestN, tiles: want.length / 2 };
+}
+
 export function buildTexram(rom, texSets) {
     const md = rom.mainData;
     const dv = rom.mainDataView;
@@ -513,26 +603,45 @@ export function buildTexram(rom, texSets) {
 
     const tex = new Uint8Array(SHEET_BYTES * 2);
 
+    /* TEX_HEADER is the data-region header; PAGE_TABLE is the page grid in the
+     * program ROM, which is the one address of the two that moves between
+     * games. See js/games.js. */
+    const TEX_HEADER = rom.game.texture.header;
+    const PAGE_TABLE = rom.game.texture.pageTable;
+
     const destTable = dv.getUint32(TEX_HEADER + 0x08, true);
     const pageTable = dv.getUint32(TEX_HEADER + 0x0c, true);
 
     const lut = new Int32Array(0x100);
-    for (let i = 0; i < 0x100; i++) lut[i] = dv.getInt32(LUT_OFFSET + i * 4, true);
+    for (let i = 0; i < 0x100; i++) lut[i] = dv.getInt32(TEX_HEADER + 0x10 + i * 4, true);
+
+    /* A pointer the game would follow, checked before following it. The game
+     * never checks because it only ever reads set numbers its own tables name;
+     * the viewer will happily be asked for any number at all, and Fighting
+     * Vipers' page-list array has no terminator to stop a walk off the end. */
+    const ptrOk = (p, need = 4) => p >= MAIN_DATA_BASE && off(p) + need <= md.length;
 
     let pages = 0;
     for (const texSet of [].concat(texSets)) {
-        const setPtr = dv.getUint32(off(pageTable) + texSet * 4, true);
-        if (!setPtr) continue;
+        if (texSet < 0) continue;
+        const setAddr = off(pageTable) + texSet * 4;
+        if (setAddr + 4 > md.length) continue;
+        const setPtr = dv.getUint32(setAddr, true);
+        if (!ptrOk(setPtr)) continue;
 
         /* The set's first word selects which destination list its pages use;
          * the list starts with a count and then one packed origin per page. */
         const listIdx = dv.getUint32(off(setPtr), true);
-        const listPtr = dv.getUint32(off(destTable) + listIdx * 4, true);
+        const listAddr = off(destTable) + listIdx * 4;
+        if (listAddr + 4 > md.length) continue;
+        const listPtr = dv.getUint32(listAddr, true);
+        if (!ptrOk(listPtr)) continue;
         const count = dv.getUint32(off(listPtr), true);
 
         for (let i = 0; i < count; i++) {
+            if (!ptrOk(setPtr + 4 + i * 4) || !ptrOk(listPtr + 4 + i * 4)) break;
             const pagePtr = dv.getUint32(off(setPtr) + 4 + i * 4, true);
-            if (!pagePtr) continue;
+            if (!ptrOk(pagePtr)) continue;
 
             /* Origin word: a page slot in its low half plus a byte offset in
              * each of the top two bytes, resolved against the ROM page grid. */

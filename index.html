@@ -135,6 +135,12 @@
       <div class="field row">
         <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
       </div>
+      <!-- Only for a game with no stage table: with no scene to name the
+           texture numbers, the set has to be chosen here instead. -->
+      <div class="field" id="model-texset-field" hidden>
+        <label>Texture set</label>
+        <select id="model-texset"></select>
+      </div>
       <div id="model-count" class="dim"></div>
       <div id="model-list" class="modellist"></div>
       <div id="model-info" class="meta-block"></div>

@@ -65,6 +65,17 @@ const sfight = {
     modelTable: { offset: 0x000e0004, count: 5103, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
+    /* `header` is the data-region texture header both games keep at 0x300000;
+     * `pageTable` is the 24-entry (y, x) page grid in the program ROM, which is
+     * the address that moves. `sets` is how many texture numbers the page-list
+     * array holds. */
+    texture: {
+        header: 0x300000, pageTable: 0x4b394, sets: 0x12,
+        /* Set 16 goes in ahead of whatever a stage names: the attract and
+         * character-select screens leave it resident, and the stage sets do not
+         * overwrite its deepest mip levels. */
+        residentSet: 16,
+    },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
@@ -147,6 +158,19 @@ const fvipers = {
     modelTable: { offset: 0x000e0004, count: 5413, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
+    /* The whole texture pipeline carried across: every routine texture.js ports
+     * is in this program ROM under the same official label, and
+     * unp_send_tex_para_sub reaches the data header through the same
+     * `ld off_230000C, r4`. Only the page grid moved, to unk_4B9C0 — read off
+     * the same `ldos unk_4B9C0[g0*4]` pair that gives the y and x. */
+    texture: {
+        header: 0x300000, pageTable: 0x4b9c0, sets: 100,
+        /* 100 because unp_send_tex_req rejects anything above it:
+         * `lda unk_63, r3 / cmpoble g0, r3` — texture numbers run 0..0x63.
+         * Which set is resident behind the others is not known for this game,
+         * so nothing is forced in ahead of the chosen one. */
+        residentSet: null,
+    },
     /* Nothing but the model explorer yet: the stage, rig and motion tables are
      * this game's own and have not been located. */
     features: { stages: false, characters: false, motions: false },

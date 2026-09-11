@@ -116,14 +116,45 @@ entries stop being *plausible*. Every entry up to 5412 has a mesh pointer inside
 the polygon ROM and uv/material pointers inside the texture ROM; nothing above
 8190 does. That upper stretch is other data that happens to follow the table.
 
+The texture pipeline did carry across, whole. Every routine `js/texture.js`
+ports is in Fighting Vipers' program ROM under the same official label —
+`unp_send_tex_para_sub`, `unpack_lod_data`, `make_huf_8bit`, `send_beta_data`,
+`send_lod_data`, `send_lod_data_q` — and the data header is reached by the same
+`ld off_230000C, r4`, so the codec, the page format and the descriptor layout
+are all identical. Two numbers move: the page grid, which the same
+`ldos unk_4B9C0[g0*4]` pair gives, and the count of texture numbers, which
+`unp_send_tex_req` bounds with `lda unk_63, r3 / cmpoble g0, r3` — 0..0x63, so
+100 sets against the other game's 18.
+
+What a second game has no answer for is *which* set to unpack. A stage record
+names the texture numbers, and there is no stage table. But a face already names
+a 32-pixel tile in the atlas, and where a set's pages land is decided by the
+origin word and the page grid alone — the codec never enters into it. So
+`texturePages` walks a set's page list and returns its 256×256 origins without
+unpacking a byte, and `bestTextureSet` scores every set on how many of a model's
+tiles it covers. Over 3550 textured models that picks a fully-covering set for
+all but one, in about half a second for the whole table; unpacking all 100 sets
+to find out would have cost seconds per model.
+
 What did not carry across is colour. A face names a row of a colour table the
 game fills in RAM per scene (see [Colour tables](#colour-tables-jscolorsjs)),
 and Sonic The Fighters' is read out of a pointer block at data offset
 `0x101000`. Fighting Vipers' `send_tex_col_skin` mentions the same address, but
 what is there is palette data, not pointers, and its luma block at `0x0D0008` is
-zero. So that table is genuinely elsewhere, and until it is found a model whose
-faces name only rows draws in the raw palette entry — black, for character
-parts. Models naming real palette colours come out right.
+zero. So that table is genuinely elsewhere. Two pieces of it are located and written
+down here for whoever picks it up: `essential_color_handling` fills luma RAM
+from `unk_64266E0` with a count at `unk_64266DC`, which through the XTRA_DATA
+mirror is data offset `0x10266DC`; and `chg_pol_color_send` writes colorxlat at
+`0x1800000 + 0x10000` in three `0x4000` channels, which is the same layout the
+other game uses. The sources the uploads read from are at data offsets
+`0x101000`, `0x105800`, `0x107780` and `0x109700`, named directly rather than
+through a pointer block.
+
+Until that is done, a model whose faces name only rows would draw black —
+multiplying a decoded texel by a palette entry that is black throws the sheet
+away. The viewer shows the texel's own value for those faces instead, so the
+texture is visible in monochrome. It is not what the board puts out and the
+panel says so. Models naming real palette colours come out right.
 
 ### Polygon decoding (`js/model.js`)
 
