@@ -1395,24 +1395,66 @@ const OBJECT_ROUTINES = new Map([
  * below is mostly about. Fighting Vipers does none of that: change_scene pushes
  * the stage position once and then hands each list to `area_clip`, which is a
  * cull and not a transform — it reads four indices per model out of a
- * visibility bitmap and calls set_obj with no matrix at all. The single models
- * at 0x18 and 0x1A go through set_obj the same way.
+ * visibility bitmap and calls set_obj with no matrix at all. So the draw list is
+ * the lists themselves, at the identity.
  *
- * So the draw list is the lists themselves, at the identity, and the layers are
- * a grouping for the sidebar rather than a statement about transforms. What is
- * missing is the object list at 0xB4, which animates: a stage built here is the
- * stage standing still.
+ * What is not optional is the flags word. Every one of the draw functions opens
+ * by testing a bit of it and returning if the bit says this stage does not draw
+ * that list, and the bits are not decoration — the first stage sets bit 13,
+ * which skips the sixteen parts entirely. Drawing them anyway puts models in the
+ * arena the board never puts there: a figure standing on a fence post, a wedge
+ * lying in the dirt. The bit each function tests is named beside it below.
+ *
+ * Still missing is the object list at 0xB4, which animates: a stage built here
+ * is the stage standing still.
  */
 export function buildFlatDisplayList(stage) {
     const out = [];
-    for (const layer of ['upper', 'ground', 'floor', 'platform', 'extra']) {
-        for (const m of stage.layers[layer] ?? []) out.push({ model: m, layer, ops: [] });
+    const f = stage.flags;
+    const push = (m, layer, extra = {}) => {
+        if (m) out.push({ model: m, layer, ops: [], ...extra });
+    };
+
+    /* ground_upper_disp: `bbs 0xB, r11` returns before the list at 0x24. */
+    if (!(f & (1 << 0xb))) for (const m of stage.layers.upper ?? []) push(m, 'upper');
+
+    /* sub_238E4: `bbs 0xD, r3` skips the area_clip over the sixteen at 0x64,
+     * but the single model at 0x18 is drawn either way — it is past the branch
+     * target, not inside it. */
+    if (!(f & (1 << 0xd))) for (const m of stage.layers.ground ?? []) push(m, 'ground');
+
+    /*
+     * The one draw that concedes its depth.
+     *
+     * This is the plate the rest of the arena stands in, and the board lays it
+     * down before every other pass, so everything standing in it overwrites it
+     * outright. Without that concession the plate and whatever meets it are
+     * sorted against each other and the seam between them comes out as a flat
+     * line along the join — which is exactly what a building's base does when
+     * it is left to fight the ground it sits on. Same reasoning, and the same
+     * material, as the other game's stage_floor.
+     */
+    for (const m of stage.layers.floor ?? []) push(m, 'floor', { groundPlate: true });
+
+    /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
+     * read at 0x1A. */
+    if (stage.slot !== 7 && stage.slot !== 14) {
+        for (const m of stage.layers.platform ?? []) push(m, 'platform');
     }
-    /* The cage list repeats one ring of panels three times over; the record
-     * holds all 24 and the repeats are the rows, so they are kept as they are
-     * rather than de-duplicated. */
-    for (const m of stage.layers.cage ?? []) out.push({ model: m, layer: 'cage', ops: [] });
-    if (stage.cagePole) out.push({ model: stage.cagePole, layer: 'poles', ops: [] });
+
+    /* cage_sub_disp: `bbc 0xE, r3` returns unless bit 14 is set. */
+    if (f & (1 << 0xe)) for (const m of stage.layers.extra ?? []) push(m, 'extra');
+
+    /* cage_clip_m walks the 24 at 0x84 as three rings of eight, each ring
+     * translated in Z by its own entry in the table at 0x6CE2048. That
+     * translation is not read yet, and the reader already keeps only the first
+     * ring — three rings at the identity would be three copies in one place. */
+    for (const m of stage.layers.cage ?? []) push(m, 'cage');
+
+    /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
+     * returns before that. */
+    if ((f & (1 << 0x12)) && stage.slot !== 7) push(stage.cagePole, 'poles');
+
     return out;
 }
 
