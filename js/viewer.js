@@ -860,6 +860,31 @@ export class Viewer {
         this.waterMaterial = createModelMaterial();
         this.waterMaterial.uniforms = this.material.uniforms;
         this.waterMaterial.defines = { ZSORT_CONCEDE: '1' };
+        /*
+         * Depth bias for surfaces that share a plane exactly.
+         *
+         * The board has no depth buffer. Co-planar polygons land in one z
+         * bucket, the bucket is drawn newest first, and the fill writes a pixel
+         * only where nothing has — so whichever was submitted last is the one
+         * you see, and the order the draw functions run in decides it outright.
+         * A depth test has no such rule: two surfaces at the same z give an
+         * undefined winner that changes with the camera, which is the flicker
+         * along a road marking lying in the road.
+         *
+         * These reproduce the board's answer by pushing each plane back by the
+         * distance its submission order deserves — index 0 submitted last and
+         * kept in front, higher indices submitted earlier and pushed behind.
+         * A unit is a depth-buffer step, so this settles ties and nothing more.
+         */
+        this.planeMaterials = [0, 1, 2, 3].map((n) => {
+            if (n === 0) return this.material;
+            const m = createModelMaterial();
+            m.uniforms = this.material.uniforms;
+            m.polygonOffset = true;
+            m.polygonOffsetFactor = n;
+            m.polygonOffsetUnits = n;
+            return m;
+        });
         this.edgeMaterial = new THREE.LineBasicMaterial({
             color: 0x63e0ff, transparent: true, opacity: 0.28, depthTest: true,
         });

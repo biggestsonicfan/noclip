@@ -532,7 +532,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    groundPlate = false,
+    groundPlate = false, planeBias = 0,
 } = {}) {
     const v = state.viewer;
     /* The ground plate takes the material that stands one step back, because
@@ -549,7 +549,8 @@ function addModelToScene(decoded, {
         backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
                 : layer === 'water' ? v.waterMaterial
-                    : v.material);
+                    : planeBias ? v.planeMaterials[planeBias]
+                        : v.material);
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
     mesh.userData.layer = layer;
@@ -881,6 +882,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
         const { mesh, lines } = addModelToScene(d, {
             layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
             groundPlate: entry.groundPlate,
+            planeBias: entry.planeBias,
         });
         /* buildGeometry hands the decoder's own array straight to the attribute,
          * so a draw whose header is rewritten per frame takes a copy first —

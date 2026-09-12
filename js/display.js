@@ -1415,31 +1415,49 @@ export function buildFlatDisplayList(stage) {
         if (m) out.push({ model: m, layer, ops: [], ...extra });
     };
 
+    /*
+     * Three lists share the ground plane, and the order they are submitted in
+     * is the only thing that separates them.
+     *
+     * On a stage like the night parking lot every road plate, the arena floor
+     * and the platform sit at exactly y = 0. The board has no depth buffer:
+     * they land in one z bucket, the bucket is drawn newest first, and the fill
+     * writes a pixel only where nothing has, so the last one submitted is the
+     * one you see. A depth test has no such rule — two surfaces at the same z
+     * give an undefined winner that swaps as the camera moves, which is the
+     * flicker along a road marking lying in the road.
+     *
+     * So each list takes a depth bias for where it falls in that order. The
+     * draw functions run: sub_238E4 first, which area_clips the sixteen at 0x64
+     * and then draws the single model at 0x18, and ground_upper_disp after it,
+     * which area_clips the list at 0x24. Later submitted wins, so the sixteen
+     * go furthest back, the floor sits between, and the 0x24 list keeps the
+     * front.
+     *
+     * This is not the other game's arrangement and must not borrow its floor
+     * material. There, camera_init lays the floor down before every other pass
+     * and it concedes to everything; here the floor is submitted in the middle
+     * and only concedes to what comes after it.
+     */
     /* ground_upper_disp: `bbs 0xB, r11` returns before the list at 0x24. */
-    if (!(f & (1 << 0xb))) for (const m of stage.layers.upper ?? []) push(m, 'upper');
+    if (!(f & (1 << 0xb))) {
+        for (const m of stage.layers.upper ?? []) push(m, 'upper', { planeBias: 0 });
+    }
 
     /* sub_238E4: `bbs 0xD, r3` skips the area_clip over the sixteen at 0x64,
      * but the single model at 0x18 is drawn either way — it is past the branch
      * target, not inside it. */
-    if (!(f & (1 << 0xd))) for (const m of stage.layers.ground ?? []) push(m, 'ground');
+    if (!(f & (1 << 0xd))) {
+        for (const m of stage.layers.ground ?? []) push(m, 'ground', { planeBias: 2 });
+    }
 
-    /*
-     * The one draw that concedes its depth.
-     *
-     * This is the plate the rest of the arena stands in, and the board lays it
-     * down before every other pass, so everything standing in it overwrites it
-     * outright. Without that concession the plate and whatever meets it are
-     * sorted against each other and the seam between them comes out as a flat
-     * line along the join — which is exactly what a building's base does when
-     * it is left to fight the ground it sits on. Same reasoning, and the same
-     * material, as the other game's stage_floor.
-     */
-    for (const m of stage.layers.floor ?? []) push(m, 'floor', { groundPlate: true });
+    for (const m of stage.layers.floor ?? []) push(m, 'floor', { planeBias: 1 });
 
     /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
-     * read at 0x1A. */
+     * read at 0x1A. It runs after both of the ground passes, so the platform
+     * keeps the front of the plane like the 0x24 list. */
     if (stage.slot !== 7 && stage.slot !== 14) {
-        for (const m of stage.layers.platform ?? []) push(m, 'platform');
+        for (const m of stage.layers.platform ?? []) push(m, 'platform', { planeBias: 0 });
     }
 
     /* cage_sub_disp: `bbc 0xE, r3` returns unless bit 14 is set. */
