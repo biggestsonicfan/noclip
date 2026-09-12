@@ -5,6 +5,7 @@
 import { loadRomSet, readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight } from './stages.js';
+import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -85,6 +86,11 @@ const state = {
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
+    /* The scroll layer's sky, decoded once per stage and kept. */
+    sky: null,
+    skyTextures: new Map(),
+    skyPanoAspect: new Map(),
+    skyTopColor: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
      * a texture number. null is "work it out from the model"; a number is the
      * set the user chose. `texSetCache` memoises the worked-out answer. */
@@ -834,6 +840,87 @@ function useModelScene(idx) {
     applyStageShading(stage);
 }
 
+/*
+ * The scroll layer's sky, on a cylinder round the arena.
+ *
+ * A game that keeps its sky as a tilemap rather than as models gets it here —
+ * see js/scroll.js for the decode. The panorama is 576 tiles round where the
+ * hardware shows 64 of them, so the strip is a full turn and goes on a cylinder
+ * at that scale: turning the camera walks it exactly as the scroll registers
+ * walk the tilemap.
+ *
+ * Vertically it is an estimate and not the board's arithmetic. The board draws
+ * the layer in screen space at one tile to eight pixels, so how much sky is in
+ * frame depends on the projection rather than on anything in the data. The
+ * height below puts the panorama's foot on the horizon and scales the rest by
+ * the same pixels-per-degree the horizontal mapping implies, which lands the
+ * cloud band where the captures put it.
+ */
+const SKY_RADIUS = 600;
+
+function addSkyPanorama(slot) {
+    const v = state.viewer;
+    if (!state.rom.game.stageTable.scroll) return;
+
+    state.sky = null;
+    let tex = state.skyTextures.get(slot);
+    if (tex === undefined) {
+        const pano = buildSkyPanorama(state.rom, slot);
+        /* Not makeDataTexture: that one is for the single-channel lookup
+         * tables the fill shader reads, and this is an image. */
+        tex = pano
+            ? new THREE.DataTexture(pano.rgba, pano.width, pano.height, THREE.RGBAFormat)
+            : null;
+        if (tex) {
+            /* The panorama's first row is the top of the sky, and a DataTexture
+             * puts its first row at the bottom unless told otherwise. */
+            tex.flipY = true;
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.LinearFilter;
+            tex.minFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.needsUpdate = true;
+            state.skyPanoAspect.set(slot, pano.height / pano.width);
+            state.skyTopColor.set(slot, pano.topColor.map((c) => c / 255));
+        }
+        state.skyTextures.set(slot, tex);
+    }
+    if (!tex) return;
+
+    /* One turn across, and the same pixels-per-radian up. */
+    const aspect = state.skyPanoAspect.get(slot);
+    const height = 2 * Math.PI * SKY_RADIUS * aspect;
+    const geom = new THREE.CylinderGeometry(
+        SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+        map: tex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.renderOrder = BACKDROP_ORDER;
+    mesh.userData.layer = 'sky';
+    mesh.frustumCulled = false;
+    v.root.add(mesh);
+    state.sky = { mesh, height };
+    stepSky();
+}
+
+/*
+ * Keep the sky at infinity.
+ *
+ * The board draws this layer in screen space, so its horizon is wherever the
+ * camera is looking level — it does not come nearer or go by as the camera
+ * moves through the arena. A cylinder standing in the world would do both, so
+ * it is carried on the camera instead, with the foot of the strip on the eye
+ * line. That is the same thing a skybox does, and here it is not a convention
+ * but the behaviour being reproduced.
+ */
+function stepSky() {
+    const sky = state.sky;
+    if (!sky) return;
+    const c = state.viewer.camera;
+    sky.mesh.position.set(c.position.x, c.position.y + sky.height / 2, c.position.z);
+}
+
 /* ---- Stage view ---------------------------------------------------------- */
 
 function loadStage(slot, { keepCamera = false } = {}) {
@@ -848,6 +935,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * and the colour tables the same scene change fills. */
     useRomTexram(stage.texSets);
     useRomColorLuts(stage, null);
+    addSkyPanorama(slot);
 
     const list = stageDisplayList(stage);
     const visible = [];   /* everything but the sky shells frames the camera */
@@ -934,10 +1022,23 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * passing display-referred floats without the tag leaves three to encode
      * them a second time on output, which is what made this backdrop
      * rgb(0,120,240) instead of rgb(0,0,184). */
-    /* A game whose backdrop is one boot-time colour rather than a field of the
-     * record says so on the profile; see the note there. */
-    const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
-    state.bgRGB = palette555ToRGB(state.cxlat, bg555);
+    /*
+     * The backdrop, which is whatever shows where the sky does not reach.
+     *
+     * A game whose sky is a tilemap band has the answer in the band itself:
+     * addSkyPanorama takes the commonest colour along its top row, which is
+     * what the sky is doing where it runs out, and it is per stage. Falling
+     * back to the profile's boot-time constant covers a stage whose panorama
+     * would not decode; falling back to the record's own field is the other
+     * game, where the backdrop is a field and there is no tilemap at all.
+     */
+    const top = state.skyTopColor.get(slot);
+    if (top) {
+        state.bgRGB = top;
+    } else {
+        const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
+        state.bgRGB = palette555ToRGB(state.cxlat, bg555);
+    }
     applyBackdropTransfer();
     /* Left untransformed on purpose: the fill shader applies the transfer to
      * this uniform itself, so the surface and the fog it blends into stay in
@@ -2445,7 +2546,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') stepBillboards();
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); }
         state.viewer.render();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;

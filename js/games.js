@@ -329,25 +329,38 @@ const fvipers = {
          * that stage's tile graphics from off_6450000[n] and that stage's
          * palette from off_6450000[n + 1]. A second pointer at 0x14 feeds a
          * per-stage tile blit that ends up in text RAM at 0x1004000. The
-         * palettes are visibly skies and visibly differ: the western arena
-         * gets a ramp of blues topping out at full blue, the night parking lot
-         * a near-black. Drawing any of it needs a tilemap renderer, which this
-         * viewer has never had for either game.
+         * palettes are visibly skies and visibly differ. js/scroll.js decodes
+         * the layer, and the backdrop below is only the fallback: what the
+         * viewer normally shows behind an arena is the commonest colour along
+         * the top row of that stage's own panorama, which is what the sky is
+         * doing where the band runs out.
          *
-         * What is below is only what shows where no tile covers: the board's
-         * backdrop register. init_fix sets it once in the boot sequence by
-         * handing bg_col_set the constant, and bg_col_set writes it into
-         * colour 0 of the first twenty-four palette groups. In BGR555 it is
-         * R2 G8 B31 — a deep blue, and close to the blue the top of the screen
-         * actually shows on the two daytime stages captured out of the
-         * emulator. On a night stage the scroll layer would cover it, so this
-         * stands in for a sky it is not.
+         * The constant is the board's backdrop register. init_fix sets it once
+         * in the boot sequence by handing bg_col_set this value, and
+         * bg_col_set writes it into colour 0 of the first twenty-four palette
+         * groups. In BGR555 it is R2 G8 B31 — a deep blue, and close to the
+         * blue the top of the screen shows on the two daytime stages captured
+         * out of the emulator, but one colour for all sixteen stages.
          *
          * The record's own 0x16, which change_scene writes to 0x18021EE, is a
          * single entry in the middle of a group and holds 0x8000 on every
          * stage. It is one tile's colour, not the sky.
          */
         backdrop: 0xfd02,
+        /*
+         * Where the scroll layer's per-stage sky comes from. sub_29728 indexes
+         * `records` with stage_num << 5; `cg` is the entry it hands
+         * _Scroll_Initialize, which takes the tile pixels from cgTable[cg] and
+         * the palette from cgTable[cg + 1]; `patterns` points at the eighteen
+         * pattern numbers it lays side by side, each looked up in patternTable.
+         * See js/scroll.js for the formats.
+         */
+        scroll: {
+            records: 0x06ce3600, stride: 32,
+            fields: { cg: 0x0c, patterns: 0x14 },
+            cgTable: 0x06450000, patternTable: 0x06450300,
+            charBytes: 0x100000,
+        },
         /*
          * The railing sub_24224 draws round the arena, four panels at quarter
          * turns behind a test of flags bit 17. The model is not a field of the

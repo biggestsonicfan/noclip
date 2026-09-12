@@ -204,24 +204,41 @@ ramp of blues at full blue with the green climbing — a gradient — topping ou
 white; the night parking lot's opens on `0x9400`, which is R0 G0 B5, a near
 black. So a per-stage sky colour does exist, and it is in that palette.
 
-What this viewer draws instead is only what shows where no tile covers: the
-board's backdrop register. `init_fix` sets it once in the boot sequence by
-handing `bg_col_set` a constant, and `bg_col_set` writes it into colour 0 of the
-first twenty-four palette groups. It is R2 G8 B31, and close to the blue the top
-of the screen actually shows on the two daytime stages captured out of the
-emulator — but it is one colour for every stage, where the real thing is a
-per-stage gradient.
+The layer is now decoded, in `js/scroll.js`. Three formats, each read off the
+routine that walks it: the CG list is pairs of source and destination until the
+source is zero, a source being a count followed by that many 32-byte tiles —
+8x8 at four bits a pixel; the palette list is blocks of destination, halfword
+count and data; a pattern is a header whose `0x04` is its row count, then rows
+of 32 tilemap entries on a 64-byte stride.
 
-Picking one colour out of a stage's scroll palette without decoding the tilemap
-was tried and is not reliable: the bluest entry gives a bright blue for the night
-parking lot, which is plainly wrong. Doing it properly means drawing the layer —
-tile graphics, its own palette, and the placement — which is a subsystem neither
-game has ever needed here, since the other game's skies are ordinary models.
+A tilemap entry is the character number whole. `0x1080000 + entry * 32` is its
+pixels, and `0x1080000` is the address `clr_first_group_cg` clears — which is
+what settles it, because no split of the entry into character and palette bits
+puts every character inside a range the CG list actually fills. There is no
+palette field: the layer takes one 16-colour group, and the group is the first
+the palette list writes.
 
-The record's own `0x16`, which `change_scene` writes to `0x18021EE`, is a single
-entry in the middle of a palette group and holds `0x8000` on every stage. It is
-one tile's colour, not the sky, which is why reading it as the other game's
-backdrop field gave black sixteen times over.
+Eighteen patterns of 32 tiles is 576 across where the hardware shows 64, so the
+strip is nine screens wide. That is not a wide backdrop to be cropped: 576 tiles
+is one full turn and 64 of them is the board's horizontal field, which is why
+the viewer puts it on a cylinder at that scale. Turning the camera walks the
+strip exactly as the scroll registers walk the tilemap.
+
+Vertically it is an estimate rather than the board's arithmetic. The board draws
+the layer in screen space at one tile to eight pixels, so how much sky is in
+frame is a property of the projection and not of anything in the data. The
+cylinder is scaled by the same pixels-per-radian the horizontal mapping implies
+and carried on the camera, the foot of the strip on the eye line — which is what
+a skybox does, and here it is the behaviour being reproduced rather than a
+convention borrowed.
+
+The backdrop comes out of the same decode. The panorama is a band, not a dome,
+and above its top row the hardware shows the backdrop; the commonest colour
+along that row is what the sky is doing where it runs out. That is the per-stage
+colour, and it is what the viewer now uses — deep blue over the western arena,
+near-black over the night parking lot. The boot-time constant `init_fix` hands
+`bg_col_set` is kept only as a fallback for a stage whose panorama will not
+decode.
 
 ### The stage records
 
