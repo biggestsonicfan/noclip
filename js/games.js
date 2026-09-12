@@ -314,26 +314,38 @@ const fvipers = {
         /* change_scene hands both numbers to send_tex_stage. */
         texPair: 'literal',
         /*
-         * The sky, such as it is: one flat colour behind everything.
+         * The backdrop colour, which is not the sky.
          *
-         * This game has no sky geometry at all. No record carries a shell —
-         * every byte of a record past 0xB8 is zero on all sixteen, where the
-         * other game keeps a four-entry sky list at 0xC0 — and no stage has
-         * anything enclosing to stand in for one; the tallest thing on the
-         * western arena reaches seven units and the largest is the floor.
+         * There is no sky geometry in this game. No record carries a shell —
+         * every byte past 0xB8 is zero on all sixteen, where the other game
+         * keeps a four-entry list at 0xC0 — and no stage has anything
+         * enclosing to stand in for one; the tallest thing on the western
+         * arena reaches seven units and the largest is its own floor. The two
+         * models sub_24224 draws four times round the arena are both railings.
          *
-         * What fills the frame behind the arena is the backdrop colour, and it
-         * is not per-stage either. `init_fix` sets it once in the boot sequence,
-         * beside the calls that build the colour tables, by handing bg_col_set
-         * the constant below; bg_col_set writes it into colour 0 of the first
-         * twenty-four palette groups, which is the slot a tile leaves showing.
-         * In BGR555 it is R2 G8 B31 of 31 — a deep blue.
+         * The sky is the board's 2D scroll layer, and it is per stage.
+         * sub_29728 takes stage_num, indexes a 32-byte record at 0x6CE3600,
+         * and hands the number at its 0x0C to _Scroll_Initialize, which loads
+         * that stage's tile graphics from off_6450000[n] and that stage's
+         * palette from off_6450000[n + 1]. A second pointer at 0x14 feeds a
+         * per-stage tile blit that ends up in text RAM at 0x1004000. The
+         * palettes are visibly skies and visibly differ: the western arena
+         * gets a ramp of blues topping out at full blue, the night parking lot
+         * a near-black. Drawing any of it needs a tilemap renderer, which this
+         * viewer has never had for either game.
          *
-         * The one palette write change_scene does make per stage, the record's
-         * 0x16 into 0x18021EE, is a single entry in the middle of a group and
-         * holds 0x8000 on every stage. It is one tile's colour, not the sky,
-         * which is why reading it as the other game's backdrop field gave
-         * black sixteen times over.
+         * What is below is only what shows where no tile covers: the board's
+         * backdrop register. init_fix sets it once in the boot sequence by
+         * handing bg_col_set the constant, and bg_col_set writes it into
+         * colour 0 of the first twenty-four palette groups. In BGR555 it is
+         * R2 G8 B31 — a deep blue, and close to the blue the top of the screen
+         * actually shows on the two daytime stages captured out of the
+         * emulator. On a night stage the scroll layer would cover it, so this
+         * stands in for a sky it is not.
+         *
+         * The record's own 0x16, which change_scene writes to 0x18021EE, is a
+         * single entry in the middle of a group and holds 0x8000 on every
+         * stage. It is one tile's colour, not the sky.
          */
         backdrop: 0xfd02,
         /*

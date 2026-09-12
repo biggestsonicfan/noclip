@@ -183,6 +183,46 @@ bits 0-7, ambient in 8-15, specular in 16-23, mirror in 24-31.
 The light vector needs no new code: it is `(0, 0, bright)` turned by the same two
 rotations, which is the board's formula and already in `stageLight`.
 
+### Where the sky is
+
+There is no sky geometry in Fighting Vipers. No stage record carries a shell —
+every byte past `0xB8` is zero on all sixteen, where the other game keeps a
+four-entry list at `0xC0` — and no stage has anything enclosing to stand in for
+one: on the western arena the tallest model reaches seven units and the largest
+is its own floor. The two models `sub_24224` draws four times round the arena
+are both railings, which was settled by rendering them.
+
+The sky is the board's 2D scroll layer, and it is per stage. `sub_29728` takes
+`stage_num`, indexes a 32-byte record at `0x6CE3600`, and hands the number at
+its `0x0C` to `_Scroll_Initialize`, which loads that stage's tile graphics from
+`off_6450000[n]` and that stage's palette from `off_6450000[n + 1]`. A second
+pointer at `0x14` feeds a per-stage tile blit that lands in text RAM at
+`0x1004000`, which is the visible tilemap.
+
+Those palettes are visibly skies and visibly differ. The western arena's is a
+ramp of blues at full blue with the green climbing — a gradient — topping out at
+white; the night parking lot's opens on `0x9400`, which is R0 G0 B5, a near
+black. So a per-stage sky colour does exist, and it is in that palette.
+
+What this viewer draws instead is only what shows where no tile covers: the
+board's backdrop register. `init_fix` sets it once in the boot sequence by
+handing `bg_col_set` a constant, and `bg_col_set` writes it into colour 0 of the
+first twenty-four palette groups. It is R2 G8 B31, and close to the blue the top
+of the screen actually shows on the two daytime stages captured out of the
+emulator — but it is one colour for every stage, where the real thing is a
+per-stage gradient.
+
+Picking one colour out of a stage's scroll palette without decoding the tilemap
+was tried and is not reliable: the bluest entry gives a bright blue for the night
+parking lot, which is plainly wrong. Doing it properly means drawing the layer —
+tile graphics, its own palette, and the placement — which is a subsystem neither
+game has ever needed here, since the other game's skies are ordinary models.
+
+The record's own `0x16`, which `change_scene` writes to `0x18021EE`, is a single
+entry in the middle of a palette group and holds `0x8000` on every stage. It is
+one tile's colour, not the sky, which is why reading it as the other game's
+backdrop field gave black sixteen times over.
+
 ### The stage records
 
 They are the other game's records exactly. `stage_data` is a label in this
