@@ -934,7 +934,10 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * passing display-referred floats without the tag leaves three to encode
      * them a second time on output, which is what made this backdrop
      * rgb(0,120,240) instead of rgb(0,0,184). */
-    state.bgRGB = palette555ToRGB(state.cxlat, stage.bgColor555);
+    /* A game whose backdrop is one boot-time colour rather than a field of the
+     * record says so on the profile; see the note there. */
+    const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
+    state.bgRGB = palette555ToRGB(state.cxlat, bg555);
     applyBackdropTransfer();
     /* Left untransformed on purpose: the fill shader applies the transfer to
      * this uniform itself, so the surface and the fog it blends into stay in

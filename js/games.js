@@ -314,6 +314,29 @@ const fvipers = {
         /* change_scene hands both numbers to send_tex_stage. */
         texPair: 'literal',
         /*
+         * The sky, such as it is: one flat colour behind everything.
+         *
+         * This game has no sky geometry at all. No record carries a shell —
+         * every byte of a record past 0xB8 is zero on all sixteen, where the
+         * other game keeps a four-entry sky list at 0xC0 — and no stage has
+         * anything enclosing to stand in for one; the tallest thing on the
+         * western arena reaches seven units and the largest is the floor.
+         *
+         * What fills the frame behind the arena is the backdrop colour, and it
+         * is not per-stage either. `init_fix` sets it once in the boot sequence,
+         * beside the calls that build the colour tables, by handing bg_col_set
+         * the constant below; bg_col_set writes it into colour 0 of the first
+         * twenty-four palette groups, which is the slot a tile leaves showing.
+         * In BGR555 it is R2 G8 B31 of 31 — a deep blue.
+         *
+         * The one palette write change_scene does make per stage, the record's
+         * 0x16 into 0x18021EE, is a single entry in the middle of a group and
+         * holds 0x8000 on every stage. It is one tile's colour, not the sky,
+         * which is why reading it as the other game's backdrop field gave
+         * black sixteen times over.
+         */
+        backdrop: 0xfd02,
+        /*
          * The railing sub_24224 draws round the arena, four panels at quarter
          * turns behind a test of flags bit 17. The model is not a field of the
          * record: sub_24294 picks between two indices off the stage number
