@@ -314,6 +314,23 @@ const fvipers = {
         /* change_scene hands both numbers to send_tex_stage. */
         texPair: 'literal',
         /*
+         * The railing sub_24224 draws round the arena, four panels at quarter
+         * turns behind a test of flags bit 17. The model is not a field of the
+         * record: sub_24294 picks between two indices off the stage number
+         * outright — `lda loc_444+6` for stages 0 and 4, `lda loc_AD8+1` for
+         * the rest — and hands one to set_obj. Both are bars, twelve wide and
+         * three tall, so it is part of the cage and not a backdrop.
+         */
+        rail: {
+            model: 2777, bySlot: { 0: 1098, 4: 1098 }, turns: 4, flagBit: 17,
+            /* sub_24294 pushes rotate, then translate (0, 0, dword_50A00C),
+             * then scale by that same value over 6.0 — so with the 6.0 the
+             * board sets at stage load the push is six units and the scale is
+             * unity. Each panel is twelve wide and three tall, so four of them
+             * pushed out six make the box round the arena. */
+            push: 6.0,
+        },
+        /*
          * Every model in a list is drawn where it already is.
          *
          * The other game scales its arena by 1.6 and gives the cage, the poles

@@ -1445,15 +1445,51 @@ export function buildFlatDisplayList(stage) {
     /* cage_sub_disp: `bbc 0xE, r3` returns unless bit 14 is set. */
     if (f & (1 << 0xe)) for (const m of stage.layers.extra ?? []) push(m, 'extra');
 
-    /* cage_clip_m walks the 24 at 0x84 as three rings of eight, each ring
-     * translated in Z by its own entry in the table at 0x6CE2048. That
-     * translation is not read yet, and the reader already keeps only the first
-     * ring — three rings at the identity would be three copies in one place. */
-    for (const m of stage.layers.cage ?? []) push(m, 'cage');
+    /*
+     * The cage, which is eight wall panels and a rail over them.
+     *
+     * cage_clip_m walks the eight models at 0x84 and pushes the same translate
+     * before each — `lda 0x40C00000` into the third slot of a 0x3000606, six
+     * units — then pushes its negation after, so each wall is drawn six out
+     * from the arena centre and the next starts from the centre again. No
+     * rotation: the eight models are already oriented, one per side. Drawing
+     * them at the identity is what stacked them in the middle.
+     *
+     * The 24 entries at 0x84 are three groups of eight and the group is chosen
+     * by a damage state, not a ring — the table cage_clip_m indexes with the
+     * wall's hit timer gives group 0 at rest, and on every stage the three
+     * groups hold the same eight models anyway. The reader keeps the first.
+     */
+    const CAGE_PUSH = [['t', [0, 0, 6.0]]];
+    for (const m of stage.layers.cage ?? []) push(m, 'cage', { ops: CAGE_PUSH });
+
+    /* cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws under
+     * the same six-unit push — the cage's top rail. */
+    if (f & (1 << 0x14)) push(stage.cageTop, 'cage', { ops: CAGE_PUSH });
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
      * returns before that. */
     if ((f & (1 << 0x12)) && stage.slot !== 7) push(stage.cagePole, 'poles');
+
+    /*
+     * The railing round the arena.
+     *
+     * sub_24224 tests flags bit 17 and calls sub_24294 four times with the Y
+     * rotation stepped a quarter turn each — 0, 0x4000, 0x8000, 0xC000 in the
+     * binary radians the board uses — and each pushes the same six units out
+     * before drawing, so the four panels make the ring. The scale sub_24294
+     * also pushes is built from two runtime values that are both unity with the
+     * numbers the board sets at stage load, so it is left out.
+     */
+    const rail = stage.rail;
+    if (rail && (f & (1 << rail.flagBit))) {
+        const model = rail.bySlot[stage.slot] ?? rail.model;
+        for (let i = 0; i < rail.turns; i++) {
+            push(model, 'cage', {
+                ops: [['r', (i * 360) / rail.turns], ['t', [0, 0, rail.push]]],
+            });
+        }
+    }
 
     return out;
 }

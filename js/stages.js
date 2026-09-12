@@ -275,6 +275,10 @@ export function readStageTable(rom) {
              * kept in order rather than de-duplicated like the layer lists. */
             sky: sky.filter((m) => m !== 0),
             cagePole: dv.getUint16(b + F.cagePole, true),
+            /* cage_clip_m draws this one six units up when flags bit 20 is set;
+             * nothing else reads 0x20. */
+            cageTop: dv.getUint16(b + 0x20, true),
+            rail: T.rail ?? null,
             bright,
             materials,
             vecter,
