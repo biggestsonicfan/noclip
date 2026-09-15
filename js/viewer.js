@@ -52,6 +52,9 @@ const VERT_SHADER = /* glsl */`
     flat out float vMaterial;
     out vec3 vViewNormal;
     out vec3 vViewPos;
+    // The face's facing point in camera space: the same at all three vertices,
+    // so flat for the reason above.
+    flat out vec3 vFacePt;
 
     void main() {
         vColor = aColor;
@@ -69,6 +72,7 @@ const VERT_SHADER = /* glsl */`
         vViewNormal = mat3(modelViewMatrix) * normal;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vViewPos = mv.xyz;
+        vFacePt = (modelViewMatrix * vec4(aFacePt, 1.0)).xyz;
         gl_Position = projectionMatrix * mv;
 
         // The board has no depth buffer. model2_3d_process_polygon gives a
@@ -224,7 +228,7 @@ const VERT_SHADER = /* glsl */`
         // through -- the sawtooth along a wall's top, a ring's apron.
         bool bothSides = ((int(aFlags + 0.5) >> 7) & 1) != 0;
         if (uBoardCull > 0.5 && !bothSides &&
-                dot(vViewNormal, (modelViewMatrix * vec4(aFacePt, 1.0)).xyz) < 0.0) {
+                dot(vViewNormal, vFacePt) < 0.0) {
             gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         }
     }
@@ -271,6 +275,7 @@ const FRAG_SHADER = /* glsl */`
     flat in float vMaterial;
     in vec3 vViewNormal;
     in vec3 vViewPos;
+    flat in vec3 vFacePt;
 
     out vec4 fragColor;
 
@@ -319,10 +324,17 @@ const FRAG_SHADER = /* glsl */`
     // diffuse/ambient the material slot the polygon's attribute word names. The
     // sign test is the board's own: a polygon lit from the far side gets its
     // ambient term and nothing else.
+    //
+    // P is one point per polygon, the facing point the front/back test uses,
+    // not the pixel's own position. geo_parse takes N.P once, so a polygon is
+    // lit or unlit whole. Taken per pixel, the sign can flip partway across a
+    // face when the ROM normal is not the triangle's plane, which splits the
+    // face into lit and unlit parts. It also means a face the test keeps always
+    // has N.P >= 0 here, unless it is drawn from both sides.
     float polyLuma() {
         vec3 n = normalize(vNormal);
         float dotl = dot(n, uLight);
-        float dotp = dot(normalize(vViewNormal), vViewPos);
+        float dotp = dot(normalize(vViewNormal), vFacePt);
         float luminance = (dotl * dotp < 0.0) ? 0.0 : abs(dotl);
         vec2 m = uMaterial[int(vMaterial + 0.5)];
         return clamp(luminance * m.x + m.y, 0.0, 255.0);
