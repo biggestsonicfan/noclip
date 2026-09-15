@@ -33,16 +33,28 @@
  *   pattern      a header whose 0x04 is the row count, then rows of 32 tilemap
  *                entries on a 64-byte stride.
  *
- * A tilemap entry is the character number whole: `0x1080000 + entry * 32` is
- * its pixels, and 0x1080000 is the address clr_first_group_cg clears. There is
- * no palette field in an entry — the layer takes one 16-colour group, and the
- * group the sky uses is the first the palette list writes.
+ * A tilemap entry is read the way the System 24 tile chip reads one (MAME
+ * segaic24 get_tile_info): the character is the low 14 bits, the palette group
+ * is bits 7-14, and bit 15 is the category — behind the 3D when clear, in front
+ * when set. The character and the group share bits 7-13, which is why no split
+ * of the entry into separate fields worked. The game packs its characters so
+ * that the overlap is the group it wants: the sky's start at 7680, which is
+ * group 60, where each stage's palette list starts writing. `0x1080000 + char *
+ * 32` is the pixels, and 0x1080000 is the address clr_first_group_cg clears.
+ *
+ * The group does change from tile to tile. On all sixteen stages every tile
+ * names a group its palette list writes, and each list writes 19 to 67 of them.
+ * Colouring the whole sky from the first group gets 6% to 80% of its pixels
+ * wrong: slot 4's sunset breaks into banded clouds with black holes, and slot
+ * 0's hills come out as a white stripe. Every sky tile is category 0, behind
+ * the arena.
  */
 
 import { xtraResolve } from './romset.js';
 
 const CHAR_BASE = 0x01080000;
 const PAL_BASE = 0x01800000;
+const CHAR_MASK = 0x3fff;       /* the character field of a tilemap entry */
 const TILE_BYTES = 32;          /* 8x8 at 4bpp */
 const PATTERN_TILES = 32;       /* tiles across one pattern */
 const PATTERN_STRIDE = 64;      /* bytes per pattern row */
@@ -101,9 +113,9 @@ export function buildSkyPanorama(rom, slot) {
         }
     }
 
-    /* ---- _ScrollColor_Initialize: the palette, and where it starts ---- */
+    /* ---- _ScrollColor_Initialize: the palette ---- */
     const pal = new Uint16Array(0x8000);
-    let group = -1;
+    let written = 0;
     {
         const t = at(rom, S.cgTable + (cg + 1) * 4);
         let a = t.view.getUint32(t.off, true), guard = 0;
@@ -114,7 +126,7 @@ export function buildSkyPanorama(rom, slot) {
             /* The count is halved into a dword count, so it is halfwords. */
             const words = e.view.getUint32(e.off + 4, true) >> 1;
             const first = (dest - PAL_BASE) >> 1;
-            if (group < 0) group = first >> 4;
+            written += words;
             for (let i = 0; i < words * 2; i++) {
                 const d = first + i;
                 if (d >= 0 && d < pal.length) pal[d] = e.view.getUint16(e.off + 8 + i * 2, true);
@@ -122,7 +134,7 @@ export function buildSkyPanorama(rom, slot) {
             a += 8 + words * 4;
         }
     }
-    if (group < 0) return null;
+    if (!written) return null;
 
     /* ---- the eighteen patterns, side by side ---- */
     const L = at(rom, listPtr);
@@ -152,7 +164,8 @@ export function buildSkyPanorama(rom, slot) {
             for (let tx = 0; tx < PATTERN_TILES; tx++) {
                 const entry = col.R.view.getUint16(
                     col.R.off + 0x0c + ty * PATTERN_STRIDE + tx * 2, true);
-                const base = entry * TILE_BYTES;
+                const base = (entry & CHAR_MASK) * TILE_BYTES;
+                const group = (entry >> 7) & 0xff;
                 if (base + TILE_BYTES > chars.length) continue;
                 for (let py = 0; py < 8; py++) {
                     for (let px = 0; px < 8; px++) {

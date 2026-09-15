@@ -211,12 +211,24 @@ source is zero, a source being a count followed by that many 32-byte tiles —
 count and data; a pattern is a header whose `0x04` is its row count, then rows
 of 32 tilemap entries on a 64-byte stride.
 
-A tilemap entry is the character number whole. `0x1080000 + entry * 32` is its
-pixels, and `0x1080000` is the address `clr_first_group_cg` clears — which is
-what settles it, because no split of the entry into character and palette bits
-puts every character inside a range the CG list actually fills. There is no
-palette field: the layer takes one 16-colour group, and the group is the first
-the palette list writes.
+A tilemap entry is read the way the System 24 tile chip reads one, as MAME's
+`segaic24` does and m2-hle2's tile renderer now does too: the character is the
+low 14 bits, the palette group is bits 7–14, and bit 15 is the category, which
+puts a tile behind the 3D when clear and in front when set. `0x1080000 + char *
+32` is the tile's pixels, and `0x1080000` is the address `clr_first_group_cg`
+clears.
+
+The character and the group share bits 7–13. That is why no split of the entry
+into separate character and palette fields put every character inside a range
+the CG list fills, and why this section once concluded there was no palette
+field and coloured the whole sky from the first group the palette list writes.
+The game packs its characters so that the overlap *is* the group it wants. The
+sky's characters start at 7680, which is group 60, the first group every
+stage's palette list writes, and on all sixteen stages every tile names a
+group its list writes. Each list writes 19 to 67 groups, so a single group
+was never enough: it coloured 6% to 80% of a stage's sky wrong. Slot 4's sunset
+broke into banded clouds with black holes in them, and slot 0's hills came out
+as a white stripe. Every sky tile is category 0, behind the arena.
 
 Eighteen patterns of 32 tiles is 576 across where the hardware shows 64, so the
 strip is nine screens wide. That is not a wide backdrop to be cropped: 576 tiles
