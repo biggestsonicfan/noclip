@@ -68,6 +68,14 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
 
     const out = { game };
     for (const [key, spec] of regions) {
+        /* A region the viewer can do without is left null rather than failing
+         * the whole set when a zip does not carry its chips. */
+        if (spec.optional && !spec.parts.every(([, lo, , hi]) => names.has(lo) && names.has(hi))) {
+            warnings.push(`${key}: chips not in the supplied zips, skipped`);
+            out[key] = null;
+            done += spec.parts.length * 2;
+            continue;
+        }
         const dest = new Uint8Array(spec.size);
         for (const [off, loName, loCrc, hiName, hiCrc] of spec.parts) {
             onProgress(`decompressing ${loName}`, done / totalParts);
@@ -86,7 +94,7 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
     /* A view per region, named for it, so a profile that adds one — Fighting
      * Vipers' second bank — gets a view without this list being touched.
      * mainCpuView keeps its old spelling because the callers use it. */
-    for (const [key] of regions) out[`${key}View`] = new DataView(out[key].buffer);
+    for (const [key] of regions) out[`${key}View`] = out[key] ? new DataView(out[key].buffer) : null;
     out.mainCpuView = out.maincpuView;
     return out;
 }

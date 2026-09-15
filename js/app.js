@@ -14,7 +14,7 @@ import {
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
-    SLOT_COUNT, HEAD_SLOT } from './pose.js';
+    useCoproTrig, SLOT_COUNT, HEAD_SLOT } from './pose.js';
 import { readOsage, osageParts } from './osage.js';
 import {
     readTails, tailParts, PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
@@ -176,6 +176,7 @@ async function bootWithBuffers(buffers) {
     $('#loader-error').hidden = true;
     try {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
+        useCoproTrig(state.rom);
     } catch (err) {
         return failToLoad(err, 'check that these are the sfight, schamp or fvipers ROM zips');
     }

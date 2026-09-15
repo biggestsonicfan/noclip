@@ -19,8 +19,8 @@
 
 /* Mirrors the MAME `sfight` region layout (see m2-hle2 src/profiles/sfight.h).
  * Only the regions the viewer reads are assembled — program code, the
- * model/palette data region, the polygon ROM and the texture ROM. Sound and
- * coprocessor regions are skipped. */
+ * model/palette data region, the polygon ROM, the texture ROM and the start of
+ * the coprocessor's data ROM. Sound is skipped. */
 const sfight = {
     id: 'sfight',
     name: 'Sonic The Fighters',
@@ -60,6 +60,15 @@ const sfight = {
                 [0x000000, 'mpr-19019.27', 0x59121896, 'mpr-19017.25', 0x7b298379],
                 [0x800000, 'mpr-19020.28', 0x9540dba0, 'mpr-19018.26', 0x3b7e7a12],
             ],
+        },
+        /* The coprocessor's data ROM, as the SHARC reads it at DM 0x1C00000,
+         * one float a word. Only the first megabyte is kept: it holds the
+         * sine and cosine tables the rig's rotations come from (js/pose.js).
+         * Optional, because the viewer falls back to computing them. */
+        copro: {
+            size: 0x100000,
+            optional: true,
+            parts: [[0x000000, 'mpr-19015.29', 0xc74d99e3, 'mpr-19016.30', 0x746ae931]],
         },
     },
     /* The XTRA_DATA window at 0x06000000. This game mirrors one bank through

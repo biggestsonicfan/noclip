@@ -29,10 +29,10 @@
  * (x, y, z) floats on the same slot numbering, read here as the four pivots,
  * the eight bone lengths and the chest's spine offset.
  *
- * Angles are 16-bit binary radians and the coprocessor takes its cosine from a
- * 256-entry table, so the angle is quantised to its top byte before the lookup.
- * Nothing here uses a transcendental beyond that table and a square root, which
- * is what the hardware has.
+ * Angles are 16-bit binary radians, and the coprocessor takes their sine and
+ * cosine from tables in its data ROM, one entry for every angle. Nothing here
+ * uses a transcendental beyond those tables and a square root, which is what
+ * the hardware has.
  *
  * Matrices are column-major three-by-threes, `m[col * 3 + row]`, with the
  * translation kept beside them — the coprocessor's own layout. `poseMatrices`
@@ -41,14 +41,49 @@
 
 /* ---- the coprocessor's trig table ---------------------------------------- */
 
-const COS = new Float32Array(256);
-const SIN = new Float32Array(256);
-for (let i = 0; i < 256; i++) {
-    COS[i] = Math.fround(Math.cos((i * 2 * Math.PI) / 256));
-    SIN[i] = Math.fround(Math.sin((i * 2 * Math.PI) / 256));
+/*
+ * The firmware's sine and cosine (_L202C1 in m2-hle2's reading of it) index
+ * the coprocessor's data ROM by the signed angle: sine at word 0x10000 + a,
+ * cosine 0x20000 words further on. That is a table for every one of the 65536
+ * angles, not a coarse table with the angle rounded into it. This file used to
+ * truncate the angle to its top byte and read 256 entries, which is up to
+ * 0.024 out, about 1.4 degrees, and always on the same side.
+ *
+ * The table's values are rounded to six decimals, so cos(0x4000) is exactly 0
+ * and cos(-0x4000) is -1e-6. Rounding libm's answers the same way does not
+ * give the same table (about 26,000 entries differ), so the exact values come
+ * from the ROM. Until useCoproTrig has seen one, the table is filled from libm
+ * at the same resolution, which is within 2e-6 of it.
+ */
+const COS = new Float32Array(0x10000);
+const SIN = new Float32Array(0x10000);
+for (let i = 0; i < 0x10000; i++) {
+    COS[i] = Math.fround(Math.cos((i * 2 * Math.PI) / 0x10000));
+    SIN[i] = Math.fround(Math.sin((i * 2 * Math.PI) / 0x10000));
 }
-const cosA = (a) => COS[(a >>> 8) & 0xff];
-const sinA = (a) => SIN[(a >>> 8) & 0xff];
+const cosA = (a) => COS[a & 0xffff];
+const sinA = (a) => SIN[a & 0xffff];
+
+const COPRO_SIN = 0x10000;
+const COPRO_COS = 0x30000;
+
+/**
+ * Take the sine and cosine tables out of a loaded set's coprocessor ROM. A set
+ * without that region keeps the computed tables.
+ *
+ * @param {object} rom  from loadRomSet()
+ * @returns {boolean}   whether the ROM's tables are now in use
+ */
+export function useCoproTrig(rom) {
+    const dv = rom?.coproView;
+    if (!dv || dv.byteLength < (COPRO_COS + 0x8000) * 4) return false;
+    for (let i = 0; i < 0x10000; i++) {
+        const a = i < 0x8000 ? i : i - 0x10000;
+        SIN[i] = dv.getFloat32((COPRO_SIN + a) * 4, true);
+        COS[i] = dv.getFloat32((COPRO_COS + a) * 4, true);
+    }
+    return true;
+}
 
 /* ---- column-major post-multiplies, one per axis --------------------------- */
 

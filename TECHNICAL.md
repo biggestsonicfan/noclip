@@ -1592,9 +1592,19 @@ facing once the parts are drawn.
 
 The first twelve objects are joint angles, rounded to 16-bit binary radians
 (`cvtri`/`stis`, and `set_mirror` reflects a yaw by taking it from `0x8000`).
-The last eight stay floats. Angles reach the coprocessor's cosine through a
-256-entry table, so an angle is quantised to its top byte before the lookup, and
-nothing in the solve needs a transcendental beyond that table and a square root.
+The last eight stay floats. The coprocessor takes an angle's sine and cosine
+from tables in its data ROM (`mpr-19015`/`mpr-19016`, which the SHARC sees at DM
+`0x1C00000`): sine at word `0x10000 + a` for the signed angle, cosine at
+`0x30000 + a`. There is an entry for every one of the 65536 angles, so nothing
+is quantised. Those two chips hold 56,711 distinct cosines, each within 2e-6 of
+the true value and rounded to six decimals, which makes `cos(0x4000)` exactly 0.
+An earlier reading here took a 256-entry table indexed by the angle's top byte;
+that is up to 0.024 out, about 1.4°, and m2-hle2's pose grader puts the cost at
+3.0e-2 of rotation and 9.6e-3 of position on a real fight's angles. Rounding
+libm's answers to six decimals misses about 26,000 entries, so the viewer loads
+the start of that ROM and reads the tables themselves, falling back to libm when
+a set does not carry the chips. Nothing in the solve needs a transcendental
+beyond those tables and a square root.
 
 Both the aim and the IK derive their cosine and sine from ratios — the law of
 cosines, then `sin = sqrt(1 - c^2)` — so a limb that cannot span the distance to
