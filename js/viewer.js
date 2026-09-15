@@ -27,6 +27,13 @@ const VERT_SHADER = /* glsl */`
     in vec3 aZc1;        // by; a triangle repeats one, and a face that asked
     in vec3 aZc2;        // for the previous polygon's z carries that polygon's
     in vec3 aZc3;        // corners instead of its own
+    in vec3 aFacePt;     // the point the board tests the normal against
+    // bit 7 of aFlags = drawn from both sides
+
+    // Set per game -- see ZSORT_RECEDE below.
+    uniform float uZsortRecede;
+    // The board's own front/back test, on unless the panel turns it off.
+    uniform float uBoardCull;
 
     // Everything the decoder writes once per face and copies to all three of
     // its vertices is flat, and has to be: the fill path truncates vTile and
@@ -155,7 +162,21 @@ const VERT_SHADER = /* glsl */`
         // the bound's fault: the board sorts the two plates by a corner
         // hundreds of units out and everything standing in them wins. So they
         // are told to say that -- see waterMaterial and floorMaterial.
-        const float ZSORT_RECEDE = 12.0;
+        //
+        // Fighting Vipers takes none of it, and the bound is a uniform so that
+        // a game can say so. Its stages are several plates laid in one plane at
+        // y = 0 and cut at different sizes -- the western arena's dirt is a
+        // plate forty-eight units across with faces deeper than the bound, the
+        // wood ring laid in it is faces of six to ten -- and the bounded recede
+        // parts them by size rather than by anything the board does: the ring
+        // sinks by up to ten units, the dirt keeps its depth, and the ring comes
+        // out a wood octagon in the dirt, redrawn whole polygon at a time as the
+        // camera moves. A capture of the stage has the wood from fence to fence.
+        // Nothing in that game is modelled behind a surface it shows through --
+        // its lettering stands 0.002 in front of the sign it is painted on, and
+        // what rests on the ground rests just over it -- so the depth buffer is
+        // the whole answer there. See games.js.
+        float ZSORT_RECEDE = uZsortRecede;
         float zf = (zNear - zFar) <= ZSORT_RECEDE
             ? clamp(zb, mv.z - ZSORT_RECEDE, mv.z)
             : mv.z;
@@ -186,6 +207,25 @@ const VERT_SHADER = /* glsl */`
             float zc = projectionMatrix[2][2] * zf + projectionMatrix[3][2];
             float zw = projectionMatrix[2][3] * zf + projectionMatrix[3][3];
             gl_Position.z = clamp(zc / max(zw, 1e-6), -1.0, 1.0) * gl_Position.w;
+        }
+
+        // The board's front/back test (see the facing point in model.js): a
+        // polygon not marked as drawn from both sides is thrown out when its
+        // normal and its first new point, both in camera space, have a negative
+        // dot product. Every input is the face's own and the same at its three
+        // vertices, so all three land on the same point outside the clip volume
+        // and the triangle has no area to fill.
+        //
+        // This is not the winding. A face that is seen from behind in this
+        // sense is one the board never shows, and drawing it anyway costs more
+        // than a wall seen through from inside a shell: a face stepped back to
+        // its far corner by the recede above lands exactly on the back faces
+        // that share that corner, and whichever of them is drawn last shows
+        // through -- the sawtooth along a wall's top, a ring's apron.
+        bool bothSides = ((int(aFlags + 0.5) >> 7) & 1) != 0;
+        if (uBoardCull > 0.5 && !bothSides &&
+                dot(vViewNormal, (modelViewMatrix * vec4(aFacePt, 1.0)).xyz) < 0.0) {
+            gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         }
     }
 `;
@@ -494,6 +534,9 @@ export function createModelMaterial() {
         glslVersion: THREE.GLSL3,
         vertexShader: VERT_SHADER,
         fragmentShader: FRAG_SHADER,
+        /* Both sides as far as three.js is concerned, because which side a face
+         * is drawn from is the board's question and not the winding's: the
+         * vertex shader answers it off the ROM normal, per polygon. */
         side: THREE.DoubleSide,
         /* Stated rather than left to the default, because a decal depends on
          * it. A decal here is the surface's own faces emitted again with a
@@ -532,6 +575,9 @@ export function createModelMaterial() {
             uTransfer: { value: 0 },
             uFogDensity: { value: 0.0 },
             uFogColor: { value: new THREE.Vector3(0.05, 0.06, 0.09) },
+            /* The Sonic The Fighters bound; a game profile may replace it. */
+            uZsortRecede: { value: 12.0 },
+            uBoardCull: { value: 1 },
         },
     });
 }
@@ -550,8 +596,31 @@ export function buildGeometry(decoded) {
     for (let c = 0; c < 4; c++) {
         g.setAttribute(`aZc${c}`, new THREE.BufferAttribute(decoded.zCorners[c], 3));
     }
+    g.setAttribute('aFacePt', new THREE.BufferAttribute(decoded.facePoints, 3));
     g.computeBoundingSphere();
     return g;
+}
+
+/*
+ * Whether the board draws triangle `tri` of a mesh from where the camera is —
+ * the vertex shader's front/back test, on the CPU, so a pick does not land on a
+ * face nobody can see. The view is rigid, so the camera-space dot product the
+ * shader takes is the world-space normal against the point less the eye.
+ */
+const FACING_N = new THREE.Vector3();
+const FACING_P = new THREE.Vector3();
+const FACING_M = new THREE.Matrix3();
+export function boardDrawsFace(mesh, tri, camera) {
+    const g = mesh.geometry;
+    const pt = g.getAttribute('aFacePt');
+    const flags = g.getAttribute('aFlags');
+    if (!pt || !flags || !mesh.material.uniforms?.uBoardCull.value) return true;
+    if ((Math.round(flags.getX(tri * 3)) >> 7) & 1) return true;
+    FACING_N.fromBufferAttribute(g.getAttribute('normal'), tri * 3)
+        .applyMatrix3(FACING_M.setFromMatrix4(mesh.matrixWorld));
+    FACING_P.fromBufferAttribute(pt, tri * 3).applyMatrix4(mesh.matrixWorld)
+        .sub(camera.getWorldPosition(new THREE.Vector3()));
+    return FACING_N.dot(FACING_P) >= 0;
 }
 
 export function buildEdgeGeometry(decoded) {
@@ -738,6 +807,7 @@ export class Viewer {
 
         this.root = new THREE.Group();
         this.reach = null;      /* see setReach */
+        this.nearMin = 0.02;    /* see setDepthProfile */
         /* Driven by hand: see setWorldFrame in app.js. */
         this.root.matrixAutoUpdate = false;
         this.scene.add(this.root);
@@ -766,8 +836,8 @@ export class Viewer {
          *
          * It shares the uniforms object rather than a clone of it, so every
          * per-stage uniform the panel and the colour pipeline write lands on
-         * both; `side` is the one piece of state that has to be mirrored, which
-         * backfaceCull does.
+         * both — the board's front/back test included, which is a uniform for
+         * exactly that reason.
          */
         this.backdropMaterial = createModelMaterial();
         this.backdropMaterial.uniforms = this.material.uniforms;
@@ -942,13 +1012,27 @@ export class Viewer {
         this.camera.updateProjectionMatrix();
     }
 
-    /** Cull back faces, or draw both sides — on the backdrop shells too. */
+    /** Take the board's front/back test, or draw every face from both sides.
+     *  Every model material shares the one uniform, so this reaches them all. */
     backfaceCull(on) {
-        for (const m of [this.material, this.backdropMaterial, this.floorMaterial,
-            this.waterMaterial]) {
-            m.side = on ? THREE.FrontSide : THREE.DoubleSide;
-            m.needsUpdate = true;
-        }
+        this.material.uniforms.uBoardCull.value = on ? 1 : 0;
+    }
+
+    /*
+     * The per-game depth settings: how far a polygon may step back to the
+     * corner the board sorts it by (see ZSORT_RECEDE in the vertex shader), and
+     * the least the near plane may be.
+     *
+     * The near plane is the depth buffer's precision, and what it has to hold
+     * apart is per game. Sonic The Fighters is framed at 1.6 and asks for 0.02.
+     * Fighting Vipers paints its lettering 0.002 in front of the board it is on,
+     * which a 24-bit buffer at 0.02 stops telling apart about twenty-six units
+     * out — a sign across the arena shimmers — and its arena is twelve units
+     * wide, so there is nothing to lose by standing the plane further off.
+     */
+    setDepthProfile({ recede = 12, nearMin = 0.02 } = {}) {
+        this.material.uniforms.uZsortRecede.value = recede;
+        this.nearMin = nearMin;
     }
 
     /*
@@ -1005,7 +1089,7 @@ export class Viewer {
         this.camera.lookAt(c);
         this.orbit.update();
         this.fly.syncFromCamera();
-        this.camera.near = Math.max(0.02, r / 4000);
+        this.camera.near = Math.max(this.nearMin, r / 4000);
         this.camera.far = Math.max(2000, r * 60);
         this.camera.updateProjectionMatrix();
         this.frameFar();

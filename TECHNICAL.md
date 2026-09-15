@@ -517,10 +517,10 @@ three cameras each, the one frame that changes is the Final Eggman Boss's; the
 other forty-seven are identical to the pixel.
 
 That arch is worth naming for what it is: **back faces**. All 184 of 2450's wall
-triangles are wound one way, and 1122's interior renders nothing at all under
-`backfaceCull` — the board would never draw either of them, and the viewer shows
-them only because `side` defaults to `DoubleSide` so a free camera inside a shell
-sees a wall rather than looking through it.
+triangles are wound one way, and 1122's interior renders nothing at all under the
+board's front/back test — the board would never draw either of them. The viewer
+showed them then because it drew every face from both sides; it now takes that
+test too, and see *Which side the board draws* below for what that changed.
 
 #### The floor plate concedes a tie
 
@@ -573,6 +573,81 @@ Model-table entry `i` lives at `main_data + 0x0E0004 + i*16`:
 | `+0x00` | UV stream, word index into the texture ROM |
 | `+0x04` | material records, half-word index into the texture ROM |
 | `+0x08` | mesh pointer; ROM offset is `ptr*4 - 0x02000010 + 0x10` |
+
+#### Which side the board draws
+
+A Model 2 polygon is drawn from one side unless it says otherwise.
+`model2_v.cpp`'s `check_culling` throws a polygon out when bit 17 of its attribute
+word is clear and `geo_parse` has set the rear bit on it, and the rear bit is set
+when `dot(normal, point) < 0` — the ROM normal and the first point the link itself
+brings, both through the same matrix and before the perspective divide. Four in
+five polygons in both games leave bit 17 clear.
+
+The viewer drew every face from both sides until this, on the argument that a
+free camera inside a shell should see a wall. What that cost only showed once the
+far-corner recede met it: a face stepped back to its far corner lands on the back
+faces that share that corner, and whichever is drawn last shows through. Fighting
+Vipers is where it was plain — a sawtooth along the tops of the graffiti arena's
+walls, the underside of stage 8's ring apron standing up through the ring —
+alongside the plates in the next section.
+
+`js/model.js` now carries bit 17 as face flag bit 7 and the link's first new point
+per face, and the vertex shader collapses a face whose test fails. Three things
+are worth knowing about it:
+
+- **It is the ROM normal, not the winding.** The two agree in every model checked
+  in both games, and the normal points *away* from the side that is drawn. The
+  test is taken against one point per polygon, which matters only on a quad whose
+  normal is not its plane's.
+- **A face with no normal of its own is drawn from both sides.** Its dot product
+  is zero, which the board counts as the front.
+- **Picking takes the same test**, so a click does not land on a face nobody can
+  see (`boardDrawsFace`).
+
+Measured against the renders before it, over all sixteen stages of both games at
+six cameras each: in Sonic The Fighters the large changes are cameras outside a
+sky shell, under a ground plate or inside a drum, which now see through it — the
+board's answer, and the one this file used to trade away. Inside the arena
+the changes are inside-out boxes closing (Mushroom Hill's tree trunks, Death Egg's
+hanging monitors showing their backs from outside the ring), and on the
+characters a few hundred pixels at most, among them Fang's smile, which the back
+of his head had been covering. In Fighting Vipers some geometry built only for the
+game's low camera disappears from above: stage 1's gantry is one-sided with its
+drawn side facing down, exactly as the board would cull it. The `backface cull`
+checkbox turns the test off.
+
+#### Fighting Vipers takes no recede
+
+The bounded far-corner recede above is a Sonic The Fighters rule, and the bound is
+a per-game setting (`depth.recede` in `js/games.js`). Fighting Vipers sets it to
+zero.
+
+Its stages are several plates in one plane — road, floor, ring, building bases,
+all at `y = 0` — cut at sizes that have nothing to do with each other. The bounded
+recede steps a face back by its own depth up to twelve units, and not at all past
+twelve, so plates in one plane part by how they were cut, and the parting moves
+with the camera. The western arena is the clearest case: its dirt 581 is a plate
+forty-eight units across with faces deeper than the bound, which keep their depth,
+and the wood ring 583 is faces of six to ten, which all sink under the dirt. What
+came out was a wood octagon floating in dirt, redrawn a polygon at a time as the
+camera moved. A capture of that stage has wood from fence to fence, and with the
+recede off so does the viewer. Turning it off changed a fifth to a third of the
+screen on that stage and up to a sixth on the graffiti arena, and every view
+compared came out as the capture shows it. The plate biases `buildFlatDisplayList`
+hands out are what settle the plane then, by submission order, which is the
+board's answer — the recede had simply been larger than them.
+
+What the recede exists for is a surface modelled behind one it shows through, and
+this game has none. Searching every stage for a face lying under an opaque face
+within 0.3 finds only things resting on the ground — porch boards 0.002 over the
+dirt, a lip 0.27 over the floor — which the depth buffer puts on top unaided.
+
+What it does have is lettering 0.002 in *front* of its sign, which a 24-bit buffer
+at `near = 0.02` stops separating about twenty-six units out. So the same profile
+raises the near plane's floor to 0.1 (`depth.nearMin`); at one camera across the
+western arena that took the shimmer from 2,982 pixels to 2. The arena is twelve
+units wide, so the plane standing a tenth of a unit off is not something a flying
+camera runs into.
 
 ### Stages (`js/stages.js`, `js/display.js`)
 

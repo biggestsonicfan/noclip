@@ -29,7 +29,7 @@ import {
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
 import { decodeMotion, sampleMotion, listMotions } from './motion.js';
-import { Viewer, buildGeometry, buildEdgeGeometry, THREE } from './viewer.js';
+import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet } from './texture.js';
@@ -2264,11 +2264,13 @@ function wirePicking() {
                 -((e.clientY - r.top) / r.height) * 2 + 1);
         ray.setFromCamera(ndc, v.camera);
         /* Nearest first out of intersectObjects, so the first hit that is a
-         * visible mesh is the one under the cursor — the wire overlays and any
-         * layer toggled off are not it. */
+         * visible mesh is the one under the cursor — the wire overlays, any
+         * layer toggled off and any face the board does not draw from this side
+         * are not it. */
         const hit = ray.intersectObjects(v.root.children, false).find(
             (h) => h.object.isMesh && h.object.visible
-                && h.object.userData.modelIndex != null);
+                && h.object.userData.modelIndex != null
+                && boardDrawsFace(h.object, h.faceIndex, v.camera));
         if (hit) revealModel(hit.object.userData.modelIndex);
     });
 }
@@ -2509,6 +2511,8 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    state.viewer.setDepthProfile(state.rom.game.depth);
+    state.viewer.backfaceCull($('#opt-cull').checked);
     const on = applyGameFeatures();
     if (on.stage) state.stages = readStageTable(state.rom);
     if (on.anim) state.frames = readFrameTables(state.rom);

@@ -216,7 +216,9 @@ export function decodeModel(rom, modelIdx, points = null) {
      * The first cuts out the palm fronds and the billboard trees; the second is
      * how the board does half-transparency, and South Island uses it on the
      * water planes and the waterfall. Bits 5 and 6 carry the face's z source,
-     * which is not a texture property at all — see the note below emitTri. */
+     * which is not a texture property at all — see the note below emitTri —
+     * and neither is bit 7, which says the board draws the face from behind as
+     * well as in front; see the note on the facing point. */
     let faceFlags = 0;
     /* Which of the 32 material slots the geometry engine lights this polygon
      * with — bits 18-22 of the attribute word. The slots themselves are per
@@ -260,6 +262,35 @@ export function decodeModel(rom, modelIdx, points = null) {
      * falls back to the triangle's plane. */
     let faceNx = 0, faceNy = 0, faceNz = 0, faceN = false;
 
+    /*
+     * Which side of the polygon the board draws.
+     *
+     * A polygon is drawn from in front only, unless bit 17 of its attribute word
+     * says both sides. model2_v.cpp's check_culling throws a polygon out when
+     * that bit is clear and geo_parse set the rear bit on it, and geo_parse
+     * sets the rear bit when dot(normal, point) < 0 -- the normal out of ROM and
+     * the first point the link itself brings, both through the same matrix,
+     * before the perspective divide. So the test is per polygon, against one
+     * point, and against the artist's normal rather than the winding. Which
+     * point it is matters on anything curved, where the normal is not the
+     * plane's.
+     *
+     * The ROM's normals point away from the side that is drawn: a polygon
+     * facing the camera has dot(normal, point) >= 0 with the camera at the
+     * origin. Four in five polygons in both games leave bit 17 clear.
+     *
+     * The link's first new point is the third corner the face loop reads -- C,
+     * in the A-B-D-C of a quad and the A-B-C of a triangle -- because a record
+     * carries its link's attribute and normal beside the *previous* link's
+     * points. Each vertex of the face carries it, so the shader's test has the
+     * same answer at all three.
+     *
+     * A face with no normal of its own has dot product zero, which the board
+     * counts as the front, so it is marked as drawn from both sides.
+     */
+    let facePt = 0;
+    const facePts = [];
+
     function emitTri(p0, p1, p2, s0, s1, s2) {
         const ax = sv[p0], ay = sv[p0 + 1], az = sv[p0 + 2];
         const bx = sv[p1], by = sv[p1 + 1], bz = sv[p1 + 2];
@@ -284,6 +315,7 @@ export function decodeModel(rom, modelIdx, points = null) {
         for (let t = 0; t < 3; t++) lumaBases.push(lumaBase);
         for (let t = 0; t < 3; t++) flags.push(faceFlags);
         for (let t = 0; t < 3; t++) mats.push(material);
+        for (let t = 0; t < 3; t++) facePts.push(sv[facePt], sv[facePt + 1], sv[facePt + 2]);
         for (let c = 0; c < 4; c++) {
             const q = zSrc[c];
             for (let t = 0; t < 3; t++) zc[c].push(sv[q], sv[q + 1], sv[q + 2]);
@@ -401,6 +433,8 @@ export function decodeModel(rom, modelIdx, points = null) {
             }
         }
         faceFlags |= zMode << 5;
+        if (((att[fi] >>> 17) & 1) || !faceN) faceFlags |= 128;
+        facePt = hasC ? C : A;
 
         if (triCnt || !hasC || !hasD) {
             if (hasC) {
@@ -455,6 +489,7 @@ export function decodeModel(rom, modelIdx, points = null) {
         lumaBases: new Float32Array(lumaBases),
         flags: new Float32Array(flags),
         zCorners: zc.map((a) => new Float32Array(a)),
+        facePoints: new Float32Array(facePts),
         mats: new Float32Array(mats),
         edges: new Float32Array(edges),
         faceCount,

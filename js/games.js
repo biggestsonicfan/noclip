@@ -117,6 +117,10 @@ const sfight = {
         lists: { ground: [0x64, 16], cage: [0x84, 24], sky: [0xc0, 4] },
         materials: { source: 'maincpu', ptrs: 0x000909e0 },
     },
+    /* How a polygon's board depth is carried into the depth buffer — the bound
+     * on the far-corner recede, and the least the near plane may be. The note on
+     * ZSORT_RECEDE in js/viewer.js is where these numbers come from. */
+    depth: { recede: 12, nearMin: 0.02 },
     scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
@@ -390,6 +394,33 @@ const fvipers = {
          */
         flat: true,
     },
+    /*
+     * No far-corner recede, and a near plane five times further off.
+     *
+     * The recede is what stood the textures against each other. Every stage
+     * lays several plates in the one plane — road, floor, ring, the bases of the
+     * buildings — cut at sizes that have nothing to do with each other, and a
+     * bounded recede steps each face back by its own depth up to twelve units,
+     * or not at all past twelve. So plates in one plane part by how they were
+     * cut, and the parting moves with the camera. On the western arena the dirt
+     * has faces deeper than the bound and keeps its depth while the wood ring's
+     * faces of six to ten sink under it, leaving a wood octagon in the dirt; a
+     * capture has wood from fence to fence. The same thing notched the wall tops
+     * and ate the platform on the graffiti arena. With the recede off, the
+     * plate biases buildFlatDisplayList hands out settle the plane by
+     * submission order, which is the board's answer. See "Fighting Vipers takes
+     * no recede" in TECHNICAL.md for the measurements.
+     *
+     * What the recede exists for is a surface modelled behind one it shows
+     * through, and this game has none: searching every stage for a face lying
+     * under an opaque face within 0.3 finds only things resting on the ground —
+     * porch boards 0.002 over the dirt, a lip 0.27 over the floor — and the depth
+     * buffer puts those on top unaided.
+     *
+     * What it does have is lettering 0.002 in front of its sign, and that is the
+     * near plane's to hold: see setDepthProfile in js/viewer.js.
+     */
+    depth: { recede: 0, nearMin: 0.1 },
     scenes: null,
     /* The stage table is read, so the Stages tab is on. Rigs and motions are
      * still this game's own and not located, and neither is the object list a
