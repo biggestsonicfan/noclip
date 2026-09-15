@@ -1,7 +1,9 @@
 # Technical notes
 
-How the *Sonic The Fighters* explorer reads the ROM set and turns it into what
-you see. For running and deploying the viewer, see [README.md](README.md).
+How the explorer reads a Sega Model 2 ROM set and turns it into what you see.
+Most of what follows is *Sonic The Fighters*, the game it goes deepest on; the
+parts that are not its alone say so. For running and deploying the viewer, see
+[README.md](README.md).
 
 ## Layout
 
@@ -9,6 +11,7 @@ you see. For running and deploying the viewer, see [README.md](README.md).
 index.html  style.css
 js/
   zip.js         zip central-directory reader + inflate
+  games.js       per-game ROM recipes and table addresses
   romset.js      MAME region assembly, model table, address translation
   model.js       index-array polygon decoder
   stages.js      stage_data reader
@@ -53,12 +56,242 @@ is the way out.
 
 ## How it works
 
-### ROM assembly (`js/zip.js`, `js/romset.js`)
+### ROM assembly (`js/zip.js`, `js/romset.js`, `js/games.js`)
 
 The zip members are inflated in the browser via `DecompressionStream` and
 interleaved into MAME's region layout (`ROM_LOAD32_WORD`: two 16-bit halves into
 32-bit words). Four regions are assembled — the program ROM, the main data ROM
 (model table, face palette, motion tables), the polygon ROM and the texture ROM.
+
+Which chips make up each region, and where the tables sit once it is built, is
+per-game and lives in `js/games.js`. `loadRomSet` identifies the set from its
+member names rather than being told, and hangs the profile it chose on the ROM
+set as `rom.game`, so the decoders read their numbers off the set they were
+handed. Nothing downstream carries a game's address as a module constant.
+
+### Working out a second game's layout
+
+Adding *Fighting Vipers* meant deriving a layout for a set whose MAME recipe was
+not to hand, and the method is worth recording because it needs no recipe.
+
+The program ROM settles the tables. Both games are built on Sega's Model 2
+library and Fighting Vipers' program ROM carries the same official labels, so
+`set_obj` is where it always is and reaches for the model table the same way:
+
+```
+set_obj:  ld   off_501018, r4
+          ...
+          lda  unk_20E0004[g0*16], g0
+          ldq  (g0), r8
+```
+
+`MAIN_DATA` is based at `0x02000000`, so that is data offset `0x0E0004` on a
+16-byte stride — the same as Sonic The Fighters, and the `ldq` confirms the
+16-byte entry. The face palette is the labelled `unk_2100000`, data offset
+`0x100000`, and reading it back shows a linear BGR555 grey ramp, which is what a
+palette that starts at black and walks to white looks like.
+
+The chips settle themselves, given something to score them against. Each region
+is a small number of candidate pairings, and a wrong one is not subtly wrong —
+it is floating-point garbage. Two tests separate them:
+
+- **Polygons.** Every 40-byte record ends in the polygon's normal, and the board
+  stores it unit length. Build a candidate, decode a few hundred meshes, and
+  count how many open on normals whose length is 1. The right pairing scores
+  across the whole region; a wrong one collapses in the 4MB band it got wrong.
+- **Textures.** A material record's first half-word gives the tile size as two
+  three-bit fields, and the UV stream is texel coordinates in eighths. A
+  candidate that yields tile sizes over 512, or UVs in the thousands, is not the
+  texture ROM. Because a record's bytes alternate between the two chips, the low
+  chip is scored on the header and the high chip on the UVs.
+
+The pointer ranges size the regions before any of that: the largest mesh pointer
+in the table is at 9.9MB, which no two 2MB pairs can hold, so the polygon ROM
+has three; the UV pointers stop below 12MB with a 4MB hole in the middle, which
+is two pairs at the same offsets Sonic The Fighters uses.
+
+The table's length is the one thing the program does not state. Entries run in
+banks separated by runs of zeros, so the end is not the first zero — it is where
+entries stop being *plausible*. Every entry up to 5412 has a mesh pointer inside
+the polygon ROM and uv/material pointers inside the texture ROM; nothing above
+8190 does. That upper stretch is other data that happens to follow the table.
+
+The texture pipeline did carry across, whole. Every routine `js/texture.js`
+ports is in Fighting Vipers' program ROM under the same official label —
+`unp_send_tex_para_sub`, `unpack_lod_data`, `make_huf_8bit`, `send_beta_data`,
+`send_lod_data`, `send_lod_data_q` — and the data header is reached by the same
+`ld off_230000C, r4`, so the codec, the page format and the descriptor layout
+are all identical. Two numbers move: the page grid, which the same
+`ldos unk_4B9C0[g0*4]` pair gives, and the count of texture numbers, which
+`unp_send_tex_req` bounds with `lda unk_63, r3 / cmpoble g0, r3` — 0..0x63, so
+100 sets against the other game's 18.
+
+What a second game has no answer for is *which* set to unpack. A stage record
+names the texture numbers, and there is no stage table. But a face already names
+a 32-pixel tile in the atlas, and where a set's pages land is decided by the
+origin word and the page grid alone — the codec never enters into it. So
+`texturePages` walks a set's page list and returns its 256×256 origins without
+unpacking a byte, and `bestTextureSet` scores every set on how many of a model's
+tiles it covers. Over 3550 textured models that picks a fully-covering set for
+all but one, in about half a second for the whole table; unpacking all 100 sets
+to find out would have cost seconds per model.
+
+### Colour and light for a second game
+
+The colour tables carried across as completely as the textures did.
+`send_tex_col_go` in Fighting Vipers is instruction for instruction the other
+game's `send_tex_col_loop` — the same `0x200` row stride, the same `0x60` group,
+the same sixteen colours over luma 48..63 with channels `0x20` apart. The ramp
+in `chg_pol_color_req` uses the same `0x1C`/`0x12` rational and starts its row
+loop at 1, leaving row 0 and luma 0 zero exactly as the other does. `sub_74C`
+builds the intensity curve on the same pivot and divisor, written as
+`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37. And `check_sram_all` ships add
+22, multiply 54 and brightness 31, which are the other game's numbers, though
+this one keeps a pair per channel at `0x500234`..`0x500239` rather than one for
+all three. So `js/colors.js` is one implementation with the addresses lifted out
+into the profile.
+
+Two things differ. There is no pointer block: each upload names its table
+outright, `lda unk_2109700` for the scene's and `lda unk_2105800` for a
+fighter's parts. And a fighter takes seven colorxlat rows a side rather than
+five, so rows 0..6 and 7..13 are both spoken for and there is no gap left for
+the pair of boot-time tables the other game needs.
+
+### The second data bank
+
+The lighting is in a place the ROM layout did not originally have. Sockets .5
+and .6 are not part of the data region the i960 sees at `0x02000000`; they are a
+second bank reached only through the XTRA_DATA window, and the window is split
+in two. Anything with `0x800000` set mirrors that bank, anything without mirrors
+the last megabyte of the data region, and both halves repeat every megabyte. The
+split was read off the board's own addresses: `lda unk_64266E0` for luma RAM
+lands in the low half and matches the data region byte for byte, while
+`ld off_6CE33A4[r12*4]` for the material table lands in the high half and
+matches the .5/.6 pair, which nothing else in the set uses.
+
+In that bank is a scene table, indexed by `change_scene` with `shlo 8, r12, r4`
+off `stage_num` — the same `0x100` stride the other game's stage record has. The
+fields the viewer reads are the ones `change_scene` and `stage_disp` read:
+brightness and the two rotations that build the light vector, the pair of
+texture numbers handed to `send_tex_stage`, and three bytes copied to `0x5000E0`
+as the per-channel trim. A second array gives the materials: `sub_24878` walks
+32 slots out of `off_6CE33A4[stage_num*4]` and pushes them at the geometry
+engine behind command `0x606`. The debug editor at `sub_56694` names every field
+of a slot as it builds one, which is how the packing was confirmed — diffuse in
+bits 0-7, ambient in 8-15, specular in 16-23, mirror in 24-31.
+
+The light vector needs no new code: it is `(0, 0, bright)` turned by the same two
+rotations, which is the board's formula and already in `stageLight`.
+
+### Where the sky is
+
+There is no sky geometry in Fighting Vipers. No stage record carries a shell —
+every byte past `0xB8` is zero on all sixteen, where the other game keeps a
+four-entry list at `0xC0` — and no stage has anything enclosing to stand in for
+one: on the western arena the tallest model reaches seven units and the largest
+is its own floor. The two models `sub_24224` draws four times round the arena
+are both railings, which was settled by rendering them.
+
+The sky is the board's 2D scroll layer, and it is per stage. `sub_29728` takes
+`stage_num`, indexes a 32-byte record at `0x6CE3600`, and hands the number at
+its `0x0C` to `_Scroll_Initialize`, which loads that stage's tile graphics from
+`off_6450000[n]` and that stage's palette from `off_6450000[n + 1]`. A second
+pointer at `0x14` feeds a per-stage tile blit that lands in text RAM at
+`0x1004000`, which is the visible tilemap.
+
+Those palettes are visibly skies and visibly differ. The western arena's is a
+ramp of blues at full blue with the green climbing — a gradient — topping out at
+white; the night parking lot's opens on `0x9400`, which is R0 G0 B5, a near
+black. So a per-stage sky colour does exist, and it is in that palette.
+
+The layer is now decoded, in `js/scroll.js`. Three formats, each read off the
+routine that walks it: the CG list is pairs of source and destination until the
+source is zero, a source being a count followed by that many 32-byte tiles —
+8x8 at four bits a pixel; the palette list is blocks of destination, halfword
+count and data; a pattern is a header whose `0x04` is its row count, then rows
+of 32 tilemap entries on a 64-byte stride.
+
+A tilemap entry is read the way the System 24 tile chip reads one, as MAME's
+`segaic24` does and m2-hle2's tile renderer now does too: the character is the
+low 14 bits, the palette group is bits 7–14, and bit 15 is the category, which
+puts a tile behind the 3D when clear and in front when set. `0x1080000 + char *
+32` is the tile's pixels, and `0x1080000` is the address `clr_first_group_cg`
+clears.
+
+The character and the group share bits 7–13. That is why no split of the entry
+into separate character and palette fields put every character inside a range
+the CG list fills, and why this section once concluded there was no palette
+field and coloured the whole sky from the first group the palette list writes.
+The game packs its characters so that the overlap *is* the group it wants. The
+sky's characters start at 7680, which is group 60, the first group every
+stage's palette list writes, and on all sixteen stages every tile names a
+group its list writes. Each list writes 19 to 67 groups, so a single group
+was never enough: it coloured 6% to 80% of a stage's sky wrong. Slot 4's sunset
+broke into banded clouds with black holes in them, and slot 0's hills came out
+as a white stripe. Every sky tile is category 0, behind the arena.
+
+Eighteen patterns of 32 tiles is 576 across where the hardware shows 64, so the
+strip is nine screens wide. That is not a wide backdrop to be cropped: 576 tiles
+is one full turn and 64 of them is the board's horizontal field, which is why
+the viewer puts it on a cylinder at that scale. Turning the camera walks the
+strip exactly as the scroll registers walk the tilemap.
+
+Vertically it is an estimate rather than the board's arithmetic. The board draws
+the layer in screen space at one tile to eight pixels, so how much sky is in
+frame is a property of the projection and not of anything in the data. The
+cylinder is scaled by the same pixels-per-radian the horizontal mapping implies
+and carried on the camera, the foot of the strip on the eye line — which is what
+a skybox does, and here it is the behaviour being reproduced rather than a
+convention borrowed.
+
+The backdrop comes out of the same decode. The panorama is a band, not a dome,
+and above its top row the hardware shows the backdrop; the commonest colour
+along that row is what the sky is doing where it runs out. That is the per-stage
+colour, and it is what the viewer now uses — deep blue over the western arena,
+near-black over the night parking lot. The boot-time constant `init_fix` hands
+`bg_col_set` is kept only as a fallback for a stage whose panorama will not
+decode.
+
+### The stage records
+
+They are the other game's records exactly. `stage_data` is a label in this
+program ROM at `0x06CE1048`, and `change_scene` indexes it with
+`shlo 8, r12, r4` — the same `0x100` stride. Every field `js/stages.js` already
+knew is at the same offset, and each was confirmed against the routine that
+reads it: `change_scene` for the brightness, rotations and texture pair,
+`stage_disp` for the trim, `pole_disp` for `0x1C`, `cage_sub_disp` for `0x1E`,
+`cage_clip_m` for the cage at `0x84`, `ground_upper_disp` for a list at `0x24`
+the other game has no equivalent for, and `object_init` for the pointer at
+`0xB4`. Every single-model field resolves to a table entry carrying geometry.
+
+So `readStageTable` is one reader with the addresses in the profile, and the one
+new thing it needs is that a record may live behind the mirror window rather
+than in the program ROM.
+
+The draw list, though, is not the same at all, and it is simpler. The other
+game's `buildStageDisplayList` is mostly about transforms — the 1.6 scale on the
+arena, a matrix each for the cage, its posts, the ring ramp and the platform.
+This one pushes the stage position once and then hands each list to `area_clip`,
+and `area_clip` is a cull:
+
+```
+area_clip:  ldos  (g2), r5          ; count
+            ...                     ; four indices into a visibility bitmap
+            and   r9, r10, r10
+            cmpobne 0, r10, skip
+            ldos  (g3)[r6*2], r13   ; the model
+            mov   0, g1
+            call  set_obj           ; no matrix
+```
+
+Four bytes of clip-region indices per model decide whether it is drawn, and
+nothing transforms it. The geometry is already in world space, so the draw list
+is the lists themselves at the identity, and `buildFlatDisplayList` is the whole
+of it. The layers are a grouping for the sidebar rather than a claim about
+transforms.
+
+What is missing is motion. The object list at `0xB4` is what animates a stage,
+and walking it is not written, so a stage here stands still.
 
 ### Polygon decoding (`js/model.js`)
 
@@ -296,10 +529,10 @@ three cameras each, the one frame that changes is the Final Eggman Boss's; the
 other forty-seven are identical to the pixel.
 
 That arch is worth naming for what it is: **back faces**. All 184 of 2450's wall
-triangles are wound one way, and 1122's interior renders nothing at all under
-`backfaceCull` — the board would never draw either of them, and the viewer shows
-them only because `side` defaults to `DoubleSide` so a free camera inside a shell
-sees a wall rather than looking through it.
+triangles are wound one way, and 1122's interior renders nothing at all under the
+board's front/back test — the board would never draw either of them. The viewer
+showed them then because it drew every face from both sides; it now takes that
+test too, and see *Which side the board draws* below for what that changed.
 
 #### The floor plate concedes a tie
 
@@ -352,6 +585,81 @@ Model-table entry `i` lives at `main_data + 0x0E0004 + i*16`:
 | `+0x00` | UV stream, word index into the texture ROM |
 | `+0x04` | material records, half-word index into the texture ROM |
 | `+0x08` | mesh pointer; ROM offset is `ptr*4 - 0x02000010 + 0x10` |
+
+#### Which side the board draws
+
+A Model 2 polygon is drawn from one side unless it says otherwise.
+`model2_v.cpp`'s `check_culling` throws a polygon out when bit 17 of its attribute
+word is clear and `geo_parse` has set the rear bit on it, and the rear bit is set
+when `dot(normal, point) < 0` — the ROM normal and the first point the link itself
+brings, both through the same matrix and before the perspective divide. Four in
+five polygons in both games leave bit 17 clear.
+
+The viewer drew every face from both sides until this, on the argument that a
+free camera inside a shell should see a wall. What that cost only showed once the
+far-corner recede met it: a face stepped back to its far corner lands on the back
+faces that share that corner, and whichever is drawn last shows through. Fighting
+Vipers is where it was plain — a sawtooth along the tops of the graffiti arena's
+walls, the underside of stage 8's ring apron standing up through the ring —
+alongside the plates in the next section.
+
+`js/model.js` now carries bit 17 as face flag bit 7 and the link's first new point
+per face, and the vertex shader collapses a face whose test fails. Three things
+are worth knowing about it:
+
+- **It is the ROM normal, not the winding.** The two agree in every model checked
+  in both games, and the normal points *away* from the side that is drawn. The
+  test is taken against one point per polygon, which matters only on a quad whose
+  normal is not its plane's.
+- **A face with no normal of its own is drawn from both sides.** Its dot product
+  is zero, which the board counts as the front.
+- **Picking takes the same test**, so a click does not land on a face nobody can
+  see (`boardDrawsFace`).
+
+Measured against the renders before it, over all sixteen stages of both games at
+six cameras each: in Sonic The Fighters the large changes are cameras outside a
+sky shell, under a ground plate or inside a drum, which now see through it — the
+board's answer, and the one this file used to trade away. Inside the arena
+the changes are inside-out boxes closing (Mushroom Hill's tree trunks, Death Egg's
+hanging monitors showing their backs from outside the ring), and on the
+characters a few hundred pixels at most, among them Fang's smile, which the back
+of his head had been covering. In Fighting Vipers some geometry built only for the
+game's low camera disappears from above: stage 1's gantry is one-sided with its
+drawn side facing down, exactly as the board would cull it. The `backface cull`
+checkbox turns the test off.
+
+#### Fighting Vipers takes no recede
+
+The bounded far-corner recede above is a Sonic The Fighters rule, and the bound is
+a per-game setting (`depth.recede` in `js/games.js`). Fighting Vipers sets it to
+zero.
+
+Its stages are several plates in one plane — road, floor, ring, building bases,
+all at `y = 0` — cut at sizes that have nothing to do with each other. The bounded
+recede steps a face back by its own depth up to twelve units, and not at all past
+twelve, so plates in one plane part by how they were cut, and the parting moves
+with the camera. The western arena is the clearest case: its dirt 581 is a plate
+forty-eight units across with faces deeper than the bound, which keep their depth,
+and the wood ring 583 is faces of six to ten, which all sink under the dirt. What
+came out was a wood octagon floating in dirt, redrawn a polygon at a time as the
+camera moved. A capture of that stage has wood from fence to fence, and with the
+recede off so does the viewer. Turning it off changed a fifth to a third of the
+screen on that stage and up to a sixth on the graffiti arena, and every view
+compared came out as the capture shows it. The plate biases `buildFlatDisplayList`
+hands out are what settle the plane then, by submission order, which is the
+board's answer — the recede had simply been larger than them.
+
+What the recede exists for is a surface modelled behind one it shows through, and
+this game has none. Searching every stage for a face lying under an opaque face
+within 0.3 finds only things resting on the ground — porch boards 0.002 over the
+dirt, a lip 0.27 over the floor — which the depth buffer puts on top unaided.
+
+What it does have is lettering 0.002 in *front* of its sign, which a 24-bit buffer
+at `near = 0.02` stops separating about twenty-six units out. So the same profile
+raises the near plane's floor to 0.1 (`depth.nearMin`); at one camera across the
+western arena that took the shimmer from 2,982 pixels to 2. The arena is twelve
+units wide, so the plane standing a tenth of a unit off is not something a flying
+camera runs into.
 
 ### Stages (`js/stages.js`, `js/display.js`)
 
@@ -1284,9 +1592,19 @@ facing once the parts are drawn.
 
 The first twelve objects are joint angles, rounded to 16-bit binary radians
 (`cvtri`/`stis`, and `set_mirror` reflects a yaw by taking it from `0x8000`).
-The last eight stay floats. Angles reach the coprocessor's cosine through a
-256-entry table, so an angle is quantised to its top byte before the lookup, and
-nothing in the solve needs a transcendental beyond that table and a square root.
+The last eight stay floats. The coprocessor takes an angle's sine and cosine
+from tables in its data ROM (`mpr-19015`/`mpr-19016`, which the SHARC sees at DM
+`0x1C00000`): sine at word `0x10000 + a` for the signed angle, cosine at
+`0x30000 + a`. There is an entry for every one of the 65536 angles, so nothing
+is quantised. Those two chips hold 56,711 distinct cosines, each within 2e-6 of
+the true value and rounded to six decimals, which makes `cos(0x4000)` exactly 0.
+An earlier reading here took a 256-entry table indexed by the angle's top byte;
+that is up to 0.024 out, about 1.4°, and m2-hle2's pose grader puts the cost at
+3.0e-2 of rotation and 9.6e-3 of position on a real fight's angles. Rounding
+libm's answers to six decimals misses about 26,000 entries, so the viewer loads
+the start of that ROM and reads the tables themselves, falling back to libm when
+a set does not carry the chips. Nothing in the solve needs a transcendental
+beyond those tables and a square root.
 
 Both the aim and the IK derive their cosine and sine from ratios — the law of
 cosines, then `sin = sqrt(1 - c^2)` — so a limb that cannot span the distance to

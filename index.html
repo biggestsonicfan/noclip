@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sonic The Fighters — 3D Explorer</title>
+<title>Sega Model 2 — 3D Explorer</title>
 <!-- Which site this is — the sidebar, or the sheet along the bottom of the
      view — is decided here, ahead of the stylesheet, so a phone never paints
      the desktop layout first. A phone is one whose user agent says so: the
@@ -61,20 +61,23 @@
 
 <div id="loader">
   <div class="loader-box">
-    <h1>Sonic The Fighters</h1>
-    <p class="sub">Model 2 &mdash; interactive 3D explorer</p>
+    <h1>Sega Model 2</h1>
+    <p class="sub">Interactive 3D explorer</p>
 
     <div class="romnote">
-      <p>The viewer builds its regions from <b>Sonic The Fighters</b>' own program
-         EPROMs &mdash; <code>epr-19001</code>&ndash;<code>epr-19004</code> &mdash; and from the
-         mask ROMs <code>mpr-19005</code>&ndash;<code>mpr-19020</code>, which MAME shares with the
-         parent set, <b>Sonic Championship</b> (<code>schamp</code>). A split set keeps those two
-         halves in separate zips, so a combined set is the easiest thing to drop:</p>
+      <p>Drop a ROM set and the viewer works out which game it is from the program
+         ROM inside it. Two are supported:</p>
       <ul>
-        <li><b>Non-merged</b> &mdash; <code>sfight.zip</code> on its own; it carries everything.</li>
-        <li><b>Split</b> &mdash; <code>sfight.zip</code> <i>and</i> <code>schamp.zip</code> together:
-            the program EPROMs come from the first, the data ROMs from the second.</li>
-        <li><b>Merged</b> &mdash; <code>schamp.zip</code> on its own; the clone's EPROMs are inside it.</li>
+        <li><b>Sonic The Fighters</b> &mdash; stages, character rigs and motions.
+            Built from that game's own program EPROMs, <code>epr-19001</code>&ndash;<code>epr-19004</code>,
+            and the mask ROMs <code>mpr-19005</code>&ndash;<code>mpr-19020</code>, which MAME shares with
+            the parent set <b>Sonic Championship</b> (<code>schamp</code>). Drop
+            <code>sfight.zip</code> on its own, or <code>schamp.zip</code> on its own, or both
+            together if your set is split across the two.</li>
+        <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; the model explorer only, for
+            now. The model table is in the same place, because both games are built on the
+            same Sega library; its stage and motion tables are its own and have not been
+            located yet.</li>
       </ul>
     </div>
 
@@ -101,7 +104,7 @@
 <div id="app" hidden>
   <aside id="sidebar">
     <header>
-      <div class="title">Sonic The Fighters</div>
+      <div class="title" id="game-title">Sega Model 2</div>
       <nav id="tabs">
         <button data-tab="stage" class="active">Stages</button>
         <button data-tab="model">Models</button>
@@ -131,6 +134,18 @@
       </div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
+      </div>
+      <!-- Only for a game with no stage table: with no scene to name the
+           texture numbers, the set has to be chosen here instead. -->
+      <div class="field" id="model-texset-field" hidden>
+        <label>Texture set</label>
+        <select id="model-texset"></select>
+      </div>
+      <!-- Likewise for colour: a scene record would name the scene colour block
+           and whoever is on screen, and there is no scene record. -->
+      <div class="field" id="model-colour-field" hidden>
+        <label>Fighter colours</label>
+        <select id="model-fighter"></select>
       </div>
       <div id="model-count" class="dim"></div>
       <div id="model-list" class="modellist"></div>
@@ -218,7 +233,7 @@
       </div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="opt-grid"> grid</label>
-        <label class="check"><input type="checkbox" id="opt-cull"> backface cull</label>
+        <label class="check" title="Draw each polygon only from the side the board draws it from: the ROM normal against the polygon's own point, unless the polygon is marked two-sided. Off draws every face from both sides, which the board never does"><input type="checkbox" id="opt-cull" checked> backface cull</label>
       </div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="opt-axes"> axes</label>

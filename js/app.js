@@ -2,18 +2,19 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, MODEL_TABLE_COUNT, readModelEntry } from './romset.js';
+import { loadRomSet, readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight } from './stages.js';
+import { buildSkyPanorama } from './scroll.js';
 import {
-    buildStageDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
+    buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
     stageLightYaw, stageMaterials, stageWorldFrame,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
-    SLOT_COUNT, HEAD_SLOT } from './pose.js';
+    useCoproTrig, SLOT_COUNT, HEAD_SLOT } from './pose.js';
 import { readOsage, osageParts } from './osage.js';
 import {
     readTails, tailParts, PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
@@ -28,10 +29,10 @@ import {
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
 import { decodeMotion, sampleMotion, listMotions } from './motion.js';
-import { Viewer, buildGeometry, buildEdgeGeometry, THREE } from './viewer.js';
+import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
-import { buildTexram } from './texture.js';
+import { buildTexram, bestTextureSet } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -85,6 +86,25 @@ const state = {
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
+    /* The scroll layer's sky, decoded once per stage and kept. */
+    sky: null,
+    skyTextures: new Map(),
+    skyPanoAspect: new Map(),
+    skyTopColor: new Map(),
+    /* The Models tab's texture picker, for a game with no stage table to name
+     * a texture number. null is "work it out from the model"; a number is the
+     * set the user chose. `texSetCache` memoises the worked-out answer. */
+    texSetChoice: null,
+    texSetCache: new Map(),
+    /* For a game with no stage record: which scene colour block fills the
+     * scene rows of colorxlat, which character's blocks fill the part and skin
+     * rows, and the light vector, since none of the three is in a table the
+     * viewer can read. -1 for the fighter leaves those rows at zero. */
+    /* Whose part and skin colours to fill colorxlat's fighter rows with, for a
+     * game the viewer has no roster for. A stage record does not say who is
+     * standing in it, so it is a choice on the panel; -1 leaves those rows at
+     * zero, which is what a scene with nobody in it shows. */
+    colorFighter: 0,
     frames: null,       /* the animation frame tables, read once per ROM set */
     animate: true,
     /* Which of the two framings the moving stages are shown in — see
@@ -156,8 +176,9 @@ async function bootWithBuffers(buffers) {
     $('#loader-error').hidden = true;
     try {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
+        useCoproTrig(state.rom);
     } catch (err) {
-        return failToLoad(err, 'check that these are the sfight / schamp ROM zips');
+        return failToLoad(err, 'check that these are the sfight, schamp or fvipers ROM zips');
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
      * problem, and swapping to the app shell first would hide the message. */
@@ -312,7 +333,11 @@ function useRomTexram(texSets) {
     const key = texSets.join(',');
     if (key === state.texramKey) return;
 
-    const { sheet0, sheet1 } = buildTexram(state.rom, [16, ...texSets]);
+    /* Which set sits behind the named ones is the game's own arrangement, so it
+     * comes off the profile; a game with none named just gets what was asked. */
+    const resident = state.rom.game.texture.residentSet;
+    const queue = resident == null ? texSets : [resident, ...texSets];
+    const { sheet0, sheet1 } = buildTexram(state.rom, queue);
     setAtlasSheets(sheet0, sheet1);
     state.texramKey = key;
 
@@ -424,7 +449,51 @@ async function loadTexramFiles(files) {
     }
 }
 
+/*
+ * The draw list for the loaded stage.
+ *
+ * A game whose geometry is already in world space takes the flat builder; the
+ * long one is about the transforms the other game's draw functions apply, and
+ * there are none to apply here.
+ */
+function stageDisplayList(stage) {
+    return state.rom.game.stageTable.flat
+        ? buildFlatDisplayList(stage)
+        : buildStageDisplayList(stage, state.frames);
+}
+
+/* ---- Colour and light for a game with no stage table --------------------- */
+
+/* ---- Texture set for a lone model ---------------------------------------- */
+
+/*
+ * Which texture number to unpack for a model, when no stage record names one.
+ *
+ * `null` from the picker means work it out from the model; any other value is
+ * the set the user chose and is used as given, including when it covers
+ * nothing — seeing a model against the wrong sheets is a legitimate thing to
+ * want to do while working out which sheets are the right ones.
+ *
+ * The answer is cached per model because the search walks every set's page
+ * list, which is cheap but not free, and clicking down the list would repeat it
+ * on every row.
+ */
+function modelTextureSet(idx) {
+    if (state.texSetChoice !== null) return state.texSetChoice;
+    if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
+    const found = bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets);
+    const set = found ? found.set : null;
+    state.texSetCache.set(idx, set);
+    return set;
+}
+
 /* ---- Model cache --------------------------------------------------------- */
+
+/* How many entries the loaded game's model table has. Read through a call
+ * rather than imported, because it is not known until a ROM set is in hand. */
+function modelCount() {
+    return state.rom ? state.rom.game.modelTable.count : 0;
+}
 
 function getModel(idx) {
     if (state.modelCache.has(idx)) return state.modelCache.get(idx);
@@ -470,7 +539,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    groundPlate = false,
+    groundPlate = false, planeBias = 0,
 } = {}) {
     const v = state.viewer;
     /* The ground plate takes the material that stands one step back, because
@@ -487,7 +556,8 @@ function addModelToScene(decoded, {
         backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
                 : layer === 'water' ? v.waterMaterial
-                    : v.material);
+                    : planeBias ? v.planeMaterials[planeBias]
+                        : v.material);
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
     mesh.userData.layer = layer;
@@ -590,6 +660,10 @@ function modelsInDisplayList(list) {
  */
 function rigModels() {
     const out = new Map();
+    /* The roster and every table it leads to are one game's. Read against
+     * another's ROMs the pointers land wherever they land, so a game without
+     * them has no rig models rather than a mapful of wrong ones. */
+    if (!state.rom.game.features.characters) return out;
     const add = (m, index) => { if (m && !out.has(m)) out.set(m, index); };
     for (const { index } of CHARACTERS) {
         const c = readCharacter(state.rom, index);
@@ -656,7 +730,7 @@ function modelScenes() {
         else owner.set(model, [slot]);
     };
     state.stages.forEach((stage, slot) => {
-        for (const m of modelsInDisplayList(buildStageDisplayList(stage, state.frames))) {
+        for (const m of modelsInDisplayList(stageDisplayList(stage))) {
             add(m, slot);
         }
     });
@@ -674,7 +748,13 @@ function modelScenes() {
  * zero a scene with nobody in it leaves them. */
 function modelFighter(idx) {
     modelScenes();
-    return state.rigOwners.get(idx) ?? null;
+    const owner = state.rigOwners.get(idx);
+    if (owner !== undefined) return owner;
+    /* With no roster to say which fighter carries a part, the panel says. */
+    if (state.rom.game.stageTable.flat) {
+        return state.colorFighter >= 0 ? state.colorFighter : null;
+    }
+    return null;
 }
 
 /*
@@ -719,6 +799,20 @@ function useModelScene(idx) {
     if (!slots || slots[0] === SCENE_ANY) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
+        /*
+         * Which sheets to stand a model on that no stage draws.
+         *
+         * The other game answers this with the loaded stage, because every one
+         * of its scenes holds the fighters' set. A game whose stages name a
+         * hundred sets between them does not have that property, so the model
+         * is asked instead: a face names a 32-pixel tile, and the set whose
+         * pages cover those tiles is the one the game would have had resident.
+         * The picker on the panel overrides it.
+         */
+        if (state.rom.game.stageTable.flat) {
+            const set = modelTextureSet(idx);
+            if (set != null) useRomTexram([set]);
+        }
         /* A fighter takes whichever scene is loaded, since every scene holds
          * its sheets. A model no scene claims takes it too, and for the same
          * reason the ramp exists: the colour it shows is not a colour but a row
@@ -747,6 +841,87 @@ function useModelScene(idx) {
     applyStageShading(stage);
 }
 
+/*
+ * The scroll layer's sky, on a cylinder round the arena.
+ *
+ * A game that keeps its sky as a tilemap rather than as models gets it here —
+ * see js/scroll.js for the decode. The panorama is 576 tiles round where the
+ * hardware shows 64 of them, so the strip is a full turn and goes on a cylinder
+ * at that scale: turning the camera walks it exactly as the scroll registers
+ * walk the tilemap.
+ *
+ * Vertically it is an estimate and not the board's arithmetic. The board draws
+ * the layer in screen space at one tile to eight pixels, so how much sky is in
+ * frame depends on the projection rather than on anything in the data. The
+ * height below puts the panorama's foot on the horizon and scales the rest by
+ * the same pixels-per-degree the horizontal mapping implies, which lands the
+ * cloud band where the captures put it.
+ */
+const SKY_RADIUS = 600;
+
+function addSkyPanorama(slot) {
+    const v = state.viewer;
+    if (!state.rom.game.stageTable.scroll) return;
+
+    state.sky = null;
+    let tex = state.skyTextures.get(slot);
+    if (tex === undefined) {
+        const pano = buildSkyPanorama(state.rom, slot);
+        /* Not makeDataTexture: that one is for the single-channel lookup
+         * tables the fill shader reads, and this is an image. */
+        tex = pano
+            ? new THREE.DataTexture(pano.rgba, pano.width, pano.height, THREE.RGBAFormat)
+            : null;
+        if (tex) {
+            /* The panorama's first row is the top of the sky, and a DataTexture
+             * puts its first row at the bottom unless told otherwise. */
+            tex.flipY = true;
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.LinearFilter;
+            tex.minFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.needsUpdate = true;
+            state.skyPanoAspect.set(slot, pano.height / pano.width);
+            state.skyTopColor.set(slot, pano.topColor.map((c) => c / 255));
+        }
+        state.skyTextures.set(slot, tex);
+    }
+    if (!tex) return;
+
+    /* One turn across, and the same pixels-per-radian up. */
+    const aspect = state.skyPanoAspect.get(slot);
+    const height = 2 * Math.PI * SKY_RADIUS * aspect;
+    const geom = new THREE.CylinderGeometry(
+        SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+        map: tex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.renderOrder = BACKDROP_ORDER;
+    mesh.userData.layer = 'sky';
+    mesh.frustumCulled = false;
+    v.root.add(mesh);
+    state.sky = { mesh, height };
+    stepSky();
+}
+
+/*
+ * Keep the sky at infinity.
+ *
+ * The board draws this layer in screen space, so its horizon is wherever the
+ * camera is looking level — it does not come nearer or go by as the camera
+ * moves through the arena. A cylinder standing in the world would do both, so
+ * it is carried on the camera instead, with the foot of the strip on the eye
+ * line. That is the same thing a skybox does, and here it is not a convention
+ * but the behaviour being reproduced.
+ */
+function stepSky() {
+    const sky = state.sky;
+    if (!sky) return;
+    const c = state.viewer.camera;
+    sky.mesh.position.set(c.position.x, c.position.y + sky.height / 2, c.position.z);
+}
+
 /* ---- Stage view ---------------------------------------------------------- */
 
 function loadStage(slot, { keepCamera = false } = {}) {
@@ -761,8 +936,9 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * and the colour tables the same scene change fills. */
     useRomTexram(stage.texSets);
     useRomColorLuts(stage, null);
+    addSkyPanorama(slot);
 
-    const list = buildStageDisplayList(stage, state.frames);
+    const list = stageDisplayList(stage);
     const visible = [];   /* everything but the sky shells frames the camera */
     const drawn = [];     /* and everything at all, which the far plane covers */
     /* And the arena on its own — the surface fought on and the ring round it.
@@ -795,6 +971,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
         const { mesh, lines } = addModelToScene(d, {
             layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
             groundPlate: entry.groundPlate,
+            planeBias: entry.planeBias,
         });
         /* buildGeometry hands the decoder's own array straight to the attribute,
          * so a draw whose header is rewritten per frame takes a copy first —
@@ -846,7 +1023,23 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * passing display-referred floats without the tag leaves three to encode
      * them a second time on output, which is what made this backdrop
      * rgb(0,120,240) instead of rgb(0,0,184). */
-    state.bgRGB = palette555ToRGB(state.cxlat, stage.bgColor555);
+    /*
+     * The backdrop, which is whatever shows where the sky does not reach.
+     *
+     * A game whose sky is a tilemap band has the answer in the band itself:
+     * addSkyPanorama takes the commonest colour along its top row, which is
+     * what the sky is doing where it runs out, and it is per stage. Falling
+     * back to the profile's boot-time constant covers a stage whose panorama
+     * would not decode; falling back to the record's own field is the other
+     * game, where the backdrop is a field and there is no tilemap at all.
+     */
+    const top = state.skyTopColor.get(slot);
+    if (top) {
+        state.bgRGB = top;
+    } else {
+        const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
+        state.bgRGB = palette555ToRGB(state.cxlat, bg555);
+    }
     applyBackdropTransfer();
     /* Left untransformed on purpose: the fill shader applies the transfer to
      * this uniform itself, so the surface and the fog it blends into stay in
@@ -1731,19 +1924,19 @@ function renderModelList() {
     const q = $('#model-search').value.trim();
     const onlyMesh = $('#model-only-mesh').checked;
 
-    let lo = 0, hi = MODEL_TABLE_COUNT - 1;
+    let lo = 0, hi = modelCount() - 1;
     const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
     const single = q.match(/^(\d+)$/);
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
-    lo = Math.max(0, lo); hi = Math.min(MODEL_TABLE_COUNT - 1, hi);
+    lo = Math.max(0, lo); hi = Math.min(modelCount() - 1, hi);
 
     const rows = [];
     for (let i = lo; i <= hi && rows.length < 1500; i++) {
         if (onlyMesh && readModelEntry(state.rom, i).meshPtr === 0) continue;
         rows.push(i);
     }
-    $('#model-count').textContent = `${rows.length} shown of ${MODEL_TABLE_COUNT} table entries`;
+    $('#model-count').textContent = `${rows.length} shown of ${modelCount()} table entries`;
 
     list.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -1798,6 +1991,9 @@ function renderModelInfo(idx, d) {
 function describeModelScene(idx) {
     const slots = modelScenes().get(idx);
     if (!slots) {
+        /* With no stage table located there is no scene to name and no ramp in
+         * play, so say what is actually on screen: the model's own palette. */
+        if (!state.stages.length) return 'shaded flat, on the face palette in the ROM';
         const stage = state.stages[state.stageIndex];
         return `drawn by no stage — shaded against ${stage ? stage.name : 'the loaded stage'}'s tables`;
     }
@@ -2069,11 +2265,13 @@ function wirePicking() {
                 -((e.clientY - r.top) / r.height) * 2 + 1);
         ray.setFromCamera(ndc, v.camera);
         /* Nearest first out of intersectObjects, so the first hit that is a
-         * visible mesh is the one under the cursor — the wire overlays and any
-         * layer toggled off are not it. */
+         * visible mesh is the one under the cursor — the wire overlays, any
+         * layer toggled off and any face the board does not draw from this side
+         * are not it. */
         const hit = ray.intersectObjects(v.root.children, false).find(
             (h) => h.object.isMesh && h.object.visible
-                && h.object.userData.modelIndex != null);
+                && h.object.userData.modelIndex != null
+                && boardDrawsFace(h.object, h.faceIndex, v.camera));
         if (hit) revealModel(hit.object.userData.modelIndex);
     });
 }
@@ -2217,7 +2415,7 @@ function wireOptions() {
 
     document.addEventListener('keydown', (e) => {
         if (e.target.matches('input, select, textarea')) return;
-        if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(MODEL_TABLE_COUNT - 1, state.modelIndex + 1));
+        if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(modelCount() - 1, state.modelIndex + 1));
         if (state.tab === 'model' && e.code === 'BracketLeft') selectModel(Math.max(0, state.modelIndex - 1));
         if (e.code === 'KeyF') {
             if (state.tab === 'stage') loadStage(state.stageIndex);
@@ -2229,20 +2427,117 @@ function wireOptions() {
 
 /* ---- Boot ---------------------------------------------------------------- */
 
+/*
+ * Show only the tabs the loaded game has tables for.
+ *
+ * The stage list, the rigs and the motions are each read out of a table located
+ * in one game's program ROM, and a second game keeps its own somewhere else. So
+ * a title the repo has only the model table for gets the Models tab and nothing
+ * else, rather than three panels where two are empty or, worse, full of another
+ * game's addresses read against these ROMs.
+ */
+/* The Models tab's texture picker. Shown only when no stage record is going to
+ * name a texture number, which is the same condition that hides the Stages tab.
+ * "From the model" is the default and is what the auto search does. */
+function renderTextureSetPicker() {
+    const sel = $('#model-texset');
+    sel.innerHTML = '';
+    const auto = el('option');
+    auto.value = 'auto';
+    auto.textContent = 'From the model (auto)';
+    sel.appendChild(auto);
+    for (let s = 0; s < state.rom.game.texture.sets; s++) {
+        const o = el('option');
+        o.value = String(s);
+        o.textContent = `set ${s}`;
+        sel.appendChild(o);
+    }
+    sel.value = 'auto';
+    sel.addEventListener('change', () => {
+        state.texSetChoice = sel.value === 'auto' ? null : Number(sel.value);
+        /* The sheets are keyed on the set, so a change has to invalidate that
+         * key or the rebuild is skipped as a repeat. */
+        state.texramKey = null;
+        loadModel(state.modelIndex, { keepCamera: true });
+    });
+    $('#model-texset-field').hidden = false;
+
+    /* Scene colours and whose parts to read, the two a stage record would name.
+     * Both are written on every rebuild, since a model names rows in one range
+     * or the other and nothing says in advance which. */
+    const C = state.rom.game.colors;
+    const fill = (id, n, label, first) => {
+        const s = $(id);
+        s.innerHTML = '';
+        if (first) {
+            const o = el('option');
+            o.value = '-1';
+            o.textContent = first;
+            s.appendChild(o);
+        }
+        for (let i = 0; i < n; i++) {
+            const o = el('option');
+            o.value = String(i);
+            o.textContent = `${label} ${i}`;
+            s.appendChild(o);
+        }
+        return s;
+    };
+    const rebuild = () => {
+        state.lutKey = null;
+        loadModel(state.modelIndex, { keepCamera: true });
+    };
+    const fighter = fill('#model-fighter', C.part.blocks, 'fighter', 'none');
+    fighter.value = String(state.colorFighter);
+    fighter.addEventListener('change', () => {
+        state.colorFighter = Number(fighter.value);
+        rebuild();
+    });
+    $('#model-colour-field').hidden = false;
+}
+
+function applyGameFeatures() {
+    const f = state.rom.game.features;
+    $('#game-title').textContent = state.rom.game.name;
+    document.title = `${state.rom.game.name} — 3D Explorer`;
+    const on = { stage: f.stages, model: true, anim: f.characters && f.motions };
+    for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
+    /* One tab left is not a choice; the panel says which game is loaded. */
+    $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
+    return on;
+}
+
 function start() {
     /* Build the viewer before swapping panels, so a renderer failure still has
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.stages = readStageTable(state.rom);
-    state.frames = readFrameTables(state.rom);
+    state.viewer.setDepthProfile(state.rom.game.depth);
+    state.viewer.backfaceCull($('#opt-cull').checked);
+    const on = applyGameFeatures();
+    if (on.stage) state.stages = readStageTable(state.rom);
+    if (on.anim) state.frames = readFrameTables(state.rom);
+    /* The model the panel opens on is a hand-picked one, and it is only
+     * hand-picked for the game it was picked in — in another the same index is
+     * as likely to be one of the table's empty entries, which opens the viewer
+     * on nothing at all. Fall forward to the first index that draws something.
+     * A pointer is not enough to go on: the first entries of both tables carry
+     * one and still decode to no geometry. */
+    if (!getModel(state.modelIndex)?.positions.length) {
+        for (let i = 0; i < Math.min(modelCount(), 512); i++) {
+            if (getModel(i)?.positions.length) { state.modelIndex = i; break; }
+        }
+    }
     $('#loader').hidden = true;
 
-    renderStageSelect();
-    renderCharacterSelect();
+    if (on.stage) renderStageSelect();
+    /* The texture picker is for models no stage draws — see useModelScene. A
+     * game whose stages carry every set between them does not need it. */
+    if (state.rom.game.stageTable.flat) renderTextureSetPicker();
+    if (on.anim) renderCharacterSelect();
     renderModelList();
     wireOptions();
-    switchTab('stage');
+    switchTab(on.stage ? 'stage' : 'model');
     state.viewer.resize();
 
     let frames = 0;
@@ -2256,7 +2551,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') stepBillboards();
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); }
         state.viewer.render();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;

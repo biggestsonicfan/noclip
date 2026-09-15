@@ -1,8 +1,13 @@
-# Sonic The Fighters — 3D Explorer
+# Sega Model 2 — 3D Explorer
 
-A browser-based explorer for *Sonic The Fighters* (Sega Model 2B). It reads the
-arcade ROM set directly in the page — no server-side conversion, no pre-baked
-asset dump — and renders the game's geometry with three.js.
+A browser-based explorer for Sega Model 2 arcade games. It reads the arcade ROM
+set directly in the page — no server-side conversion, no pre-baked asset dump —
+and renders the game's geometry with three.js. Drop a set on it and it works out
+which game it is from the program ROM inside.
+
+*Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
+views below are its. *Fighting Vipers* has stages and models — see
+[Fighting Vipers](#fighting-vipers).
 
 Three views:
 
@@ -61,6 +66,39 @@ Three views:
   exhaust](TECHNICAL.md#metal-sonics-jet-exhaust) and [The Egg robots' timed
   animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs).
 
+## Fighting Vipers
+
+Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
+Stages and Models tabs — sixteen arenas and 5413 table entries, 3601 of which
+carry geometry, textured and lit from the ROM.
+
+It works because the two games are built on the same Sega library, and that went
+further than the model table. Fighting Vipers' program ROM carries the same
+official labels, its `set_obj` reaches for the model table the same way, and the
+palette, the texture pipeline and the colour tables are all the same machinery
+at different addresses. The reasoning for each is written down beside the
+profile in [`js/games.js`](js/games.js) and in [TECHNICAL.md](TECHNICAL.md).
+
+The stage records went furthest of all: `stage_data` is a label in this program
+ROM, and every field the other game's reader knows is at the same offset — the
+flags word, the brightness and two rotations that build the light vector, the
+texture pair, the four single models, the sixteen parts, the cage and the object
+list pointer. They were checked one at a time against the routine that reads
+each. The records live in a second data bank, which is what ROM sockets .5 and
+.6 turn out to be for, reached only through the top half of the mirror window.
+
+Two differences change what the viewer does with them. The geometry is already
+in world space: where the other game scales its arena and gives the cage, poles
+and platform a transform each, this one hands each list to `area_clip`, which is
+a cull and not a transform — it reads a visibility bitmap and calls `set_obj`
+with no matrix. So the draw list is the lists themselves. And a stage here
+stands still: the object list a record points at is what animates, and walking
+it is not written yet.
+
+What else is missing: the character rigs and the motion tables, so there is no
+Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
+its own record until someone identifies it.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -85,6 +123,8 @@ Championship (`schamp`), so a combined set is the least fuss:
 - **split** — `sfight.zip` *and* `schamp.zip` together: the program EPROMs come
   from the first, the data ROMs from the second.
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
+
+For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
 Then serve the directory over HTTP — the page is ES modules, so opening
 `index.html` off the filesystem will not work. The dev server moved out with the

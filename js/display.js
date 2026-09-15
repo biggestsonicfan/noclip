@@ -1387,6 +1387,131 @@ const OBJECT_ROUTINES = new Map([
  * @param {object} frames from readFrameTables(); without it a stage is built
  *                        at rest, with every animated draw held on frame 0.
  */
+/*
+ * The draw list of a stage whose geometry is already in world space.
+ *
+ * Sonic The Fighters scales its arena by 1.6 and gives the cage, the poles, the
+ * ring ramp and the platform a transform each, which is what the long function
+ * below is mostly about. Fighting Vipers does none of that: change_scene pushes
+ * the stage position once and then hands each list to `area_clip`, which is a
+ * cull and not a transform — it reads four indices per model out of a
+ * visibility bitmap and calls set_obj with no matrix at all. So the draw list is
+ * the lists themselves, at the identity.
+ *
+ * What is not optional is the flags word. Every one of the draw functions opens
+ * by testing a bit of it and returning if the bit says this stage does not draw
+ * that list, and the bits are not decoration — the first stage sets bit 13,
+ * which skips the sixteen parts entirely. Drawing them anyway puts models in the
+ * arena the board never puts there: a figure standing on a fence post, a wedge
+ * lying in the dirt. The bit each function tests is named beside it below.
+ *
+ * Still missing is the object list at 0xB4, which animates: a stage built here
+ * is the stage standing still.
+ */
+export function buildFlatDisplayList(stage) {
+    const out = [];
+    const f = stage.flags;
+    const push = (m, layer, extra = {}) => {
+        if (m) out.push({ model: m, layer, ops: [], ...extra });
+    };
+
+    /*
+     * Three lists share the ground plane, and the order they are submitted in
+     * is the only thing that separates them.
+     *
+     * On a stage like the night parking lot every road plate, the arena floor
+     * and the platform sit at exactly y = 0. The board has no depth buffer:
+     * they land in one z bucket, the bucket is drawn newest first, and the fill
+     * writes a pixel only where nothing has, so the last one submitted is the
+     * one you see. A depth test has no such rule — two surfaces at the same z
+     * give an undefined winner that swaps as the camera moves, which is the
+     * flicker along a road marking lying in the road.
+     *
+     * So each list takes a depth bias for where it falls in that order. The
+     * draw functions run: sub_238E4 first, which area_clips the sixteen at 0x64
+     * and then draws the single model at 0x18, and ground_upper_disp after it,
+     * which area_clips the list at 0x24. Later submitted wins, so the sixteen
+     * go furthest back, the floor sits between, and the 0x24 list keeps the
+     * front.
+     *
+     * This is not the other game's arrangement and must not borrow its floor
+     * material. There, camera_init lays the floor down before every other pass
+     * and it concedes to everything; here the floor is submitted in the middle
+     * and only concedes to what comes after it.
+     */
+    /* ground_upper_disp: `bbs 0xB, r11` returns before the list at 0x24. */
+    if (!(f & (1 << 0xb))) {
+        for (const m of stage.layers.upper ?? []) push(m, 'upper', { planeBias: 0 });
+    }
+
+    /* sub_238E4: `bbs 0xD, r3` skips the area_clip over the sixteen at 0x64,
+     * but the single model at 0x18 is drawn either way — it is past the branch
+     * target, not inside it. */
+    if (!(f & (1 << 0xd))) {
+        for (const m of stage.layers.ground ?? []) push(m, 'ground', { planeBias: 2 });
+    }
+
+    for (const m of stage.layers.floor ?? []) push(m, 'floor', { planeBias: 1 });
+
+    /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
+     * read at 0x1A. It runs after both of the ground passes, so the platform
+     * keeps the front of the plane like the 0x24 list. */
+    if (stage.slot !== 7 && stage.slot !== 14) {
+        for (const m of stage.layers.platform ?? []) push(m, 'platform', { planeBias: 0 });
+    }
+
+    /* cage_sub_disp: `bbc 0xE, r3` returns unless bit 14 is set. */
+    if (f & (1 << 0xe)) for (const m of stage.layers.extra ?? []) push(m, 'extra');
+
+    /*
+     * The cage, which is eight wall panels and a rail over them.
+     *
+     * cage_clip_m walks the eight models at 0x84 and pushes the same translate
+     * before each — `lda 0x40C00000` into the third slot of a 0x3000606, six
+     * units — then pushes its negation after, so each wall is drawn six out
+     * from the arena centre and the next starts from the centre again. No
+     * rotation: the eight models are already oriented, one per side. Drawing
+     * them at the identity is what stacked them in the middle.
+     *
+     * The 24 entries at 0x84 are three groups of eight and the group is chosen
+     * by a damage state, not a ring — the table cage_clip_m indexes with the
+     * wall's hit timer gives group 0 at rest, and on every stage the three
+     * groups hold the same eight models anyway. The reader keeps the first.
+     */
+    const CAGE_PUSH = [['t', [0, 0, 6.0]]];
+    for (const m of stage.layers.cage ?? []) push(m, 'cage', { ops: CAGE_PUSH });
+
+    /* cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws under
+     * the same six-unit push — the cage's top rail. */
+    if (f & (1 << 0x14)) push(stage.cageTop, 'cage', { ops: CAGE_PUSH });
+
+    /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
+     * returns before that. */
+    if ((f & (1 << 0x12)) && stage.slot !== 7) push(stage.cagePole, 'poles');
+
+    /*
+     * The railing round the arena.
+     *
+     * sub_24224 tests flags bit 17 and calls sub_24294 four times with the Y
+     * rotation stepped a quarter turn each — 0, 0x4000, 0x8000, 0xC000 in the
+     * binary radians the board uses — and each pushes the same six units out
+     * before drawing, so the four panels make the ring. The scale sub_24294
+     * also pushes is built from two runtime values that are both unity with the
+     * numbers the board sets at stage load, so it is left out.
+     */
+    const rail = stage.rail;
+    if (rail && (f & (1 << rail.flagBit))) {
+        const model = rail.bySlot[stage.slot] ?? rail.model;
+        for (let i = 0; i < rail.turns; i++) {
+            push(model, 'cage', {
+                ops: [['r', (i * 360) / rail.turns], ['t', [0, 0, rail.push]]],
+            });
+        }
+    }
+
+    return out;
+}
+
 export function buildStageDisplayList(stage, frames = null) {
     const out = [];
     const flags = stage.flags;
@@ -1741,7 +1866,7 @@ export function describeOps(ops) {
 }
 
 export const DISPLAY_LAYER_ORDER =
-    ['sky', 'water', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects'];
+    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further
