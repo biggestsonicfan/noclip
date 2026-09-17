@@ -387,6 +387,34 @@ and `BO_devilon` under the name mapping, and it reaches the two wing beats with
 Its callback is the larger of the two and may treat bodies of its own apart;
 those have not been read yet.
 
+#### The bodies were never given their layers
+
+`js/layers.js` exists because this game's art lays one face on another in the
+same plane and leaves the board's polygon sort to say which is on top. A depth
+buffer cannot, so the ranking is computed and the fill shader takes a ranked
+face's depth from its group's plane. Both games that need it declare
+`depth.layers`.
+
+It was applied to the stage draws and to a lone model in the Models tab, and
+never to a body's parts. So every enemy wore its decals fighting: `BO_neil`'s
+wounds are faces laid on his face, and which of the two the depth buffer kept
+came down to rounding, in stripes, differently each frame as the pose moved.
+
+A part is the easy case, easier than a stage. It is rigid — a pose moves its
+matrix and never its points — so its faces can be ranked once per model in the
+part's own space, and the vertex shader already carries a plane from local space
+into view through the normal matrix, the same way it carries a normal. Nothing
+had to be added to the shader; the ranking simply was not being asked for.
+
+It is not a rare shape. 81 of the finished game's 94 bodies have at least one
+part with faces stacked in a plane, and 58 of the prototype's 68 — `BO_ebita`
+has thirteen of its seventeen parts that way, and 74 of the 148 faces of its
+chest alone.
+
+The geometry cache the parts draw from is shared with the stage path, which
+ranks the same models against a whole scene rather than against themselves. The
+two need not agree, because switching tabs rebuilds whichever view is showing.
+
 #### Auditing the bodies
 
 Two bugs found by eye — Sophie's garbage and hyum's hand — were both a part

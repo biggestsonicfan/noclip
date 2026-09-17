@@ -2066,6 +2066,26 @@ function rebuildBody({ keepCamera = true } = {}) {
 }
 
 /* Point a part's slot at a model, or at nothing. */
+const IDENTITY_MATRIX = new THREE.Matrix4().elements;
+
+/*
+ * Rank a body part's coplanar faces, for a game whose art lays one on another
+ * in the same plane (see js/layers.js). A part is rigid — a pose moves its
+ * matrix and never its points — so the ranking is its own, computed once per
+ * model in the part's own space, and the vertex shader carries the plane into
+ * view through the normal matrix like any other direction. Without it a face
+ * laid on another fights it: BO_neil wears his wounds that way, and the depth
+ * buffer picked between them by rounding.
+ *
+ * The geometry cache is shared with the stage path, which ranks the same models
+ * against a whole scene instead. They do not have to agree, because switching
+ * tabs rebuilds whichever view is showing.
+ */
+function rankBodyPart(slot) {
+    if (!slot?.decoded || !slot.mesh) return;
+    applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }]);
+}
+
 function setBodySlot(slot, model) {
     if (slot.model === model) return;
     slot.model = model;
@@ -2085,6 +2105,7 @@ function setBodySlot(slot, model) {
         slot.lines.geometry = geom.edges;
         slot.lines.visible = state.wireframe;
     }
+    rankBodyPart(slot);
 }
 
 function poseBodyRig() {
@@ -2104,6 +2125,7 @@ function poseBodyRig() {
                     { matrix: new THREE.Matrix4(), geom: frameGeometry(models[k]) });
                 if (lines) { lines.matrixAutoUpdate = false; }
                 p.slots.push({ mesh, lines, model: models[k], decoded: d });
+                rankBodyPart(p.slots[p.slots.length - 1]);
                 continue;
             }
             setBodySlot(p.slots[k], k < models.length ? models[k] : null);
