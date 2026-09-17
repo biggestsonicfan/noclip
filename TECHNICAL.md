@@ -298,6 +298,49 @@ highest index the skin table names.
 24 that do not are written for counts no body in the table carries, which is the
 same thing that leaves two of the prototype's 508 unfitted.
 
+#### A leading zero that was mistaken for padding
+
+The finished game's colour ramps were read one set out, and it took a body to
+show it. `BO_kyurianb` came out grey where `BO_kyurian`, the same figure under
+another texture set, came out in tan and pale blue.
+
+The two are worth keeping in mind as a technique, because between them they made
+the fault findable. They share a name, a joint count, a skin and a part tree,
+part for part, offset for offset — only their models differ, one bank's worth
+each, so anything that shows on one and not the other is a property of the *set*
+and not of the body. That ruled out the tree, the roles and the skin in one
+comparison, and drawing each head on its own ruled out the geometry: model 7406
+renders perfectly under set 12, grey.
+
+Grey and *lit* is the clue. A model drawn under a set that does not hold its
+textures comes out nearly black — 6991 under set 12 lights 3859 pixels against
+37490 under its own. 7406 under set 12 lit 32735 pixels at a saturation of 8
+where its twin managed 139. The texture was there and bright; the colour was
+not. That is the curve, not the sheets.
+
+`colors.curve.sets.ptrs` had been read as the first *non-zero* entry of its
+array. It is not: the array opens on a zero because set 0, the boot set, has no
+ramps of its own, and the game indexes it with the same set number it uses for
+everything else. The set-loading routine says so in three consecutive
+instructions:
+
+```
+ld   unk_A9970[r4*4], g0   ; the texture bank
+ld   off_A98F0[r4*4], g0   ; the palette table
+ld   unk_A9930[r4*4], g0   ; the colour ramps
+```
+
+Starting after the zero hands every set the next one's ramps, and the last set
+none at all — which is the bare grey curve, and why set 12 was the one that
+looked broken rather than merely wrong. The prototype's profile had the base
+right all along, and its array has the same leading zero, which is the check
+that settles the shape.
+
+What it cost elsewhere was subtler and worse for being subtle: every set in the
+game was wearing its neighbour's colours. The first chapter's sky came out blue
+where it should be a warm sepia, and Stage 4's last section, drawn under set 12,
+was black enough to look like nothing had loaded.
+
 #### Revision A, and what a shifted build is worth
 
 The finished game shipped in two revisions. MAME calls the later one `hotd` and

@@ -920,12 +920,17 @@ const hotdo = {
      * gain is still 1.1, and still followed by 1.0 with the same run of
      * 0x80008000 behind it; that pair occurs once in the program ROM.
      *
-     * Twelve of the thirteen sets have ramps. Set 12's pointer is zero, and a
-     * set with no table keeps the bare curve, which is what the game does.
+     * The pointer array opens on a zero: set 0, the boot set, has no ramps and
+     * keeps the bare curve, and sets 1 to 12 have one each. That leading zero
+     * is part of the table, not padding in front of it — sub_1330 is handed
+     * `ld unk_A9930[r4*4]` with the same set number that indexes the bank
+     * table at 0xA9970 and the palette tables at 0xA98F0 two instructions
+     * earlier. Starting the array after the zero instead gives every set the
+     * next one's ramps and set 12 none at all, which is the bare grey curve.
      */
     colors: {
         luma: { data: 0xe9aac0, bytes: 0x4000 },
-        curve: { sets: { ptrs: 0xa9934, rows: 14, row0: 1, step: 2, gain: 0xa8308 } },
+        curve: { sets: { ptrs: 0xa9930, rows: 14, row0: 1, step: 2, gain: 0xa8308 } },
         solid: true,
     },
     /*
@@ -1139,7 +1144,7 @@ const hotd = {
     },
     colors: {
         ...hotdo.colors,
-        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a4, gain: 0xa8318 } },
+        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a0, gain: 0xa8318 } },
     },
     stageTable: {
         ...hotdo.stageTable,
