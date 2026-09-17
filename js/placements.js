@@ -53,6 +53,10 @@ const TWO_WORDS = new Set([13, 14, 15, 20, 32, 33, 40, 69, 70, 71, 72, 73, 74, 7
 const THREE_WORDS = new Set([26, 68, 76, 87]);
 /* Spawns and two list setters: the opcode, pointers, and a -1. */
 const LISTS = new Set([9, 10, 11, 12, 50, 51]);
+/* Of those, the four whose entries are pointers to a spawn record. 50 and 51
+ * carry plain numbers and are not read. */
+const SPAWN_OPS = new Set([9, 10, 11, 12]);
+const SPAWN_BYTES = 20;
 /* 92 halts and 93 moves on to the next script. */
 const ENDS = new Set([92, 93]);
 
@@ -84,6 +88,46 @@ function walkScript(rom, at, visit) {
         } else {
             return;     /* nothing the table decodes: stop rather than guess */
         }
+    }
+}
+
+/*
+ * The props a spawn list puts in the room, as the object table names them.
+ *
+ * A record is {type, flags, x, y, z}. The type indexes the table in the profile,
+ * whose entry carries a sound and, at `model`, the model to draw. The word after
+ * the type is not a turn: 1219 of the game's 1246 records carry 0x80000000 there
+ * and 25 carry 0x40000000, and nothing in the field reads as an angle — so a
+ * prop stands where it is put, unturned, which is also how the draw loop treats
+ * a placement.
+ *
+ * Type 0 is skipped. Its entry names PN_test_tubo01a, a test pot, and 170 of the
+ * game's spawns are of it — a game does not hold 170 test pots, and the table's
+ * first entry is what an index of "none" lands on.
+ *
+ * Records are keyed by their own address, because a script listed by two
+ * sections is walked twice and would otherwise stand its props up twice.
+ */
+function spawnProps(rom, at, set, out) {
+    const O = rom.game.objects;
+    if (!O) return;
+    const dv = rom.mainCpuView;
+    for (let q = at + 4; inRom(rom, q); q += 4) {
+        const rec = dv.getUint32(q, true);
+        if (rec === END) break;
+        if (!inRom(rom, rec, SPAWN_BYTES)) continue;
+        if (out.has(rec)) continue;
+        const type = dv.getUint32(rec, true);
+        if (!(type > 0 && type < O.count)) continue;
+        const model = dv.getUint32(O.table + type * O.stride + O.model, true);
+        if (!model || model >= rom.game.modelTable.count) continue;
+        out.set(rec, {
+            type,
+            model,
+            set,
+            pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true),
+                dv.getFloat32(rec + 16, true)],
+        });
     }
 }
 
@@ -270,7 +314,7 @@ function skyDraws(rom, sky) {
 /* A stage entry in the shape the viewer's stage list takes. The set is the
  * atlas, the palette and the colour tables at once — sub_2B720 loads all three
  * from the one number. */
-function placementStage(stages, lit, chapter, { name, set, draws, sky = null, alternates = [], meta, mixedSets = false }) {
+function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, alternates = [], meta, mixedSets = false }) {
     stages.push({
         slot: stages.length,
         placements: true,
@@ -279,6 +323,7 @@ function placementStage(stages, lit, chapter, { name, set, draws, sky = null, al
         name,
         chapter,
         draws,
+        objects,
         sky,
         alternates,
         texSets: [set],
@@ -326,6 +371,9 @@ export function readPlacementStages(rom) {
          * machine: a set's sky is what is standing when its first zone is made
          * current, and whatever its own sections then ask for. */
         const sky = { index: 0, on: 0, spin: false };
+        /* The props the chapter's scripts spawn, each under the set that was
+         * loaded when its list ran — the same rule the zones are grouped by. */
+        const props = new Map();
         sections.forEach((section, number) => {
             let set = dv.getUint32(sectionSets + number * 4, true);
             for (const script of pointerList(rom, section)) {
@@ -342,6 +390,7 @@ export function readPlacementStages(rom) {
                         }
                         return;
                     }
+                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props); return; }
                     if (op !== OP_ZONE) return;
                     if (!groups.has(set)) {
                         groups.set(set, {
@@ -402,10 +451,12 @@ export function readPlacementStages(rom) {
             if (!widest || draws.length > widest.count) widest = { set, count: draws.length };
 
             const sky = skyDraws(rom, g.sky);
+            const objects = [...props.values()].filter((o) => o.set === set);
             placementStage(stages, lit, chapter, {
                 name: `Stage ${chapter + 1} · set ${set}`,
                 set,
                 draws,
+                objects,
                 sky,
                 alternates,
                 meta: [
@@ -413,6 +464,7 @@ export function readPlacementStages(rom) {
                     ['sections', runs(g.sections)],
                     ['zones', g.zones.size],
                     ['placements', draws.length],
+                    ...(objects.length ? [['props', objects.length]] : []),
                     ['sky', sky ? `${sky.dome}${sky.spin ? ', drifting' : ', held'}` : 'off'],
                     ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
@@ -449,11 +501,13 @@ export function readPlacementStages(rom) {
                 /* The sky of the set that draws most of the chapter, since that
                  * is the set this stage is framed as. */
                 sky: skyDraws(rom, groups.get(widest.set)?.sky),
+                objects: [...props.values()],
                 alternates,
                 mixedSets: true,
                 meta: [
                     ['texture set', `${[...new Set(all.map((d) => d.set))].sort((a, b) => a - b).join(', ')}, per part`],
                     ['placements', table.length],
+                    ...(props.size ? [['props', props.size]] : []),
                     ['in no reached zone', table.filter((d) => !reached.has(d.index)).length],
                     ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
@@ -486,7 +540,15 @@ export function buildPlacementDisplayList(stage) {
         });
         sky.push({ model: band, layer: 'sky', ops: at(0) });
     }
-    return sky.concat(stage.draws.map((d) => ({
+    /* The props go in under their own layer, so they can be turned off and so
+     * the camera frames on the room rather than on them. */
+    const objects = (stage.objects ?? []).map((o) => ({
+        model: o.model,
+        layer: 'objects',
+        set: o.set,
+        ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]]],
+    }));
+    return sky.concat(objects, stage.draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
         anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,
         layer: 'scenery',

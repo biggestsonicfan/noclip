@@ -1956,6 +1956,40 @@ The chunks themselves loop instead. Their handler steps +0x54 the same way from
 4529 and wraps at 4649 — `lda loc_11B0+1` and `lda 0x78(g6)`, the base and the
 base plus 120 — so they tumble for as long as the chunk lives.
 
+#### Standing the props up
+
+The furniture is not placements and never was, which is why a room read as an
+empty shell. A placement is a chapter's scenery table; a chair is an object the
+stage scripts spawn, and the four spawn opcodes were the ones the script walk
+stepped over.
+
+So the walk reads them now. It already visits every opcode and already tracks
+which texture set is loaded as it goes — the same variable the zones are grouped
+by — so a prop lands in the stage whose section spawned it, under the set that
+section had loaded, with no new traversal. The type goes through the object
+table for its model, the position is taken from the record, and nothing is
+turned, because the word that looked like an angle is a flag.
+
+Type 0 is left out. Its entry names `PN_test_tubo01a`, a test pot, and 170 of
+the game's 1246 spawns are of it; a house does not hold 170 test pots, and the
+first entry of a table is what an index meaning "none" lands on.
+
+They come out as their own layer, so they can be switched off and so the camera
+frames the room rather than them. The first chapter gains 59 props in the
+courtyard and 85 in the mansion, 144 over the whole table; the prototype, whose
+table is the same one 78 types long, gains 25 and 63.
+
+The prototype's table was found by its own shape and then held against the
+finished game's: **73 of the 77 types both carry name the same model, type for
+type** — `PN_test_tubo01a`, `PN_tokei`, `PN_book_tana`, `PN_sika_atama01a`, and
+`PN_moon` at 59 in both.
+
+And Revision A moved it, as it moved everything: the finished game's first
+revision keeps it at 0xAC314 and Revision A at 0xAC324. Worth saying because the
+reader failed safe when the address was wrong — at 0xAC314 Revision A reads
+`PN_space` for every type, so every prop was dropped rather than drawn in the
+wrong place, and the bug showed up as nothing rather than as nonsense.
+
 #### What handles a type
 
 A second table, at **0xAF950**, gives each type its handler, and the dispatch is

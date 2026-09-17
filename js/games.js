@@ -695,6 +695,17 @@ const hotdp = {
      */
     sky: { models: 0x840e0, heights: 0x840f0, count: 4, band: 1462, spin: 4 },
     /*
+     * The props the scripts spawn, in the same 76-byte table the finished game
+     * keeps them in — a sound at 0 and the model at 8. Found by its own shape
+     * and then held against the other build: 73 of the 77 types both tables
+     * carry name the same model, type for type, PN_test_tubo01a through
+     * PN_tokei, PN_book_tana, PN_sika_atama01a and PN_moon at 59.
+     *
+     * It stops at 78 where the finished game's runs to 122, which is the
+     * prototype being the smaller game.
+     */
+    objects: { table: 0x84184, stride: 76, model: 8, count: 79 },
+    /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
      * depths to keep — js/layers.js ranks them the way the board's polygon sort
@@ -1050,6 +1061,27 @@ const hotdo = {
      * PN_r2skyuvb hangs at -200 in both and every other dome at -9.
      */
     sky: { models: 0xac1e0, heights: 0xac1e4, spins: 0xac1e8, stride: 16, count: 6, band: 1544 },
+    /*
+     * The props a room is furnished with — the barrels and crates that break,
+     * the bookcases, the tables and what is laid on them — are not placements.
+     * They are objects the stage scripts spawn, and the four spawn opcodes the
+     * script walk used to step over carry a -1-terminated list of pointers to a
+     * record of {type, flags, x, y, z}.
+     *
+     * The type indexes this table, which the handlers reach with
+     * `ldis 0xCC(r4) / mulo 0x4C / ld unk_AC314(g4)`: 76 bytes an entry, a sound
+     * at 0 and the model at 8. Read that way its entries are what a house is
+     * full of — PN_isu chairs, PN_tabul tables, PN_tokei a clock, PN_sitai a
+     * corpse, PN_sara plates, PN_nabe pots, PN_book_tana a bookcase,
+     * PN_tantansu a chest, PN_tarun_dam a breaking barrel, PN_kibako a crate,
+     * and at 59 PN_moon.
+     *
+     * `count` stops at 123 because that is where the entries stop naming
+     * models, and the handler table beside this one holds 125. The spawns whose
+     * type is 128 or more are not objects in this space at all — see the note
+     * on +0xCC in TECHNICAL.md — and are left alone rather than looked up here.
+     */
+    objects: { table: 0xac314, stride: 76, model: 8, count: 123 },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
@@ -1225,6 +1257,10 @@ const hotd = {
         },
     },
     sky: { ...hotdo.sky, models: 0xac1f0, heights: 0xac1f4, spins: 0xac1f8 },
+    /* The props' table moved with everything else. It is worth saying that the
+     * reader failed safe when it had not: at 0xAC314 this build reads PN_space
+     * for every type, so every prop was dropped rather than drawn wrong. */
+    objects: { ...hotdo.objects, table: 0xac324 },
     rig: {
         bodies: {
             ...hotdo.rig.bodies,
