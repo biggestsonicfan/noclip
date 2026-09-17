@@ -139,6 +139,14 @@ function trim(v, tint) {
 export function buildLumaram(rom) {
     const dv = rom.mainDataView;
     const md = rom.mainData;
+    /* The House of the Dead states no count: sub_1610 copies a fixed 0x4000
+     * bytes, data 0xC8EB40..0xC92B3F, to the even addresses. */
+    if (rom.game.colors.luma.bytes) {
+        const { data, bytes } = rom.game.colors.luma;
+        const luma = new Uint8Array(LUMA_BYTES);
+        for (let i = 0; i < Math.min(bytes, LUMA_BYTES / 2); i++) luma[i * 2] = md[data + i];
+        return luma;
+    }
     /* essential_color_handling reads a block count and then that many 128-byte
      * bands, one per lumabase. Fighting Vipers reaches its pair through the
      * XTRA_DATA mirror -- `lda unk_64266E0` -- which folds to a data offset like
@@ -204,6 +212,7 @@ function colorTable(dv, src) {
  * @returns {Uint8Array} CXLAT_BYTES, laid out like a dump of 0x01810000
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
+    if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
@@ -283,6 +292,76 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
         });
     });
 
+    return out;
+}
+
+/* ---- The House of the Dead ----------------------------------------------- */
+
+/*
+ * The AM1 library's colorxlat: a curve rather than a ramp, and set colours that
+ * are ramps of their own rather than sixteen palette slots.
+ *
+ * sub_1180, once at boot, walks all 32 rows. A row's brightness is
+ * y = ½√x + ½x² with x = (8·row + row>>2) / 255, which runs 0 to 1 over the 32
+ * rows. Luma 0..63 of the row take the same curve again at z = y·luma/63, times
+ * 255, into a RAM staging copy; luma 64..255 take the flat y·255 and go straight
+ * into colorxlat. The three channels are identical.
+ *
+ * sub_1330, on every change of set, overwrites the staging copy's odd rows
+ * 1, 3 .. 27 with the set's fourteen tables — 64 RGB byte triples each, named by
+ * `dword_820D0[set]` — times a gain of 1.1 (1.0 on stages 5 and 8, which this
+ * prototype never reaches). The gain is `dword_7FFC0[byte_51E49A & 1]`, and that
+ * byte is a test-menu setting the EEPROM defaults to 0. So a palette colour whose
+ * three channels are the same odd number names a coloured ramp, and one whose
+ * channels are even names a grey.
+ *
+ * The staging copy reaches colorxlat unchanged: sub_15900 copies the even rows
+ * and row 31, sub_15A00 the odd rows 1..29, 64 entries each.
+ *
+ * The arithmetic is float, mixed single and double as the i960 does it — a `real`
+ * operation rounds to single, a `long real` one to double — and every result is
+ * truncated toward zero and capped at 255.
+ */
+function buildCurveColorxlat(rom, colorSet) {
+    const C = rom.game.colors;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const view = new DataView(out.buffer);
+    const put = (ch, row, luma, v) => {
+        view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
+    };
+    const f = Math.fround;
+    const cap = (v) => Math.min(Math.trunc(v), 255);
+    /* ½√v + ½v²: the square root and its half in single, the square in double,
+     * the sum rounded back to single. */
+    const curve = (v) => f(f(f(Math.sqrt(v)) * 0.5) + (0.5 * v) * v);
+
+    for (let row = 0; row < 32; row++) {
+        const y = curve(f(((row << 3) + (row >> 2)) / 255));
+        for (let luma = 0; luma < 64; luma++) {
+            const v = cap(f(curve(f(y * f(luma / 63))) * 255));
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+        const flat = cap(f(y * 255));
+        for (let luma = 64; luma < 256; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, flat);
+        }
+    }
+
+    const { ptrs, rows, row0, step, gain } = C.curve.sets;
+    const table = colorSet >= 0 ? cv.getUint32(ptrs + colorSet * 4, true) : 0;
+    if (table && table + rows * 4 <= rom.maincpu.length) {
+        const g = f(cv.getFloat32(gain, true));
+        for (let r = 0; r < rows; r++) {
+            const src = cv.getUint32(table + r * 4, true);
+            if (!src || src + 64 * 3 > rom.maincpu.length) continue;
+            for (let luma = 0; luma < 64; luma++) {
+                for (let ch = 0; ch < 3; ch++) {
+                    put(ch, row0 + r * step, luma, cap(f(rom.maincpu[src + luma * 3 + ch] * g)));
+                }
+            }
+        }
+    }
     return out;
 }
 

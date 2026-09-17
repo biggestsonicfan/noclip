@@ -64,6 +64,10 @@ for (let i = 0; i < 0x10000; i++) {
 const cosA = (a) => COS[a & 0xffff];
 const sinA = (a) => SIN[a & 0xffff];
 
+/** The coprocessor's sine and cosine of a 16-bit angle (Fn_sin, Fn_cos). */
+export const coproSin = sinA;
+export const coproCos = cosA;
+
 const COPRO_SIN = 0x10000;
 const COPRO_COS = 0x30000;
 

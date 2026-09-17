@@ -154,13 +154,14 @@
 
     <section class="tabpanel" data-tab="anim" hidden>
       <div class="field">
-        <label>Fighter</label>
+        <label id="char-label">Fighter</label>
         <select id="char-select"></select>
       </div>
       <div id="char-meta" class="meta"></div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="char-skel" checked> skeleton</label>
-        <label class="check"><input type="checkbox" id="char-squish"> hammer squished</label>
+        <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> hammer squished</label>
+        <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> root travel</label>
       </div>
       <div class="field">
         <label>Motion</label>
@@ -182,15 +183,23 @@
         <div id="exhaust-readout" class="mono dim"></div>
       </div>
       <div class="field" id="osage-field" hidden>
-        <label>Sway frame &mdash; pigtails, tails, feathers</label>
-        <div id="osage-turn" class="jointlist"></div>
+        <label>Sway chains &mdash; pigtails, tails, feathers</label>
         <div id="osage-readout" class="mono dim"></div>
       </div>
       <div class="field">
         <label>Skeleton slots</label>
         <div id="slot-list" class="jointlist"></div>
       </div>
-      <div class="note">
+      <div class="note" id="anim-note-bodies" hidden>
+        A body is a tree of parts from <code>0x94E20</code>, each a model hung
+        off its parent and turned by one joint's three angles. A motion is
+        those angles baked for every frame, with the root's position in front,
+        and holds no joint count of its own: its length gives one, so each
+        body lists the motions written for as many joints as it has. The game
+        draws a motion on the spot and moves the enemy along its path
+        separately; <em>root travel</em> shows that path.
+      </div>
+      <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects
         &times; 3 axes &mdash; of constant, linear or cubic-Hermite keyframes;

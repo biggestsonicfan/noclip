@@ -28,6 +28,8 @@ const VERT_SHADER = /* glsl */`
     in vec3 aZc2;        // for the previous polygon's z carries that polygon's
     in vec3 aZc3;        // corners instead of its own
     in vec3 aFacePt;     // the point the board tests the normal against
+    in float aLayer;     // how many coplanar faces lie under this one (js/layers.js)
+    in vec4 aPlane;      // the plane its group takes depth from, n.p = w; zeros if none
     // bit 7 of aFlags = drawn from both sides
 
     // Set per game -- see ZSORT_RECEDE below.
@@ -55,9 +57,16 @@ const VERT_SHADER = /* glsl */`
     // The face's facing point in camera space: the same at all three vertices,
     // so flat for the reason above.
     flat out vec3 vFacePt;
+    flat out float vLayer;
+    flat out vec4 vPlane;
 
     void main() {
         vColor = aColor;
+        vLayer = aLayer;
+        // The layer plane in camera space. For x = B p + u, n.p = w is
+        // (B^-T n).x = w + (B^-T n).u; a zero normal stays zero.
+        vec3 planeN = normalMatrix * aPlane.xyz;
+        vPlane = vec4(planeN, aPlane.w + dot(planeN, modelViewMatrix[3].xyz));
         vTexel = aTexel;
         vTile = aTile;
         vLumaBase = aLumaBase;
@@ -181,7 +190,11 @@ const VERT_SHADER = /* glsl */`
         // what rests on the ground rests just over it -- so the depth buffer is
         // the whole answer there. See games.js.
         float ZSORT_RECEDE = uZsortRecede;
-        float zf = (zNear - zFar) <= ZSORT_RECEDE
+        // A face known to lie on another in the same plane is put over it by its
+        // layer (see FACE_LAYERS in the fragment shader) and does not recede:
+        // stepping a small stain back to its own far corner would stand it
+        // behind the long wall it is painted on, which keeps its depth.
+        float zf = (zNear - zFar) <= ZSORT_RECEDE && aLayer < 0.5
             ? clamp(zb, mv.z - ZSORT_RECEDE, mv.z)
             : mv.z;
 #ifdef ZSORT_CONCEDE
@@ -260,6 +273,9 @@ const FRAG_SHADER = /* glsl */`
     // Set for a game whose colour tables have not been located: see the note in
     // the untextured branch below.
     uniform float uFlatTexel;
+    // Set for a game whose untextured faces go through colorxlat as well — see
+    // the solid branch at the end of main().
+    uniform float uSolidRamp;
     uniform vec3 uLight;         // the stage's light vector, world space
     uniform vec2 uMaterial[32];  // per slot: (diffuse, ambient), 0..255
     uniform int uTransfer;      // 0 = none, 1 = linear->gamma, 2 = gamma->linear
@@ -276,6 +292,9 @@ const FRAG_SHADER = /* glsl */`
     in vec3 vViewNormal;
     in vec3 vViewPos;
     flat in vec3 vFacePt;
+    flat in float vLayer;
+    flat in vec4 vPlane;
+    uniform mat4 projectionMatrix;
 
     out vec4 fragColor;
 
@@ -307,23 +326,41 @@ const FRAG_SHADER = /* glsl */`
         return c;
     }
 
+    // Snapped back to the integer the texture holds: a normalised byte times 255
+    // can come back a hair under it, and the luma arithmetic floors.
     float lumaByte(int i) {
-        return texelFetch(uLuma, ivec2(i & 255, i >> 8), 0).r * 255.0;
+        return floor(texelFetch(uLuma, ivec2(i & 255, i >> 8), 0).r * 255.0 + 0.5);
     }
     float cxlatByte(int i) {
         return texelFetch(uCxlat, ivec2(i & 255, i >> 8), 0).r * 255.0;
+    }
+
+    // One colorxlat entry per channel, and the board's output stage after it.
+    // The row is the face's raw 5-bit palette colour; the stage tint and
+    // brightness are viewer-side and must not move which table row is read.
+    // MAME's gamma table then drops everything below 64 and stretches the rest.
+    vec3 cxlatColor(int li) {
+        int r5 = int(vColor.r * 31.0 + 0.5);
+        int g5 = int(vColor.g * 31.0 + 0.5);
+        int b5 = int(vColor.b * 31.0 + 0.5);
+        vec3 c = vec3(cxlatByte(((r5 << 8) + li) * 2),
+                      cxlatByte(0x4000 + ((g5 << 8) + li) * 2),
+                      cxlatByte(0x8000 + ((b5 << 8) + li) * 2));
+        return clamp(max(c - 64.0, 0.0) * (255.0 / 191.0) / 255.0, 0.0, 1.0);
     }
 
     // The geometry engine's per-polygon luma, as cpres2 computes it (and as
     // MAME's geo_parse_np_ns does for the boards that keep the TGP):
     //
     //   luminance = (N.L * N.P < 0) ? 0 : |N.L|
-    //   luma      = clamp(luminance * diffuse + ambient, 0, 255)
+    //   luma      = int(clamp(luminance * diffuse + ambient, 0, 255))
     //
     // N is the polygon's own normal out of ROM, L the stage's light vector, and
     // diffuse/ambient the material slot the polygon's attribute word names. The
     // sign test is the board's own: a polygon lit from the far side gets its
-    // ambient term and nothing else.
+    // ambient term and nothing else. The luma goes to the rasterizer as eight
+    // bits of the polygon's command word, so the fraction is dropped, not
+    // rounded (model2_v.cpp: luma = (int32_t)luminance).
     //
     // P is one point per polygon, the facing point the front/back test uses,
     // not the pixel's own position. geo_parse takes N.P once, so a polygon is
@@ -337,7 +374,7 @@ const FRAG_SHADER = /* glsl */`
         float dotp = dot(normalize(vViewNormal), vFacePt);
         float luminance = (dotl * dotp < 0.0) ? 0.0 : abs(dotl);
         vec2 m = uMaterial[int(vMaterial + 0.5)];
-        return clamp(luminance * m.x + m.y, 0.0, 255.0);
+        return floor(clamp(luminance * m.x + m.y, 0.0, 255.0));
     }
 
     bool flags(int bit) {
@@ -423,6 +460,36 @@ const FRAG_SHADER = /* glsl */`
     }
 
     void main() {
+#ifdef FACE_LAYERS
+        // A face lying on others in its own plane is pulled in front of them by
+        // its layer. The board settles such faces a polygon at a time with no
+        // depth at all; a depth buffer finds the same value on both and hands
+        // the pixel to rounding, which is the flicker on a wall's stains and a
+        // floor's rugs as the camera moves.
+        //
+        // The same value is not good enough, though, when it is only nearly the
+        // same. A window pane the art stands 0.0025 behind its wall is behind it
+        // by several steps of the buffer seen close and square on, and each
+        // vertex's depth comes out of the projection rounded by a step or two,
+        // so an offset of a couple of steps loses the whole row of windows in
+        // one view and keeps it in the next. So a face in a group takes its
+        // depth from the group's plane where this pixel's ray meets it -- the
+        // same inputs for every face of the group, the same answer -- and the
+        // layer need only beat the rounding of that one division. A face with
+        // no plane falls back on its own depth and the slope of this pixel.
+        float layerDepth = gl_FragCoord.z;
+        float layerSlope = fwidth(gl_FragCoord.z);
+        float planeDen = dot(vPlane.xyz, vViewPos);
+        if (planeDen != 0.0) {
+            float planeZ = vViewPos.z * vPlane.w / planeDen;
+            if (planeZ < 0.0) {
+                layerDepth = 0.5 * (projectionMatrix[2][2] * planeZ + projectionMatrix[3][2])
+                    / (projectionMatrix[2][3] * planeZ + projectionMatrix[3][3]) + 0.5;
+                layerSlope = 0.0;
+            }
+        }
+        gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
+#endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
         // the rest (model2rd.ipp steps x by 2 and skips the opposite parity).
@@ -456,8 +523,14 @@ const FRAG_SHADER = /* glsl */`
             // 496x384; this viewer runs at whatever size the window is. Screen
             // space derivatives ask the same question — how many texels does
             // this pixel cover — against the resolution actually being drawn.
+            //
+            // The deepest level is the board's own bound: down to 2x2,
+            // 30 - clz(min(w, h)) (draw_scanline_tex). A tile is 32 << n on a
+            // side, so its log2 is a whole number, but a float log2 can land a
+            // hair either side of it on some drivers. Rounding takes it back.
+            float lmax = max(floor(log2(min(vTile.z, vTile.w)) + 0.5) - 1.0, 0.0);
             float lod = clamp(log2(max(length(dFdx(vTexel)), length(dFdy(vTexel)))),
-                              0.0, log2(min(vTile.z, vTile.w)) - 1.0);
+                              0.0, lmax);
             int L0 = int(floor(lod));
             vec2 texel = mix(sampleLevel(L0), sampleLevel(L0 + 1), fract(lod));
             if (flags(1) && texel.y < 0.5) discard;
@@ -480,18 +553,12 @@ const FRAG_SHADER = /* glsl */`
                 // slots their luma band holds. Nothing infers that any more;
                 // the material table says it.
                 float poly = polyLuma() * uLumaScale;
-                int li = int(min(lram * poly / 256.0, 63.0) + 0.5);
-                // The colorxlat index is the face's raw 5-bit palette colour;
-                // the stage tint and brightness are viewer-side and must not
-                // move which table row is read.
-                int r5 = int(vColor.r * 31.0 + 0.5);
-                int g5 = int(vColor.g * 31.0 + 0.5);
-                int b5 = int(vColor.b * 31.0 + 0.5);
-                vec3 c = vec3(cxlatByte(((r5 << 8) + li) * 2),
-                              cxlatByte(0x4000 + ((g5 << 8) + li) * 2),
-                              cxlatByte(0x8000 + ((b5 << 8) + li) * 2));
-                rgb = clamp(max(c - 64.0, 0.0) * (255.0 / 191.0) / 255.0, 0.0, 1.0);
-                rgb *= uTint * uBright;
+                // Integer arithmetic on the board, so the quotient is floored:
+                // u32(lumaram[...]) * luma / 256, capped at 0x3F. Rounding it
+                // puts every pixel whose fraction reaches a half on the
+                // colorxlat row above the board's.
+                int li = int(min(floor(lram * poly / 256.0), 63.0));
+                rgb = cxlatColor(li) * uTint * uBright;
             } else {
                 rgb = base * shade;
                 if (al > 0.0) {
@@ -509,6 +576,14 @@ const FRAG_SHADER = /* glsl */`
                     }
                 }
             }
+        } else if (uSolidRamp > 0.5 && uUseRamp > 0.5 && vTile.z <= 0.0) {
+            // An untextured face the way draw_scanline_solid draws it: no luma
+            // RAM, just the polygon's own luma cut to six bits
+            // (object.luma >> 2) as the column of the palette colour's row.
+            // Only a game that needs it asks for it; the other two keep the
+            // flat term below, which is what they were checked against.
+            int li = int(polyLuma() * uLumaScale) >> 2;
+            rgb = cxlatColor(min(li, 63)) * uTint * uBright;
         } else {
             rgb = base * shade;
         }
@@ -582,6 +657,7 @@ export function createModelMaterial() {
             uUseRamp: { value: 0 },
             uLumaScale: { value: 1.0 },
             uFlatTexel: { value: 0 },
+            uSolidRamp: { value: 0 },
             uLight: { value: new THREE.Vector3(0, 1, 0) },
             uMaterial: { value: Array.from({ length: 32 }, () => new THREE.Vector2(0, 255)) },
             uTransfer: { value: 0 },
@@ -967,6 +1043,9 @@ export class Viewer {
             m.polygonOffsetUnits = n;
             return m;
         });
+        /* One more copy per texture set, for a stage that spans several — see
+         * setMaterial. */
+        this.setMaterials = new Map();
         this.edgeMaterial = new THREE.LineBasicMaterial({
             color: 0x63e0ff, transparent: true, opacity: 0.28, depthTest: true,
         });
@@ -1031,6 +1110,42 @@ export class Viewer {
     }
 
     /*
+     * The scenery material again with texture RAM and colour tables of its own.
+     *
+     * The atlas and the colour translation are uniforms, so a material shows
+     * one texture set, and the game holds one set in texture RAM at a time for
+     * the same reason: a set is what a scene change loads. The House of the
+     * Dead's stages are assembled out of every zone a chapter reaches, and a
+     * chapter loads three sets across its sections, so a stage of the whole
+     * table needs a material per set and each part drawn with its own — see
+     * materialForSet in js/app.js.
+     *
+     * Everything else is shared with the main material, by sharing the uniform
+     * objects themselves: the light, the material slots, the shade mode, the
+     * fog and the output scales belong to the scene, not to the set.
+     */
+    setMaterial(key, { atlas, cxlat = null }) {
+        const have = this.setMaterials.get(key);
+        if (have) return have;
+        const m = createModelMaterial();
+        m.uniforms = { ...this.material.uniforms, uAtlas: { value: atlas } };
+        if (cxlat) m.uniforms.uCxlat = { value: cxlat };
+        m.defines = { ...(this.material.defines ?? {}) };
+        this.setMaterials.set(key, m);
+        return m;
+    }
+
+    /** Drop the per-set materials and the texture RAM they hold. */
+    clearSetMaterials() {
+        for (const m of this.setMaterials.values()) {
+            if (m.uniforms.uAtlas !== this.material.uniforms.uAtlas) m.uniforms.uAtlas.value?.dispose?.();
+            if (m.uniforms.uCxlat !== this.material.uniforms.uCxlat) m.uniforms.uCxlat.value?.dispose?.();
+            m.dispose();
+        }
+        this.setMaterials.clear();
+    }
+
+    /*
      * The per-game depth settings: how far a polygon may step back to the
      * corner the board sorts it by (see ZSORT_RECEDE in the vertex shader), and
      * the least the near plane may be.
@@ -1042,9 +1157,20 @@ export class Viewer {
      * out — a sign across the arena shimmers — and its arena is twelve units
      * wide, so there is nothing to lose by standing the plane further off.
      */
-    setDepthProfile({ recede = 12, nearMin = 0.02 } = {}) {
+    setDepthProfile({ recede = 12, nearMin = 0.02, layers = false } = {}) {
         this.material.uniforms.uZsortRecede.value = recede;
         this.nearMin = nearMin;
+        /* Only a game whose draws carry layers pays for writing the depth from
+         * the fragment shader, which turns off the early depth test. */
+        for (const m of [this.material, this.backdropMaterial, this.floorMaterial,
+            this.waterMaterial, ...this.planeMaterials, ...this.setMaterials.values()]) {
+            const has = 'FACE_LAYERS' in (m.defines ?? {});
+            if (has === layers) continue;
+            m.defines = { ...(m.defines ?? {}) };
+            if (layers) m.defines.FACE_LAYERS = '1';
+            else delete m.defines.FACE_LAYERS;
+            m.needsUpdate = true;
+        }
     }
 
     /*

@@ -125,6 +125,11 @@ Championship (`schamp`), so a combined set is the least fuss:
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
+So is `hotdp.zip` for the House of the Dead prototype: its two playable stages,
+assembled from the game's own placement tables and split by the texture set each
+part is drawn under, every model by its development name, with the textures,
+palette and colour tables of the part of the game that draws it, and its 68
+enemy bodies playing the 507 motions baked for their joint counts.
 
 Then serve the directory over HTTP — the page is ES modules, so opening
 `index.html` off the filesystem will not work. The dev server moved out with the
