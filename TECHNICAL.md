@@ -298,6 +298,56 @@ highest index the skin table names.
 24 that do not are written for counts no body in the table carries, which is the
 same thing that leaves two of the prototype's 508 unfitted.
 
+#### Revision A, and what a shifted build is worth
+
+The finished game shipped in two revisions. MAME calls the later one `hotd` and
+the first `hotdo`, and they differ in one chip pair — `epr-19696a.15` and
+`epr-19697a.16`, the first megabyte of the program ROM, which is where every
+table the viewer reads out of it lives. The second pair and every mask ROM are
+the same chips, so the model table, the names, the bounds, the roles, the
+scales, the hit motions, the luma curve and the whole skin block do not move.
+
+28.5% of that megabyte's bytes differ, across 408 clusters, which looks like a
+rewrite and is not. It is an insertion. Running the same finders over Revision A
+that found the first revision's tables — the `BO_`/`MO_` name runs, the
+increasing XTRA_DATA run, the palette tables' four opening colours, the 24-byte
+placement records, the 50-byte zone lists, the sky's dome numbers — puts every
+table exactly sixteen bytes later than before, the colour block a hundred and
+twelve, with two exceptions: the skin index and its pointers moved a quarter of
+a megabyte back, and the stage scripts did not move at all.
+
+It is worth saying why this was still done with the finders rather than by
+adding sixteen to the profile. A constant offset is a *result* here, not a
+method. It is only trustworthy because each address was found independently and
+the offsets came out equal, and the two tables that broke the pattern are
+exactly what a blanket shift would have got wrong — silently, since a wrong
+skin-pointer base still reads plausible-looking numbers.
+
+The contents then check the addresses back. Every table that holds values rather
+than pointers is byte for byte the first revision's: the joint counts, the frame
+counts, the flat ankles, the top palette, the gain, the sky records, the texture
+patches, the bank table, all 94 skin indices and all 28 skins. Every table that
+holds pointers differs by exactly the shift. And the two builds produce the same
+eighteen stages with the same zone, placement, draw and triangle counts, and the
+same 94 bodies over 674 motions with 650 fitted and 55 skinned — which is the
+real test, because a single wrong base would have moved one of those numbers.
+
+#### Telling a merged set apart
+
+A merged MAME archive holds the parent and every clone at once, and it broke
+detection the first time one was loaded. `readZipDirectory` keys members on
+their basename so that a split set resolves, and under that rule the one archive
+satisfies all three House of the Dead profiles at the same time — `prg0.15` is
+in it, as `hotdp/prg0.15`, and so is `epr-19696.15` as `hotdo/epr-19696.15`. The
+answer came down to the order of the `GAMES` list, which is no answer at all.
+
+MAME's own convention settles it: the parent's chips are the ones at the top
+level, and a clone's are in a directory named for it. So the reader now records
+whether a member was nested, never lets a nested chip displace a top-level one
+of the same name, and `detectGame` prefers the profile whose members are all
+top-level, falling back to basenames only when none is. A merged archive then
+identifies as the parent, each standalone clone zip as itself.
+
 #### The sky, which the model names give away
 
 The sky is geometry in both builds: a dome a script opcode picks and turns, and

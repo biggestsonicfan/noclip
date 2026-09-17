@@ -81,10 +81,20 @@ export function readZipDirectory(buffer) {
         const commentLen = dv.getUint16(p + 32, true);
         const localOffset = dv.getUint32(p + 42, true);
         const name = dec.decode(new Uint8Array(buffer, p + 46, nameLen));
-        /* MAME sets are flat, but tolerate paths: key on the basename. */
+        /* MAME sets are flat, but tolerate paths: key on the basename.
+         *
+         * A merged set is the one place paths carry meaning. It holds the
+         * parent and every clone at once, the parent's chips at the top level
+         * and each clone's differing ones in a directory named for it — so a
+         * chip inside a directory must never displace the top-level one of the
+         * same name, and callers are told which is which. */
         const base = name.substring(name.lastIndexOf('/') + 1);
+        const nested = base !== name;
         if (base) {
-            entries.set(base, { localOffset, compSize, size: uncompSize, method, crc });
+            const had = entries.get(base);
+            if (!had || (had.nested && !nested)) {
+                entries.set(base, { localOffset, compSize, size: uncompSize, method, crc, nested });
+            }
         }
         p += 46 + nameLen + extraLen + commentLen;
     }

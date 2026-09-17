@@ -742,7 +742,9 @@ const hotdp = {
 /* ---- The House of the Dead ----------------------------------------------- */
 
 /*
- * The `hotd` set: the finished game the prototype above became.
+ * The `hotdo` set: the finished game the prototype above became, in the
+ * revision that shipped first. Revision A is the profile after this one, and
+ * takes everything here but the addresses its patched program moved.
  *
  * It is the same program grown up — AM1's library, the board's geometry, the
  * raw texture banks and the curve colour pipeline all carry across — but not
@@ -762,18 +764,14 @@ const hotdp = {
  *   - there are thirteen texture sets and thirteen model banks, against eleven
  *     and eight, and here they correspond one for one.
  *
- * This is MAME's `hotdo`, the first revision. `hotd` is Revision A, and differs
- * only in epr-19696a.15/epr-19697a.16 — the program pair every address below
- * lives in, so it is deliberately not identified as this set until its own
- * tables have been read.
+ * This is MAME's `hotdo`. Its identity is both halves of its own program pair,
+ * which is what separates it from Revision A, plus a chip from each of the two
+ * regions whose layout changed, so a prototype zip renamed to these labels does
+ * not pass.
  */
-const hotd = {
-    id: 'hotd',
+const hotdo = {
+    id: 'hotdo',
     name: 'The House of the Dead',
-    /* Both halves of the first program pair, which is what separates this
-     * revision from Revision A, plus a chip from each of the two regions whose
-     * layout changed, so a prototype zip renamed to these labels does not pass.
-     */
     identify: ['epr-19696.15', 'epr-19697.16', 'mpr-19715.17', 'mpr-19718.27'],
     regions: {
         /* Two pairs. The second holds no table the viewer reads, but the region
@@ -1080,7 +1078,93 @@ const hotd = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
-export const GAMES = [sfight, fvipers, hotdp, hotd];
+/* ---- The House of the Dead (Revision A) ---------------------------------- */
+
+/*
+ * The `hotd` set: the same game as `hotdo`, with a patched program pair.
+ *
+ * Only epr-19696a.15/epr-19697a.16 differ — the first megabyte of the program
+ * ROM, which is where every table the viewer reads out of it lives. The second
+ * pair and every mask ROM are the same chips, so the model table, the names,
+ * the bounds, the roles, the scales, the hit motions, the luma curve and the
+ * whole skin block are at the addresses above, untouched.
+ *
+ * The patch is an insertion, not a rewrite. 28.5% of that megabyte's bytes
+ * differ across 408 clusters, but what the differences do is push things along:
+ * every table below sits exactly sixteen bytes later than `hotdo`'s, the colour
+ * block a hundred and twelve, and the contents are the same bytes wherever they
+ * are not themselves pointers — the joint counts, the frame counts, the flat
+ * ankles, the top palette, the gain, the sky records, the texture patches and
+ * the bank table are all byte for byte what they were.
+ *
+ * Two things do not simply shift, so neither is assumed:
+ *
+ *   - the skin index and the skin's texture pointers are not sixteen bytes on
+ *     but a quarter of a megabyte back, at 0x20E40 and 0x20F00. Their contents
+ *     are byte for byte `hotdo`'s, all 94 indices and all 28 skins.
+ *   - the stage scripts did not move at all. `scripts` is still 0xE0000 and its
+ *     header still names the same seven chapters; only the last of the seven
+ *     points anywhere new.
+ *
+ * Every address here was found by running the same finders over this program
+ * ROM that found `hotdo`'s over its own — the `BO_`/`MO_` name runs, the
+ * increasing XTRA_DATA run, the palette tables' four opening colours, the
+ * 24-byte placement records and the 50-byte zone lists, the sky's dome
+ * numbers — not by adding sixteen to the profile above. The shift is what came
+ * out, not what went in.
+ */
+const hotd = {
+    ...hotdo,
+    id: 'hotd',
+    name: 'The House of the Dead (Revision A)',
+    /* The `a` suffix is the whole difference, so identify on both halves of the
+     * pair that carries it. */
+    identify: ['epr-19696a.15', 'epr-19697a.16', 'mpr-19715.17', 'mpr-19718.27'],
+    regions: {
+        ...hotdo.regions,
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19696a.15', 0x42adc32e, 'epr-19697a.16', 0x1e247cd5],
+                [0x100000, 'epr-19694.13', 0xe85ca1a3, 'epr-19695.14', 0xcd52b461],
+            ],
+        },
+    },
+    /* +0x70, with the set tables' own chain — each ending where the next
+     * begins, the top table behind the last — intact. */
+    palette: { ...hotdo.palette, tables: 0xa9960, top: 0xa35c8 },
+    texture: {
+        ...hotdo.texture,
+        raw: { ...hotdo.texture.raw, bankTable: 0xa99e0, patchTable: 0xc15f0 },
+    },
+    colors: {
+        ...hotdo.colors,
+        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a4, gain: 0xa8318 } },
+    },
+    stageTable: {
+        ...hotdo.stageTable,
+        placements: {
+            ...hotdo.stageTable.placements,
+            maps: 0xc0bd0, zones: 0xc0bb0, sectionSets: 0xab0b0,
+            /* Unmoved, and `bounds` is in the shared data ROM. Placement 55 is
+             * still PN_room5a_CT00a with its 32-frame cycle in the record's
+             * second tail word, so `cycle` and `turns` carry over as they are. */
+            scripts: 0xe0000,
+        },
+    },
+    sky: { ...hotdo.sky, models: 0xac1f0, heights: 0xac1f4, spins: 0xac1f8 },
+    rig: {
+        bodies: {
+            ...hotdo.rig.bodies,
+            names: 0xc8a60, joints: 0xc73c0, trees: 0xc7240,
+            skins: 0x20e40,
+        },
+        motions: { ...hotdo.rig.motions, names: 0xc8be0, data: 0xc7540, frames: 0xc7fd0, flatAnkles: 0x7c6f0 },
+        skins: { ...hotdo.rig.skins, pointers: 0x20f00 },
+    },
+};
+
+export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd];
 
 /**
  * Pick the profile a set of zip member names belongs to.
@@ -1088,10 +1172,22 @@ export const GAMES = [sfight, fvipers, hotdp, hotd];
  * Members are looked at across every supplied zip at once, so a parent/clone
  * split spread over two archives identifies the same as one self-contained set.
  *
+ * A merged set is the awkward case: it carries the parent and every clone in
+ * one archive, so by basename alone all three House of the Dead profiles match
+ * it at once and the answer would come down to the order of this list. MAME's
+ * own convention settles it — the parent's chips are the ones at the top level,
+ * and a clone's are in a directory named for it — so a profile whose members
+ * are all top-level is preferred, and basenames decide only when none is.
+ *
  * @param {Set<string>|string[]} names  every member name across the zips
+ * @param {Set<string>} [nested]  those of them that exist only inside a
+ *   clone's directory
  * @returns {null|object} the profile, or null if none matches
  */
-export function detectGame(names) {
+export function detectGame(names, nested = null) {
     const have = names instanceof Set ? names : new Set(names);
-    return GAMES.find((g) => g.identify.every((m) => have.has(m))) || null;
+    const has = (m) => have.has(m);
+    return GAMES.find((g) => g.identify.every((m) => has(m) && !nested?.has(m)))
+        || GAMES.find((g) => g.identify.every(has))
+        || null;
 }
