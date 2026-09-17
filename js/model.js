@@ -21,7 +21,7 @@
  * not the triangle's plane, and the two are not the same on anything curved.
  */
 
-import { readModelEntry, meshOffsetOf } from './romset.js';
+import { readModelEntry, meshOffsetOf, facePalette } from './romset.js';
 
 const VERTEX_PAIR_SIZE = 40;
 const MAX_VERTEX_PAIRS = 4096;
@@ -44,19 +44,29 @@ function bgr555(cw, out) {
  *   hands the geometry engine in place of the model's own. The block a game
  *   builds is not always a copy of what it replaces: Aurora Icefield's turns
  *   two of the curtain's nine panels the right way up.
+ * @param {null|object} mesh  a mesh that is not in the polygon ROM, as
+ *   {bytes, uvPtr, matPtr}: the same records in a buffer of their own, with the
+ *   texture pointers a table entry would carry. The House of the Dead builds
+ *   the polygons that join an enemy's chest to its hips this way, a template
+ *   with some points moved every frame, and hands them to the geometry engine
+ *   exactly as it does a model.
  * @returns {null|object}   null when the table entry has no mesh
  */
-export function decodeModel(rom, modelIdx, points = null) {
-    if (modelIdx < 0 || modelIdx >= rom.game.modelTable.count) return null;
-    const entry = readModelEntry(rom, modelIdx);
+export function decodeModel(rom, modelIdx, points = null, mesh = null) {
+    if (!mesh && (modelIdx < 0 || modelIdx >= rom.game.modelTable.count)) return null;
+    const entry = mesh ? { uvPtr: mesh.uvPtr, matPtr: mesh.matPtr, meshPtr: 1 } : readModelEntry(rom, modelIdx);
     if (entry.meshPtr === 0) return null;
 
-    const polygons = rom.polygons;
-    const polyView = rom.polygonsView;
+    const polygons = mesh ? mesh.bytes : rom.polygons;
+    const polyView = mesh ? new DataView(mesh.bytes.buffer, mesh.bytes.byteOffset, mesh.bytes.byteLength)
+        : rom.polygonsView;
     const textures = rom.textures;
-    const mainData = rom.mainData;
+    const palette = facePalette(rom);
+    /* The highest colorbase any face names — which of a game's per-set palettes
+     * can colour this model at all. */
+    let paletteMax = -1;
 
-    let meshOffset = meshOffsetOf(rom, entry);
+    let meshOffset = mesh ? 0 : meshOffsetOf(rom, entry);
     if (meshOffset < 0 || meshOffset + VERTEX_PAIR_SIZE > polygons.length) return null;
 
     /* Material stream: one 8-byte record per EMITTED face at matPtr*2.
@@ -124,6 +134,20 @@ export function decodeModel(rom, modelIdx, points = null) {
         if (isEnd) break;
         meshOffset += VERTEX_PAIR_SIZE;
         vcount++;
+    }
+
+    /* A triangle reads one new point, and the slot for a second is not a
+     * point: the geometry engine takes its place with the first (MAME
+     * geo_parse_*, `p3 = p2`), which is what a following polygon linking off it
+     * gets. The attribute describing a record's points is the one before it.
+     * Sonic The Fighters and Fighting Vipers store the first point again in
+     * that slot; The House of the Dead stores zeros, so taken literally a strip
+     * after a triangle reached back to the part's origin. */
+    for (let k = 0; k + 1 < qt.length; k++) {
+        if (qt[k] !== 2) continue;
+        const a = (k + 1) * 6;
+        if (a + 6 > sv.length) break;
+        sv[a + 3] = sv[a]; sv[a + 4] = sv[a + 1]; sv[a + 5] = sv[a + 2];
     }
 
     const nsv = sv.length / 3;
@@ -290,8 +314,12 @@ export function decodeModel(rom, modelIdx, points = null) {
      */
     let facePt = 0;
     const facePts = [];
+    /* Which face each triangle was cut from, so a quad's two halves can be put
+     * back together (see js/layers.js). */
+    const triFaces = [];
 
     function emitTri(p0, p1, p2, s0, s1, s2) {
+        triFaces.push(faceCount);
         const ax = sv[p0], ay = sv[p0 + 1], az = sv[p0 + 2];
         const bx = sv[p1], by = sv[p1 + 1], bz = sv[p1 + 2];
         const cx = sv[p2], cy = sv[p2 + 1], cz = sv[p2 + 2];
@@ -322,7 +350,22 @@ export function decodeModel(rom, modelIdx, points = null) {
         }
     }
 
-    let efi = 0;            /* emitted-face index; drives the material stream */
+    /*
+     * The material stream is walked, not indexed.
+     *
+     * model2_3d_process_polygon reads a polygon's texture header at the current
+     * address and then moves the address by a signed record count out of bits
+     * 12-16 of that polygon's attribute word — for every polygon it is handed,
+     * including the ones check_culling then throws out. Sonic The Fighters and
+     * Fighting Vipers store 1 on every face that draws and 0 on the groups that
+     * do not, which is one record per emitted face and is how this was first
+     * read. The House of the Dead stores 0 on most faces and reuses a header
+     * for a run of them, and steps back as well as forward: read as one record
+     * per face, its rooms come out in the eight primary colours at the bottom
+     * of its palette.
+     */
+    let hdr = matBase;
+    const planeNormals = rom.game.lighting?.planeNormals === true;
     let faceCount = 0;
     let texturedFaces = 0;
 
@@ -345,8 +388,11 @@ export function decodeModel(rom, modelIdx, points = null) {
         rgb[0] = 0.7; rgb[1] = 0.7; rgb[2] = 0.7;
 
         if (haveMat) {
-            const rec = matBase + efi * 8;
-            if (rec + 8 <= textures.length) {
+            const rec = hdr;
+            let tho = (att[fi] >>> 12) & 0x1f;
+            if (tho & 0x10) tho -= 0x20;
+            hdr += tho * 8;
+            if (rec >= 0 && rec + 8 <= textures.length) {
                 const th0 = textures[rec] | (textures[rec + 1] << 8);
                 const th1 = textures[rec + 2] | (textures[rec + 3] << 8);
                 const th2 = textures[rec + 4] | (textures[rec + 5] << 8);
@@ -380,10 +426,8 @@ export function decodeModel(rom, modelIdx, points = null) {
                 tw = textured ? texw : 0;
                 th = texh;
                 const matidx = (th3 >> 6) & 0x3ff;   /* colorbase -> global palette */
-                const pal = rom.game.paletteOffset + matidx * 2;
-                if (pal + 2 <= mainData.length) {
-                    bgr555(mainData[pal] | (mainData[pal + 1] << 8), rgb);
-                }
+                if (matidx > paletteMax) paletteMax = matidx;
+                if (palette[matidx] >= 0) bgr555(palette[matidx], rgb);
             }
         }
 
@@ -432,6 +476,23 @@ export function decodeModel(rom, modelIdx, points = null) {
                 zSrc[0] = A; zSrc[1] = B; zSrc[2] = D; zSrc[3] = C;
             }
         }
+        /* A game that runs the geometry engine in mode 2 has it ignore the
+         * normal in ROM and take the plane of the polygon's first three points
+         * instead — P0(n-1), P1(n-1) and P0(n), which are A, B and C here on
+         * every link type (MAME geo_parse_nn_ns, vector_cross3). Negated,
+         * because the z flip on read reverses a cross product's handedness. */
+        if (planeNormals && hasC) {
+            const e1x = sv[B] - sv[A], e1y = sv[B + 1] - sv[A + 1], e1z = sv[B + 2] - sv[A + 2];
+            const e2x = sv[C] - sv[A], e2y = sv[C + 1] - sv[A + 1], e2z = sv[C + 2] - sv[A + 2];
+            const px = e1y * e2z - e1z * e2y;
+            const py = e1z * e2x - e1x * e2z;
+            const pz = e1x * e2y - e1y * e2x;
+            const len = Math.hypot(px, py, pz);
+            if (len > 0) {
+                faceNx = -px / len; faceNy = -py / len; faceNz = -pz / len;
+                faceN = true;
+            }
+        }
         faceFlags |= zMode << 5;
         if (((att[fi] >>> 17) & 1) || !faceN) faceFlags |= 128;
         facePt = hasC ? C : A;
@@ -462,7 +523,6 @@ export function decodeModel(rom, modelIdx, points = null) {
         }
         if (textured) texturedFaces++;
         faceCount++;
-        efi++;
     }
 
     if (positions.length === 0) return null;
@@ -492,8 +552,10 @@ export function decodeModel(rom, modelIdx, points = null) {
         facePoints: new Float32Array(facePts),
         mats: new Float32Array(mats),
         edges: new Float32Array(edges),
+        faces: new Uint32Array(triFaces),
         faceCount,
         texturedFaces,
+        paletteMax,
         vertexPairs: vcount,
         bounds: { min, max, center, radius },
     };

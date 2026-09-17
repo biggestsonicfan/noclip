@@ -174,6 +174,32 @@ export function stageLight(bright, vecterX, vecterY) {
 }
 
 /*
+ * The light and material slots of a game that keeps one set for the whole game
+ * rather than one per stage record: the fixed light a profile's `lighting` names,
+ * and the material table the boot sequence uploads. Slots past the uploaded
+ * count stay at zero, which is what the geometry engine holds for a slot nothing
+ * has written. Null for a game without such a block.
+ *
+ * @returns {null|{light: number[], materials: {diffuse:number, ambient:number}[]}}
+ */
+export function gameLighting(rom) {
+    const L = rom.game.lighting;
+    if (!L) return null;
+    const cv = rom.mainCpuView;
+    const materials = [];
+    for (let i = 0; i < MATERIAL_COUNT; i++) {
+        const at = L.materials.at + i * 8;
+        if (i >= L.materials.count || at + 4 > rom.maincpu.length) {
+            materials.push({ diffuse: 0, ambient: 0 });
+            continue;
+        }
+        const w = cv.getUint32(at, true);
+        materials.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
+    }
+    return { light: stageLight(1, L.vecter[0], L.vecter[1]), materials };
+}
+
+/*
  * The texture sets a stage actually uploads.
  *
  * The record's g0/g1 pair is not two set numbers to load. Two captures of real

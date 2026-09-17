@@ -123,6 +123,82 @@ export function readModelEntry(rom, index) {
     };
 }
 
+/**
+ * A model's name, for a game whose ROM carries them; null otherwise.
+ *
+ * `modelNames.ptrs` is a table of pointers to C strings, `skip` entries in, one
+ * per model; entries past `count` are the second half of a table that repeats
+ * the first and take the same names.
+ */
+export function readModelName(rom, index) {
+    const n = rom.game.modelNames;
+    if (!n || index < 0) return null;
+    const dv = rom.mainDataView;
+    const at = n.ptrs + (n.skip + (index % n.count)) * 4;
+    if (at + 4 > rom.mainData.length) return null;
+    const off = dv.getUint32(at, true) - 0x02000000;
+    if (off < 0 || off >= rom.mainData.length) return null;
+    let end = off;
+    while (end < rom.mainData.length && end - off < 64 && rom.mainData[end] !== 0) end++;
+    return String.fromCharCode(...rom.mainData.subarray(off, end));
+}
+
+/*
+ * The face palette, as the 1024 colours a material record's 10-bit colorbase
+ * can name: BGR555, or -1 where the ROM has nothing to say.
+ *
+ * Two layouts. The AM2 games keep one table in the data ROM at `paletteOffset`.
+ * The House of the Dead writes palette RAM from the program ROM in parts — a
+ * shared table below `split`, the loaded set's table from `split` on, and a
+ * fixed table down from the top — so its palette depends on `rom.paletteSet`,
+ * which the caller moves when it moves the texture set. Built once per set and
+ * kept.
+ */
+export function facePalette(rom) {
+    const p = rom.game.palette;
+    const set = p ? (rom.paletteSet ?? 0) : 0;
+    rom.facePalettes ??= new Map();
+    if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
+
+    const out = new Int32Array(1024).fill(-1);
+    if (!p) {
+        const md = rom.mainData;
+        for (let i = 0; i < 1024; i++) {
+            const o = rom.game.paletteOffset + i * 2;
+            if (o + 2 > md.length) break;
+            out[i] = md[o] | (md[o + 1] << 8);
+        }
+    } else {
+        const cv = rom.mainCpuView;
+        const table = (s, first) => {
+            const t = cv.getUint32(p.tables + s * 4, true);
+            if (!t || t + 2 > rom.maincpu.length) return;
+            const count = cv.getUint16(t, true);
+            for (let i = 0; i < count && first + i < 1024 && t + 4 + i * 2 <= rom.maincpu.length; i++) {
+                out[first + i] = cv.getUint16(t + 2 + i * 2, true);
+            }
+        };
+        table(0, 0);
+        /* A set's table overwrites only as many entries as it holds, and nothing
+         * clears the rest, so what sits above it is whatever the sets loaded
+         * before it left there. Where the game has an order of play, lay those
+         * down first. */
+        const order = p.loadOrder ?? [];
+        const before = order.includes(set) ? order.slice(0, order.indexOf(set)) : order.slice(0, 1);
+        for (const s of before) table(s, p.split);
+        if (set >= 0 && set < p.sets) table(set, p.split);
+        /* The top of the palette, filled downward from 1023 by its own table,
+         * then single entries a setting decides. */
+        if (p.top) {
+            const count = cv.getUint16(p.top, true);
+            for (let i = 0; i < count && i < 1024; i++) out[1023 - i] = cv.getUint16(p.top + 2 + i * 2, true);
+        }
+        for (const [index, color] of p.fixed ?? []) out[index] = color;
+    }
+    rom.facePalettes.set(set, out);
+    return out;
+}
+
 /** Byte offset into the polygon ROM of a table entry's mesh, or -1 if it has none. */
 export function meshOffsetOf(rom, entry) {
     if (entry.meshPtr === 0) return -1;

@@ -2,9 +2,11 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, readModelEntry } from './romset.js';
+import { loadRomSet, readModelEntry, readModelName } from './romset.js';
 import { decodeModel } from './model.js';
-import { readStageTable, stageLight } from './stages.js';
+import { readStageTable, stageLight, gameLighting } from './stages.js';
+import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
+import { coplanarLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
@@ -14,8 +16,8 @@ import {
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
-    useCoproTrig, SLOT_COUNT, HEAD_SLOT } from './pose.js';
-import { readOsage, osageParts } from './osage.js';
+    useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
+import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
 import {
     readTails, tailParts, PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
 } from './tails.js';
@@ -29,10 +31,13 @@ import {
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
 import { decodeMotion, sampleMotion, listMotions } from './motion.js';
+import {
+    readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, rankMotions, partDraws, readSkin, skinMesh,
+} from './bodies.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
-import { buildTexram, bestTextureSet } from './texture.js';
+import { buildTexram, bestTextureSet, bankTextureSet } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -55,6 +60,12 @@ const state = {
     modelIndex: 517,
     charIndex: 0,
     character: null,
+    /* A game whose enemies are jointed bodies rather than a fighter roster —
+     * see js/bodies.js. `travel` poses a motion along the path it carries
+     * instead of on the spot, where the game draws it. */
+    bodies: null,
+    motionRanks: null,
+    travel: false,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -78,11 +89,6 @@ const state = {
         id: 0, slot: 0, decoded: null, frame: 1, tick: 0, playing: true, start: 0,
         parts: [], skeleton: null, list: null,
     },
-    /* A hand knob on the sway chains' frame, in 16-bit binary radians. The
-     * frame the ROM builds does not put the chain meshes where they belong and
-     * the reason is not yet known, so this is here to find the rotation that
-     * does by eye. Zero is the ROM's own frame. */
-    osageTurn: [0, 0, 0],
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
@@ -329,6 +335,10 @@ function setAtlasSheets(sheet0, sheet1) {
  * and the stage sets do not overwrite its deepest mip levels — without it the
  * corner of the mip chain is blank rather than what the hardware holds. */
 function useRomTexram(texSets) {
+    /* Where a game ties its face palette to the texture set, the palette moves
+     * with the set asked for — before the pinned and repeat checks, since a
+     * dumped sheet says nothing about which palette is in RAM. */
+    if (state.rom.game.palette && texSets.length) state.rom.paletteSet = texSets[texSets.length - 1];
     if (state.texramPinned) return;
     const key = texSets.join(',');
     if (key === state.texramKey) return;
@@ -386,6 +396,9 @@ function setLumaTables(luma, cxlat) {
 function useRomColorLuts(stage, fighter = null) {
     const u = state.viewer.material.uniforms;
     if (state.lutsPinned) { u.uUseRamp.value = 1; return; }
+    /* A game whose colour pipeline is not ported has no tables to build, and
+     * without them the ramp would read zeros: shade flat on the palette. */
+    if (!state.rom.game.colors || !stage) { u.uUseRamp.value = 0; return; }
     const key = `${stage.texSet[1]}:${stage.tint.join(',')}:${fighter}`;
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
@@ -398,6 +411,37 @@ function useRomColorLuts(stage, fighter = null) {
     });
     setLumaTables(luma, cxlat);
     state.lutKey = key;
+}
+
+/*
+ * The sheets and colour tables of one texture set, as a material of its own.
+ *
+ * A stage assembled out of every zone a chapter reaches draws parts loaded
+ * under different sets (see the all-placements stage in js/placements.js), and
+ * a set is what one texture RAM — and so one atlas — holds. Each is built the
+ * way the scene's own is, by the game's unpack and table routines, and cached
+ * on the viewer until the ROM changes. The face palette is not a uniform but
+ * something the decode bakes in, so the caller sets `rom.paletteSet` to match
+ * before it decodes the part.
+ */
+function materialForSet(set, stage) {
+    const v = state.viewer;
+    const key = `${set}:${stage.tint.join(',')}`;
+    const have = v.setMaterials.get(key);
+    if (have) return have;
+    const resident = state.rom.game.texture.residentSet;
+    const { sheet0, sheet1 } = buildTexram(state.rom, resident == null ? [set] : [resident, set]);
+    const atlas = makeDataTexture(buildAtlas(sheet0, sheet1), ATLAS_W, ATLAS_H);
+    atlas.magFilter = THREE.LinearFilter;
+    atlas.minFilter = THREE.LinearFilter;
+    /* Pinned tables are a capture of a real machine and stand for every part;
+     * a game with no colour pipeline ported has none to build. */
+    const cxlat = state.rom.game.colors && !state.lutsPinned
+        ? makeDataTexture(buildColorxlat(state.rom, {
+            colorSet: set, tint: stage.tint, fighters: [],
+        }), CXLAT_W, CXLAT_H)
+        : null;
+    return v.setMaterial(key, { atlas, cxlat });
 }
 
 /* A dump is still accepted, and still wins: it captures one real moment of a
@@ -425,6 +469,9 @@ async function loadTexramFiles(files) {
 
         setAtlasSheets(s0, s1);
         state.texramPinned = true;
+        /* The dump stands for every part of a mixed-set stage, so the sheets
+         * built per set go — see materialForSet. */
+        state.viewer.clearSetMaterials();
 
         /* A dump that brings both tables pins them too; one that brings only
          * the sheets leaves the ROM-built pair in place. */
@@ -457,9 +504,22 @@ async function loadTexramFiles(files) {
  * there are none to apply here.
  */
 function stageDisplayList(stage) {
+    if (stage.placements) return buildPlacementDisplayList(stage);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
+}
+
+/*
+ * Whether the Models tab picks a model's sheets itself.
+ *
+ * A game whose stages name every texture set between them lets the stage that
+ * draws a model decide. One whose stage records are flat and name a hundred
+ * sets, or that has no stage table read at all, has to ask the model.
+ */
+function modelsPickTextures() {
+    const t = state.rom.game.stageTable;
+    return !t || !!t.flat;
 }
 
 /* ---- Colour and light for a game with no stage table --------------------- */
@@ -481,7 +541,13 @@ function stageDisplayList(stage) {
 function modelTextureSet(idx) {
     if (state.texSetChoice !== null) return state.texSetChoice;
     if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
-    const found = bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets);
+    /* A game that says which set each bank of its model table is drawn under
+     * is taken at its word; see bankTextureSet for why tile coverage cannot
+     * answer it there. */
+    const banked = bankTextureSet(state.rom, idx);
+    const found = banked === null
+        ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
+        : { set: banked };
     const set = found ? found.set : null;
     state.texSetCache.set(idx, set);
     return set;
@@ -495,10 +561,13 @@ function modelCount() {
     return state.rom ? state.rom.game.modelTable.count : 0;
 }
 
+/* A game whose face palette changes with the loaded set bakes different colours
+ * into the same mesh under each, so the set is part of the key. */
 function getModel(idx) {
-    if (state.modelCache.has(idx)) return state.modelCache.get(idx);
+    const key = state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx;
+    if (state.modelCache.has(key)) return state.modelCache.get(key);
     const m = decodeModel(state.rom, idx);
-    state.modelCache.set(idx, m);
+    state.modelCache.set(key, m);
     return m;
 }
 
@@ -539,7 +608,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    groundPlate = false, planeBias = 0,
+    groundPlate = false, planeBias = 0, material = null,
 } = {}) {
     const v = state.viewer;
     /* The ground plate takes the material that stands one step back, because
@@ -551,13 +620,15 @@ function addModelToScene(decoded, {
      * standing in it to concede to.
      * The open water takes the one that stands the whole bound back, because
      * the board sorts it by a corner hundreds of units out and nothing in the
-     * arena is modelled under it — see waterMaterial. */
+     * arena is modelled under it — see waterMaterial.
+     * A draw that names a material of its own is one whose texture set is not
+     * the scene's — see materialForSet. */
     const mesh = new THREE.Mesh(geom ? geom.mesh : buildGeometry(decoded),
-        backdrop ? v.backdropMaterial
+        material ?? (backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
                 : layer === 'water' ? v.waterMaterial
                     : planeBias ? v.planeMaterials[planeBias]
-                        : v.material);
+                        : v.material));
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
     mesh.userData.layer = layer;
@@ -730,8 +801,15 @@ function modelScenes() {
         else owner.set(model, [slot]);
     };
     state.stages.forEach((stage, slot) => {
+        /* A view that mixes texture sets under one says nothing about which
+         * set draws a model. */
+        if (stage.mixedSets) return;
         for (const m of modelsInDisplayList(stageDisplayList(stage))) {
             add(m, slot);
+        }
+        /* The versions of a piece a stage leaves out are still its models. */
+        for (const d of stage.alternates ?? []) {
+            for (const m of d.cycle ?? [d.model]) if (m && !owner.get(m)?.includes(slot)) add(m, slot);
         }
     });
     /* Disjoint from the stages in this ROM set, so the order of the two passes
@@ -751,7 +829,7 @@ function modelFighter(idx) {
     const owner = state.rigOwners.get(idx);
     if (owner !== undefined) return owner;
     /* With no roster to say which fighter carries a part, the panel says. */
-    if (state.rom.game.stageTable.flat) {
+    if (state.rom.game.colors?.part && modelsPickTextures()) {
         return state.colorFighter >= 0 ? state.colorFighter : null;
     }
     return null;
@@ -799,6 +877,12 @@ function useModelScene(idx) {
     if (!slots || slots[0] === SCENE_ANY) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
+        /* A game that lights everything the same way needs no scene to say how. */
+        const lit = gameLighting(state.rom);
+        if (lit) {
+            u.uLight.value.set(...lit.light);
+            lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+        }
         /*
          * Which sheets to stand a model on that no stage draws.
          *
@@ -809,8 +893,9 @@ function useModelScene(idx) {
          * pages cover those tiles is the one the game would have had resident.
          * The picker on the panel overrides it.
          */
-        if (state.rom.game.stageTable.flat) {
-            const set = modelTextureSet(idx);
+        let set = null;
+        if (modelsPickTextures()) {
+            set = modelTextureSet(idx);
             if (set != null) useRomTexram([set]);
         }
         /* A fighter takes whichever scene is loaded, since every scene holds
@@ -827,8 +912,18 @@ function useModelScene(idx) {
          * but the fighter rows of the colour table do not: they are the
          * character's, and a part read without them shows black where its own
          * palette should be. */
-        useRomColorLuts(state.stages[state.stageIndex], modelFighter(idx));
-        u.uUseRamp.value = state.cxlat ? 1 : 0;
+        /* Where one set number is the sheets, the palette and the colour tables
+         * at once, the tables are the set just picked for the sheets, whatever
+         * stage is up — building them from the loaded stage would read a model
+         * against another set's colours. A game with colour tables and no stage
+         * table has the same answer for want of any other. */
+        const ownSet = set != null && state.rom.game.colors
+            ? { texSet: [set, set], tint: [1, 1, 1] } : null;
+        const scene = state.rom.game.palette
+            ? ownSet
+            : state.stages[state.stageIndex] ?? ownSet;
+        useRomColorLuts(scene, modelFighter(idx));
+        u.uUseRamp.value = state.cxlat && scene ? 1 : 0;
         return;
     }
     /* Several stages draw some of these — South Island's chunks are on three
@@ -955,8 +1050,17 @@ function loadStage(slot, { keepCamera = false } = {}) {
     for (const layer of LAYER_ORDER) { counts[layer] = 0; totals[layer] = 0; }
 
     const m = new THREE.Matrix4();
+    const layered = [];
+    /* A stage whose parts are loaded under different texture sets draws each
+     * under its own — sheets, colour tables and face palette (materialForSet).
+     * A pinned dump is one machine's texture RAM and stands for all of them. */
+    const perPart = stage.mixedSets && !state.texramPinned;
+    const sceneSet = state.rom.paletteSet;
+    const partSets = new Set();
     for (const entry of list) {
         totals[entry.layer]++;
+        const partMaterial = perPart && entry.set != null ? materialForSet(entry.set, stage) : null;
+        if (partMaterial) { state.rom.paletteSet = entry.set; partSets.add(entry.set); }
         const d = entry.scroll?.points
             ? getTpdModel(entry.model, entry.scroll.points)
             : getModel(entry.model);
@@ -972,6 +1076,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
             layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
             groundPlate: entry.groundPlate,
             planeBias: entry.planeBias,
+            material: partMaterial,
         });
         /* buildGeometry hands the decoder's own array straight to the attribute,
          * so a draw whose header is rewritten per frame takes a copy first —
@@ -987,6 +1092,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
                 new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
         }
         mesh.visible = state.layerOn[entry.layer] !== false;
+        layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry });
         counts[entry.layer]++;
         const box = transformedBounds(d, m);
         drawn.push(box);
@@ -1004,6 +1110,15 @@ function loadStage(slot, { keepCamera = false } = {}) {
             state.anim.billboards.push({ entry, mesh, lines });
         }
     }
+    /* Back to the scene's own set, which is what the Models tab and anything
+     * else decoding after this expects to be loaded. */
+    state.rom.paletteSet = sceneSet;
+    if (partSets.size) {
+        const status = $('#tex-status');
+        const sets = [...partSets].sort((a, b) => a - b).join(', ');
+        if (status) status.textContent = `sheets unpacked from ROM (sets ${sets}, one per part)`;
+    }
+    applyFaceLayers(layered);
     applyWireVisibility();
 
     const u = v.material.uniforms;
@@ -1379,6 +1494,34 @@ function transformedBounds(d, matrix) {
     return { bounds: { min, max } };
 }
 
+/*
+ * Put each face lying on another in its plane over it, for a game whose art
+ * depends on that (see js/layers.js). The layers are for the draws as they
+ * stand when the scene is built; a draw that swaps models through a cycle takes
+ * the first frame's, which every frame of such a cycle shares the shape of --
+ * the depth planes only where a frame's points are the first frame's, since a
+ * face that has moved off its plane would be drawn at a depth it is not at.
+ */
+function applyFaceLayers(draws) {
+    if (!state.rom.game.depth?.layers || !draws.length) return;
+    const layers = coplanarLayers(draws);
+    draws.forEach(({ mesh, entry, decoded }, i) => {
+        const { layer, plane } = layers[i];
+        const set = (geometry, d) => {
+            if (d.positions.length / 3 !== layer.length) return;
+            geometry.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
+            const still = d === decoded || d.positions.every((v, k) => Math.abs(v - decoded.positions[k]) < 1e-3);
+            if (still) geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
+            else geometry.deleteAttribute('aPlane');
+        };
+        set(mesh.geometry, decoded);
+        for (const frame of entry?.anim?.frames ?? []) {
+            const d = getModel(frame);
+            if (d) set(frameGeometry(frame).mesh, d);
+        }
+    });
+}
+
 /* ---- Model view ---------------------------------------------------------- */
 
 function loadModel(idx, { keepCamera = false } = {}) {
@@ -1387,10 +1530,13 @@ function loadModel(idx, { keepCamera = false } = {}) {
     resetStageAnimation();
     v.clear();
 
-    const d = getModel(idx);
+    /* The scene first: where the palette follows the texture set, the set it
+     * picks is what the decode's colours come from. */
     useModelScene(idx);
+    const d = getModel(idx);
     if (d) {
-        addModelToScene(d);
+        const { mesh } = addModelToScene(d);
+        applyFaceLayers([{ decoded: d, matrix: new THREE.Matrix4().elements, mesh }]);
         applyWireVisibility();
         if (!keepCamera) v.frame(d.bounds.center, d.bounds.radius);
     }
@@ -1401,6 +1547,7 @@ function loadModel(idx, { keepCamera = false } = {}) {
 /* ---- Character rig view -------------------------------------------------- */
 
 function loadCharacter(charIndex, { keepCamera = false, keepMotion = false } = {}) {
+    if (state.bodies) return loadBody(charIndex, { keepCamera, keepMotion });
     state.charIndex = charIndex;
     const c = readCharacter(state.rom, charIndex);
     state.character = c;
@@ -1423,7 +1570,7 @@ function setMotion(id, slot, { rebuild = true } = {}) {
     const m = state.motion;
     m.id = id;
     m.slot = slot;
-    m.decoded = decodeMotion(state.rom, id);
+    m.decoded = state.bodies ? m.list[id] ?? null : decodeMotion(state.rom, id);
     m.frame = 1;
     m.tick = 0;
     m.start = performance.now();
@@ -1482,6 +1629,7 @@ function slotModel(c, i) {
 }
 
 function rebuildRig({ keepCamera = true } = {}) {
+    if (state.bodies) return rebuildBody({ keepCamera });
     const v = state.viewer;
     const c = state.character;
     if (!c) return;
@@ -1552,8 +1700,9 @@ function rebuildRig({ keepCamera = true } = {}) {
      * frame. The squished form has no chains of its own; the table is the
      * fighter's either way. */
     m.osage = readOsage(state.rom, c.charIndex);
+    m.osageSim = null;
     m.osageParts = [];
-    for (const p of osageParts(restPoseFor(c), m.osage, { turn: state.osageTurn })) {
+    for (const p of osageParts(restPoseFor(c), m.osage, { floorY: NO_FLOOR })) {
         const d = getModel(p.model);
         if (!d) continue;
         const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
@@ -1690,8 +1839,34 @@ function restPoseFor(c) {
     });
 }
 
+/* How many board frames the chains are run to catch up with a display counter
+ * that has moved on by more than one. Past that the gap is a jump, not a slow
+ * frame, and the chains start again from rest. */
+const OSAGE_CATCH_UP = 8;
+
+/*
+ * Run the sway chains on to the current frame. They keep their points and
+ * carries from one board frame to the next, as the coprocessor keeps them in
+ * bufferram, so a pose that moves one frame on moves them one frame on and they
+ * swing. Anything else — a new motion, a scrub backwards, a jump — starts them
+ * again and settles them on the pose, which is what a pose held still shows.
+ */
+function placeOsage(m, pose, board) {
+    const step = m.tick - m.osageTick;
+    if (m.osageSim?.osage === m.osage && step >= 1 && step <= OSAGE_CATCH_UP) {
+        let placed = [];
+        for (let i = 0; i < step; i++) placed = stepOsage(m.osageSim, pose, board);
+        m.osageTick = m.tick;
+        return placed;
+    }
+    m.osageSim = createOsageSim(m.osage);
+    m.osageTick = m.tick;
+    return settleOsage(m.osageSim, pose, board);
+}
+
 /** Solve the current frame of the current motion onto the parts on screen. */
 function poseRig() {
+    if (state.bodies) return poseBodyRig();
     const c = state.character;
     const m = state.motion;
     if (!c || !m.parts.length) return;
@@ -1723,7 +1898,9 @@ function poseRig() {
     }
     /* The sway chains hang off the pose, so they follow it frame by frame. */
     if (m.osage) {
-        const placed = osageParts(pose, m.osage, { turn: state.osageTurn });
+        /* With no motion the pose has its waist at the origin and no ground
+         * under it, so there is no floor for the chains to stop at. */
+        const placed = placeOsage(m, pose, m.decoded ? {} : { floorY: NO_FLOOR });
         for (let i = 0; i < m.osageParts.length && i < placed.length; i++) {
             const mat = viewerMatrix(placed[i]);
             m.osageParts[i].mesh.matrix.fromArray(mat);
@@ -1820,6 +1997,154 @@ function faceCamera() {
     part.mesh.geometry = part.sides[side];
 }
 
+/* ---- Jointed bodies ------------------------------------------------------ */
+
+/* The motions a body can play: those written for its joint count. A motion
+ * names no body — the game picks one per enemy — so any body with the same
+ * count plays it, every angle landing on the joint it was written for. */
+function bodyMotions(body) {
+    state.motionRanks ??= new Map();
+    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, rankMotions(body, state.motion.list, state.bodies));
+    return state.motionRanks.get(body.index);
+}
+
+function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
+    const body = state.bodies[index] ?? state.bodies[0];
+    state.charIndex = body.index;
+    state.character = body;
+    const m = state.motion;
+    /* Start on a motion likely written for the body: a body can play any
+     * motion of its joint count, but one keyed on another skeleton bends its
+     * parts in ways they were not modelled for. A motion carried over from the
+     * last body stays if it is among them. */
+    const { fits, lead } = bodyMotions(body);
+    const held = keepMotion && m.decoded?.joints === body.joints ? m.decoded : null;
+    const pick = held && lead.includes(held) ? held : lead[0] ?? fits[0];
+    setMotion(pick?.index ?? -1, -1, { rebuild: false });
+    rebuildBody({ keepCamera });
+    renderAnimPanel();
+    updateHud();
+}
+
+function rebuildBody({ keepCamera = true } = {}) {
+    const v = state.viewer;
+    const body = state.character;
+    if (!body) return;
+    resetStageAnimation();
+    v.clear();
+    /* The sheets, palette, colour tables and light the Models tab shows the
+     * body's models under. A body's parts are all in one bank, so its first
+     * part answers for the rest. */
+    const first = body.parts.find((p) => p.model)?.model;
+    if (first != null) useModelScene(first);
+
+    const m = state.motion;
+    /* A part can draw more than one model, and which ones changes with the
+     * frame, so each keeps a slot per model it has drawn so far and swaps their
+     * geometry — the coat alone is a hundred models. */
+    m.parts = body.parts.map((p) => ({ part: p.index, slots: [] }));
+    m.skin = readSkin(state.rom, body);
+    m.skinMesh = null;
+    applyWireVisibility();
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array(Math.max(1, body.parts.length - 1) * 6), 3));
+    m.skeleton = new THREE.LineSegments(g, v.skeletonMaterial);
+    m.skeleton.renderOrder = 2;
+    m.skeleton.frustumCulled = false;
+    v.root.add(m.skeleton);
+
+    poseRig();
+
+    if (!keepCamera) {
+        const drawn = m.parts.flatMap((p) => p.slots.filter((x) => x.decoded)
+            .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
+        const b = unionBounds(drawn, 10);
+        v.frame(b.center, b.radius * 1.25, { dir: [-0.45, 0.18, -0.9] });
+    }
+}
+
+/* Point a part's slot at a model, or at nothing. */
+function setBodySlot(slot, model) {
+    if (slot.model === model) return;
+    slot.model = model;
+    const d = model == null ? null : getModel(model);
+    slot.decoded = d?.positions.length ? d : null;
+    const hidden = !slot.decoded;
+    slot.mesh.visible = !hidden;
+    if (slot.lines) slot.lines.userData.hidden = hidden;
+    if (hidden) {
+        if (slot.lines) slot.lines.visible = false;
+        return;
+    }
+    const geom = frameGeometry(model);
+    slot.mesh.geometry = geom.mesh;
+    slot.mesh.userData.modelIndex = model;
+    if (slot.lines) {
+        slot.lines.geometry = geom.edges;
+        slot.lines.visible = state.wireframe;
+    }
+}
+
+function poseBodyRig() {
+    const body = state.character;
+    const m = state.motion;
+    if (!body) return;
+    const v = state.viewer;
+    const { matrices, origins } = poseBody(body, m.decoded, m.frame, { travel: state.travel });
+    const draws = partDraws(body, m.decoded, m.frame, m.tick);
+    for (const p of m.parts) {
+        const models = draws[p.part];
+        for (let k = 0; k < Math.max(models.length, p.slots.length); k++) {
+            if (k >= p.slots.length) {
+                const d = getModel(models[k]);
+                if (!d?.positions.length) continue;
+                const { mesh, lines } = addModelToScene(d,
+                    { matrix: new THREE.Matrix4(), geom: frameGeometry(models[k]) });
+                if (lines) { lines.matrixAutoUpdate = false; }
+                p.slots.push({ mesh, lines, model: models[k], decoded: d });
+                continue;
+            }
+            setBodySlot(p.slots[k], k < models.length ? models[k] : null);
+        }
+        for (const x of p.slots) {
+            x.mesh.matrix.fromArray(matrices[p.part]);
+            if (x.lines) x.lines.matrix.fromArray(matrices[p.part]);
+        }
+    }
+
+    /* The skin is rebuilt every frame, as the board rebuilds it: its points on
+     * the chest side move with the pose. */
+    if (m.skin) {
+        const d = decodeModel(state.rom, null, null, skinMesh(m.skin, matrices));
+        if (d) {
+            d.index = null;
+            if (!m.skinMesh) {
+                const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
+                if (lines) { lines.matrixAutoUpdate = false; }
+                m.skinMesh = { mesh, lines };
+            } else {
+                m.skinMesh.mesh.geometry.dispose();
+                m.skinMesh.mesh.geometry = buildGeometry(d);
+                if (m.skinMesh.lines) {
+                    m.skinMesh.lines.geometry.dispose();
+                    m.skinMesh.lines.geometry = buildEdgeGeometry(d);
+                }
+            }
+            m.skinMesh.mesh.matrix.fromArray(matrices[m.skin.hips]);
+            if (m.skinMesh.lines) m.skinMesh.lines.matrix.fromArray(matrices[m.skin.hips]);
+        }
+    }
+
+    if (m.skeleton) {
+        const a = m.skeleton.geometry.getAttribute('position');
+        a.array.set(bodySkeletonLines(body, origins));
+        a.needsUpdate = true;
+        m.skeleton.visible = state.showSkeleton;
+    }
+}
+
 /** Advance the motion to whatever frame elapsed time puts us on, and loop. */
 function stepMotion(now) {
     const m = state.motion;
@@ -1841,7 +2166,7 @@ function applyWireVisibility() {
     for (const o of state.viewer.root.children) {
         if (!o.userData.isWire) continue;
         const layer = o.userData.layer;
-        o.visible = state.wireframe && (layer == null || state.layerOn[layer]);
+        o.visible = state.wireframe && !o.userData.hidden && (layer == null || state.layerOn[layer]);
     }
 }
 
@@ -1863,7 +2188,13 @@ function renderStagePanel(stage, counts, totals, list) {
     const totalTris = state.viewer.root.children
         .filter((c) => c.isMesh)
         .reduce((a, m) => a + m.geometry.attributes.position.count / 3, 0);
-    $('#stage-meta').innerHTML = `
+    /* A stage built from placements has no record fields to show, and says what
+     * it was assembled from instead. */
+    $('#stage-meta').innerHTML = stage.meta ? `
+        ${stage.meta.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('')}
+        <span>draws</span><b>${list.length}</b>
+        <span>triangles</span><b>${totalTris.toLocaleString()}</b>
+    ` : `
         <span>stage_NUM</span><b>${stage.num}</b>
         <span>flags</span><b>0x${stage.flags.toString(16).toUpperCase()}</b>
         <span>floor size</span><b>${stage.floorSize.toFixed(3)}</b>
@@ -1930,10 +2261,14 @@ function renderModelList() {
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
     lo = Math.max(0, lo); hi = Math.min(modelCount() - 1, hi);
+    /* Anything else is a name to look for, in a game whose models have them. */
+    const named = !!state.rom.game.modelNames;
+    const needle = named && !range && !single && q ? q.toLowerCase() : null;
 
     const rows = [];
     for (let i = lo; i <= hi && rows.length < 1500; i++) {
         if (onlyMesh && readModelEntry(state.rom, i).meshPtr === 0) continue;
+        if (needle && !(readModelName(state.rom, i) ?? '').toLowerCase().includes(needle)) continue;
         rows.push(i);
     }
     $('#model-count').textContent = `${rows.length} shown of ${modelCount()} table entries`;
@@ -1962,7 +2297,9 @@ function fillModelInfoLazily(list) {
             if (!e.isIntersecting) continue;
             io.unobserve(e.target);
             const d = getModel(+e.target.dataset.index);
-            e.target.querySelector('[data-info]').textContent = d ? `${d.faceCount} faces` : 'no mesh';
+            const name = readModelName(state.rom, +e.target.dataset.index);
+            const faces = d ? `${d.faceCount} faces` : 'no mesh';
+            e.target.querySelector('[data-info]').textContent = name ? `${name} · ${faces}` : faces;
         }
     }, { root: list, rootMargin: '240px' });
     for (const row of list.children) io.observe(row);
@@ -1977,8 +2314,9 @@ function selectModel(idx) {
 
 function renderModelInfo(idx, d) {
     const entry = readModelEntry(state.rom, idx);
+    const name = readModelName(state.rom, idx);
     $('#model-info').innerHTML = d
-        ? `<b>model ${idx}</b> — ${d.faceCount} faces · ${d.positions.length / 9} tris ·
+        ? `<b>model ${idx}</b>${name ? ` <span class="mono">${name}</span>` : ''} — ${d.faceCount} faces · ${d.positions.length / 9} tris ·
            ${d.vertexPairs} vertex pairs · ${d.texturedFaces} textured<br>
            <span class="mono">mesh ${entry.meshPtr} · mat ${entry.matPtr} · uv ${entry.uvPtr}</span><br>
            <span class="mono">${describeModelScene(idx)}</span>`
@@ -1993,6 +2331,9 @@ function describeModelScene(idx) {
     if (!slots) {
         /* With no stage table located there is no scene to name and no ramp in
          * play, so say what is actually on screen: the model's own palette. */
+        if (state.rom.game.palette) {
+            return `drawn by no stage — sheets, palette and colour tables of set ${state.rom.paletteSet ?? 0}`;
+        }
         if (!state.stages.length) return 'shaded flat, on the face palette in the ROM';
         const stage = state.stages[state.stageIndex];
         return `drawn by no stage — shaded against ${stage ? stage.name : 'the loaded stage'}'s tables`;
@@ -2011,6 +2352,16 @@ function describeModelScene(idx) {
 function renderCharacterSelect() {
     const sel = $('#char-select');
     sel.innerHTML = '';
+    if (state.bodies) {
+        for (const b of state.bodies) {
+            const opt = el('option');
+            opt.value = String(b.index);
+            opt.textContent = `${String(b.index).padStart(2, '0')} · ${b.name}`;
+            sel.appendChild(opt);
+        }
+        sel.value = String(state.charIndex);
+        return;
+    }
     for (const c of CHARACTERS) {
         const opt = el('option');
         opt.value = String(c.index);
@@ -2021,6 +2372,7 @@ function renderCharacterSelect() {
 }
 
 function renderAnimPanel() {
+    if (state.bodies) return renderBodyPanel();
     const c = state.character;
     if (!c) return;
 
@@ -2101,50 +2453,106 @@ function renderExhaustPanel() {
         + `<br>${why}`;
 }
 
-/* Sliders on the sway frame, shown only for the five fighters that have one. */
+/* What the sway chains are made of, shown only for the five fighters that have
+ * them: each chain's attach bone, its segments and the damping it runs with. */
 function renderOsagePanel() {
     const m = state.motion;
     const field = $('#osage-field');
     field.hidden = !m.osage;
     if (!m.osage) return;
 
-    const host = $('#osage-turn');
-    host.innerHTML = '';
-    const row = el('div', 'joint');
-    const axes = el('div', 'joint-axes');
-    ['X', 'Y', 'Z'].forEach((axis, a) => {
-        const wrap = el('label', 'axis', `<span>${axis}</span>`);
-        const input = el('input');
-        input.type = 'range';
-        input.min = '-180'; input.max = '180'; input.step = '1';
-        input.value = String(Math.round((state.osageTurn[a] / 65536) * 360));
-        const val = el('span', 'axis-val', `${input.value}°`);
-        input.addEventListener('input', () => {
-            state.osageTurn[a] = Math.round((+input.value / 360) * 65536) & 0xffff;
-            val.textContent = `${input.value}°`;
-            poseRig();
-            updateOsageReadout();
-        });
-        wrap.append(input, val);
-        axes.appendChild(wrap);
-    });
-    row.appendChild(axes);
-    host.appendChild(row);
-    updateOsageReadout();
+    const lines = [`table 0x${m.osage.table.toString(16)}`];
+    let damping = null, limits = null, chain = 0;
+    for (const r of m.osage.records) {
+        if (r.type === 3) { damping = r.damping; limits = r.noLimits !== 1; }
+        if (r.type !== 4) continue;
+        const c = m.osage.chains[chain++];
+        const lengths = c.segments.map((s) => s.length.toFixed(2)).join(' + ');
+        lines.push(`chain ${chain} on ${SLOT_NAMES[c.bone] ?? `slot ${c.bone}`}: `
+            + `${c.segments.length} × (${lengths})`
+            + (damping === null ? '' : `, damping ${damping.toFixed(2)}${limits ? '' : ', no body limits'}`));
+    }
+    $('#osage-readout').innerHTML = lines.join('<br>');
 }
 
-function updateOsageReadout() {
-    const t = state.osageTurn;
-    const deg = t.map((v) => Math.round(((v << 16 >> 16) / 65536) * 360));
-    $('#osage-readout').textContent =
-        `turn  X ${deg[0]}°  Y ${deg[1]}°  Z ${deg[2]}°`
-        + `   —  0x${t[0].toString(16).padStart(4, '0')}`
-        + ` 0x${t[1].toString(16).padStart(4, '0')}`
-        + ` 0x${t[2].toString(16).padStart(4, '0')}`;
+function renderBodyPanel() {
+    const body = state.character;
+    if (!body) return;
+    const drawn = body.parts.filter((p) => p.model).length;
+    $('#char-meta').innerHTML = `
+        <span>body</span><b>${body.index}</b>
+        <span>root part</span><b>0x${body.root.toString(16)}</b>
+        <span>joints</span><b>${body.joints}</b>
+        <span>parts</span><b>${body.parts.length}, ${drawn} with a model</b>
+        <span>scale</span><b>${body.scale.toFixed(3)}</b>
+        <span>motions that fit</span><b>${bodyMotions(body).fits.length}</b>
+    `;
+
+    const list = $('#slot-list');
+    list.innerHTML = '';
+    for (const p of body.parts) {
+        const row = el('div', 'joint');
+        const name = p.model ? readModelName(state.rom, p.model) : '';
+        const label = p.model ? `model ${p.model}${name ? ` · ${name}` : ''}` : 'no mesh';
+        const off = p.offset.map((x) => x.toFixed(2)).join(', ');
+        row.innerHTML = `<div class="joint-head"><b>${'\u2003'.repeat(p.depth)}joint ${p.joint}</b>
+            <span class="dim">${label} · ${off}</span></div>`;
+        if (p.model) {
+            row.querySelector('.joint-head').addEventListener('click', () => {
+                switchTab('model');
+                selectModel(p.model);
+            });
+        }
+        list.appendChild(row);
+    }
+    renderMotionPanel();
+}
+
+/* The motions written for the body's joint count, by name. */
+function renderBodyMotionPanel() {
+    const body = state.character;
+    const m = state.motion;
+    if (!body) return;
+    const sel = $('#motion-select');
+    sel.innerHTML = '';
+    const { fits, lead, label } = bodyMotions(body);
+    const group = (label, list) => {
+        if (!list.length) return;
+        const g = el('optgroup');
+        g.label = label;
+        for (const x of list) {
+            const o = el('option');
+            o.value = `id:${x.index}`;
+            o.textContent = `${x.name} · ${x.frames}f`;
+            g.appendChild(o);
+        }
+        sel.appendChild(g);
+    };
+    group(`${label} (${lead.length})`, lead);
+    group(lead.length ? `Every other motion for ${body.joints} joints (${fits.length - lead.length})`
+        : `Motions for ${body.joints} joints (${fits.length})`, fits.filter((x) => !lead.includes(x)));
+    if (m.decoded) sel.value = `id:${m.decoded.index}`;
+
+    const d = m.decoded;
+    $('#motion-meta').innerHTML = d ? `
+        <span>motion</span><b>${d.index}</b>
+        <span>data</span><b>0x${d.address.toString(16)}</b>
+        <span>frames</span><b>${d.frames}</b>
+        <span>frame size</span><b>${frameBytes(d.joints)} bytes</b>
+    ` : '<span>motion</span><b>none fits this body</b>';
+
+    const scrub = $('#motion-frame');
+    scrub.max = String(d ? d.frames : 1);
+    scrub.value = String(m.frame);
+    scrub.disabled = !d;
+    $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
+    $('#motion-play').disabled = !d;
+    updateMotionFrameReadout();
 }
 
 /* The 52 action slots, then the whole motion table for browsing. */
 function renderMotionPanel() {
+    if (state.bodies) return renderBodyMotionPanel();
     const c = state.character;
     const m = state.motion;
     if (!c) return;
@@ -2213,7 +2621,7 @@ function updateHud() {
     } else {
         const m = state.motion;
         label = `<b>${state.character?.name ?? ''}</b> · `
-            + (m.decoded ? `motion ${m.decoded.id}` : 'no motion');
+            + (m.decoded ? m.decoded.name || `motion ${m.decoded.id}` : 'no motion');
     }
     $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? 'noclip' : 'orbit'} camera`
         + (v.mode === 'orbit' ? ` · ${isMobile() ? 'tap' : 'click'} a part to identify it` : '');
@@ -2319,6 +2727,10 @@ function wireOptions() {
         state.jetExhaust = e.target.checked;
         rebuildRig({ keepCamera: true });
         renderAnimPanel();
+    });
+    $('#char-travel').addEventListener('change', (e) => {
+        state.travel = e.target.checked;
+        poseRig();
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
@@ -2464,8 +2876,10 @@ function renderTextureSetPicker() {
 
     /* Scene colours and whose parts to read, the two a stage record would name.
      * Both are written on every rebuild, since a model names rows in one range
-     * or the other and nothing says in advance which. */
+     * or the other and nothing says in advance which. A game with no colour
+     * tables ported has neither to offer. */
     const C = state.rom.game.colors;
+    if (!C?.part) return;
     const fill = (id, n, label, first) => {
         const s = $(id);
         s.innerHTML = '';
@@ -2500,7 +2914,15 @@ function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
     document.title = `${state.rom.game.name} — 3D Explorer`;
-    const on = { stage: f.stages, model: true, anim: f.characters && f.motions };
+    const on = { stage: f.stages, model: true, anim: (f.characters && f.motions) || Boolean(f.bodies) };
+    /* The panel's controls are the roster's. A game of jointed bodies keeps the
+     * ones that mean something for it, under names for what it has. */
+    const bodies = Boolean(f.bodies);
+    $('#char-label').textContent = bodies ? 'Body' : 'Fighter';
+    $('#char-squish-field').hidden = bodies;
+    $('#char-travel-field').hidden = !bodies;
+    $('#anim-note').hidden = bodies;
+    $('#anim-note-bodies').hidden = !bodies;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
@@ -2513,10 +2935,19 @@ function start() {
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
     state.viewer.setDepthProfile(state.rom.game.depth);
+    state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     state.viewer.backfaceCull($('#opt-cull').checked);
     const on = applyGameFeatures();
-    if (on.stage) state.stages = readStageTable(state.rom);
-    if (on.anim) state.frames = readFrameTables(state.rom);
+    if (on.stage) {
+        state.stages = state.rom.game.stageTable.placements
+            ? readPlacementStages(state.rom)
+            : readStageTable(state.rom);
+    }
+    if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
+    if (on.anim && state.rom.game.rig) {
+        state.bodies = readBodies(state.rom);
+        state.motion.list = readMotions(state.rom, state.bodies);
+    }
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
      * as likely to be one of the table's empty entries, which opens the viewer
@@ -2533,7 +2964,8 @@ function start() {
     if (on.stage) renderStageSelect();
     /* The texture picker is for models no stage draws — see useModelScene. A
      * game whose stages carry every set between them does not need it. */
-    if (state.rom.game.stageTable.flat) renderTextureSetPicker();
+    if (modelsPickTextures()) renderTextureSetPicker();
+    if (state.rom.game.modelNames) $('#model-search').placeholder = 'Model index, range (500-520) or name';
     if (on.anim) renderCharacterSelect();
     renderModelList();
     wireOptions();

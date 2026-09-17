@@ -127,7 +127,9 @@ export function readFrameTables(rom) {
 export function frameModel(anim, frame) {
     const t = anim.frames;
     const i = anim.index ? anim.index(frame) : (frame >> anim.shift) + anim.phase;
-    return t[i & (t.length - 1)];
+    /* A true modulo, which is the mask for the power-of-two tables the fighting
+     * games use and still right for a cycle of any other length. */
+    return t[((i % t.length) + t.length) % t.length];
 }
 
 /**
@@ -150,6 +152,8 @@ export function frameModel(anim, frame) {
  * banks the plane under a horizon that stays where it is.
  */
 export function stageWorldFrame(stage, frame, frames = null) {
+    /* The slots below are Sonic The Fighters'; a placement stage has none. */
+    if (stage.placements) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return worldPrologue(carpetAt(frame));
     if (stage.slot === CANYON_CRUISE_SLOT) {
         return frames?.canyon ? worldPrologue(canyonAt(frames.canyon, frame)) : null;
@@ -458,6 +462,7 @@ const CARPET_LIGHT_BASE = 0x271c;
 const CANYON_LIGHT_BASE = 0x20 - 0x12000;
 
 export function stageLightYaw(stage, frame, frames = null) {
+    if (stage.placements) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return CARPET_LIGHT_BASE - carpetAt(frame).yaw;
     if (stage.slot === CANYON_CRUISE_SLOT && frames?.canyon) {
         return CANYON_LIGHT_BASE + canyonAt(frames.canyon, frame - 1).yaw;
@@ -1224,7 +1229,7 @@ function canyonTunnelScale(c) {
  * slots ever differ from the record, so only these are handed back.
  */
 export function stageMaterials(stage, frame, frames = null) {
-    if (stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
+    if (stage.placements || stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
     const k = canyonTunnelScale(canyonMoveClock(frame));
     return CANYON_TUNNEL_SLOTS.map((slot) => {
         const m = stage.materials[slot];
@@ -1865,8 +1870,10 @@ export function describeOps(ops) {
     }).join(' ');
 }
 
+/* `scenery` is a placement stage's one layer: its draws are all the same kind
+ * of thing, a model where the table puts it. */
 export const DISPLAY_LAYER_ORDER =
-    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects'];
+    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further

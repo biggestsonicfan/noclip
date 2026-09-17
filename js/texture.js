@@ -595,7 +595,133 @@ export function bestTextureSet(rom, decoded, setCount) {
     return best < 0 ? null : { set: best, covered: bestN, tiles: want.length / 2 };
 }
 
+/* ---- Raw banks (The House of the Dead) ----------------------------------- */
+
+/*
+ * The second half of a raw bank, dealt out between the sheets.
+ *
+ * Each row is a rectangle of the bank's mip half in halfword columns and rows
+ * (x0, y0, x1, y1), and whether it lands on the sheet that took the bank's
+ * full-size half or on the other one. Read off sub_D40, which loads a bank onto
+ * sheet 0, and sub_EB0, which loads one onto sheet 1 with every destination
+ * swapped. The pattern is the mip chain alternating sheets level by level, the
+ * same arrangement pageDestinations builds for a compressed page.
+ */
+const RAW_MIP_RECTS = [
+    [0x000, 0x000, 0x1ff, 0x0ff, true],
+    [0x000, 0x100, 0x0ff, 0x1ff, false],
+    [0x100, 0x100, 0x1ff, 0x17f, false],
+    [0x100, 0x180, 0x17f, 0x1ff, true],
+    [0x180, 0x180, 0x1ff, 0x1bf, true],
+    [0x180, 0x1c0, 0x1bf, 0x1ff, false],
+    [0x1c0, 0x1c0, 0x1ff, 0x1df, false],
+    [0x1c0, 0x1e0, 0x1df, 0x1ff, true],
+    [0x1e0, 0x1e0, 0x1ff, 0x1ef, true],
+    [0x1e0, 0x1f0, 0x1ff, 0x1ff, false],
+];
+
+/* Where sub_489F0 pastes a set's eight blocks on sheet 0, in halfword columns
+ * and rows; each is 64 halfwords square, full-size level only, and the block
+ * index picks the place — a null entry leaves that place alone. */
+const RAW_PATCH_AT = [[0, 0], [64, 0], [0, 64], [64, 64], [0, 128], [64, 128], [0, 192], [64, 192]];
+
+/* sub_1030: copy a rectangle of halfwords between two sheet-shaped images. A
+ * row is 0x400 bytes, so a halfword (x, y) is at byte ((y << 9) + x) * 2 in
+ * both. */
+function copyRect(src, srcBase, dst, dstBase, x0, y0, x1, y1) {
+    for (let y = y0; y <= y1; y++) {
+        const a = ((y << 9) + x0) * 2;
+        const b = ((y << 9) + x1 + 1) * 2;
+        if (srcBase + b > src.length) return;
+        dst.set(src.subarray(srcBase + a, srcBase + b), dstBase + a);
+    }
+}
+
+function uploadRawBank(md, base, tex, toSheet1) {
+    const near = toSheet1 ? SHEET1 : SHEET0;
+    const far = toSheet1 ? SHEET0 : SHEET1;
+    copyRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
+    for (const [x0, y0, x1, y1, same] of RAW_MIP_RECTS) {
+        copyRect(md, base + 0x80000, tex, (same ? near : far) + 0x80000, x0, y0, x1, y1);
+    }
+}
+
+/*
+ * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
+ * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
+ * rectangles are complementary, so each sheet's mip half is half one bank and
+ * half the other.
+ */
+function buildRawTexram(rom, texSets) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const off = (a) => a - MAIN_DATA_BASE;
+
+    uploadRawBank(md, off(raw.bootBank), tex, false);
+
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : null;
+    let pages = 1;
+    if (set !== null) {
+        const bank = cv.getUint32(raw.bankTable + set * 4, true);
+        if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
+            uploadRawBank(md, off(bank), tex, true);
+            pages++;
+        }
+        for (let i = 0; i < RAW_PATCH_AT.length; i++) {
+            const src = cv.getUint32(raw.patchTable + set * 32 + i * 4, true);
+            if (!src || off(src) + 0x2000 > md.length) continue;
+            /* The source is packed: 64 rows of 128 bytes, back to back. */
+            const [x, y] = RAW_PATCH_AT[i];
+            for (let r = 0; r < 64; r++) {
+                const s = off(src) + r * 128;
+                tex.set(md.subarray(s, s + 128), SHEET0 + (((y + r) << 9) + x) * 2);
+            }
+        }
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
+/*
+ * The set a model's own bank is drawn under, for a game that says.
+ *
+ * Tile coverage cannot answer this for raw banks: they are dense, and nearly
+ * every tile of every set holds something. What does answer it is the stage
+ * data. Each section names the set it loads and the zones it shows, and the
+ * zones name the models, so every placed model can be put under the set it is
+ * drawn with — and they sort by bank. The table's empty entries divide it into
+ * banks, bank k is drawn under set k, and bank 0, the shared one, textures only
+ * from sheet 0 and so takes whichever set `bankSets[0]` names.
+ *
+ * @returns {number|null} the set, or null for a game without banks
+ */
+export function bankTextureSet(rom, index) {
+    const bankSets = rom.game.texture.bankSets;
+    if (!bankSets) return null;
+    /* A table that repeats itself repeats its banks, so count the first copy. */
+    const half = rom.game.modelNames?.count ?? rom.game.modelTable.count;
+    if (!rom.modelBanks) {
+        const t = rom.game.modelTable;
+        const dv = rom.mainDataView;
+        const starts = [0];
+        for (let i = 0; i < half; i++) {
+            const o = t.offset + i * t.stride;
+            let empty = true;
+            for (let k = 0; k < t.stride && empty; k += 4) empty = dv.getUint32(o + k, true) === 0;
+            if (empty) starts.push(i + 1);
+        }
+        rom.modelBanks = starts;
+    }
+    const i = index % half;
+    let bank = 0;
+    for (let b = 0; b < rom.modelBanks.length && rom.modelBanks[b] <= i; b++) bank = b;
+    return bankSets[Math.min(bank, bankSets.length - 1)];
+}
+
 export function buildTexram(rom, texSets) {
+    if (rom.game.texture.raw) return buildRawTexram(rom, texSets);
     const md = rom.mainData;
     const dv = rom.mainDataView;
     const cv = rom.mainCpuView;

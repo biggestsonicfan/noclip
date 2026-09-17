@@ -437,7 +437,309 @@ const fvipers = {
     features: { stages: true, characters: false, motions: false },
 };
 
-export const GAMES = [sfight, fvipers];
+/* ---- The House of the Dead (prototype) ----------------------------------- */
+
+/*
+ * The `hotdp` set: a Model 2C prototype on flash modules rather than mask ROMs,
+ * and a game from AM1 rather than AM2. That second fact is the one that matters.
+ * The program ROM carries none of the official labels the other two share, its
+ * library is a different one (`_TaskOpen`, `_GeoWriteTex2`, `_TransMapLoadNow`),
+ * and where the geometry is the board's own format and carries straight across,
+ * the texture and colour pipelines do not.
+ *
+ * The chip order is MAME's, and it holds: every mesh the model table points at
+ * opens on a unit normal across all five polygon bands, and every material
+ * record names a sane tile.
+ */
+const hotdp = {
+    id: 'hotdp',
+    name: 'The House of the Dead (prototype)',
+    /* prg0/prg1 are the program pair and no other Model 2 set uses the names,
+     * but they are generic enough to want company. */
+    identify: ['prg0.15', 'prg1.16', 'tgp0.17', 'tex1.27'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'prg0.15', 0x548ed10a, 'prg1.16', 0xf43bb51f]],
+        },
+        /* Three pairs of 4MB flash, laid end to end with no hole. The model
+         * table, the name tables and the luma curves sit in the second pair;
+         * the raw texture banks fill the first 11MB. */
+        mainData: {
+            size: 0x1800000,
+            parts: [
+                [0x0000000, 'dat0.11', 0x8d40fc82, 'dat1.12', 0x63e04c15],
+                [0x0800000, 'dat2.9', 0x2aa9e4b9, 'dat3.10', 0x356d348b],
+                [0x1000000, 'dat4.7', 0x7ec403f6, 'dat5.8', 0x592fac50],
+            ],
+        },
+        polygons: {
+            size: 0x1800000,
+            parts: [
+                [0x0000000, 'tgp0.17', 0xb458ec9b, 'tgp1.21', 0x4b250500],
+                [0x0800000, 'tgp2.18', 0x17f68d25, 'tgp3.22', 0xcaff1d48],
+                [0x1000000, 'tgp4.19', 0x8854f204, 'tgp5.23', 0x29f311f3],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'tex1.27', 0xeea00bdf, 'tex0.25', 0xfb10366a],
+                [0x800000, 'tex3.28', 0x9a61d7e8, 'tex2.26', 0x84ec2923],
+            ],
+        },
+    },
+    /* A capture of the machine's address space has the whole last bank at
+     * 0x06000000, not a megabyte of it repeated. The game reaches through the
+     * window (`lda 0x6000C0C`) but nothing the viewer reads does. */
+    xtra: { window: 0x800000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+    /*
+     * set_obj is sub_FDB0, and it indexes `lda 0x2C5D1F0[g0*16]` — the same
+     * 16-byte entry and the same mesh pointer encoding as the other two, in a
+     * different place.
+     *
+     * The table is two copies of 5049 entries. Where the halves differ, only the
+     * uv and material pointers do — the same meshes wearing a second set of
+     * texture records, most likely the green blood the test menu offers. Empty
+     * entries split each half into eight banks: the enemies and effects every
+     * chapter shares, then a set per part of the game.
+     */
+    modelTable: { offset: 0x00c5d1f0, count: 10097, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /*
+     * The face palette is not in the data ROM, and it is not one table.
+     *
+     * The board reads a polygon's colour out of palette RAM at 0x1802000 +
+     * colorbase * 2. Boot writes `off_820A0[0]` there, and every change of set
+     * writes `off_820A0[set]` from colorbase 500 on (sub_1FA0, `lda 0x18023E8`),
+     * so the first 500 entries are shared and the rest belong to the set. Each
+     * table is a halfword count and then that many BGR555 colours.
+     *
+     * Straight after, sub_1A250 fills the top of the palette downward from 1023
+     * out of the table at 0x7C004 — a hundred colours, down to 924, which is
+     * exactly where the largest set's table stops — and then writes 1023 once
+     * more from the test menu's blood colour: 0x801F for red, 0xB340 for green.
+     * The EEPROM default is red. 1023 is the gore colour: the sprays, the flesh
+     * chunks and the wound on every `_dam` body part name it. sub_1A380 cycles a
+     * few entries under it every frame, starting from the same values.
+     *
+     * Neither routine clears what it does not write. Boot (sub_11FB0) puts set
+     * 1's table at 500 as well as table 0 at 0, and each set after writes its
+     * own length and no more, so the entries above a short table keep the last
+     * longer one's colours. Each model bank names colours up to exactly the end
+     * of its own set's table (bank 2 to 571, set 2's last; bank 3 to 923; bank 7
+     * to 844) with one exception: the spiders and BO_tetuman in bank 4 name
+     * 764-767, past set 4's end at 623, and get them from set 3, which Chapter 1
+     * loads just before. `loadOrder` is the order the chapters' scripts load
+     * sets in; a set outside it is laid over boot's set 1 alone.
+     */
+    palette: {
+        source: 'maincpu', tables: 0x820a0, split: 500, sets: 11,
+        top: 0x7c004, fixed: [[1023, 0x801f]],
+        loadOrder: [1, 3, 4, 5, 6, 7],
+    },
+    /*
+     * Every model has its artist's name, which is the difference between browsing
+     * 10097 numbers and browsing `PN_hashi01_00a`.
+     *
+     * A debug table at 0xCD7990 points at names: 1384 texture file names first,
+     * then one `PN_` name per model in table order, a null where the table has
+     * an empty entry. The null runs line up with the table's empty entries one
+     * for one, which is what pins the offset. The second half of the table reuses
+     * the first half's names.
+     */
+    modelNames: { ptrs: 0x00cd7990, skip: 1384, count: 5049 },
+    /*
+     * Textures are not compressed at all: the data ROM holds texture RAM itself.
+     *
+     * At boot sub_D40 copies the megabyte at data 0 into sheet 0, and on every
+     * change of set sub_EB0 copies the megabyte `off_82100[set]` names into
+     * sheet 1. The first half of a bank is the sheet's full-size half; the second
+     * half is dealt out in rectangles between the two sheets, the mip chain
+     * alternating between them level by level. sub_489F0 then pastes up to eight
+     * 64x64 blocks per set over the corner of sheet 0 from `0x93420[set * 32]`.
+     * texture.js carries the rectangles.
+     */
+    texture: {
+        raw: { bankTable: 0x82100, bootBank: 0x02000000, patchTable: 0x93420 },
+        sets: 11,
+        residentSet: null,
+        /* Which set each bank of the model table is drawn under, read off the
+         * stage data: every model a Chapter 1 courtyard section shows is in bank
+         * 1 and drawn under set 1, the mansion's are bank 3 under set 3, and
+         * Chapter 2's are banks 5, 6 and 7 under sets 5, 6 and 7. Bank 4's two
+         * placed models, PN_room_6b and 6bb, are drawn by Chapter 1's last
+         * section, which loads set 4; the bank's enemies (BO_syndy, BO_hyum,
+         * BO_disiprin) come out whole under set 4 and in another set's patches
+         * under set 3. The palettes say the same of every bank at once: a bank's
+         * models name colours up to exactly the last entry its set's table
+         * writes — bank 1 to 780, 2 to 571, 3 to 923, 4 to 622, 5 to 731, 6 to
+         * 698, 7 to 844 — and past no other set's end but the four colours in
+         * `palette.loadOrder`. Nothing places bank 2, but PN_pfuta_amun names
+         * 571, set 2's last colour. BO_tom2 is in it all the same and wears Mr.
+         * G's muscles under set 2: its texture points were made for sheets this
+         * set does not hold. Bank 0 is the shared one and textures from sheet 0
+         * alone, so its set decides only the colours from 500 up, which it does
+         * not use. See bankTextureSet. */
+        bankSets: [1, 1, 2, 3, 4, 5, 6, 7],
+    },
+    /*
+     * The colour pipeline is AM1's own, and js/colors.js carries it as
+     * buildCurveColorxlat: colorxlat is a curve computed at boot (sub_1180) with
+     * a set's fourteen colour ramps laid over its odd rows (sub_1330), and luma
+     * RAM is a straight copy (sub_1610).
+     *
+     * `solid` says the untextured faces go through colorxlat too, as MAME's
+     * draw_scanline_solid has every board's do. Here it is not optional: nine
+     * faces in ten are untextured, and their palette colours are row numbers —
+     * 0x94A5 is row 5 in all three channels, which is the set's third ramp,
+     * not a grey.
+     */
+    colors: {
+        luma: { data: 0xc8eb40, bytes: 0x4000 },
+        curve: { sets: { ptrs: 0x820d0, rows: 14, row0: 1, step: 2, gain: 0x7ffc0 } },
+        solid: true,
+    },
+    /*
+     * One light and one material table for the whole game, not one per stage.
+     *
+     * The camera update, sub_1FAE0, rebuilds the light every frame without
+     * reading anything: sub_54EE0 loads the view matrix, zeroes its translation,
+     * turns it by coprocessor function 0x15 with 0xC000 and 0x14 with 0xE000,
+     * and transforms (0, 0, 1), and the first of three such vectors goes to GEO
+     * command 0x0A. The coprocessor program is not Sonic The Fighters' cpres1,
+     * but its translate and three rotations sit at the same place in the table
+     * twelve on — 0x12, 0x14, 0x15, 0x16 against Fn_trans, Fn_x_rot, Fn_y_rot,
+     * Fn_z_rot at 0x06, 0x08, 0x09, 0x0A — and the camera update itself uses
+     * 0x15 for the heading and 0x14 for the pitch. So it is camera_init's
+     * construction exactly: a Y turn of 0xC000 and an X turn of 0xE000, which is
+     * 45 degrees up. Enemies may pick the second vector, (0x4000, 0xC000), which
+     * is vertical.
+     *
+     * The boot sequence uploads the material table at 0x7A0 with GEO command 6,
+     * slots 0-30, and sub_2350 later rescales that same table by a brightness
+     * per enemy draw — 200 is common, 0 blacks it out, 255 leaves it. The
+     * scenery is drawn against the table as uploaded. No mesh in the ROM names a
+     * slot above 15. Nearly all of the rooms name slot 0 — diffuse 0, ambient
+     * 255, unlit — because their light is painted into the textures; the lit
+     * slots are the enemies' (2 and 11) and a third of the courtyard (12).
+     *
+     * And the normal in ROM is not what gets lit. Boot sets GEO mode 2 (the
+     * `mov 2` after `st 0x707, 0x800070`), which is MAME's geo_parse_nn_ns:
+     * skip the stored normal, take the plane of the polygon's first three
+     * points. That plane agrees in sign with the stored normal on 99.2% of the
+     * game's triangles and differs where the art smoothed a curve.
+     */
+    lighting: {
+        vecter: [0xe000, 0xc000],
+        materials: { at: 0x7a0, count: 31 },
+        planeNormals: true,
+    },
+    /*
+     * The stages are a placement table and zone lists in the program ROM, driven
+     * by the stage script — nothing like a stage record. js/placements.js reads
+     * them; the addresses are the tables the draw loop and the interpreter index
+     * with the chapter number, which is `dword_51E4C0`. Only chapters 0 and 1
+     * have scripts in this prototype: 2 and 3 set a zone and stop, and 4 is one
+     * camera move.
+     *
+     * The geometry is in world space, which is what `flat` says to the rest of
+     * the viewer. What shows behind it is the scroll layer, which is not read, so
+     * the backdrop is palette black.
+     *
+     * `turns` is the one exception the draw loop at 0x3DB10 makes to drawing a
+     * placement where it stands: after the translate it compares the zone's
+     * placement index with 55 (`addo 0x1F, 0x18`) and, on a match, turns the
+     * matrix by coprocessor function 0x15, the Y rotation, a quarter turn. 55 is
+     * the rain in the mansion corridor's windows, PN_room5a_CT00a, modelled as a
+     * plane across X for a corridor that runs along Z. The test does not look at
+     * the chapter; Chapter 2's table stops at 27.
+     */
+    stageTable: {
+        placements: {
+            chapters: 2,
+            maps: 0x92db0, zones: 0x92d90, scripts: 0xe0000, sectionSets: 0x83360,
+            turns: { 55: 0x4000 },
+            bounds: 0xcdde20,
+        },
+        flat: true,
+        backdrop: 0x8000,
+    },
+    /*
+     * The sky is geometry here, not the board's scroll layer.
+     *
+     * The scroll layer exists — `_ScrollTable` at 0x7EFC0 holds a tile set, a
+     * palette and a tilemap per entry, and sub_13120/sub_13220 upload them —
+     * but every caller is the attract mode, the test menu or the HUD, and no
+     * stage script opcode touches any of it. What is behind the arena is two
+     * shells drawn by the task `_TaskOpen(loc_2A920, 0x58)` registers:
+     *
+     *   - `models[index]`, a dome 1800 across and 1100 tall (PN_skyuv for the
+     *     first chapter, three PN_r2skyuv* for the second), turned about Y by a
+     *     counter the task advances `spin` units of 65536 a frame;
+     *   - `band`, PN_skyuv02a, a cut-out ring 1673 across and 132 tall that
+     *     every sky draws over its dome, and that does not turn.
+     *
+     * Both are lowered by the float at `heights[index]`, and both are drawn
+     * only while the byte at 0x51F306 is non-zero. Two script opcodes set the
+     * pair: 70 the index, 71 the enable, whose value 1 drifts and 2 holds the
+     * dome still (the task skips the counter on 2). js/placements.js reads them
+     * along the scripts, the same walk the zones and the texture sets come out
+     * of, so a stage carries the sky the chapter turns on while its set is
+     * loaded — the courtyard's, and none for the mansion, which is indoors.
+     *
+     * The moons (PN_moon, PN_moonb, PN_moonc) are not part of this. They are
+     * flat quads an object handler billboards at the camera, spawned from the
+     * script's own object lists, which are not read.
+     */
+    sky: { models: 0x840e0, heights: 0x840f0, count: 4, band: 1462, spin: 4 },
+    /*
+     * `layers`: the rooms and grounds are large faces with smaller ones laid on
+     * them in the same plane, and a depth buffer cannot tell which of two equal
+     * depths to keep — js/layers.js ranks them the way the board's polygon sort
+     * does.
+     *
+     * With that done there is nothing left for the recede to do, and what it
+     * does do is wrong here. Almost every polygon in this game sorts by its far
+     * corner, and the recede only lets a face step back when it is shallow — so
+     * a short stretch of the mansion corridor's wall steps back twelve units,
+     * behind the rain 2 units outside it, while the rain, 200 units long, keeps
+     * its depth and shows through the wall between the windows. The board gives
+     * that pixel to the wall, whose far corner is nearer.
+     */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    scenes: null,
+    /*
+     * The enemies are jointed bodies played by baked motions — see js/bodies.js.
+     * Both name tables are pointer tables in the program ROM, and each ends
+     * where the next begins: 68 bodies, then 508 motions. The scale table is in
+     * the data ROM, one float per body.
+     */
+    rig: {
+        /* `roles` is eight bytes per joint, 31 joints per body, with the role
+         * sub_764C0 switches on in byte 3; `skins` is a halfword per body naming
+         * its skin, or -1. */
+        bodies: {
+            names: 0x96020, count: 68, joints: 0x94f30, trees: 0x94e20, scales: 0xdc0050,
+            roles: 0xdc0380, skins: 0xd80000, hitMotions: 0xde5150,
+        },
+        /* `flatAnkles` is a byte per motion: set, the ankles are turned from the
+         * body's own frame instead of the shin's (sub_2BA50). */
+        motions: { names: 0x96130, count: 508, data: 0x95040, frames: 0x95830, flatAnkles: 0x5e880 },
+        /* The polygons joining chest to hips (sub_4DEF0, sub_4DF90), all in the
+         * data ROM and indexed by skin: a template of 0x640 bytes, its texture
+         * point and header pointers, its polygon count, twelve points in the
+         * chest's space, and which of the template's points each one fills. */
+        skins: {
+            templates: 0xd80160, templateBytes: 0x640, pointers: 0xd80090, counts: 0xd8c120,
+            points: 0xd8a3e0, order: 0xd8bc40, slots: 0xd8b280, shared: 0xd8c190,
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
+};
+
+export const GAMES = [sfight, fvipers, hotdp];
 
 /**
  * Pick the profile a set of zip member names belongs to.
