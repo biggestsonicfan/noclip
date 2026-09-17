@@ -1637,9 +1637,10 @@ straight.
 slots at all — they hang off a bone and trail behind it.
 `osage_per_character` at `0x68D64` maps a character to a definition table, and
 `osage_dsp` at `0x67640` walks it as a stream of typed records: `MATRIX` (the
-frame the segments are drawn in), `COLI` (collision volumes), `ETC` (damping),
-`TSUKENE` (a new chain: its root mode, attach bone and offset) and `OSAGE` (one
-segment: its model, length and a bias triple).
+frame the chains are simulated in), `COLI` (the volumes a segment is kept out
+of), `ETC` (whether those apply, and the damping), `TSUKENE` (a new chain: its
+root mode, attach bone and offset) and `OSAGE` (one segment: its model, length
+and two bias vectors).
 
 | fighter | chains |
 |---------|--------|
@@ -1651,23 +1652,47 @@ segment: its model, length and a bias triple).
 
 Everyone else points at the same empty table at `0x69DE4`.
 
-#### The sway is in the ROM and switched off
+#### The main CPU builds the stream; the coprocessor sways the chains
 
-The obvious question about a pigtail is whether it flows with the motion or
-just hangs. The engine has an integrator for exactly that, and never runs it.
-Both halves of it are gated on bit 0 of the chain's flag word at `0x0(g13)`:
+The main CPU does not simulate the chains. Each record's handler (the table at
+`0x679A8`) writes a matching record into bufferram, sized by the table at
+`0x67520`, and `osage_copro` at `0x687C4` hands the whole stream to the
+coprocessor as one command, `Fn_osage` (`0x4A`). The coprocessor answers each
+segment with the matrix it is drawn with, and writes the segment's new point
+and carry back into its record. Those two survive into the next frame, so the
+chains have memory and they swing.
 
-| site | gate | what is skipped |
-|------|------|-----------------|
-| `os_set_matrix` `0x67E74` | `bbc 0` | storing the sway direction at `0x114` |
-| `os_set_osage` `0x68600` | `bbc 0` | the integration — the static path at `0x686EC` runs instead, and never advances the running position at `0x108` |
+| record | main CPU handler | what goes into bufferram |
+|--------|------------------|--------------------------|
+| `MATRIX` | `os_set_matrix` `0x67D28` | the frame `F = bone · Rz · Ry · Rx · T(offset)`; `M1 = F⁻¹ · F_prev`, which carries last frame's points into this frame's frame; `M2`, the same rotation with gravity (turned into `F`) as its translation |
+| `COLI` | `os_set_coli` `0x6829C` | the floor as a plane in `F`, two spheres whose centres sit in the bone's XZ plane, a cylinder, and two lines taken off a second bone's X axis |
+| `ETC` | `0x68758` | whether the body limits apply, and the damping (`0.8` while airborne) |
+| `TSUKENE` | `os_set_tsukene` `0x680E0` | the chain root `P = F⁻¹ · bone · offset` |
+| `OSAGE` | `os_set_osage` `0x685FC` | the bias: the second vector while bit 1 of the flags is set, which the last segment's side of `F`'s X decides (`0x6878C`), and none while airborne |
 
-The end of `osage_dsp`, at `0x67D1C`, does `clrbit 0` on that word on every
-pass, and nowhere in the module is there a matching `setbit 0`. So the state
-that would carry momentum is frozen: `0x114` holds whatever `osage_init` left
-in it, and `0x108` never leaves the chain root.
+The coprocessor then does, for each segment (cpres1 PM `0x207BD`, ported in
+m2-hle2's `sharc_osage` and matched word for word against MAME):
 
-Behind it is a wind oscillator that is dead the same way. The routine at
+```
+a     = M1 · point                  where last frame's point is now
+aim   = a + M2 · carry + bias       plus momentum, gravity and the bias
+aim   → onto the floor if below it, else out of the body's lines and spheres
+u     = unit(aim − P)
+draw  F · [X, u, Z | P]             X = (u.y, −u.x, 0) / √(1 − u.z²), Z = X × u
+point = P + length · u,   carry = (point − a) · damping,   P = point
+```
+
+The segment meshes run along their own +Y for their length, which is why they
+lie end to end. The frame is exact; the half turn about Z the viewer used to add
+by eye is what that formula gives for a segment hanging straight down.
+
+Bit 0 of the chain's flag word is not a sway switch. `osage_init` at `0x67600`
+sets it and runs `osage_dsp` once, and `0x67D1C` clears it at the end of the
+pass: it marks the first frame. What it gates is the initialisation — gravity
+stored at `0x114`, each point started one length down `unit(gravity + bias)`
+from `0x108`, and the `COLI` constants.
+
+Behind it all is a wind oscillator that is dead. The routine at
 `0x68AA4` steps a phase at `0x130`, turns it to a heading at `0x134` and writes
 a vector to `0x138`, with magnitude `gravity * amplitude / (sin(phase) + 2)`.
 The amplitude comes from a per-character table at `0x68914` whose 52 entries
@@ -1676,33 +1701,46 @@ is always zero while the phase goes on stepping `0x11C7` a frame under it. A
 populated table of real speeds and amplitudes (1.32, 0.206, 1.084, …) sits
 unreferenced at `0x68A04`. The wind was authored and then switched off.
 
-What is left, and what the viewer draws, is a rest pose that tracks the attach
-bone: the root is the bone's position stepped by the record's offset, and each
-segment lies along `normalise(bias + gravity)` for its own length.
+`js/osage.js` ports both halves. The viewer keeps the chains' points and
+carries between display ticks, so a motion that plays, or is stepped one frame
+at a time, swings them; anything else (a new motion, a scrub backwards, a jump
+of more than eight frames) starts them again and runs them until they stop
+moving, which is what a pose held still shows. The pose with every channel at
+zero has its waist at the origin, so it takes the board's own "no floor"
+(`-999.9`, loaded at `0x678C8`).
 
 #### Holding the chains against the machine
 
-`stf-tools/mame-osage.py` breakpoints the return of `os_set_osage` in a real fight
-and reads the chain state at every segment of every frame; run it with `HOLD`
-set to a `:IN1` field and the fighter is walking while it samples, which is the
-only way the question can be answered — a chain with momentum looks exactly
-like one without it when its owner stands still.
-`stf-tools/test-osage-mame.mjs` checks the capture in `osage-honey-motion.json`,
-36 frames of Honey walking across two motions:
+An earlier reading of this module took bit 0 for a sway switch that was never
+set, and `stf-tools/test-osage-mame.mjs` confirmed its predictions on 36 frames
+of Honey walking: bit 0 clear, `0x108` and `0x114` bit-identical throughout. All
+of that holds, and none of it is about the chains — those two fields are the
+first frame's, and the state that moves is in bufferram. The records there are
+what `stf-tools/osage-fang-segments.json` reads as `out_pos` and `out_0c`: each
+of Fang's three points sits exactly its own length from the one before (1.000,
+1.000, 0.800), and the carries change from frame to frame.
 
-| | |
-|---|---|
-| bit 0 clear on every chain | flag `0x80000606` throughout |
-| `0x108` pinned to the chain root | worst `0.00e+0` |
-| `0x114` frozen at its init value | drift `0.00e+0` |
-| the length of `0x114` is the gravity constant | off by `1.93e-9` |
-| wind vector `0x138` zero | every frame |
-| wind phase `0x130` steps `0x11C7` | every frame |
+The port was graded against m2-hle2, whose `Fn_osage` matches MAME, on the
+attract replay fight: each frame's struct, bufferram stream and unit-matrix
+cache recorded, then for every pair of frames the port starts from frame N's
+state, runs one frame on frame N+1's bones, and is compared with frame N+1's
+records. Fang's, Honey's and Espio's tables were swapped into Sonic's empty
+chain struct mid-fight, with bit 0 set so the game initialised them on his
+bones.
 
-Over those frames the chest bone moves by 0.388 and the head by 0.124 while
-every one of the chain's own values stays bit-identical. The rest pose is not
-an approximation of a simulation that was too hard to port — it is what the
-board draws.
+| table | frame pairs | worst point | worst carry | limits reached |
+|-------|-------------|-------------|-------------|----------------|
+| Bean | 300 | 2.0e-6 | 1.8e-6 | floor, lines below the origin |
+| Fang (root mode 2) | 600 | 2.4e-6 | 1.4e-6 | floor |
+| Honey | 600 | 2.1e-6 | 1.3e-6 | floor, lines, spheres |
+| Espio | 400 | 1.2e-6 | 0.9e-6 | floor, lines |
+
+Airborne frames are among them, and bit 1 as the port leaves it matches the
+struct on every pair. The residue is float32 rounding: the port runs in
+doubles. Taking the bones from frame N instead of N+1 puts the points up to
+1.58 out, so the chains run after the frame's rig. No table in the game uses
+root modes 1 or 3, the cylinder never pushed, and Bark's table, whose records
+have the same shape as Espio's, lost its swap before it could be graded.
 
 ### Tails' tails
 
