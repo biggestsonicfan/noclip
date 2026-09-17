@@ -136,9 +136,9 @@ The finished game takes `hotd.zip` — MAME's `hotdo`, the first revision. Its
 and palette of the chapter that draws it, across thirteen texture sets against
 the prototype's eleven, and its four chapters come out as eighteen stages —
 every zone a chapter's scripts reach while one texture set is loaded, plus the
-whole of each chapter's table. Its enemy bodies and motions are not read yet.
-Revision A (`hotd`) is a different program pair and is deliberately not accepted
-as this set.
+whole of each chapter's table, with its 94 enemy bodies playing the 674 motions
+baked for their joint counts. Revision A (`hotd`) is a different program pair
+and is deliberately not accepted as this set.
 
 Then serve the directory over HTTP — the page is ES modules, so opening
 `index.html` off the filesystem will not work. The dev server moved out with the

@@ -251,8 +251,54 @@ Two details differ, and both would have passed silently as corruption:
   reason the draw loop's quarter turn for placement 55 is carried across: the
   compare is against that index, and that index is still that plane.
 
-What is left is the rig and its motions, and the sky's table of shells. Those
-have no such shape.
+#### The rig, which describes itself from both ends
+
+The rig is six arrays in the program ROM, laid end to end with two words of
+padding between them, and three of the six announce themselves:
+
+- the **body names** are the only long run of pointers to strings beginning
+  `BO_`, and the **motion names** the only one to `MO_`;
+- the **motion data** table is the only long strictly-increasing run of
+  XTRA_DATA addresses, and it opens at `0x06000000` in both builds.
+
+With any one of them placed, the rest follow, because every boundary is a whole
+number of entries plus eight bytes of padding. In the finished game the run is
+trees `0xC7230`, joints `0xC73B0`, data `0xC7530`, frames `0xC7FC0`, body names
+`0xC8A50`, motion names `0xC8BD0` — 94 bodies and 674 motions against the
+prototype's 68 and 508 — and the frame counts it lands on open 156, 66, 31, 61,
+89, 116, which is the prototype's opening, motion for motion.
+
+The data-ROM tables have no such shape, and were read against the prototype
+instead. 59 bodies share a name *and* a joint count between the two builds, and
+that is enough to score a candidate base: `roles` is the one base at which 55 of
+those 59 agree role for role (the runner-up scores 20), and `scales` the one at
+which 58 agree value for value (runner-up 45). `hitMotions` needed no comparison
+— it is the only per-body pointer array in 32MB whose every target is twenty
+valid motion numbers — and it reads the way the prototype's does: the dogs get
+`MO_ddoggdam`, the zombies `MO_z_a_*hit`, the monkeys `MO_saru*dam`.
+
+Two tables changed region, which is the kind of thing no amount of scanning
+tells you and a disassembler says in one line. The skin index and the skin's
+texture-record pointers are in the data ROM in the prototype and in the
+**program** ROM in the finished game — `ldis word_63C60[g4*2]` and
+`ldl 0x63D20[g4*8]` — and the pointers are indexed by *body* there rather than
+by skin, so bodies sharing a skin carry the same pair. There is still a copy of
+the skin index at data `0xF80000`, beside the skin block where the prototype
+kept it; it agrees with the program-ROM copy for the first forty bodies and then
+does not, and the one the code reads is the one to believe.
+
+The 28 skins' own strides come straight off the routine that builds them: the
+count at `0x2F8D220[skin*4]`, the template at `0x2F803A0 + skin*0x640`, the
+points at `0x2F8B2A0 + skin*144`, the slots at `0x2F8C260 + skin*96`, the order
+at `0x2F8CCE0 + skin*48`, and the shared pair at `0x2F8D290` on an 8-byte
+stride. Each ends exactly where the next begins at 28 entries, which is also the
+highest index the skin table names.
+
+650 of the 674 motions fit exactly one of the joint counts the bodies have; the
+24 that do not are written for counts no body in the table carries, which is the
+same thing that leaves two of the prototype's 508 unfitted.
+
+What is left is the sky's table of shells, which has no such shape.
 
 ### Colour and light for a second game
 

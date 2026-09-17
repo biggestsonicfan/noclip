@@ -1007,7 +1007,63 @@ const hotd = {
      * ranking and the same absent recede. */
     depth: { recede: 0, nearMin: 0.02, layers: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false },
+    /*
+     * The rig: 94 jointed bodies playing 674 baked motions, against the
+     * prototype's 68 and 508.
+     *
+     * The program ROM keeps all six index tables in one run, each followed by
+     * two words of padding, and the run is found from either end: the body
+     * names are the only long array of pointers to `BO_` strings, the motion
+     * names the only one to `MO_` strings, and the motion data the only long
+     * increasing run of XTRA_DATA addresses. Every boundary then falls out at
+     * 94 or 674 entries plus eight bytes —
+     *
+     *   trees 0xC7230, joints 0xC73B0, data 0xC7530, frames 0xC7FC0,
+     *   body names 0xC8A50, motion names 0xC8BD0
+     *
+     * — and the frame counts it lands on open 156, 66, 31, 61, 89, 116, which
+     * is the prototype's opening frame for frame.
+     *
+     * `flatAnkles` is `ldob unk_7C6E0(g4)` on the motion number, 674 bytes of
+     * 0 and 1 and a zero behind them, opening on the same run of 22 the
+     * prototype's does.
+     *
+     * The data-ROM tables were read against the prototype over the 59 bodies
+     * that share a name and a joint count between the builds: `roles` is the
+     * one base where 55 of them match role for role (the next scores 20), and
+     * `scales` the one where 58 match value for value (next 45). `hitMotions`
+     * was the only per-body pointer array in 32MB whose targets are all valid
+     * motion numbers, and it reads as the prototype's does — the dogs get
+     * MO_ddoggdam, the zombies MO_z_a_*hit, the monkeys MO_saru*dam.
+     */
+    rig: {
+        bodies: {
+            names: 0xc8a50, count: 94, joints: 0xc73b0, trees: 0xc7230,
+            scales: 0xfc0060, roles: 0xfc04b0, hitMotions: 0xff264c,
+            /* This one is in the program ROM here, not the data ROM. There is
+             * a stale copy of it at data 0xF80000, left over beside the skin
+             * block the prototype kept it in; the two agree for the first
+             * forty bodies and then do not, and the copy the code reads is
+             * this one. */
+            skins: 0x63c60, skinsSource: 'maincpu',
+        },
+        motions: { names: 0xc8bd0, count: 674, data: 0xc7530, frames: 0xc7fc0, flatAnkles: 0x7c6e0 },
+        /*
+         * 28 skins, every stride read straight off the routine at 0x64020:
+         * `ld 0x2F8D220[g1*4]` is the count, `g1 * 0x640` from 0x2F803A0 the
+         * template, `g1 * 144` from 0x2F8B2A0 the points, `g1 * 96` from
+         * 0x2F8C260 the slots, `g1 * 48` from 0x2F8CCE0 the order, and
+         * 0x2F8D290/4 on an 8-byte stride the shared pair. Each table ends
+         * exactly where the next begins at 28 entries, which is also the
+         * highest index the skin table names.
+         */
+        skins: {
+            templates: 0xf803a0, templateBytes: 0x640, counts: 0xf8d220,
+            points: 0xf8b2a0, order: 0xf8cce0, slots: 0xf8c260, shared: 0xf8d290,
+            pointers: 0x63d20, pointersSource: 'maincpu', pointersBy: 'body',
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 export const GAMES = [sfight, fvipers, hotdp, hotd];

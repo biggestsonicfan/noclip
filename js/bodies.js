@@ -119,7 +119,11 @@ export function readBodies(rom) {
             joints,
             scale: md.getFloat32(B.scales + i * 4, true),
             roles,
-            skin: md.getInt16(B.skins + i * 2, true),
+            /* Which skin joins this body's chest to its hips, or -1. The
+             * prototype keeps the table in the data ROM; the finished game
+             * moved it into the program ROM, where `ldis word_63C60[g4*2]`
+             * reads it. */
+            skin: (B.skinsSource === 'maincpu' ? dv : md).getInt16(B.skins + i * 2, true),
             hitMotions: readHitMotions(rom, i),
             root,
             parts: readParts(rom, root),
@@ -520,6 +524,13 @@ export function readSkin(rom, body) {
     if (!hips || !chest) return null;
     const dv = rom.mainDataView;
     const i = body.skin;
+    /* The texture records the skin is drawn with. They moved with the skin
+     * index: the prototype keeps one pair per skin beside it in the data ROM,
+     * and the finished game one pair per body in the program ROM, which
+     * `ldl 0x63D20[g4*8]` reads with the body number the draw was given. Bodies
+     * sharing a skin carry the same pair there. */
+    const pv = S.pointersSource === 'maincpu' ? rom.mainCpuView : dv;
+    const pi = S.pointersBy === 'body' ? body.index : i;
     const count = dv.getUint32(S.counts + i * 4, true);
     /* 10 * count + 7 words: the records, and the closing one up to its attribute. */
     const used = 40 * count + 28;
@@ -545,8 +556,8 @@ export function readSkin(rom, body) {
         index: i,
         count,
         template,
-        uvPtr: dv.getUint32(S.pointers + i * 8, true),
-        matPtr: dv.getUint32(S.pointers + i * 8 + 4, true),
+        uvPtr: pv.getUint32(S.pointers + pi * 8, true),
+        matPtr: pv.getUint32(S.pointers + pi * 8 + 4, true),
         hips: hips.index,
         chest: chest.index,
         points,
