@@ -215,10 +215,44 @@ thirteen. Bank 0 is the shared one — it names nothing above 212, and one of it
 98985 textured faces sits on sheet 1 where every other bank's face does — so its
 set decides nothing, and it takes its own.
 
-Which leaves the stage data, the rig and its motions still to find. Those are in
-the program ROM, where there is no such luck: they are indexed tables with no
-self-describing content, and finding them is a disassembly job rather than a
-scan.
+#### The stages, which do describe themselves after all
+
+The stage tables looked at first like a disassembly job — indexed tables reached
+only through code. They are not. Two of the three have a shape nothing else in
+the program ROM has:
+
+- A **placement** is 24 bytes: a model number, three world floats, and two tail
+  words. So a run of records whose model is inside the model table, whose three
+  floats are finite and of sane magnitude, and whose tail is empty is a placement
+  table and essentially nothing else is. The prototype yields exactly two such
+  runs — its two chapters, the second 27 records long, which is what its own
+  notes say. The finished game yields four.
+- A **zone** is 50 bytes of placement indices terminated by `0xFF` with zeros
+  behind it, which is as distinctive. Four of those as well.
+
+`maps` and `zones` are then simply the arrays that name what was found, and they
+sit 0x20 apart in both builds. `scripts` did not move at all — still `0xE0000`,
+still a header of chapter pointers, a `-1` and a `0x5C`, with chapter 0's section
+array behind it. `sectionSets` is the one array of four pointers to arrays
+holding nothing but set numbers, and it reads as the game plays: chapter 0 is
+1,1,1,1,1,3,3,3,3,1,1,1 — courtyard, mansion, out — section for section the
+prototype's.
+
+Two details differ, and both would have passed silently as corruption:
+
+- The prototype's placement tables close on a record whose model is 0. The
+  finished game's close on a `-1` and then a 0, and a walk that stops only at 0
+  takes the `-1` for a placement and indexes the model tables with 4294967295.
+- The cycle list — the `-1`-terminated run of model numbers an animated placement
+  draws in turn — is in the record's *second* tail word here, not its first. Each
+  build has exactly one placement that uses one, and it is the same placement in
+  both: index 55, `PN_room5a_CT00a`, the rain in the mansion corridor's windows,
+  cycling `PN_room5a_CT01` through `CT32`. That the index matches is also the
+  reason the draw loop's quarter turn for placement 55 is carried across: the
+  compare is against that index, and that index is still that plane.
+
+What is left is the rig and its motions, and the sky's table of shells. Those
+have no such shape.
 
 ### Colour and light for a second game
 

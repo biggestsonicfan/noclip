@@ -946,18 +946,68 @@ const hotd = {
         planeNormals: true,
     },
     /*
-     * The stage data — the placement tables, the zone lists and the script the
-     * interpreter walks — has not been found in this program ROM yet, so there
-     * are no stages to show and the Models tab picks a model's sheets itself,
-     * off `bankSets`. The rig and its motions are likewise still to come.
+     * The stages, in the prototype's three tables and found by their shapes.
+     *
+     * A placement is 24 bytes — a model, three world floats, a cycle list and a
+     * far model — and a table of them ends on a zero model, so a run of records
+     * whose model is in range, whose floats are sane and whose far word is zero
+     * is a placement table and nothing else is. Four such runs are in this
+     * program ROM, against the prototype's two, and the models they open on say
+     * which chapter each belongs to: 2333 in bank 1, then PN_room2_00a,
+     * PN_room3_00a and one more. A zone list is 50 bytes of placement indices
+     * ending in 0xFF with zeros behind it, which is as distinctive, and there
+     * are four of those too.
+     *
+     * `maps` and `zones` are then the arrays that name them, and they sit 0x20
+     * apart exactly as the prototype's do. Both carry seven entries and a zero:
+     * chapters 0-3 have tables of their own and 4-6 reuse them.
+     *
+     * `scripts` did not move at all — still 0xE0000, still a header of chapter
+     * pointers, a -1 and a 0x5C, with chapter 0's section array behind it. Only
+     * the header is longer, seven chapters against five.
+     *
+     * `sectionSets` is the one array of four pointers to arrays of nothing but
+     * set numbers, and it reads as the game plays: chapter 0 is
+     * 1,1,1,1,1,3,3,3,3,1,1,1 — the courtyard, then the mansion, then out —
+     * which is the prototype's chapter 0 section for section.
+     *
+     * The sky is not carried: which shell a chapter shows is a script opcode's
+     * argument against a table of models and heights, and that table has not
+     * been found here.
      */
-    stageTable: null,
+    stageTable: {
+        placements: {
+            chapters: 4,
+            maps: 0xc0bc0, zones: 0xc0ba0, scripts: 0xe0000, sectionSets: 0xab0a0,
+            /* The cycle list is in the record's second tail word here, not its
+             * first. One placement in the game has one, and it is the same
+             * placement as the prototype's — index 55, PN_room5a_CT00a, the
+             * rain in the mansion corridor's windows, cycling PN_room5a_CT01
+             * through CT32. Which is also why `turns` is carried across: the
+             * draw loop's quarter turn is a compare against placement 55, and
+             * 55 is still that plane, still modelled across X for a corridor
+             * that runs along Z. */
+            cycle: 0x14,
+            turns: { 55: 0x4000 },
+            /*
+             * The sphere cull's box per model, which `resolveAlternates` needs
+             * to tell versions of one piece from rooms that merely share an
+             * origin. It follows the name table, as the prototype's does, and
+             * the base is not guessed: only one puts a null at each of the five
+             * dummy models and at each of the model table's twelve holes, and
+             * nowhere else.
+             */
+            bounds: 0xeec390,
+        },
+        flat: true,
+        backdrop: 0x8000,
+    },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
     depth: { recede: 0, nearMin: 0.02, layers: true },
     scenes: null,
-    features: { stages: false, characters: false, motions: false },
+    features: { stages: true, characters: false, motions: false },
 };
 
 export const GAMES = [sfight, fvipers, hotdp, hotd];

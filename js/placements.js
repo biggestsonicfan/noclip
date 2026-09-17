@@ -118,9 +118,13 @@ function readPlacement(rom, map, index) {
     if (!inRom(rom, at, PLACEMENT_BYTES)) return null;
     /* A non-zero cycle pointer overrides the model: the loop draws the next
      * entry of that -1-terminated list each time, and goes back to the first
-     * past the end. The far model at +0x14, drawn past 200 units, is zero on
-     * every placement this prototype has. */
-    const cycleAt = dv.getUint32(at + 0x10, true);
+     * past the end. Which of the record's two tail words holds it moved between
+     * the prototype and the finished game — 0x10 there, 0x14 here, with the
+     * other word carrying something the viewer does not read — so the profile
+     * says. Each game has exactly one placement that uses it, and it is the
+     * same one: the rain in the mansion corridor's windows, cycling 32 frames.
+     */
+    const cycleAt = dv.getUint32(at + (rom.game.stageTable.placements.cycle ?? 0x10), true);
     const cycle = cycleAt ? modelList(rom, cycleAt) : null;
     return {
         index,
@@ -145,16 +149,20 @@ function modelList(rom, at) {
 
 /*
  * How many placements a chapter's table holds. The program never says — the
- * draw loop only ever reaches a record through a zone — but both tables end in
- * a record whose model is 0, and nothing is placed as model 0. The first
- * chapter's closing record is zero throughout; the second's is followed at once
- * by the next table, so its model word is the only part of it to go by.
+ * draw loop only ever reaches a record through a zone — but a table ends in a
+ * record no zone names, and nothing is placed as model 0. The prototype's
+ * chapters close on a zero model; the finished game's close on a -1 model and a
+ * zero one behind it, so both words end the walk. Stopping only on zero there
+ * would take the -1 for a placement and index the model tables with it.
  */
 function placementCount(rom, map) {
     const dv = rom.mainCpuView;
     let n = 0;
-    while (n < 256 && inRom(rom, map + n * PLACEMENT_BYTES, PLACEMENT_BYTES)
-        && dv.getUint32(map + n * PLACEMENT_BYTES, true) !== 0) n++;
+    while (n < 256 && inRom(rom, map + n * PLACEMENT_BYTES, PLACEMENT_BYTES)) {
+        const model = dv.getUint32(map + n * PLACEMENT_BYTES, true);
+        if (model === 0 || model === END) break;
+        n++;
+    }
     return n;
 }
 
