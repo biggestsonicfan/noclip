@@ -387,6 +387,41 @@ and `BO_devilon` under the name mapping, and it reaches the two wing beats with
 Its callback is the larger of the two and may treat bodies of its own apart;
 those have not been read yet.
 
+#### Auditing the bodies
+
+Two bugs found by eye — Sophie's garbage and hyum's hand — were both a part
+drawing a model out of a bank its body has nothing else in, and a third,
+Samson's black limbs, was a face naming a colour its texture set does not hold.
+Those are mechanical questions, so they are worth asking of every body at once
+rather than waiting for the next one to be noticed. Over each body: does the
+part tree match the joint count, do the models every part can draw — its own and
+the callback's, sampled across its motions, frames and vsync parities — all
+exist, decode to geometry, come from a bank the body uses, and name colours the
+body's set resolves, and does a named skin build?
+
+Across all 94 bodies of both revisions, and the prototype's 68, nothing is left
+of those three classes: no model past the table, none decoding to nothing, none
+from a foreign bank, none naming an unresolvable colour. What the sweep does
+turn up is two things that are the ROM's rather than the reader's:
+
+- Seven bodies have fewer parts than joints — `BO_neopetit` and its two
+  variants, `BO_pkenb`, `BO_pdolob`, and, in the finished game, `BO_pbaba` and
+  `BO_gfrog`. The same bodies do it in the prototype, so a tree that uses twelve
+  of its eighteen joints is how they are built, not a truncated walk. The
+  motions are still written for eighteen.
+- `BO_moodybb` and `BO_moodycc`, the last two entries of the finished game's
+  table, name skin 23 and carry real texture pointers for it, but their records
+  in the roles table are not records — the table's structure runs to body 91 and
+  what follows at their offsets is other data. Without a chest and a hips role
+  there is nothing for a skin to join, and the game's own callback switches on
+  the same bytes, so it has no more to work with. They draw; they have no torso
+  seam.
+
+The prototype's own sweep flags one thing the finished game's does not: Tom and
+the two gmen each draw one model from bank 0 that their own parts never use.
+That is the shared gun hand, and it is correct — their bodies are in a chapter's
+bank and the hand they are handed is in the bank every chapter holds.
+
 #### Revision A, and what a shifted build is worth
 
 The finished game shipped in two revisions. MAME calls the later one `hotd` and
