@@ -1969,9 +1969,28 @@ ld   unk_AF950[g4*4], g4 ; and straight into the table
 
 No mask, and no bounds check. The table holds **125 entries, types 0 to 124**,
 and behind them are zeros and then floats — so a type of 128 cannot be reaching
-this dispatch at all, and 607 of the 1246 spawns are of such a type. Their
-records are the same shape as the rest, so they are spawns like any other and
-something else routes them. That is the open end.
+this dispatch at all, and 607 of the 1246 spawns are of such a type.
+
+What that turns out to mean is that **+0xCC is two fields, not one**. For a
+scenery object it is a type into the tables above; for an enemy it is a body
+index. The draw callback already reads it as a body number, and so does the
+routine that scatters an enemy's parts: `ldis 0xCC(g5)` into a table at
+**0x14BA80** whose entries are lists of that body's `_DD` models — `dog_akos_DD`,
+`ff_mune_DD`, `hyum_kao_DD`, `boss4_mune_DD`, the spider's `taraba_bodya_DD`.
+That table runs to index 189 and ends in -1, but only its first 94 entries name
+anything: 94 is the body count, and 94 to 189 all point at lists of nothing.
+
+The enemy waves are their own tables, and they are plainly enemies rather than
+types. **0xAED40** and **0xAF620** hold 28-byte records whose first halfword is a
+*body* index and whose next three floats are a position — 0xAED40 is six of
+`BO_ebita`, one of `BO_ebitb` and three of `BO_tetuman`; 0xAF620 is six of
+`BO_boss4` with `BO_mummy2c`, `BO_burnerb` and `BO_hiru_b` behind them, which is
+a boss fight written out.
+
+So a spawn record's first word is a number in whichever space the opcode that
+spawns it uses, and the four spawn opcodes do not all use the same one. Which
+opcode means which is the open end now, and it needs the script interpreter's
+own opcode table, which has not been found in this build.
 
 Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
 and `sub_3B1A0` several more, which is what a table of furniture should look
