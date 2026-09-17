@@ -1897,9 +1897,16 @@ two opcodes it needs and steps over the rest; four of the ones it steps over —
 of pointers, and each pointer names a sixteen-byte record:
 
 ```
-0xE13F0:  61 00000000   80000000   C2AA0000   C1C80000
-          type 0x61     x -0.0     y -85.0    z -25.0
+0xE13F0:  00000061  80000000  C2AA0000  C1C80000  C4494000
+          type 97   angle -0   x -85.0   y -25.0   z -805.0
 ```
+
+The position is the second float on, not the first. Both readings decode without
+complaint, and the ground settles it: taking the position from +8 puts 884 of
+the 1246 spawns within sixty units of the floor with a median y of 0, and taking
+it from +4 puts 432 there with a median of 74. The courtyard's own placements sit
+at a median y of -24.5, so the first reading is the one that stands things on
+the ground.
 
 Over the finished game's four chapters there are **1246 such records naming 118
 distinct types**, and the counts are the shape of a game: 273 of one type, 170
@@ -1949,12 +1956,53 @@ The chunks themselves loop instead. Their handler steps +0x54 the same way from
 4529 and wraps at 4649 — `lda loc_11B0+1` and `lda 0x78(g6)`, the base and the
 base plus 120 — so they tumble for as long as the chunk lives.
 
-#### What is left
+#### What handles a type
 
-The run bounds live in the handlers as instruction-embedded constants, not as
-words in the data, so each of the fourteen routines that index 0xAC314 has to be
-read to get its own. Two of the fourteen are read. And the types from 128 up
-need whatever table they belong to.
+A second table, at **0xAF950**, gives each type its handler, and the dispatch is
+three instructions:
+
+```
+shlo 0x10, g5, g4        ; the type,
+shri 0x10, g4, g4        ; sign-extended from sixteen bits
+ld   unk_AF950[g4*4], g4 ; and straight into the table
+```
+
+No mask, and no bounds check. The table holds **125 entries, types 0 to 124**,
+and behind them are zeros and then floats — so a type of 128 cannot be reaching
+this dispatch at all, and 607 of the 1246 spawns are of such a type. Their
+records are the same shape as the rest, so they are spawns like any other and
+something else routes them. That is the open end.
+
+Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
+and `sub_3B1A0` several more, which is what a table of furniture should look
+like. The distinct ones are the objects with behaviour.
+
+#### The runs, from the routines that step them
+
+Every effect start can be enumerated rather than guessed: find each `st reg,
+0x54(reg)` and walk back for the `lda` that fed it, and the function handed to
+`_TaskOpen` just before is the routine that will step it. That is **122 spawn
+sites**, each naming its first model and its stepper — and it checks out against
+what was already known, finding the Devilons' wing beats at 5121 and 6495 and
+Sophie's blink at 1468, which the draw callback carries independently.
+
+Three are read out fully:
+
+| effect | models | frames | ends |
+|---|---|---|---|
+| `PN_shoubushu###a` | 1417 → 1446 | 30 | closes itself; quarter scale |
+| `PN_nikubaan###a` | 1130 → 1187 | 58 | closes itself; 0.4 scale |
+| `PN_niku_###` | 4529 → 4648 | 120 | wraps and keeps going |
+
+The spurt is opened twice over, by `sub_429A0` on `sub_44250` and by `sub_3D640`
+and `sub_3E960` on `sub_41B60`, and the two steppers are the same seven
+instructions. The flesh burst is `sub_425C0` on `sub_43F20`. Only the chunks
+loop; the other two are one-shots that call the task-close themselves at the top
+of the run.
+
+Three more tables turned up on the way and are not read: **0xAA378**, **0xAED40**
+and **0xAF620**, all indexed with a 28-byte stride whose first halfword is an
+object type, which is what a wave of spawns would look like.
 
 ## Animation
 
