@@ -902,13 +902,21 @@ const hotdo = {
          * and banks 3, 5 and 12 stop a few short of theirs. No bank reaches
          * past its own set's end, and no other set's end fits.
          *
-         * Bank 0 is the shared one. It names nothing above 212, the shared
-         * table's own last entry, and one of its 98985 textured faces sits on
-         * sheet 1 — every other bank's face is on sheet 1 and none of bank 0's
-         * needs to be — so its set decides nothing, and 0, its own, is the set
-         * whose bank boot already put on sheet 0.
+         * Bank 0 is the shared one — the enemies every chapter draws — and it
+         * is the exception, as it is in the prototype. It names no colour above
+         * 212, the shared table's own last entry, and one of its 98985 textured
+         * faces sits on sheet 1 where every other bank's do, so neither the
+         * palette nor the sheets pick a set for it.
+         *
+         * The colour ramps do. Set 0 is not a set the game ever loads: its slot
+         * in the ramp array is a zero placeholder, and sub_1330 dereferences
+         * what it is handed without checking. What boot installs instead is
+         * `lda off_A95F0, g0 / call sub_1330` — the table at slot 1 — so the
+         * ramps a shared body is drawn under, before any chapter has loaded a
+         * set of its own, are set 1's. Drawing bank 0 under set 0 leaves the
+         * bare grey curve, which is what blacked out BO_samson's head and arms.
          */
-        bankSets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        bankSets: [1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     },
     /*
      * AM1's curve pipeline again: a curve computed at boot with a set's

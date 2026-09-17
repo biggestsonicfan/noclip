@@ -341,6 +341,22 @@ game was wearing its neighbour's colours. The first chapter's sky came out blue
 where it should be a warm sepia, and Stage 4's last section, drawn under set 12,
 was black enough to look like nothing had loaded.
 
+The same zero settles what the shared bank is drawn under, which a second body
+turned up: `BO_samson` had a black head and black arms. Its models are in bank 0
+— the enemies every chapter shares — and bank 0 had been given set 0 on the
+argument that neither its palette nor its sheets care which set it takes. They
+do not. Its ramps do, and set 0 is not a set the game ever loads: `sub_1330`
+dereferences the table it is handed with no check, so a zero would fault. What
+boot hands it is `lda off_A95F0, g0`, the table in slot 1. So the ramps a shared
+body is drawn under are set 1's, and bank 0 takes set 1 — which is what the
+prototype's profile says, for the same reason.
+
+Only the untextured faces moved. A body whose surfaces are textured, like
+`BO_kenkyu`, looks identical either way; one that leans on solid colours, where
+a palette entry is a row number into the curve rather than a colour, loses them
+all to the bare grey. That is why this showed up as *black limbs on one zombie*
+rather than as anything so obvious as the whole game being wrong.
+
 #### Revision A, and what a shifted build is worth
 
 The finished game shipped in two revisions. MAME calls the later one `hotd` and
