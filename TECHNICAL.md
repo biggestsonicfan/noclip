@@ -136,6 +136,90 @@ tiles it covers. Over 3550 textured models that picks a fully-covering set for
 all but one, in about half a second for the whole table; unpacking all 100 sets
 to find out would have cost seconds per model.
 
+### Working out a later build of the same game
+
+*The House of the Dead* shipped two years after the prototype above, and the
+finished set is a harder case than a new game, not an easier one. Nothing about
+the library changed — the raw texture banks, the curve colour pipeline, the
+placement-driven stages are all still there — but the two program ROMs diverge
+196 bytes in and share 5.5% of their 4KB blocks. Not one table address survives.
+So no address here was adjusted from the prototype's; each was found again, and
+what the prototype supplied was not a number but a *signature* to look for.
+
+The regions come from MAME, and what needs checking is only that the chips are
+paired and ordered right. Four things moved: the program ROM is two pairs and
+2MB, the polygon ROM is four pairs where the prototype had three, the data ROM
+ends in a 1MB EPROM pair mirrored up to `0x2000000`, and the XTRA_DATA window is
+the whole top 16MB rather than 8. The window's size is read off the program's own
+pointers — the prototype's `0x06xxxxxx` constants stop in the eighth megabyte and
+this build's fill all sixteen.
+
+Then, in the order each one unlocks the next:
+
+- **The debug name table.** Both builds keep 1384 texture file names and then one
+  `PN_` name per model, as pointers to C strings at `data + 0x02000000`. Scanning
+  the data region for a long run of such pointers finds one run beginning
+  `GG07.dgt`, and the skip is 1384 in both.
+- **The model table**, from the name table's holes. A name pointer is null
+  wherever the model table has an empty entry, so the null indices are a mask:
+  look for a 16-byte-strided base that is all zeros at every one of them and
+  non-zero on either side of each. In 32MB exactly one base matches — and where
+  the prototype's table is two copies of 5049 entries, this one is a single copy
+  of 7477 that ends with the string pool in the next entry.
+- **Confirmation, from the normals.** Decode every mesh the table points at and
+  measure the length of the first record's normal. 99.5% are unit, and every
+  normal that is not unit is exactly zero rather than noise — the prototype's own
+  shape. Scored per 8MB band it holds across all four, including the fourth's 623
+  meshes, which is what says the added polygon pair is paired the right way round.
+- **The palette tables**, from their first four colours. Every per-set table in
+  both builds opens `0x8000, 0xFC00, 0x83E0, 0xFFE0` behind a half-word count,
+  and they are packed end to end with the top-of-palette table following the last
+  of them. Finding those bodies gives the tables; the one pointer array in the
+  program ROM that names them all is the array the game indexes. Thirteen sets
+  here against eleven. The top table is a hundred colours whose first are the
+  prototype's byte for byte.
+- **The neighbours.** Once the palette array is placed, the colour-curve pointers
+  and the texture bank table are immediately behind it, in the same order and with
+  the same padding as the prototype's — which is worth checking rather than
+  assuming, and does check out. The texture patch table is found by its shape:
+  set 0's record is 32 zero bytes with set 1's eight data-ROM pointers behind it.
+- **The luma table**, which is 0x4000 bytes containing nothing above 63. Its first
+  thirty-two bytes match the prototype's exactly, and the match is unique in 32MB.
+- **The curve gain**, a float the builder reads as a constant. The prototype has
+  1.1 followed by 1.0 with a run of `0x80008000` behind it; that neighbourhood
+  occurs once in this program ROM.
+- **The material table** did not move at all: all 31 slots byte for byte at
+  `0x7A0`, in a program ROM otherwise 94% different. A table that was never edited
+  and happened to keep its place.
+
+#### Reading the split and the bank order off the art
+
+Two facts that the prototype needed its own disassembly for fall out of the ROM
+here without any.
+
+A set's palette table is written into palette RAM from `split` on, and `split`
+is 500 — an address in an instruction, in the prototype. But the models say so
+by themselves. Take every model's highest colorbase below the top table's range,
+gather it per bank, and compare against `500 + that set's count - 1`: nine of the
+thirteen banks land on their set's last colour exactly, none reaches past its own
+set's end, and no other set's end fits any of them. The same measurement pins
+`split` from the other side, because no face in the whole game names a colour
+between the shared table's last entry at 212 and 500. That gap would not be empty
+if the split were anywhere else.
+
+The same measurement gives the bank order for free. `bankSets` says which texture
+set each bank of the model table is drawn under, and in the prototype it had to
+be read off the stage data, because the raw banks are too dense for tile coverage
+to answer. Here the colours answer it: bank *k* is drawn under set *k*, for all
+thirteen. Bank 0 is the shared one — it names nothing above 212, and one of its
+98985 textured faces sits on sheet 1 where every other bank's face does — so its
+set decides nothing, and it takes its own.
+
+Which leaves the stage data, the rig and its motions still to find. Those are in
+the program ROM, where there is no such luck: they are indexed tables with no
+self-describing content, and finding them is a disassembly job rather than a
+scan.
+
 ### Colour and light for a second game
 
 The colour tables carried across as completely as the textures did.

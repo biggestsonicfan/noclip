@@ -739,7 +739,228 @@ const hotdp = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
-export const GAMES = [sfight, fvipers, hotdp];
+/* ---- The House of the Dead ----------------------------------------------- */
+
+/*
+ * The `hotd` set: the finished game the prototype above became.
+ *
+ * It is the same program grown up — AM1's library, the board's geometry, the
+ * raw texture banks and the curve colour pipeline all carry across — but not
+ * one address does. The two program ROMs diverge 196 bytes in and share 5.5% of
+ * their 4KB blocks, so every table here was found again rather than adjusted,
+ * each by a signature the prototype's own tables supplied. What did carry over
+ * verbatim is noted where it happens.
+ *
+ * Four things changed shape:
+ *
+ *   - the program ROM is two pairs, not one, and 2MB rather than 1;
+ *   - the polygon ROM is four pairs where the prototype had three, and every
+ *     band of it is addressed: the fourth's 623 meshes all open on a unit
+ *     normal, which is what says the pairing is right;
+ *   - the data ROM ends in a 1MB EPROM pair MAME mirrors to 0x2000000, and the
+ *     XTRA_DATA window is the whole top 16MB rather than 8;
+ *   - there are thirteen texture sets and thirteen model banks, against eleven
+ *     and eight, and here they correspond one for one.
+ *
+ * This is MAME's `hotdo`, the first revision. `hotd` is Revision A, and differs
+ * only in epr-19696a.15/epr-19697a.16 — the program pair every address below
+ * lives in, so it is deliberately not identified as this set until its own
+ * tables have been read.
+ */
+const hotd = {
+    id: 'hotd',
+    name: 'The House of the Dead',
+    /* Both halves of the first program pair, which is what separates this
+     * revision from Revision A, plus a chip from each of the two regions whose
+     * layout changed, so a prototype zip renamed to these labels does not pass.
+     */
+    identify: ['epr-19696.15', 'epr-19697.16', 'mpr-19715.17', 'mpr-19718.27'],
+    regions: {
+        /* Two pairs. The second holds no table the viewer reads, but the region
+         * is addressed whole and the program's own pointers reach into it. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19696.15', 0x03da5623, 'epr-19697.16', 0xa9722d87],
+                [0x100000, 'epr-19694.13', 0xe85ca1a3, 'epr-19695.14', 0xcd52b461],
+            ],
+        },
+        /*
+         * Three 8MB mask pairs and then a 1MB EPROM pair, which MAME repeats
+         * every megabyte up to 0x2000000 (the ROM_COPY run in `hotd`). The
+         * repeats are listed rather than copied because the XTRA_DATA window
+         * maps the top 16MB straight through and the program's pointers land in
+         * every megabyte of it — 0x06C330D0, the one beside the colour gain, is
+         * in the thirteenth.
+         *
+         * The model table, the name tables and the luma curve are in the second
+         * pair; the raw texture banks fill the first 13MB.
+         */
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19704.11', 0xaa80dbb0, 'mpr-19705.12', 0xf906843b],
+                [0x0800000, 'mpr-19702.9', 0xfc8aa3b7, 'mpr-19703.10', 0x208d993d],
+                [0x1000000, 'mpr-19700.7', 0x0558cfd3, 'mpr-19701.8', 0x224a8929],
+                [0x1800000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1900000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1a00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1b00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1c00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1d00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1e00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1f00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19715.17', 0x3ff7dda7, 'mpr-19711.21', 0x080d13f1],
+                [0x0800000, 'mpr-19714.18', 0x3e55ab49, 'mpr-19710.22', 0x80df1036],
+                [0x1000000, 'mpr-19713.19', 0x4d092cd3, 'mpr-19709.23', 0xd08937bf],
+                [0x1800000, 'mpr-19712.20', 0x41577943, 'mpr-19708.24', 0x5cb790f2],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19718.27', 0xa9de5924, 'mpr-19716.25', 0x45c7dcce],
+                [0x800000, 'mpr-19719.28', 0x838f8343, 'mpr-19717.26', 0x393e440b],
+            ],
+        },
+    },
+    /* The whole top half of the data region, not the 8MB the prototype mapped:
+     * the program's XTRA_DATA pointers spread across all sixteen megabytes of
+     * the window, where the prototype's stop at the eighth. The upper half of
+     * what they reach is the mirrored EPROM pair. */
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+    /*
+     * One copy of 7477 entries, where the prototype carried two — the second
+     * being the same meshes wearing a second set of texture records. Nothing
+     * here repeats: the table ends at 7476 and the string pool starts in the
+     * next entry.
+     *
+     * Found by the holes. The debug name table below has a null wherever the
+     * model table has an empty entry, and only one 16-byte-strided base in the
+     * data ROM is zero at all twelve of this game's null indices and non-zero
+     * on either side of each. 99.54% of its meshes open on a unit normal, and
+     * every normal that is not unit is exactly zero rather than noise — the
+     * same shape the prototype's table has, one band deeper.
+     */
+    modelTable: { offset: 0x00e73530, count: 7477, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /*
+     * The same two-part palette the prototype has: a shared table below `split`
+     * written once, the loaded set's table from `split` on, and a table filled
+     * downward from 1023 for the gore.
+     *
+     * The set tables are packed end to end and the top table follows the last
+     * of them — 0xA34A2 + 2 + 138*2 is 0xA35B8 — exactly as they are in the
+     * prototype, which is how both were found: every one of them opens on the
+     * same four colours (0x8000, 0xFC00, 0x83E0, 0xFFE0), and the top table's
+     * first hundred are the prototype's byte for byte.
+     *
+     * `split` is 500 again, and the models say so without the instruction being
+     * read. Nine of the thirteen banks name a colour exactly at the end of
+     * 500 + their set's count, none names one past its own set's end, and not
+     * one face in the game names anything between the shared table's last
+     * entry at 212 and 500. No `loadOrder`: nothing here depends on what an
+     * earlier set left behind, which is the one thing the prototype needed it
+     * for.
+     */
+    palette: {
+        source: 'maincpu', tables: 0xa98f0, split: 500, sets: 13,
+        top: 0xa35b8, fixed: [[1023, 0x801f]],
+    },
+    /*
+     * The debug name table, in the same shape and at the same offset into
+     * itself: 1384 texture file names, then one `PN_` name per model, a null
+     * where the table has an empty entry. Its pointers are data addresses, and
+     * the run of them beginning "GG07.dgt" is unique in the region.
+     */
+    modelNames: { ptrs: 0x00ee3910, skip: 1384, count: 7477 },
+    /*
+     * Raw texture banks, as in the prototype: thirteen megabytes of the data
+     * ROM are texture RAM itself, one per set, and js/texture.js deals the
+     * second half of each out between the two sheets. The three tables sit
+     * where the prototype's do relative to each other — the set palettes'
+     * pointers, then the colour curves', then these — and the patch table's
+     * first set is all zeros with the second's eight blocks behind it, which is
+     * the shape that pins its base.
+     */
+    texture: {
+        raw: { bankTable: 0xa9970, bootBank: 0x02000000, patchTable: 0xc15e0 },
+        sets: 13,
+        residentSet: null,
+        /*
+         * Bank k under set k, for all thirteen — which the prototype's tables
+         * did not do, and which is read here off the colours rather than off
+         * stage data that has not been located yet.
+         *
+         * A bank's models name colours up to exactly the last entry its set's
+         * table writes: bank 1 to 780 against set 1's 780, bank 2 to 683, 4 to
+         * 668, 6 to 698, 7 to 863, 8 to 839, 9 to 765, 10 to 659, 11 to 615,
+         * and banks 3, 5 and 12 stop a few short of theirs. No bank reaches
+         * past its own set's end, and no other set's end fits.
+         *
+         * Bank 0 is the shared one. It names nothing above 212, the shared
+         * table's own last entry, and one of its 98985 textured faces sits on
+         * sheet 1 — every other bank's face is on sheet 1 and none of bank 0's
+         * needs to be — so its set decides nothing, and 0, its own, is the set
+         * whose bank boot already put on sheet 0.
+         */
+        bankSets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    },
+    /*
+     * AM1's curve pipeline again: a curve computed at boot with a set's
+     * fourteen ramps laid over its odd rows, and luma RAM copied straight out
+     * of the data ROM.
+     *
+     * The luma table is 0x4000 bytes of nothing above 63, and its first
+     * thirty-two bytes match the prototype's exactly — one hit in 32MB. The
+     * gain is still 1.1, and still followed by 1.0 with the same run of
+     * 0x80008000 behind it; that pair occurs once in the program ROM.
+     *
+     * Twelve of the thirteen sets have ramps. Set 12's pointer is zero, and a
+     * set with no table keeps the bare curve, which is what the game does.
+     */
+    colors: {
+        luma: { data: 0xe9aac0, bytes: 0x4000 },
+        curve: { sets: { ptrs: 0xa9934, rows: 14, row0: 1, step: 2, gain: 0xa8308 } },
+        solid: true,
+    },
+    /*
+     * The material table is the prototype's, at the prototype's address: all
+     * 31 slots byte for byte at 0x7A0, in a program ROM that is otherwise 94%
+     * different. It was not edited and it did not move.
+     *
+     * `vecter` and `planeNormals` are carried across on the strength of that
+     * — the light the camera update builds, and GEO mode 2 taking the plane of
+     * the first three points over the stored normal — and are the two numbers
+     * here that this set's own code has not been read for.
+     */
+    lighting: {
+        vecter: [0xe000, 0xc000],
+        materials: { at: 0x7a0, count: 31 },
+        planeNormals: true,
+    },
+    /*
+     * The stage data — the placement tables, the zone lists and the script the
+     * interpreter walks — has not been found in this program ROM yet, so there
+     * are no stages to show and the Models tab picks a model's sheets itself,
+     * off `bankSets`. The rig and its motions are likewise still to come.
+     */
+    stageTable: null,
+    /* Its rooms are built the same way the prototype's are, large faces with
+     * smaller ones laid on them in the same plane, so they want the same
+     * ranking and the same absent recede. */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    scenes: null,
+    features: { stages: false, characters: false, motions: false },
+};
+
+export const GAMES = [sfight, fvipers, hotdp, hotd];
 
 /**
  * Pick the profile a set of zip member names belongs to.
