@@ -251,13 +251,19 @@ function skyDraws(rom, sky) {
     const S = rom.game.sky;
     if (!S || !sky?.on || sky.index >= S.count) return null;
     const dv = rom.mainCpuView;
-    const dome = dv.getUint32(S.models + sky.index * 4, true);
-    const y = dv.getFloat32(S.heights + sky.index * 4, true);
+    /* The prototype keeps the model and the height in two arrays of their own
+     * and the drift rate in the code; the finished game folds all three into a
+     * record per sky, so the profile gives a stride and, where the rate is in
+     * the data, where to read it. */
+    const stride = S.stride ?? 4;
+    const dome = dv.getUint32(S.models + sky.index * stride, true);
+    const y = dv.getFloat32(S.heights + sky.index * stride, true);
     if (!dome) return null;
+    /* Angle units of 65536 a frame, as the task's own counter counts. */
+    const rate = S.spins != null ? dv.getUint32(S.spins + sky.index * stride, true) : S.spin;
     return {
         index: sky.index, dome, band: S.band, y,
-        /* Angle units of 65536 a frame, as the task's own counter counts. */
-        spin: sky.spin ? S.spin : 0,
+        spin: sky.spin ? rate : 0,
     };
 }
 

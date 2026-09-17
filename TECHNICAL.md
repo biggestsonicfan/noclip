@@ -298,7 +298,27 @@ highest index the skin table names.
 24 that do not are written for counts no body in the table carries, which is the
 same thing that leaves two of the prototype's 508 unfitted.
 
-What is left is the sky's table of shells, which has no such shape.
+#### The sky, which the model names give away
+
+The sky is geometry in both builds: a dome a script opcode picks and turns, and
+`PN_skyuv02a`, a cut-out band, drawn over whichever dome is up. So the names
+find it. Eight of the finished game's models have `sky` in the name, six of them
+domes, and the one array in the program ROM that names any of those six names
+all six.
+
+It is not shaped like the prototype's. There, the models and their heights are
+two arrays of four and the drift rate is a constant in the code; here the three
+are folded into a sixteen-byte record per sky. The heights confirm it anyway:
+`PN_r2skyuvb` hangs at -200 in both builds and every other dome at -9.
+
+What the sky proves is not only itself. The stage scripts hand out the sky by
+opcode, and the chapters they hand it to are the chapters the artists named the
+models for — `PN_skyuv` and `PN_skyuvb` over the first chapter's courtyard and
+mansion, `PN_r2skyuv`, `PN_r2skyuvb` and `PN_r2skyuvc` over the second's three
+sets, `PN_skyuvst4a` over stage 4's last set, and nothing at all over the third
+chapter, which is indoors. Nothing in the placement, zone or script tables knows
+what those names say, so the agreement is a check on the script walk as much as
+on the sky.
 
 ### Colour and light for a second game
 

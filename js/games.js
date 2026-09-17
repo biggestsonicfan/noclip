@@ -1002,6 +1002,20 @@ const hotd = {
         flat: true,
         backdrop: 0x8000,
     },
+    /*
+     * The sky, which is geometry here as it is in the prototype — a dome a
+     * script opcode picks and turns, and PN_skyuv02a, the cut-out band, drawn
+     * over whichever dome it is.
+     *
+     * Eight models have `sky` in their name; six of them are domes, and the one
+     * array in the program ROM that names any of them names all six, sixteen
+     * bytes apart, each followed by its height and its drift rate. Where the
+     * prototype keeps model and height in two arrays and the rate as a constant
+     * in the code, this build folds the three into a record — so `stride` and
+     * `spins`. The heights agree with the prototype's model for model:
+     * PN_r2skyuvb hangs at -200 in both and every other dome at -9.
+     */
+    sky: { models: 0xac1e0, heights: 0xac1e4, spins: 0xac1e8, stride: 16, count: 6, band: 1544 },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
