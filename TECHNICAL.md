@@ -1853,6 +1853,109 @@ they are the rig's, because a head the fighters wear is in texture set 1 like
 the rest of the rig and should be shaded through the ramp rather than flat. All
 324 of them decode, and 233 are named by no part table.
 
+### The animations that are not bodies
+
+A body is a tree of parts played by a baked motion, and everything in
+`js/bodies.js` is about that. The game's other animations — the blood, the
+breaking glass, the water, the drifting rubbish — are not that at all. They are
+*objects*, and this section is what has been read of them so far. None of it is
+implemented; it is written down because finding it was the work.
+
+#### What they are
+
+An effect animation is a **run of consecutive model numbers stepped one a
+frame**. The same trick the draw callback plays for Tom's coat and the Devilons'
+wings is how the whole effect system works, and the model names give the runs
+away — a family ending in three digits, contiguous in the table:
+
+| models | count | name | what it is |
+|---|---|---|---|
+| 6–35 | 30 | `PN_akabushu###a` | 赤 *aka* red + ブシュ *bushu* spurt — the blood spray |
+| 1417–1446 | 30 | `PN_shoubushu###a` | 小 *shou* small — the lesser spurt |
+| 1130–1187 | 57 | `PN_nikubaan###a` | 肉 *niku* flesh + バーン burst |
+| 4529–4648 | 120 | `PN_niku_###` | the flesh chunks |
+| 2602–2632 | 31 | `PN_suiteki###a` | 水滴 *suiteki* water droplet |
+| 2250–2309 | 60 | `PN_hamon###a` | 波紋 *hamon* ripple |
+| 3451–3549 | 99 | `PN_gara6_###a` | ガラス *garasu* glass, shattering |
+| 3092–3191 | 100 | `PN_madogaa###a` | a window going in |
+| 736–785 | 50 | `PN_item_kira###a` | キラキラ *kirakira*, an item's sparkle |
+| 4802–4901 | 100 | `PN_fuuu###a` | |
+| 522–611 | 90 | `PN_gee0a###a` | |
+| 879–948 | 70 | `PN_kibako_dam###a` | 木箱 *kibako* crate, breaking |
+| 1674–1743, 1744–1813 | 70 each | `PN_taru_yoko_###a`, `PN_tarun_dam_###a` | 樽 *taru* barrel |
+
+The gore colour finds the bloody ones on its own. Palette index 1023 is the one
+the test menu switches between red and green, and 1520 models name a colour in
+its range — among them every `_dam` body part's wound, and `akabushu`,
+`shoubushu` and `nikubaan` whole.
+
+#### How one is spawned
+
+The stage scripts already carry them. `js/placements.js` walks a script for the
+two opcodes it needs and steps over the rest; four of the ones it steps over —
+9, 10, 11 and 12 — are spawn lists. Each is the opcode, a `-1`-terminated list
+of pointers, and each pointer names a sixteen-byte record:
+
+```
+0xE13F0:  61 00000000   80000000   C2AA0000   C1C80000
+          type 0x61     x -0.0     y -85.0    z -25.0
+```
+
+Over the finished game's four chapters there are **1246 such records naming 118
+distinct types**, and the counts are the shape of a game: 273 of one type, 170
+of another, and a long tail of ones and twos.
+
+#### The object table
+
+The type indexes a table at **0xAC314 on a 76-byte stride**, which the handlers
+reach with `ldis 0xCC(r4), g4 / mulo g4, 0x4C, g4 / ld unk_AC314(g4), g0`. Its
+first word is a sound id and its third a model number, and read that way types
+0 to about 122 come out as exactly what a house is full of — `PN_isu` chairs,
+`PN_tabul` tables, `PN_tokei` a clock, `PN_sitai` a corpse, `PN_sara` plates,
+`PN_nabe` pots, `PN_tarun_dam` a breaking barrel, `PN_niku_001` the flesh, and
+at type 59 `PN_moon`, which is the moon the prototype's notes say is billboarded
+at the camera from the script's own object lists.
+
+Types of 128 and over do not resolve there, and what they are is not yet known.
+They are a third of the spawns.
+
+#### An object, and what animates it
+
+An object is a task. Its handler is the task function, the model it draws this
+frame is the word at **+0x54**, and its type is the halfword at **+0xCC** — the
+same field a body uses for its body number, which is why the draw callback and
+these read the same offset.
+
+The small blood spurt is the whole system in two routines. `sub_429A0` opens a
+task on `sub_44250` and writes 1417, `PN_shoubushu000a`, into +0x54. Then every
+frame:
+
+```
+lda  0x54(g0), g0      ; the current-model field
+ld   (g0), g4
+addo g4, 1, g4         ; one model on
+lda  unk_5A7, g7       ; 1447, one past PN_shoubushu029a
+st   g4, (g0)
+cmpibne g4, g7, ...
+call loc_150D0         ; the end: close the task
+```
+
+Thirty frames and it is gone — a one-shot, not a loop. It draws at a quarter
+scale (`lda 0x3E800000`) on the position it reads out of its parent object, and
+what spawns it is the flesh-chunk handler: a chunk lands, and a spurt is opened
+where it landed.
+
+The chunks themselves loop instead. Their handler steps +0x54 the same way from
+4529 and wraps at 4649 — `lda loc_11B0+1` and `lda 0x78(g6)`, the base and the
+base plus 120 — so they tumble for as long as the chunk lives.
+
+#### What is left
+
+The run bounds live in the handlers as instruction-embedded constants, not as
+words in the data, so each of the fourteen routines that index 0xAC314 has to be
+read to get its own. Two of the fourteen are read. And the types from 128 up
+need whatever table they belong to.
+
 ## Animation
 
 Motion playback is implemented, and checked against the board — see
