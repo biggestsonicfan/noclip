@@ -357,6 +357,36 @@ a palette entry is a row number into the curve rather than a colour, loses them
 all to the bare grey. That is why this showed up as *black limbs on one zombie*
 rather than as anything so obvious as the whole game being wrong.
 
+#### The draw callback is a table of numbers, not a table of names
+
+`sub_764C0` draws something other than a part's own model for eleven bodies —
+Tom's coat, the hand's fingers, the spider's legs, Samson's swapped hand,
+Sophie's blinking head, the Devilons' wing beats, and the gun hands of the
+shooting motions. Those rules were read off the prototype and written into
+`js/bodies.js` as constants, which was fine while there was one game to draw.
+
+Every number in them is an index into the body, the motion or the model table,
+and all three renumber between builds. Taken over to the finished game they do
+not miss by a little. The prototype's body 34 is `BO_tarab`, the spider, and the
+finished game's is `BO_sophi` — so Sophie drew a run of spider legs out of her
+head joint, one model a frame, which is the garbage that turned up in her
+animation. Its 35 is `BO_samson` and this build's is `BO_hyum` — so hyum's joint
+5 was swapped every vsync for Samson's right hand.
+
+So the rules stay in `bodies.js` and the numbers moved to the profile, resolved
+by name: `BO_sophi` is 34 here and 39 there, `MO_gman_soten` 195 against 124,
+`PN_devilon_hane01` 5121 against 4814. Three of them have no counterpart at all
+— this game has no `BO_gman`, no `BO_handrb` and no `BO_tarab` — and a null
+cannot match a body number, so those rules simply never fire.
+
+The mapping is confirmed where the finished game's own callback states it. It
+compares the body number against 2, 34 and 50, which are `BO_tom`, `BO_sophi`
+and `BO_devilon` under the name mapping, and it reaches the two wing beats with
+`lda 0x1401` and `lda 0x7CD` — 5121 and 1997, which are exactly where
+`PN_devilon_hane01` and `PN_devilonm_hane01` sit in this build's model table.
+Its callback is the larger of the two and may treat bodies of its own apart;
+those have not been read yet.
+
 #### Revision A, and what a shifted build is worth
 
 The finished game shipped in two revisions. MAME calls the later one `hotd` and

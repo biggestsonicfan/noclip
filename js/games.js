@@ -735,6 +735,29 @@ const hotdp = {
             templates: 0xd80160, templateBytes: 0x640, pointers: 0xd80090, counts: 0xd8c120,
             points: 0xd8a3e0, order: 0xd8bc40, slots: 0xd8b280, shared: 0xd8c190,
         },
+        /*
+         * The bodies sub_764C0 draws something other than the part's own model
+         * for, and what it names doing it. Every number is an index into the
+         * body, motion or model table, and all three renumber between builds,
+         * so they live here rather than in js/bodies.js.
+         */
+        callback: {
+            bodies: {
+                tom: 2, hand: 6, gman: 14, gmanKihon: 17, haride: 18, staje: 19,
+                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64,
+            },
+            motions: {
+                gmanDash: 118, soten: 124, handra: 126, pDash: 232, kousya: 244,
+                sButt: 262, sSinderu: 267, sTatiaga: 268, sUneune: 269,
+                tombaan: 332, tombanban: 333, tompaan: 337,
+            },
+            models: {
+                magazine: 1728, gunHand: 1734, kousyaHand: 795, sotenHand: 2445,
+                coat: 162, fingersA: 2452, fingersB: 2493, spiderLegs: 4157,
+                samsonHand: 1300, sophieHead: 1467, sophieBlink: 1468,
+                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886,
+            },
+        },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
@@ -1087,6 +1110,42 @@ const hotdo = {
             points: 0xf8b2a0, order: 0xf8cce0, slots: 0xf8c260, shared: 0xf8d290,
             pointers: 0x63d20, pointersSource: 'maincpu', pointersBy: 'body',
         },
+        /*
+         * The same routine's bodies, read across by name rather than by number:
+         * every index below renumbered, and taking the prototype's would not be
+         * a near miss. Its body 34 is the spider and this build's is BO_sophi,
+         * so she drew the spider's legs; its 35 is Samson and this build's is
+         * BO_hyum, so he drew Samson's hand.
+         *
+         * The mapping is confirmed where the code states it: the callback
+         * compares the body number against 2, 34 and 50, which are BO_tom,
+         * BO_sophi and BO_devilon here, and reaches the Devilons' wing beats
+         * with `lda 0x1401` and `lda 0x7CD` — 5121 and 1997, the numbers
+         * PN_devilon_hane01 and PN_devilonm_hane01 carry in this build's model
+         * table.
+         *
+         * Three of the prototype's are null because this game has no such body:
+         * there is no BO_gman, no BO_handrb and no BO_tarab, and the rules that
+         * name them cannot fire. This build's callback is the larger of the two
+         * and may treat bodies of its own apart; those have not been read yet.
+         */
+        callback: {
+            bodies: {
+                tom: 2, hand: null, gman: null, gmanKihon: 13, haride: 14, staje: 15,
+                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55,
+            },
+            motions: {
+                gmanDash: 188, soten: 195, handra: null, pDash: 339, kousya: 360,
+                sButt: 386, sSinderu: 391, sTatiaga: 399, sUneune: 401,
+                tombaan: 462, tombanban: 463, tompaan: 466,
+            },
+            models: {
+                magazine: 1814, gunHand: 1819, kousyaHand: 875, sotenHand: null,
+                coat: 181, fingersA: null, fingersB: null, spiderLegs: null,
+                samsonHand: 1367, sophieHead: 1550, sophieBlink: 1551,
+                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997,
+            },
+        },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
@@ -1174,6 +1233,10 @@ const hotd = {
         },
         motions: { ...hotdo.rig.motions, names: 0xc8be0, data: 0xc7540, frames: 0xc7fd0, flatAnkles: 0x7c6f0 },
         skins: { ...hotdo.rig.skins, pointers: 0x20f00 },
+        /* Body and motion indices, so the same for both revisions: the two name
+         * tables are the same names in the same order, and only the tables'
+         * addresses moved. */
+        callback: hotdo.rig.callback,
     },
 };
 

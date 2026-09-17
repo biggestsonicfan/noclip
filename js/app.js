@@ -2093,7 +2093,7 @@ function poseBodyRig() {
     if (!body) return;
     const v = state.viewer;
     const { matrices, origins } = poseBody(body, m.decoded, m.frame, { travel: state.travel });
-    const draws = partDraws(body, m.decoded, m.frame, m.tick);
+    const draws = partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     for (const p of m.parts) {
         const models = draws[p.part];
         for (let k = 0; k < Math.max(models.length, p.slots.length); k++) {
