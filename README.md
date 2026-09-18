@@ -161,6 +161,19 @@ moves.
 What is missing is the course: how a track is laid out, what is placed along it
 and in what order — so there are no stages, and the cars do not move.
 
+And one thing is missing from the checking. Sonic The Fighters' texture and
+colour ports are held against a capture of the real board; this one is not,
+because the game cannot be made to reach its own uploads here. It boots in MAME
+and then spins at `0x228240` on `ldob 0x1C00040` — the dual-port RAM the Model 1
+I/O board answers on, and that board's MCU ROM is not in the sets to hand, so
+texture RAM and colorxlat stay empty however long it runs. What the board did
+confirm is smaller but real: the sixteen-entry palette init the boot sequence
+copies from program ROM `0xCCC` lands byte for byte at palram 0 *and* at palram
+`0x2000`, which is the face-palette base this profile uploads to. The rest rests
+on the instructions the addresses were read out of, on the 2817 meshes that
+decode, and on the highest colorbase in the game being 1006 against a palette
+upload of 1007.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
