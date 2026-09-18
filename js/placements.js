@@ -101,9 +101,18 @@ function walkScript(rom, at, visit) {
  * prop stands where it is put, unturned, which is also how the draw loop treats
  * a placement.
  *
- * Type 0 is skipped. Its entry names PN_test_tubo01a, a test pot, and 170 of the
- * game's spawns are of it — a game does not hold 170 test pots, and the table's
- * first entry is what an index of "none" lands on.
+ * Only the types the game treats as an ordinary standing object are put up.
+ * Each type also has a handler, and 77 of the finished game's 125 share one —
+ * the routine that draws the table's model where the object was spawned and
+ * does nothing else. The rest have handlers of their own and are not props at
+ * all: type 97 is a distance trigger that draws nothing, 98 to 102 switch on
+ * `type - 98` into four behaviours of their own, and their models are room 4's
+ * walls and shutters, which is what filled the first chapter's courtyard with
+ * PN_r4_04 pieces when every type was stood up. What those handlers do has not
+ * been read, so nothing is guessed at: they are left out.
+ *
+ * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
+ * null pointer — so the table's own shape excludes it.
  *
  * Records are keyed by their own address, because a script listed by two
  * sections is walked twice and would otherwise stand its props up twice.
@@ -119,6 +128,7 @@ function spawnProps(rom, at, set, out) {
         if (out.has(rec)) continue;
         const type = dv.getUint32(rec, true);
         if (!(type > 0 && type < O.count)) continue;
+        if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         out.set(rec, {

@@ -1970,9 +1970,34 @@ section had loaded, with no new traversal. The type goes through the object
 table for its model, the position is taken from the record, and nothing is
 turned, because the word that looked like an angle is a flag.
 
-Type 0 is left out. Its entry names `PN_test_tubo01a`, a test pot, and 170 of
-the game's 1246 spawns are of it; a house does not hold 170 test pots, and the
-first entry of a table is what an index meaning "none" lands on.
+Where the table is, and what is in an entry, is worth getting from the routine
+that builds an object rather than from what the fields look like. `sub_417F0`:
+
+```
+ldis 0xCC(g0), g4      ; the type
+mulo g4, 0x4C, g4      ; 76 bytes an entry
+lda  unk_AC2D0(g4), g4 ; the table
+ld   (g4), g5          ; the model is its first word
+st   g5, 0x54(g0)      ; and becomes the object's current model
+```
+
+The model is at 0 and the sound is at 68 — and 68 is why the handlers are seen
+reaching the table as `unk_AC314`, which is its sound field, not its head.
+Reading the head as the sound and the model as 8 past it is off by exactly one
+entry: every type then draws the *next* type's model, which is how the first
+chapter's courtyard came to be full of room 4's walls.
+
+Type 0 is nothing: its entry names `PN_space` and its slot in the handler table
+is a null pointer.
+
+Not every type is a prop, either. Each has a handler, and 77 of the finished
+game's 125 share one — the routine that draws the table's model where the object
+stands and does nothing else. The rest are their own things: type 97 is a
+distance trigger against a global, drawing nothing, and 98 to 102 switch on
+`type - 98` into four behaviours whose models are room 4's walls and shutters.
+Only the types on the shared handler are stood up. The others are left out
+rather than guessed at, which takes the first chapter from 144 props to 60 and
+loses nothing that was a prop.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter gains 59 props in the

@@ -704,7 +704,7 @@ const hotdp = {
      * It stops at 78 where the finished game's runs to 122, which is the
      * prototype being the smaller game.
      */
-    objects: { table: 0x84184, stride: 76, model: 8, count: 79 },
+    objects: { table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990, prop: 0x30670 },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
@@ -1068,20 +1068,30 @@ const hotdo = {
      * script walk used to step over carry a -1-terminated list of pointers to a
      * record of {type, flags, x, y, z}.
      *
-     * The type indexes this table, which the handlers reach with
-     * `ldis 0xCC(r4) / mulo 0x4C / ld unk_AC314(g4)`: 76 bytes an entry, a sound
-     * at 0 and the model at 8. Read that way its entries are what a house is
-     * full of — PN_isu chairs, PN_tabul tables, PN_tokei a clock, PN_sitai a
-     * corpse, PN_sara plates, PN_nabe pots, PN_book_tana a bookcase,
-     * PN_tantansu a chest, PN_tarun_dam a breaking barrel, PN_kibako a crate,
-     * and at 59 PN_moon.
+     * The type indexes this table, and sub_417F0, which builds an object, says
+     * where it is and what is in it exactly:
      *
-     * `count` stops at 123 because that is where the entries stop naming
-     * models, and the handler table beside this one holds 125. The spawns whose
-     * type is 128 or more are not objects in this space at all — see the note
-     * on +0xCC in TECHNICAL.md — and are left alone rather than looked up here.
+     *     ldis 0xCC(g0), g4      ; the type
+     *     mulo g4, 0x4C, g4      ; 76 bytes an entry
+     *     lda  unk_AC2D0(g4), g4 ; the table
+     *     ld   (g4), g5          ; the model is the first word
+     *     st   g5, 0x54(g0)      ; and becomes the object's current model
+     *
+     * So the model is at 0 and the sound the handlers play is at 68 — which is
+     * what `unk_AC314` is in `ld unk_AC314(g4)`, the same table reached at its
+     * sound field rather than its head. Read from the head its entries are what
+     * a house is full of: PN_isu chairs, PN_tabul tables, PN_tokei a clock,
+     * PN_sitai a corpse, PN_sara plates, PN_book_tana a bookcase, PN_tantansu a
+     * chest, PN_kibako a crate, PN_tarun_dam a breaking barrel.
+     *
+     * Type 0 names PN_space and its slot in the handler table is a null
+     * pointer, so it is nothing at all and is skipped.
+     *
+     * The spawns whose type is 128 or more are not objects in this space — see
+     * the note on +0xCC in TECHNICAL.md — and are left alone rather than looked
+     * up here.
      */
-    objects: { table: 0xac314, stride: 76, model: 8, count: 123 },
+    objects: { table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950, prop: 0x3a210 },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
@@ -1260,7 +1270,9 @@ const hotd = {
     /* The props' table moved with everything else. It is worth saying that the
      * reader failed safe when it had not: at 0xAC314 this build reads PN_space
      * for every type, so every prop was dropped rather than drawn wrong. */
-    objects: { ...hotdo.objects, table: 0xac324 },
+    /* The handler moved further than the tables did — the tables are 0x10 on
+     * and the routine is at 0x3B160 rather than 0x3A220. */
+    objects: { ...hotdo.objects, table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160 },
     rig: {
         bodies: {
             ...hotdo.rig.bodies,
