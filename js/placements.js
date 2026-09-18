@@ -56,7 +56,7 @@ const LISTS = new Set([9, 10, 11, 12, 50, 51]);
 /* Of those, the four whose entries are pointers to a spawn record. 50 and 51
  * carry plain numbers and are not read. */
 const SPAWN_OPS = new Set([9, 10, 11, 12]);
-const SPAWN_BYTES = 20;
+const SPAWN_BYTES = 0x28;
 /* 92 halts and 93 moves on to the next script. */
 const ENDS = new Set([92, 93]);
 
@@ -94,12 +94,22 @@ function walkScript(rom, at, visit) {
 /*
  * The props a spawn list puts in the room, as the object table names them.
  *
- * A record is {type, flags, x, y, z}. The type indexes the table in the profile,
- * whose entry carries a sound and, at `model`, the model to draw. The word after
- * the type is not a turn: 1219 of the game's 1246 records carry 0x80000000 there
- * and 25 carry 0x40000000, and nothing in the field reads as an angle — so a
- * prop stands where it is put, unturned, which is also how the draw loop treats
- * a placement.
+ * The record's shape is the spawn opcode's handler's, not a guess at it. It
+ * reads
+ *
+ *     ld   (r9), g4            ; +0x00 picks the task the object runs
+ *     ld   off_AFDD0[g4*4], g0
+ *     call _TaskOpen
+ *     ldob 0x24(r9), g4
+ *     stos g4, 0xCC(r8)        ; +0x24, a byte, is the object type
+ *     ldos 0x20(r9), g4        ; whose low two bits say how the position reads
+ *     addo r9, 8, g13          ; and the position is at +0x08
+ *
+ * So the type is the byte at 0x24 — the first word is which task it runs, which
+ * is why it ranges past any type the object table holds — and the position is
+ * three floats at 0x08 in every mode. The two modes past 1 interpolate a
+ * position between two points rather than standing one still; their first three
+ * floats are still where the object starts.
  *
  * Only the types the game treats as an ordinary standing object are put up.
  * Each type also has a handler, and 77 of the finished game's 125 share one —
@@ -126,7 +136,7 @@ function spawnProps(rom, at, set, out) {
         if (rec === END) break;
         if (!inRom(rom, rec, SPAWN_BYTES)) continue;
         if (out.has(rec)) continue;
-        const type = dv.getUint32(rec, true);
+        const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
         if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);

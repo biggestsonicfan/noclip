@@ -1896,17 +1896,30 @@ two opcodes it needs and steps over the rest; four of the ones it steps over —
 9, 10, 11 and 12 — are spawn lists. Each is the opcode, a `-1`-terminated list
 of pointers, and each pointer names a sixteen-byte record:
 
+The record's shape is the opcode handler's, not what the fields look like from
+outside. Opcode 10's handler reads:
+
 ```
-0xE13F0:  00000061  80000000  C2AA0000  C1C80000  C4494000
-          type 97   angle -0   x -85.0   y -25.0   z -805.0
+ld   (r9), g4             ; +0x00 picks the task the object will run
+ld   off_AFDD0[g4*4], g0
+call _TaskOpen
+ldob 0x24(r9), g4
+stos g4, 0xCC(r8)         ; +0x24, a byte, is the object type
+ldos 0x20(r9), g4         ; whose low two bits say how the position reads
+addo r9, 8, g13           ; and the position is three floats at +0x08
 ```
 
-The position is the second float on, not the first. Both readings decode without
-complaint, and the ground settles it: taking the position from +8 puts 884 of
-the 1246 spawns within sixty units of the floor with a median y of 0, and taking
-it from +4 puts 432 there with a median of 74. The courtyard's own placements sit
-at a median y of -24.5, so the first reading is the one that stands things on
-the ground.
+So a record is at least 0x28 bytes, the position is at 8, and **the type is the
+byte at 0x24**. The first word is which task the object runs — which is why its
+values range to 191 while no object table holds that many types, and why reading
+it as the type made a third of the spawns look like they belonged to a type
+space nobody could find. There was no such space.
+
+Reading it right puts the props on the floor. Over the first chapter the median
+prop stands at y = -20.8 against a floor at -24.5; taken from the first word the
+median was 0. The prototype says the same: 331 props where the wrong field gave
+109, and they come out as barrels, chairs, tables and pots rather than
+forty-two ladles.
 
 Over the finished game's four chapters there are **1246 such records naming 118
 distinct types**, and the counts are the shape of a game: 273 of one type, 170

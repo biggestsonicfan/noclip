@@ -704,7 +704,7 @@ const hotdp = {
      * It stops at 78 where the finished game's runs to 122, which is the
      * prototype being the smaller game.
      */
-    objects: { table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990, prop: 0x30670 },
+    objects: { table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990, prop: 0x30670, type: 0x24 },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
@@ -1107,7 +1107,7 @@ const hotdo = {
      * the note on +0xCC in TECHNICAL.md — and are left alone rather than looked
      * up here.
      */
-    objects: { table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950, prop: 0x3a210 },
+    objects: { table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950, prop: 0x3a210, type: 0x24 },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
