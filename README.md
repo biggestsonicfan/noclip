@@ -329,6 +329,29 @@ binaries from your own ROM set when they are wanted, and writes them outside the
 checkout. The reasoning, and the trap of letting a port grade itself, are in
 [TECHNICAL.md](TECHNICAL.md#checking-against-the-board-without-carrying-its-data).
 
+## Reporting something wrong
+
+Two buttons sit in the top right of the window, over everything: **GitHub**, and
+**Copy diagnostics and file an issue**.
+
+The second one exists because of how this thing runs. Everything happens in your
+browser, against your ROM set, on your GPU — so from the other end a report that
+says "the road flickers" cannot be acted on. The button gathers what it would
+take to sit down and reproduce it: which of the thirteen builds is loaded and
+which zips it was assembled out of, every complaint `loadRomSet` made about
+them, the tab and the stage or model on screen, the texture set, the shading
+switches, where the camera is, the renderer string, and the last forty lines the
+console saw. It puts that on your clipboard and opens a new issue with the
+template already in it.
+
+It works before anything has loaded, too, which is the report worth most: a set
+that will not open carries the names of the zips you dropped and the error the
+loader gave. Nothing is read off the ROM but the profile it matched and the
+names of the files, and nothing is sent anywhere — the text goes to your
+clipboard, for you to read before you paste it.
+
+The one thing worth adding by hand is a screenshot. Drag it into the issue.
+
 ## Deploying
 
 The site is static, so publishing it is a copy. A push to `master` runs

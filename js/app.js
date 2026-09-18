@@ -4,6 +4,7 @@
 
 import { loadRomSet, readModelEntry, readModelName } from './romset.js';
 import { GAMES } from './games.js';
+import { wireReportButtons } from './report.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -54,6 +55,8 @@ const state = {
     /* The zips as they were handed over, so a build swap can assemble the set
      * again without asking for them twice — see switchBuild. */
     romBuffers: null,
+    /* The dropped archives by name and size, for js/report.js. */
+    romFiles: [],
     stages: [],
     viewer: null,
     /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
@@ -334,6 +337,10 @@ function failToLoad(err, hint) {
 
 async function readRomFiles(zips) {
     setStatus(`reading ${zips.map((f) => f.name).join(', ')}…`, 0);
+    /* Kept for a bug report: which archives a set was assembled out of is
+     * half of what it takes to reproduce one. Names and sizes only — a
+     * File gives no path, and none of the bytes are held here. */
+    state.romFiles = zips.map((f) => ({ name: f.name, size: f.size }));
     try {
         bootWithBuffers(await Promise.all(zips.map((f) => f.arrayBuffer())));
     } catch (err) {
@@ -3173,8 +3180,13 @@ function start() {
 
     if (state.rom.warnings.length) console.warn('ROM warnings:', state.rom.warnings);
 
-    /* Handy from the console when checking placements against the real game. */
-    window.stf = state;
 }
 
 wireDropTarget();
+/* Wired before anything is loaded: the report worth most is the one about a
+ * ROM set that would not load at all. */
+wireReportButtons(state);
+/* Handy from the console when checking placements against the real game, and
+ * put here rather than after a successful load so that a set which would not
+ * load can be looked at too. */
+window.stf = state;

@@ -44,11 +44,18 @@ jobs:
 
       # CNAME goes in the artifact, not just the repo: Pages reads it from the
       # published site to know the custom domain.
+      # The commit goes into the page so a bug report can name the build it
+      # came from. The explorer runs entirely in the reader's browser against
+      # the reader's own ROM set, so without this there is no way to tell which
+      # version of the site a report is about. Staged, not committed: a working
+      # checkout keeps saying "dev".
       - name: Stage the site
         run: |
           mkdir _site
           cp index.html style.css CNAME _site/
           cp -r js _site/js
+          sed -i "s|<meta name=\"build\" content=\"dev\">|<meta name=\"build\" content=\"${GITHUB_SHA::7}\">|" _site/index.html
+          grep -o '<meta name="build"[^>]*>' _site/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
