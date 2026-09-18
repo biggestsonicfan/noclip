@@ -1494,9 +1494,24 @@ function daytonaBuild(spec) {
          * calls set geometry mode 3 and then 1, and 1 is geo_parse_np_s.
          */
         lighting: { light: spec.light, materials: spec.materials },
-        /* No stage table and no rig: the course data and the cars' own
-         * structures have not been read, so the Models tab is the whole of it. */
-        features: { stages: false, characters: false, motions: false, bodies: false },
+        /*
+         * The courses, which are a grid rather than a placement list: the world
+         * is cut into a 16x16 grid of 128-unit blocks and each block is one
+         * model, drawn with no matrix at all. `courses` is the array that names
+         * one 256-entry block table per course — in the data ROM for every build
+         * but the 1993 one, which keeps it in the program ROM. See
+         * readCourseStages in js/stages.js for the routines this is read off.
+         *
+         * `flat` because the geometry really is already in world space, as
+         * Fighting Vipers' arenas are — and because it keeps the Models tab's
+         * texture picker, which the models no course claims still need.
+         */
+        stageTable: {
+            courses: { ...spec.courses, count: 4, blocks: 256 },
+            flat: true,
+        },
+        /* Stages, but no rig: this game has no motion tables of any kind. */
+        features: { stages: true, characters: false, motions: false, bodies: false },
     };
 }
 
@@ -1516,6 +1531,7 @@ const daytona93 = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'maincpu', at: 0x39b0 },
 });
 
 const daytona = daytonaBuild({
@@ -1530,6 +1546,7 @@ const daytona = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonase = daytonaBuild({
@@ -1544,6 +1561,7 @@ const daytonase = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonas = daytonaBuild({
@@ -1558,6 +1576,7 @@ const daytonas = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonat = daytonaBuild({
@@ -1572,6 +1591,7 @@ const daytonat = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonata = daytonaBuild({
@@ -1586,6 +1606,7 @@ const daytonata = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonam = daytonaBuild({
@@ -1600,6 +1621,7 @@ const daytonam = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 const daytonagtx = daytonaBuild({
@@ -1614,6 +1636,7 @@ const daytonagtx = daytonaBuild({
     ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
 });
 
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,

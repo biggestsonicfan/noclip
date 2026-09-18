@@ -5,7 +5,7 @@
 import { loadRomSet, readModelEntry, readModelName } from './romset.js';
 import { GAMES } from './games.js';
 import { decodeModel } from './model.js';
-import { readStageTable, stageLight, gameLighting } from './stages.js';
+import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { coplanarLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -3104,9 +3104,12 @@ function loadGameContent() {
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     const on = applyGameFeatures();
     if (on.stage) {
-        state.stages = state.rom.game.stageTable.placements
-            ? readPlacementStages(state.rom)
-            : readStageTable(state.rom);
+        /* Three shapes of stage data: a record per arena, a placement
+         * table per chapter, and Daytona USA's grid of blocks. */
+        const T = state.rom.game.stageTable;
+        if (T.courses) state.stages = readCourseStages(state.rom);
+        else if (T.placements) state.stages = readPlacementStages(state.rom);
+        else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
     if (on.anim && state.rom.game.rig) {

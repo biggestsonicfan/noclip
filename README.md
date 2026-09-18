@@ -109,8 +109,9 @@ merged archive carrying the lot is read as all eight at once: the panel grows a
 **Build** picker and swapping between them reassembles the set without the zips
 being handed over again.
 
-There are two sets of models behind those eight names, though, and the profiles
-say so rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
+Each build opens on the Stages tab with its four course grids, and the Models
+tab has the rest. There are two sets of models behind those eight names, though,
+and the profiles say so rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
 its own data, its own fourth polygon pair and its own second texture pair: 2822
 table entries, 2817 of them with geometry. Every build after it — Revision A,
 the Special Edition, the Saturn-advert version and the four Kyle Hodgetts hacks
@@ -176,20 +177,50 @@ the main view uses, which on the board is a headlight in the engine's own frame
 and is applied here as a world light so a model keeps one lit side as the camera
 moves.
 
-What is missing is the course, and it is missing because Daytona does not keep
-one. The other games here describe a scene in a table — a placement, a zone
-list, a stage record — and this one draws it in code: the routine that hands the
-geometry engine a model has 75 call sites, 28 of which name a model by its
-address outright and the rest of which index a per-object array. There is no
-placement table to read, so there is no Stages tab. The track surface is not in
-the polygon ROM either; it comes off the 4MB coprocessor data ROM, four
-megabytes that open on a 4x4 identity matrix and are a third plausible floats,
-and the TGP builds the road from it. Reaching it means porting that, which is a
-different job from reading a table.
+### The courses
+
+The courses are a table after all, and a very plain one. This was written up
+once as *not* being one — the routine that hands a model to the geometry engine
+has 75 call sites, 28 of them naming a model outright, which looked like a game
+that draws its scenery in code. It was the wrong conclusion drawn from the right
+evidence: those call sites are the cars and the trackside objects, and the
+course is somewhere else entirely. What found it was a symbol table — the
+board's own names, 243 of them, in an IDA database of the Saturn-advert build —
+and three of those names are the whole answer:
+
+- `get_m_block` cuts the world into a 16x16 grid of 128-unit blocks and indexes
+  it `(z << 4) | x` off the camera position;
+- `set_area_block` turns that into the list of blocks in view;
+- `dsp_area_block` draws one model per block — `ld (g0)[r9*4], g0` then
+  `set_obj_cont` — **with no matrix of any kind**.
+
+So a block's geometry is already in world space, as Fighting Vipers' arenas are,
+and a course is simply its 256 models drawn where they lie. The grid is a
+visibility index and nothing else, which is why the viewer does not reproduce
+it: it draws all 256.
+
+`set_course_parms` picks the table with `ld <array>[sel_course*4]`, and the
+array names four of them. Three are the courses the game lets you pick — the
+Three-Seven Speedway oval at 10,290 triangles, Dinosaur Canyon at 46,585 and
+Seaside Street Galaxy at 25,163 — and the fourth is a flat square of coloured
+lane stripes with sample objects scattered over it, a test track. The
+Saturn-advert build points its fourth slot back at the third, which is the
+clearest statement that the fourth is not a course.
+
+The same `sel_course` indexes the texture bank in `send_tex_map`, so a course's
+texture set is its own number. That is what finally answers which sheets a
+model is drawn against: every one of the 1024 block models now takes its
+course's, and only the models no course claims still need the picker.
+
+What is still missing is the track *surface* as the game drives on it — the
+collision and height data is not in the polygon ROM but in the 4MB coprocessor
+data ROM, four megabytes that open on a 4x4 identity matrix and are a third
+plausible floats. The viewer does not need it to draw the course, and does not
+read it.
 
 Nor are there animations. This game has no rig and no motion tables — nothing
 like the `BO_`/`MO_` arrays The House of the Dead carries — so there is nothing
-of that kind to play.
+of that kind to play. The cars do not move.
 
 And one thing is missing from the checking. Sonic The Fighters' texture and
 colour ports are held against a capture of the real board; this one is not,
