@@ -119,7 +119,11 @@ export function readBodies(rom) {
             joints,
             scale: md.getFloat32(B.scales + i * 4, true),
             roles,
-            skin: md.getInt16(B.skins + i * 2, true),
+            /* Which skin joins this body's chest to its hips, or -1. The
+             * prototype keeps the table in the data ROM; the finished game
+             * moved it into the program ROM, where `ldis word_63C60[g4*2]`
+             * reads it. */
+            skin: (B.skinsSource === 'maincpu' ? dv : md).getInt16(B.skins + i * 2, true),
             hitMotions: readHitMotions(rom, i),
             root,
             parts: readParts(rom, root),
@@ -419,9 +423,9 @@ export function poseBody(body, motion, frame, { travel = false } = {}) {
 
 /* ---- what each part draws ------------------------------------------------- */
 
-/* Motions and models the callback names, for the bodies it treats apart. */
-const TOM = 2, HAND = 6, GMAN = 14, GMAN_KIHON = 17, HARIDE = 18, STAJE = 19;
-const SPIDER = 34, SAMSON = 35, SOPHIE = 39, DEVILON = 59, DEVILON_M = 64;
+/* The roles the callback switches on, which are the board library's and do not
+ * move. The bodies, motions and models it names do move — they are indices into
+ * three tables that renumber between builds — so those come off the profile. */
 const ROLE_HEAD = 1, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROLE_HIPS = 9;
 
 /**
@@ -445,13 +449,26 @@ const ROLE_HEAD = 1, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROL
  * The muzzle flashes of the firing motions are left out: they are drawn along
  * a matrix sub_FE90 keeps, not along the part.
  *
+ * Every body, motion and model named here is an index into a table that
+ * renumbers between builds, so all of them come from `rig.callback` rather than
+ * from constants. A build with no counterpart for one leaves it null, and the
+ * rule it belongs to cannot fire: the prototype's BO_gman, BO_handrb and
+ * BO_tarab have none in the finished game. Reading the prototype's numbers on
+ * the finished game is not a near miss — its body 34 is the spider there and
+ * Sophie here, so she drew the spider's legs, and its 35 is Samson there and
+ * BO_hyum here, so he drew Samson's hand.
+ *
+ * @param {object} rom loaded ROM set
  * @param {object} body from readBodies
  * @param {object|null} motion from readMotions
  * @param {number} frame the motion frame, from 1
  * @param {number} tick the vsync counter (0x51EFE8), which also counts loops
  * @returns {number[][]} per part, the model numbers drawn on it
  */
-export function partDraws(body, motion, frame, tick) {
+export function partDraws(rom, body, motion, frame, tick) {
+    const C = rom.game.rig?.callback;
+    if (!C) return body.parts.map((p) => (p.model ? [p.model] : []));
+    const BD = C.bodies, MO = C.motions, MD = C.models;
     const id = motion?.index ?? -1;
     const frames = Math.max(1, motion?.frames ?? 1);
     /* The game's frame counter runs 1 to frames - 1 and names models by it, so
@@ -462,31 +479,44 @@ export function partDraws(body, motion, frame, tick) {
     return body.parts.map((p) => {
         const own = p.model ? [p.model] : [];
         const role = body.roles[p.joint] ?? 0;
-        if (b === TOM || b === GMAN || b === GMAN_KIHON) {
-            if (role === ROLE_OTHER_HAND && id === 124 && f > 29) return [1728];
+        /* `is` and `on` keep a null from matching: a build without BO_gman has
+         * no body number for it, and -1 is not a motion. */
+        const is = (n) => n != null && b === n;
+        const on = (n) => n != null && id === n;
+        const gunner = is(BD.tom) || is(BD.gman) || is(BD.gmanKihon);
+        if (gunner) {
+            if (role === ROLE_OTHER_HAND && on(MO.soten) && f > 29 && MD.magazine != null) return [MD.magazine];
             if (role === ROLE_GUN_HAND) {
-                if (id === 244) return [795];
-                if (id === 124) return [2445];
-                if (id === 118 && f > 19 && f <= 40) return [1734];
-                if (id === 232 && f >= 1 && f <= 18) return [1734];
-                if ((id === 332 || id === 337) && f >= 1 && f <= 9) return [1734];
-                if (id === 333 && ((f > 45 && f <= 54) || (f > 77 && f <= 86) || (f > 108 && f <= 117))) return [1734];
+                if (on(MO.kousya) && MD.kousyaHand != null) return [MD.kousyaHand];
+                if (on(MO.soten) && MD.sotenHand != null) return [MD.sotenHand];
+                if (MD.gunHand != null) {
+                    if (on(MO.gmanDash) && f > 19 && f <= 40) return [MD.gunHand];
+                    if (on(MO.pDash) && f >= 1 && f <= 18) return [MD.gunHand];
+                    if ((on(MO.tombaan) || on(MO.tompaan)) && f >= 1 && f <= 9) return [MD.gunHand];
+                    if (on(MO.tombanban)
+                        && ((f > 45 && f <= 54) || (f > 77 && f <= 86) || (f > 108 && f <= 117))) return [MD.gunHand];
+                }
             }
-            if (role === ROLE_CHEST && b === TOM && id !== 244) {
-                return [...own, 162 + (((f >> 1) + 50 * (loops % 2)) % 100)];
+            if (role === ROLE_CHEST && is(BD.tom) && !on(MO.kousya) && MD.coat != null) {
+                return [...own, MD.coat + (((f >> 1) + 50 * (loops % 2)) % 100)];
             }
         }
-        if ((b === HARIDE || b === STAJE) && role === ROLE_GUN_HAND && id === 337 && f >= 1 && f <= 9) return [1734];
-        if (b === HAND && p.joint === 3) return [(id === 126 ? 2452 : 2493) + f];
-        if (b === SPIDER && p.joint === 3) return [4157 + f];
-        if (b === SAMSON && p.joint === 5) return [1300 + (tick & 1)];
-        if (b === SOPHIE && role === ROLE_HEAD) {
-            if (id === 262 || id === 267 || id === 269) return [1467];
-            if (id === 268 && f > 55 && f <= 70) return [1469 + ((f - 56) % 15)];
-            return [tick % 90 > 2 ? 1468 : 1467];
+        if ((is(BD.haride) || is(BD.staje)) && role === ROLE_GUN_HAND && on(MO.tompaan)
+            && f >= 1 && f <= 9 && MD.gunHand != null) return [MD.gunHand];
+        if (is(BD.hand) && p.joint === 3 && MD.fingersB != null) {
+            return [(on(MO.handra) && MD.fingersA != null ? MD.fingersA : MD.fingersB) + f];
         }
-        if (b === DEVILON && p.joint === 1) return [...own, 4814 + (tick % 100)];
-        if (b === DEVILON_M && p.joint === 1) return [...own, 1886 + (tick % 100)];
+        if (is(BD.spider) && p.joint === 3 && MD.spiderLegs != null) return [MD.spiderLegs + f];
+        if (is(BD.samson) && p.joint === 5 && MD.samsonHand != null) return [MD.samsonHand + (tick & 1)];
+        if (is(BD.sophie) && role === ROLE_HEAD && MD.sophieHead != null) {
+            if (on(MO.sButt) || on(MO.sSinderu) || on(MO.sUneune)) return [MD.sophieHead];
+            if (on(MO.sTatiaga) && f > 55 && f <= 70 && MD.sophieRun != null) {
+                return [MD.sophieRun + ((f - 56) % 15)];
+            }
+            return [tick % 90 > 2 && MD.sophieBlink != null ? MD.sophieBlink : MD.sophieHead];
+        }
+        if (is(BD.devilon) && p.joint === 1 && MD.devilonWing != null) return [...own, MD.devilonWing + (tick % 100)];
+        if (is(BD.devilonM) && p.joint === 1 && MD.devilonMWing != null) return [...own, MD.devilonMWing + (tick % 100)];
         return own;
     });
 }
@@ -520,6 +550,13 @@ export function readSkin(rom, body) {
     if (!hips || !chest) return null;
     const dv = rom.mainDataView;
     const i = body.skin;
+    /* The texture records the skin is drawn with. They moved with the skin
+     * index: the prototype keeps one pair per skin beside it in the data ROM,
+     * and the finished game one pair per body in the program ROM, which
+     * `ldl 0x63D20[g4*8]` reads with the body number the draw was given. Bodies
+     * sharing a skin carry the same pair there. */
+    const pv = S.pointersSource === 'maincpu' ? rom.mainCpuView : dv;
+    const pi = S.pointersBy === 'body' ? body.index : i;
     const count = dv.getUint32(S.counts + i * 4, true);
     /* 10 * count + 7 words: the records, and the closing one up to its attribute. */
     const used = 40 * count + 28;
@@ -545,8 +582,8 @@ export function readSkin(rom, body) {
         index: i,
         count,
         template,
-        uvPtr: dv.getUint32(S.pointers + i * 8, true),
-        matPtr: dv.getUint32(S.pointers + i * 8 + 4, true),
+        uvPtr: pv.getUint32(S.pointers + pi * 8, true),
+        matPtr: pv.getUint32(S.pointers + pi * 8 + 4, true),
         hips: hips.index,
         chest: chest.index,
         points,

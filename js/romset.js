@@ -40,9 +40,19 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
     const sources = zipBuffers.map((buf) => ({ buf, dir: readZipDirectory(buf) }));
 
     const names = new Set();
-    for (const s of sources) for (const n of s.dir.keys()) names.add(n);
+    /* Which of those names only exist inside a clone's directory — see
+     * detectGame, which needs it to tell a merged set's parent from its
+     * clones. */
+    const nested = new Set();
+    for (const s of sources) {
+        for (const [n, e] of s.dir) {
+            names.add(n);
+            if (e.nested) nested.add(n);
+            else nested.delete(n);
+        }
+    }
 
-    const game = detectGame(names);
+    const game = detectGame(names, nested);
     if (!game) throw new Error('unrecognised ROM set — no supported game found in these zips');
 
     const warnings = [];

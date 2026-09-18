@@ -131,6 +131,18 @@ part is drawn under, every model by its development name, with the textures,
 palette and colour tables of the part of the game that draws it, and its 68
 enemy bodies playing the 507 motions baked for their joint counts.
 
+The finished game takes `hotd.zip`, in either revision — MAME's `hotd`
+(Revision A) or `hotdo`. Its 7477 models come out under their development names,
+each drawn with the textures and palette of the chapter that draws it, across
+thirteen texture sets against the prototype's eleven, and its four chapters come
+out as eighteen stages — every zone a chapter's scripts reach while one texture
+set is loaded, plus the whole of each chapter's table, with its 94 enemy bodies
+playing the 674 motions baked for their joint counts.
+
+A merged archive carrying the parent and its clones together works too, and
+loads as the parent: the chips at the top level are the parent's, and the ones
+in a directory are a clone's, which is how MAME writes them.
+
 Then serve the directory over HTTP — the page is ES modules, so opening
 `index.html` off the filesystem will not work. The dev server moved out with the
 rest of the tooling, into

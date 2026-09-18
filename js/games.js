@@ -695,6 +695,20 @@ const hotdp = {
      */
     sky: { models: 0x840e0, heights: 0x840f0, count: 4, band: 1462, spin: 4 },
     /*
+     * The props the scripts spawn, in the same 76-byte table the finished game
+     * keeps them in — a sound at 0 and the model at 8. Found by its own shape
+     * and then held against the other build: 73 of the 77 types both tables
+     * carry name the same model, type for type, PN_test_tubo01a through
+     * PN_tokei, PN_book_tana, PN_sika_atama01a and PN_moon at 59.
+     *
+     * It stops at 78 where the finished game's runs to 122, which is the
+     * prototype being the smaller game.
+     */
+    objects: {
+        table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
+        prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
+    },
+    /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
      * depths to keep — js/layers.js ranks them the way the board's polygon sort
@@ -735,11 +749,572 @@ const hotdp = {
             templates: 0xd80160, templateBytes: 0x640, pointers: 0xd80090, counts: 0xd8c120,
             points: 0xd8a3e0, order: 0xd8bc40, slots: 0xd8b280, shared: 0xd8c190,
         },
+        /*
+         * The bodies sub_764C0 draws something other than the part's own model
+         * for, and what it names doing it. Every number is an index into the
+         * body, motion or model table, and all three renumber between builds,
+         * so they live here rather than in js/bodies.js.
+         */
+        callback: {
+            bodies: {
+                tom: 2, hand: 6, gman: 14, gmanKihon: 17, haride: 18, staje: 19,
+                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64,
+            },
+            motions: {
+                gmanDash: 118, soten: 124, handra: 126, pDash: 232, kousya: 244,
+                sButt: 262, sSinderu: 267, sTatiaga: 268, sUneune: 269,
+                tombaan: 332, tombanban: 333, tompaan: 337,
+            },
+            models: {
+                magazine: 1728, gunHand: 1734, kousyaHand: 795, sotenHand: 2445,
+                coat: 162, fingersA: 2452, fingersB: 2493, spiderLegs: 4157,
+                samsonHand: 1300, sophieHead: 1467, sophieBlink: 1468,
+                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886,
+            },
+        },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
-export const GAMES = [sfight, fvipers, hotdp];
+/* ---- The House of the Dead ----------------------------------------------- */
+
+/*
+ * The `hotdo` set: the finished game the prototype above became, in the
+ * revision that shipped first. Revision A is the profile after this one, and
+ * takes everything here but the addresses its patched program moved.
+ *
+ * It is the same program grown up — AM1's library, the board's geometry, the
+ * raw texture banks and the curve colour pipeline all carry across — but not
+ * one address does. The two program ROMs diverge 196 bytes in and share 5.5% of
+ * their 4KB blocks, so every table here was found again rather than adjusted,
+ * each by a signature the prototype's own tables supplied. What did carry over
+ * verbatim is noted where it happens.
+ *
+ * Four things changed shape:
+ *
+ *   - the program ROM is two pairs, not one, and 2MB rather than 1;
+ *   - the polygon ROM is four pairs where the prototype had three, and every
+ *     band of it is addressed: the fourth's 623 meshes all open on a unit
+ *     normal, which is what says the pairing is right;
+ *   - the data ROM ends in a 1MB EPROM pair MAME mirrors to 0x2000000, and the
+ *     XTRA_DATA window is the whole top 16MB rather than 8;
+ *   - there are thirteen texture sets and thirteen model banks, against eleven
+ *     and eight, and here they correspond one for one.
+ *
+ * This is MAME's `hotdo`. Its identity is both halves of its own program pair,
+ * which is what separates it from Revision A, plus a chip from each of the two
+ * regions whose layout changed, so a prototype zip renamed to these labels does
+ * not pass.
+ */
+const hotdo = {
+    id: 'hotdo',
+    name: 'The House of the Dead',
+    identify: ['epr-19696.15', 'epr-19697.16', 'mpr-19715.17', 'mpr-19718.27'],
+    regions: {
+        /* Two pairs. The second holds no table the viewer reads, but the region
+         * is addressed whole and the program's own pointers reach into it. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19696.15', 0x03da5623, 'epr-19697.16', 0xa9722d87],
+                [0x100000, 'epr-19694.13', 0xe85ca1a3, 'epr-19695.14', 0xcd52b461],
+            ],
+        },
+        /*
+         * Three 8MB mask pairs and then a 1MB EPROM pair, which MAME repeats
+         * every megabyte up to 0x2000000 (the ROM_COPY run in `hotd`). The
+         * repeats are listed rather than copied because the XTRA_DATA window
+         * maps the top 16MB straight through and the program's pointers land in
+         * every megabyte of it — 0x06C330D0, the one beside the colour gain, is
+         * in the thirteenth.
+         *
+         * The model table, the name tables and the luma curve are in the second
+         * pair; the raw texture banks fill the first 13MB.
+         */
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19704.11', 0xaa80dbb0, 'mpr-19705.12', 0xf906843b],
+                [0x0800000, 'mpr-19702.9', 0xfc8aa3b7, 'mpr-19703.10', 0x208d993d],
+                [0x1000000, 'mpr-19700.7', 0x0558cfd3, 'mpr-19701.8', 0x224a8929],
+                [0x1800000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1900000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1a00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1b00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1c00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1d00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1e00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                [0x1f00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19715.17', 0x3ff7dda7, 'mpr-19711.21', 0x080d13f1],
+                [0x0800000, 'mpr-19714.18', 0x3e55ab49, 'mpr-19710.22', 0x80df1036],
+                [0x1000000, 'mpr-19713.19', 0x4d092cd3, 'mpr-19709.23', 0xd08937bf],
+                [0x1800000, 'mpr-19712.20', 0x41577943, 'mpr-19708.24', 0x5cb790f2],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19718.27', 0xa9de5924, 'mpr-19716.25', 0x45c7dcce],
+                [0x800000, 'mpr-19719.28', 0x838f8343, 'mpr-19717.26', 0x393e440b],
+            ],
+        },
+    },
+    /* The whole top half of the data region, not the 8MB the prototype mapped:
+     * the program's XTRA_DATA pointers spread across all sixteen megabytes of
+     * the window, where the prototype's stop at the eighth. The upper half of
+     * what they reach is the mirrored EPROM pair. */
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+    /*
+     * One copy of 7477 entries, where the prototype carried two — the second
+     * being the same meshes wearing a second set of texture records. Nothing
+     * here repeats: the table ends at 7476 and the string pool starts in the
+     * next entry.
+     *
+     * Found by the holes. The debug name table below has a null wherever the
+     * model table has an empty entry, and only one 16-byte-strided base in the
+     * data ROM is zero at all twelve of this game's null indices and non-zero
+     * on either side of each. 99.54% of its meshes open on a unit normal, and
+     * every normal that is not unit is exactly zero rather than noise — the
+     * same shape the prototype's table has, one band deeper.
+     */
+    modelTable: { offset: 0x00e73530, count: 7477, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /*
+     * The same two-part palette the prototype has: a shared table below `split`
+     * written once, the loaded set's table from `split` on, and a table filled
+     * downward from 1023 for the gore.
+     *
+     * The set tables are packed end to end and the top table follows the last
+     * of them — 0xA34A2 + 2 + 138*2 is 0xA35B8 — exactly as they are in the
+     * prototype, which is how both were found: every one of them opens on the
+     * same four colours (0x8000, 0xFC00, 0x83E0, 0xFFE0), and the top table's
+     * first hundred are the prototype's byte for byte.
+     *
+     * `split` is 500 again, and the models say so without the instruction being
+     * read. Nine of the thirteen banks name a colour exactly at the end of
+     * 500 + their set's count, none names one past its own set's end, and not
+     * one face in the game names anything between the shared table's last
+     * entry at 212 and 500.
+     *
+     * `loadOrder` is the order the chapters first load each set, read off the
+     * sections themselves: each section's own set as it starts and every set a
+     * script loads part way through, in the order the walk meets them. The same
+     * reading of the prototype gives [1, 3, 4, 5, 6, 7], which is what its
+     * profile carries, so the method is the one that wrote that line.
+     *
+     * No model bank needs it — each names colours only up to its own set's end.
+     * The props do: a set writes as many entries from `split` as its table
+     * holds and clears nothing above them, so a lamp that names 832 under set 6,
+     * whose table stops at 698, is wearing what set 3 left there, 3 being loaded
+     * two chapters earlier and reaching 933. Because every set's own table is
+     * written last and over the top, this can only fill in entries above a set's
+     * end and cannot move a colour any scenery uses.
+     *
+     * Set 2 is not in the order because no chapter loads it, which is the same
+     * thing the prototype's notes say of its own bank 2.
+     */
+    palette: {
+        source: 'maincpu', tables: 0xa98f0, split: 500, sets: 13,
+        top: 0xa35b8, fixed: [[1023, 0x801f]],
+        loadOrder: [1, 3, 4, 5, 6, 7, 8, 10, 9, 11, 12],
+    },
+    /*
+     * The debug name table, in the same shape and at the same offset into
+     * itself: 1384 texture file names, then one `PN_` name per model, a null
+     * where the table has an empty entry. Its pointers are data addresses, and
+     * the run of them beginning "GG07.dgt" is unique in the region.
+     */
+    modelNames: { ptrs: 0x00ee3910, skip: 1384, count: 7477 },
+    /*
+     * Raw texture banks, as in the prototype: thirteen megabytes of the data
+     * ROM are texture RAM itself, one per set, and js/texture.js deals the
+     * second half of each out between the two sheets. The three tables sit
+     * where the prototype's do relative to each other — the set palettes'
+     * pointers, then the colour curves', then these — and the patch table's
+     * first set is all zeros with the second's eight blocks behind it, which is
+     * the shape that pins its base.
+     */
+    texture: {
+        raw: { bankTable: 0xa9970, bootBank: 0x02000000, patchTable: 0xc15e0 },
+        sets: 13,
+        residentSet: null,
+        /*
+         * Bank k under set k, for all thirteen — which the prototype's tables
+         * did not do, and which is read here off the colours rather than off
+         * stage data that has not been located yet.
+         *
+         * A bank's models name colours up to exactly the last entry its set's
+         * table writes: bank 1 to 780 against set 1's 780, bank 2 to 683, 4 to
+         * 668, 6 to 698, 7 to 863, 8 to 839, 9 to 765, 10 to 659, 11 to 615,
+         * and banks 3, 5 and 12 stop a few short of theirs. No bank reaches
+         * past its own set's end, and no other set's end fits.
+         *
+         * Bank 0 is the shared one — the enemies every chapter draws — and it
+         * is the exception, as it is in the prototype. It names no colour above
+         * 212, the shared table's own last entry, and one of its 98985 textured
+         * faces sits on sheet 1 where every other bank's do, so neither the
+         * palette nor the sheets pick a set for it.
+         *
+         * The colour ramps do. Set 0 is not a set the game ever loads: its slot
+         * in the ramp array is a zero placeholder, and sub_1330 dereferences
+         * what it is handed without checking. What boot installs instead is
+         * `lda off_A95F0, g0 / call sub_1330` — the table at slot 1 — so the
+         * ramps a shared body is drawn under, before any chapter has loaded a
+         * set of its own, are set 1's. Drawing bank 0 under set 0 leaves the
+         * bare grey curve, which is what blacked out BO_samson's head and arms.
+         */
+        bankSets: [1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    },
+    /*
+     * AM1's curve pipeline again: a curve computed at boot with a set's
+     * fourteen ramps laid over its odd rows, and luma RAM copied straight out
+     * of the data ROM.
+     *
+     * The luma table is 0x4000 bytes of nothing above 63, and its first
+     * thirty-two bytes match the prototype's exactly — one hit in 32MB. The
+     * gain is still 1.1, and still followed by 1.0 with the same run of
+     * 0x80008000 behind it; that pair occurs once in the program ROM.
+     *
+     * The pointer array opens on a zero: set 0, the boot set, has no ramps and
+     * keeps the bare curve, and sets 1 to 12 have one each. That leading zero
+     * is part of the table, not padding in front of it — sub_1330 is handed
+     * `ld unk_A9930[r4*4]` with the same set number that indexes the bank
+     * table at 0xA9970 and the palette tables at 0xA98F0 two instructions
+     * earlier. Starting the array after the zero instead gives every set the
+     * next one's ramps and set 12 none at all, which is the bare grey curve.
+     */
+    colors: {
+        luma: { data: 0xe9aac0, bytes: 0x4000 },
+        curve: { sets: { ptrs: 0xa9930, rows: 14, row0: 1, step: 2, gain: 0xa8308 } },
+        solid: true,
+    },
+    /*
+     * The material table is the prototype's, at the prototype's address: all
+     * 31 slots byte for byte at 0x7A0, in a program ROM that is otherwise 94%
+     * different. It was not edited and it did not move.
+     *
+     * `vecter` and `planeNormals` are carried across on the strength of that
+     * — the light the camera update builds, and GEO mode 2 taking the plane of
+     * the first three points over the stored normal — and are the two numbers
+     * here that this set's own code has not been read for.
+     */
+    lighting: {
+        vecter: [0xe000, 0xc000],
+        materials: { at: 0x7a0, count: 31 },
+        planeNormals: true,
+    },
+    /*
+     * The stages, in the prototype's three tables and found by their shapes.
+     *
+     * A placement is 24 bytes — a model, three world floats, a cycle list and a
+     * far model — and a table of them ends on a zero model, so a run of records
+     * whose model is in range, whose floats are sane and whose far word is zero
+     * is a placement table and nothing else is. Four such runs are in this
+     * program ROM, against the prototype's two, and the models they open on say
+     * which chapter each belongs to: 2333 in bank 1, then PN_room2_00a,
+     * PN_room3_00a and one more. A zone list is 50 bytes of placement indices
+     * ending in 0xFF with zeros behind it, which is as distinctive, and there
+     * are four of those too.
+     *
+     * `maps` and `zones` are then the arrays that name them, and they sit 0x20
+     * apart exactly as the prototype's do. Both carry seven entries and a zero:
+     * chapters 0-3 have tables of their own and 4-6 reuse them.
+     *
+     * `scripts` did not move at all — still 0xE0000, still a header of chapter
+     * pointers, a -1 and a 0x5C, with chapter 0's section array behind it. Only
+     * the header is longer, seven chapters against five.
+     *
+     * `sectionSets` is the one array of four pointers to arrays of nothing but
+     * set numbers, and it reads as the game plays: chapter 0 is
+     * 1,1,1,1,1,3,3,3,3,1,1,1 — the courtyard, then the mansion, then out —
+     * which is the prototype's chapter 0 section for section.
+     *
+     * The sky is not carried: which shell a chapter shows is a script opcode's
+     * argument against a table of models and heights, and that table has not
+     * been found here.
+     */
+    stageTable: {
+        placements: {
+            chapters: 4,
+            maps: 0xc0bc0, zones: 0xc0ba0, scripts: 0xe0000, sectionSets: 0xab0a0,
+            /* The cycle list is in the record's second tail word here, not its
+             * first. One placement in the game has one, and it is the same
+             * placement as the prototype's — index 55, PN_room5a_CT00a, the
+             * rain in the mansion corridor's windows, cycling PN_room5a_CT01
+             * through CT32. Which is also why `turns` is carried across: the
+             * draw loop's quarter turn is a compare against placement 55, and
+             * 55 is still that plane, still modelled across X for a corridor
+             * that runs along Z. */
+            cycle: 0x14,
+            turns: { 55: 0x4000 },
+            /*
+             * The sphere cull's box per model, which `resolveAlternates` needs
+             * to tell versions of one piece from rooms that merely share an
+             * origin. It follows the name table, as the prototype's does, and
+             * the base is not guessed: only one puts a null at each of the five
+             * dummy models and at each of the model table's twelve holes, and
+             * nowhere else.
+             */
+            bounds: 0xeec390,
+        },
+        flat: true,
+        backdrop: 0x8000,
+    },
+    /*
+     * The sky, which is geometry here as it is in the prototype — a dome a
+     * script opcode picks and turns, and PN_skyuv02a, the cut-out band, drawn
+     * over whichever dome it is.
+     *
+     * Eight models have `sky` in their name; six of them are domes, and the one
+     * array in the program ROM that names any of them names all six, sixteen
+     * bytes apart, each followed by its height and its drift rate. Where the
+     * prototype keeps model and height in two arrays and the rate as a constant
+     * in the code, this build folds the three into a record — so `stride` and
+     * `spins`. The heights agree with the prototype's model for model:
+     * PN_r2skyuvb hangs at -200 in both and every other dome at -9.
+     */
+    sky: { models: 0xac1e0, heights: 0xac1e4, spins: 0xac1e8, stride: 16, count: 6, band: 1544 },
+    /*
+     * The props a room is furnished with — the barrels and crates that break,
+     * the bookcases, the tables and what is laid on them — are not placements.
+     * They are objects the stage scripts spawn, and the four spawn opcodes the
+     * script walk used to step over carry a -1-terminated list of pointers to a
+     * record of {type, flags, x, y, z}.
+     *
+     * The type indexes this table, and sub_417F0, which builds an object, says
+     * where it is and what is in it exactly:
+     *
+     *     ldis 0xCC(g0), g4      ; the type
+     *     mulo g4, 0x4C, g4      ; 76 bytes an entry
+     *     lda  unk_AC2D0(g4), g4 ; the table
+     *     ld   (g4), g5          ; the model is the first word
+     *     st   g5, 0x54(g0)      ; and becomes the object's current model
+     *
+     * So the model is at 0 and the sound the handlers play is at 68 — which is
+     * what `unk_AC314` is in `ld unk_AC314(g4)`, the same table reached at its
+     * sound field rather than its head. Read from the head its entries are what
+     * a house is full of: PN_isu chairs, PN_tabul tables, PN_tokei a clock,
+     * PN_sitai a corpse, PN_sara plates, PN_book_tana a bookcase, PN_tantansu a
+     * chest, PN_kibako a crate, PN_tarun_dam a breaking barrel.
+     *
+     * Type 0 names PN_space and its slot in the handler table is a null
+     * pointer, so it is nothing at all and is skipped.
+     *
+     * The spawns whose type is 128 or more are not objects in this space — see
+     * the note on +0xCC in TECHNICAL.md — and are left alone rather than looked
+     * up here.
+     */
+    objects: {
+        table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
+        prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
+    },
+    /* Its rooms are built the same way the prototype's are, large faces with
+     * smaller ones laid on them in the same plane, so they want the same
+     * ranking and the same absent recede. */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    scenes: null,
+    /*
+     * The rig: 94 jointed bodies playing 674 baked motions, against the
+     * prototype's 68 and 508.
+     *
+     * The program ROM keeps all six index tables in one run, each followed by
+     * two words of padding, and the run is found from either end: the body
+     * names are the only long array of pointers to `BO_` strings, the motion
+     * names the only one to `MO_` strings, and the motion data the only long
+     * increasing run of XTRA_DATA addresses. Every boundary then falls out at
+     * 94 or 674 entries plus eight bytes —
+     *
+     *   trees 0xC7230, joints 0xC73B0, data 0xC7530, frames 0xC7FC0,
+     *   body names 0xC8A50, motion names 0xC8BD0
+     *
+     * — and the frame counts it lands on open 156, 66, 31, 61, 89, 116, which
+     * is the prototype's opening frame for frame.
+     *
+     * `flatAnkles` is `ldob unk_7C6E0(g4)` on the motion number, 674 bytes of
+     * 0 and 1 and a zero behind them, opening on the same run of 22 the
+     * prototype's does.
+     *
+     * The data-ROM tables were read against the prototype over the 59 bodies
+     * that share a name and a joint count between the builds: `roles` is the
+     * one base where 55 of them match role for role (the next scores 20), and
+     * `scales` the one where 58 match value for value (next 45). `hitMotions`
+     * was the only per-body pointer array in 32MB whose targets are all valid
+     * motion numbers, and it reads as the prototype's does — the dogs get
+     * MO_ddoggdam, the zombies MO_z_a_*hit, the monkeys MO_saru*dam.
+     */
+    rig: {
+        bodies: {
+            names: 0xc8a50, count: 94, joints: 0xc73b0, trees: 0xc7230,
+            scales: 0xfc0060, roles: 0xfc04b0, hitMotions: 0xff264c,
+            /* This one is in the program ROM here, not the data ROM. There is
+             * a stale copy of it at data 0xF80000, left over beside the skin
+             * block the prototype kept it in; the two agree for the first
+             * forty bodies and then do not, and the copy the code reads is
+             * this one. */
+            skins: 0x63c60, skinsSource: 'maincpu',
+        },
+        motions: { names: 0xc8bd0, count: 674, data: 0xc7530, frames: 0xc7fc0, flatAnkles: 0x7c6e0 },
+        /*
+         * 28 skins, every stride read straight off the routine at 0x64020:
+         * `ld 0x2F8D220[g1*4]` is the count, `g1 * 0x640` from 0x2F803A0 the
+         * template, `g1 * 144` from 0x2F8B2A0 the points, `g1 * 96` from
+         * 0x2F8C260 the slots, `g1 * 48` from 0x2F8CCE0 the order, and
+         * 0x2F8D290/4 on an 8-byte stride the shared pair. Each table ends
+         * exactly where the next begins at 28 entries, which is also the
+         * highest index the skin table names.
+         */
+        skins: {
+            templates: 0xf803a0, templateBytes: 0x640, counts: 0xf8d220,
+            points: 0xf8b2a0, order: 0xf8cce0, slots: 0xf8c260, shared: 0xf8d290,
+            pointers: 0x63d20, pointersSource: 'maincpu', pointersBy: 'body',
+        },
+        /*
+         * The same routine's bodies, read across by name rather than by number:
+         * every index below renumbered, and taking the prototype's would not be
+         * a near miss. Its body 34 is the spider and this build's is BO_sophi,
+         * so she drew the spider's legs; its 35 is Samson and this build's is
+         * BO_hyum, so he drew Samson's hand.
+         *
+         * The mapping is confirmed where the code states it: the callback
+         * compares the body number against 2, 34 and 50, which are BO_tom,
+         * BO_sophi and BO_devilon here, and reaches the Devilons' wing beats
+         * with `lda 0x1401` and `lda 0x7CD` — 5121 and 1997, the numbers
+         * PN_devilon_hane01 and PN_devilonm_hane01 carry in this build's model
+         * table.
+         *
+         * Three of the prototype's are null because this game has no such body:
+         * there is no BO_gman, no BO_handrb and no BO_tarab, and the rules that
+         * name them cannot fire. This build's callback is the larger of the two
+         * and may treat bodies of its own apart; those have not been read yet.
+         */
+        callback: {
+            bodies: {
+                tom: 2, hand: null, gman: null, gmanKihon: 13, haride: 14, staje: 15,
+                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55,
+            },
+            motions: {
+                gmanDash: 188, soten: 195, handra: null, pDash: 339, kousya: 360,
+                sButt: 386, sSinderu: 391, sTatiaga: 399, sUneune: 401,
+                tombaan: 462, tombanban: 463, tompaan: 466,
+            },
+            models: {
+                magazine: 1814, gunHand: 1819, kousyaHand: 875, sotenHand: null,
+                coat: 181, fingersA: null, fingersB: null, spiderLegs: null,
+                samsonHand: 1367, sophieHead: 1550, sophieBlink: 1551,
+                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997,
+            },
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
+};
+
+/* ---- The House of the Dead (Revision A) ---------------------------------- */
+
+/*
+ * The `hotd` set: the same game as `hotdo`, with a patched program pair.
+ *
+ * Only epr-19696a.15/epr-19697a.16 differ — the first megabyte of the program
+ * ROM, which is where every table the viewer reads out of it lives. The second
+ * pair and every mask ROM are the same chips, so the model table, the names,
+ * the bounds, the roles, the scales, the hit motions, the luma curve and the
+ * whole skin block are at the addresses above, untouched.
+ *
+ * The patch is an insertion, not a rewrite. 28.5% of that megabyte's bytes
+ * differ across 408 clusters, but what the differences do is push things along:
+ * every table below sits exactly sixteen bytes later than `hotdo`'s, the colour
+ * block a hundred and twelve, and the contents are the same bytes wherever they
+ * are not themselves pointers — the joint counts, the frame counts, the flat
+ * ankles, the top palette, the gain, the sky records, the texture patches and
+ * the bank table are all byte for byte what they were.
+ *
+ * Two things do not simply shift, so neither is assumed:
+ *
+ *   - the skin index and the skin's texture pointers are not sixteen bytes on
+ *     but a quarter of a megabyte back, at 0x20E40 and 0x20F00. Their contents
+ *     are byte for byte `hotdo`'s, all 94 indices and all 28 skins.
+ *   - the stage scripts did not move at all. `scripts` is still 0xE0000 and its
+ *     header still names the same seven chapters; only the last of the seven
+ *     points anywhere new.
+ *
+ * Every address here was found by running the same finders over this program
+ * ROM that found `hotdo`'s over its own — the `BO_`/`MO_` name runs, the
+ * increasing XTRA_DATA run, the palette tables' four opening colours, the
+ * 24-byte placement records and the 50-byte zone lists, the sky's dome
+ * numbers — not by adding sixteen to the profile above. The shift is what came
+ * out, not what went in.
+ */
+const hotd = {
+    ...hotdo,
+    id: 'hotd',
+    name: 'The House of the Dead (Revision A)',
+    /* The `a` suffix is the whole difference, so identify on both halves of the
+     * pair that carries it. */
+    identify: ['epr-19696a.15', 'epr-19697a.16', 'mpr-19715.17', 'mpr-19718.27'],
+    regions: {
+        ...hotdo.regions,
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19696a.15', 0x42adc32e, 'epr-19697a.16', 0x1e247cd5],
+                [0x100000, 'epr-19694.13', 0xe85ca1a3, 'epr-19695.14', 0xcd52b461],
+            ],
+        },
+    },
+    /* +0x70, with the set tables' own chain — each ending where the next
+     * begins, the top table behind the last — intact. */
+    palette: { ...hotdo.palette, tables: 0xa9960, top: 0xa35c8 },
+    texture: {
+        ...hotdo.texture,
+        raw: { ...hotdo.texture.raw, bankTable: 0xa99e0, patchTable: 0xc15f0 },
+    },
+    colors: {
+        ...hotdo.colors,
+        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a0, gain: 0xa8318 } },
+    },
+    stageTable: {
+        ...hotdo.stageTable,
+        placements: {
+            ...hotdo.stageTable.placements,
+            maps: 0xc0bd0, zones: 0xc0bb0, sectionSets: 0xab0b0,
+            /* Unmoved, and `bounds` is in the shared data ROM. Placement 55 is
+             * still PN_room5a_CT00a with its 32-frame cycle in the record's
+             * second tail word, so `cycle` and `turns` carry over as they are. */
+            scripts: 0xe0000,
+        },
+    },
+    sky: { ...hotdo.sky, models: 0xac1f0, heights: 0xac1f4, spins: 0xac1f8 },
+    /* The props' table moved with everything else. It is worth saying that the
+     * reader failed safe when it had not: at 0xAC314 this build reads PN_space
+     * for every type, so every prop was dropped rather than drawn wrong. */
+    /* The handler moved further than the tables did — the tables are 0x10 on
+     * and the routine is at 0x3B160 rather than 0x3A220. */
+    objects: {
+        ...hotdo.objects,
+        table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160,
+        classes: 0xafde0, generic: 0x39930,
+    },
+    rig: {
+        bodies: {
+            ...hotdo.rig.bodies,
+            names: 0xc8a60, joints: 0xc73c0, trees: 0xc7240,
+            skins: 0x20e40,
+        },
+        motions: { ...hotdo.rig.motions, names: 0xc8be0, data: 0xc7540, frames: 0xc7fd0, flatAnkles: 0x7c6f0 },
+        skins: { ...hotdo.rig.skins, pointers: 0x20f00 },
+        /* Body and motion indices, so the same for both revisions: the two name
+         * tables are the same names in the same order, and only the tables'
+         * addresses moved. */
+        callback: hotdo.rig.callback,
+    },
+};
+
+export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd];
 
 /**
  * Pick the profile a set of zip member names belongs to.
@@ -747,10 +1322,22 @@ export const GAMES = [sfight, fvipers, hotdp];
  * Members are looked at across every supplied zip at once, so a parent/clone
  * split spread over two archives identifies the same as one self-contained set.
  *
+ * A merged set is the awkward case: it carries the parent and every clone in
+ * one archive, so by basename alone all three House of the Dead profiles match
+ * it at once and the answer would come down to the order of this list. MAME's
+ * own convention settles it — the parent's chips are the ones at the top level,
+ * and a clone's are in a directory named for it — so a profile whose members
+ * are all top-level is preferred, and basenames decide only when none is.
+ *
  * @param {Set<string>|string[]} names  every member name across the zips
+ * @param {Set<string>} [nested]  those of them that exist only inside a
+ *   clone's directory
  * @returns {null|object} the profile, or null if none matches
  */
-export function detectGame(names) {
+export function detectGame(names, nested = null) {
     const have = names instanceof Set ? names : new Set(names);
-    return GAMES.find((g) => g.identify.every((m) => have.has(m))) || null;
+    const has = (m) => have.has(m);
+    return GAMES.find((g) => g.identify.every((m) => has(m) && !nested?.has(m)))
+        || GAMES.find((g) => g.identify.every(has))
+        || null;
 }

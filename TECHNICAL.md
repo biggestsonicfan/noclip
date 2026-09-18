@@ -136,6 +136,392 @@ tiles it covers. Over 3550 textured models that picks a fully-covering set for
 all but one, in about half a second for the whole table; unpacking all 100 sets
 to find out would have cost seconds per model.
 
+### Working out a later build of the same game
+
+*The House of the Dead* shipped two years after the prototype above, and the
+finished set is a harder case than a new game, not an easier one. Nothing about
+the library changed — the raw texture banks, the curve colour pipeline, the
+placement-driven stages are all still there — but the two program ROMs diverge
+196 bytes in and share 5.5% of their 4KB blocks. Not one table address survives.
+So no address here was adjusted from the prototype's; each was found again, and
+what the prototype supplied was not a number but a *signature* to look for.
+
+The regions come from MAME, and what needs checking is only that the chips are
+paired and ordered right. Four things moved: the program ROM is two pairs and
+2MB, the polygon ROM is four pairs where the prototype had three, the data ROM
+ends in a 1MB EPROM pair mirrored up to `0x2000000`, and the XTRA_DATA window is
+the whole top 16MB rather than 8. The window's size is read off the program's own
+pointers — the prototype's `0x06xxxxxx` constants stop in the eighth megabyte and
+this build's fill all sixteen.
+
+Then, in the order each one unlocks the next:
+
+- **The debug name table.** Both builds keep 1384 texture file names and then one
+  `PN_` name per model, as pointers to C strings at `data + 0x02000000`. Scanning
+  the data region for a long run of such pointers finds one run beginning
+  `GG07.dgt`, and the skip is 1384 in both.
+- **The model table**, from the name table's holes. A name pointer is null
+  wherever the model table has an empty entry, so the null indices are a mask:
+  look for a 16-byte-strided base that is all zeros at every one of them and
+  non-zero on either side of each. In 32MB exactly one base matches — and where
+  the prototype's table is two copies of 5049 entries, this one is a single copy
+  of 7477 that ends with the string pool in the next entry.
+- **Confirmation, from the normals.** Decode every mesh the table points at and
+  measure the length of the first record's normal. 99.5% are unit, and every
+  normal that is not unit is exactly zero rather than noise — the prototype's own
+  shape. Scored per 8MB band it holds across all four, including the fourth's 623
+  meshes, which is what says the added polygon pair is paired the right way round.
+- **The palette tables**, from their first four colours. Every per-set table in
+  both builds opens `0x8000, 0xFC00, 0x83E0, 0xFFE0` behind a half-word count,
+  and they are packed end to end with the top-of-palette table following the last
+  of them. Finding those bodies gives the tables; the one pointer array in the
+  program ROM that names them all is the array the game indexes. Thirteen sets
+  here against eleven. The top table is a hundred colours whose first are the
+  prototype's byte for byte.
+- **The neighbours.** Once the palette array is placed, the colour-curve pointers
+  and the texture bank table are immediately behind it, in the same order and with
+  the same padding as the prototype's — which is worth checking rather than
+  assuming, and does check out. The texture patch table is found by its shape:
+  set 0's record is 32 zero bytes with set 1's eight data-ROM pointers behind it.
+- **The luma table**, which is 0x4000 bytes containing nothing above 63. Its first
+  thirty-two bytes match the prototype's exactly, and the match is unique in 32MB.
+- **The curve gain**, a float the builder reads as a constant. The prototype has
+  1.1 followed by 1.0 with a run of `0x80008000` behind it; that neighbourhood
+  occurs once in this program ROM.
+- **The material table** did not move at all: all 31 slots byte for byte at
+  `0x7A0`, in a program ROM otherwise 94% different. A table that was never edited
+  and happened to keep its place.
+
+#### Reading the split and the bank order off the art
+
+Two facts that the prototype needed its own disassembly for fall out of the ROM
+here without any.
+
+A set's palette table is written into palette RAM from `split` on, and `split`
+is 500 — an address in an instruction, in the prototype. But the models say so
+by themselves. Take every model's highest colorbase below the top table's range,
+gather it per bank, and compare against `500 + that set's count - 1`: nine of the
+thirteen banks land on their set's last colour exactly, none reaches past its own
+set's end, and no other set's end fits any of them. The same measurement pins
+`split` from the other side, because no face in the whole game names a colour
+between the shared table's last entry at 212 and 500. That gap would not be empty
+if the split were anywhere else.
+
+The same measurement gives the bank order for free. `bankSets` says which texture
+set each bank of the model table is drawn under, and in the prototype it had to
+be read off the stage data, because the raw banks are too dense for tile coverage
+to answer. Here the colours answer it: bank *k* is drawn under set *k*, for all
+thirteen. Bank 0 is the shared one — it names nothing above 212, and one of its
+98985 textured faces sits on sheet 1 where every other bank's face does — so its
+set decides nothing, and it takes its own.
+
+#### The stages, which do describe themselves after all
+
+The stage tables looked at first like a disassembly job — indexed tables reached
+only through code. They are not. Two of the three have a shape nothing else in
+the program ROM has:
+
+- A **placement** is 24 bytes: a model number, three world floats, and two tail
+  words. So a run of records whose model is inside the model table, whose three
+  floats are finite and of sane magnitude, and whose tail is empty is a placement
+  table and essentially nothing else is. The prototype yields exactly two such
+  runs — its two chapters, the second 27 records long, which is what its own
+  notes say. The finished game yields four.
+- A **zone** is 50 bytes of placement indices terminated by `0xFF` with zeros
+  behind it, which is as distinctive. Four of those as well.
+
+`maps` and `zones` are then simply the arrays that name what was found, and they
+sit 0x20 apart in both builds. `scripts` did not move at all — still `0xE0000`,
+still a header of chapter pointers, a `-1` and a `0x5C`, with chapter 0's section
+array behind it. `sectionSets` is the one array of four pointers to arrays
+holding nothing but set numbers, and it reads as the game plays: chapter 0 is
+1,1,1,1,1,3,3,3,3,1,1,1 — courtyard, mansion, out — section for section the
+prototype's.
+
+Two details differ, and both would have passed silently as corruption:
+
+- The prototype's placement tables close on a record whose model is 0. The
+  finished game's close on a `-1` and then a 0, and a walk that stops only at 0
+  takes the `-1` for a placement and indexes the model tables with 4294967295.
+- The cycle list — the `-1`-terminated run of model numbers an animated placement
+  draws in turn — is in the record's *second* tail word here, not its first. Each
+  build has exactly one placement that uses one, and it is the same placement in
+  both: index 55, `PN_room5a_CT00a`, the rain in the mansion corridor's windows,
+  cycling `PN_room5a_CT01` through `CT32`. That the index matches is also the
+  reason the draw loop's quarter turn for placement 55 is carried across: the
+  compare is against that index, and that index is still that plane.
+
+#### The rig, which describes itself from both ends
+
+The rig is six arrays in the program ROM, laid end to end with two words of
+padding between them, and three of the six announce themselves:
+
+- the **body names** are the only long run of pointers to strings beginning
+  `BO_`, and the **motion names** the only one to `MO_`;
+- the **motion data** table is the only long strictly-increasing run of
+  XTRA_DATA addresses, and it opens at `0x06000000` in both builds.
+
+With any one of them placed, the rest follow, because every boundary is a whole
+number of entries plus eight bytes of padding. In the finished game the run is
+trees `0xC7230`, joints `0xC73B0`, data `0xC7530`, frames `0xC7FC0`, body names
+`0xC8A50`, motion names `0xC8BD0` — 94 bodies and 674 motions against the
+prototype's 68 and 508 — and the frame counts it lands on open 156, 66, 31, 61,
+89, 116, which is the prototype's opening, motion for motion.
+
+The data-ROM tables have no such shape, and were read against the prototype
+instead. 59 bodies share a name *and* a joint count between the two builds, and
+that is enough to score a candidate base: `roles` is the one base at which 55 of
+those 59 agree role for role (the runner-up scores 20), and `scales` the one at
+which 58 agree value for value (runner-up 45). `hitMotions` needed no comparison
+— it is the only per-body pointer array in 32MB whose every target is twenty
+valid motion numbers — and it reads the way the prototype's does: the dogs get
+`MO_ddoggdam`, the zombies `MO_z_a_*hit`, the monkeys `MO_saru*dam`.
+
+Two tables changed region, which is the kind of thing no amount of scanning
+tells you and a disassembler says in one line. The skin index and the skin's
+texture-record pointers are in the data ROM in the prototype and in the
+**program** ROM in the finished game — `ldis word_63C60[g4*2]` and
+`ldl 0x63D20[g4*8]` — and the pointers are indexed by *body* there rather than
+by skin, so bodies sharing a skin carry the same pair. There is still a copy of
+the skin index at data `0xF80000`, beside the skin block where the prototype
+kept it; it agrees with the program-ROM copy for the first forty bodies and then
+does not, and the one the code reads is the one to believe.
+
+The 28 skins' own strides come straight off the routine that builds them: the
+count at `0x2F8D220[skin*4]`, the template at `0x2F803A0 + skin*0x640`, the
+points at `0x2F8B2A0 + skin*144`, the slots at `0x2F8C260 + skin*96`, the order
+at `0x2F8CCE0 + skin*48`, and the shared pair at `0x2F8D290` on an 8-byte
+stride. Each ends exactly where the next begins at 28 entries, which is also the
+highest index the skin table names.
+
+650 of the 674 motions fit exactly one of the joint counts the bodies have; the
+24 that do not are written for counts no body in the table carries, which is the
+same thing that leaves two of the prototype's 508 unfitted.
+
+#### A leading zero that was mistaken for padding
+
+The finished game's colour ramps were read one set out, and it took a body to
+show it. `BO_kyurianb` came out grey where `BO_kyurian`, the same figure under
+another texture set, came out in tan and pale blue.
+
+The two are worth keeping in mind as a technique, because between them they made
+the fault findable. They share a name, a joint count, a skin and a part tree,
+part for part, offset for offset — only their models differ, one bank's worth
+each, so anything that shows on one and not the other is a property of the *set*
+and not of the body. That ruled out the tree, the roles and the skin in one
+comparison, and drawing each head on its own ruled out the geometry: model 7406
+renders perfectly under set 12, grey.
+
+Grey and *lit* is the clue. A model drawn under a set that does not hold its
+textures comes out nearly black — 6991 under set 12 lights 3859 pixels against
+37490 under its own. 7406 under set 12 lit 32735 pixels at a saturation of 8
+where its twin managed 139. The texture was there and bright; the colour was
+not. That is the curve, not the sheets.
+
+`colors.curve.sets.ptrs` had been read as the first *non-zero* entry of its
+array. It is not: the array opens on a zero because set 0, the boot set, has no
+ramps of its own, and the game indexes it with the same set number it uses for
+everything else. The set-loading routine says so in three consecutive
+instructions:
+
+```
+ld   unk_A9970[r4*4], g0   ; the texture bank
+ld   off_A98F0[r4*4], g0   ; the palette table
+ld   unk_A9930[r4*4], g0   ; the colour ramps
+```
+
+Starting after the zero hands every set the next one's ramps, and the last set
+none at all — which is the bare grey curve, and why set 12 was the one that
+looked broken rather than merely wrong. The prototype's profile had the base
+right all along, and its array has the same leading zero, which is the check
+that settles the shape.
+
+What it cost elsewhere was subtler and worse for being subtle: every set in the
+game was wearing its neighbour's colours. The first chapter's sky came out blue
+where it should be a warm sepia, and Stage 4's last section, drawn under set 12,
+was black enough to look like nothing had loaded.
+
+The same zero settles what the shared bank is drawn under, which a second body
+turned up: `BO_samson` had a black head and black arms. Its models are in bank 0
+— the enemies every chapter shares — and bank 0 had been given set 0 on the
+argument that neither its palette nor its sheets care which set it takes. They
+do not. Its ramps do, and set 0 is not a set the game ever loads: `sub_1330`
+dereferences the table it is handed with no check, so a zero would fault. What
+boot hands it is `lda off_A95F0, g0`, the table in slot 1. So the ramps a shared
+body is drawn under are set 1's, and bank 0 takes set 1 — which is what the
+prototype's profile says, for the same reason.
+
+Only the untextured faces moved. A body whose surfaces are textured, like
+`BO_kenkyu`, looks identical either way; one that leans on solid colours, where
+a palette entry is a row number into the curve rather than a colour, loses them
+all to the bare grey. That is why this showed up as *black limbs on one zombie*
+rather than as anything so obvious as the whole game being wrong.
+
+#### The draw callback is a table of numbers, not a table of names
+
+`sub_764C0` draws something other than a part's own model for eleven bodies —
+Tom's coat, the hand's fingers, the spider's legs, Samson's swapped hand,
+Sophie's blinking head, the Devilons' wing beats, and the gun hands of the
+shooting motions. Those rules were read off the prototype and written into
+`js/bodies.js` as constants, which was fine while there was one game to draw.
+
+Every number in them is an index into the body, the motion or the model table,
+and all three renumber between builds. Taken over to the finished game they do
+not miss by a little. The prototype's body 34 is `BO_tarab`, the spider, and the
+finished game's is `BO_sophi` — so Sophie drew a run of spider legs out of her
+head joint, one model a frame, which is the garbage that turned up in her
+animation. Its 35 is `BO_samson` and this build's is `BO_hyum` — so hyum's joint
+5 was swapped every vsync for Samson's right hand.
+
+So the rules stay in `bodies.js` and the numbers moved to the profile, resolved
+by name: `BO_sophi` is 34 here and 39 there, `MO_gman_soten` 195 against 124,
+`PN_devilon_hane01` 5121 against 4814. Three of them have no counterpart at all
+— this game has no `BO_gman`, no `BO_handrb` and no `BO_tarab` — and a null
+cannot match a body number, so those rules simply never fire.
+
+The mapping is confirmed where the finished game's own callback states it. It
+compares the body number against 2, 34 and 50, which are `BO_tom`, `BO_sophi`
+and `BO_devilon` under the name mapping, and it reaches the two wing beats with
+`lda 0x1401` and `lda 0x7CD` — 5121 and 1997, which are exactly where
+`PN_devilon_hane01` and `PN_devilonm_hane01` sit in this build's model table.
+Its callback is the larger of the two and may treat bodies of its own apart;
+those have not been read yet.
+
+#### The bodies were never given their layers
+
+`js/layers.js` exists because this game's art lays one face on another in the
+same plane and leaves the board's polygon sort to say which is on top. A depth
+buffer cannot, so the ranking is computed and the fill shader takes a ranked
+face's depth from its group's plane. Both games that need it declare
+`depth.layers`.
+
+It was applied to the stage draws and to a lone model in the Models tab, and
+never to a body's parts. So every enemy wore its decals fighting: `BO_neil`'s
+wounds are faces laid on his face, and which of the two the depth buffer kept
+came down to rounding, in stripes, differently each frame as the pose moved.
+
+A part is the easy case, easier than a stage. It is rigid — a pose moves its
+matrix and never its points — so its faces can be ranked once per model in the
+part's own space, and the vertex shader already carries a plane from local space
+into view through the normal matrix, the same way it carries a normal. Nothing
+had to be added to the shader; the ranking simply was not being asked for.
+
+It is not a rare shape. 81 of the finished game's 94 bodies have at least one
+part with faces stacked in a plane, and 58 of the prototype's 68 — `BO_ebita`
+has thirteen of its seventeen parts that way, and 74 of the 148 faces of its
+chest alone.
+
+The geometry cache the parts draw from is shared with the stage path, which
+ranks the same models against a whole scene rather than against themselves. The
+two need not agree, because switching tabs rebuilds whichever view is showing.
+
+#### Auditing the bodies
+
+Two bugs found by eye — Sophie's garbage and hyum's hand — were both a part
+drawing a model out of a bank its body has nothing else in, and a third,
+Samson's black limbs, was a face naming a colour its texture set does not hold.
+Those are mechanical questions, so they are worth asking of every body at once
+rather than waiting for the next one to be noticed. Over each body: does the
+part tree match the joint count, do the models every part can draw — its own and
+the callback's, sampled across its motions, frames and vsync parities — all
+exist, decode to geometry, come from a bank the body uses, and name colours the
+body's set resolves, and does a named skin build?
+
+Across all 94 bodies of both revisions, and the prototype's 68, nothing is left
+of those three classes: no model past the table, none decoding to nothing, none
+from a foreign bank, none naming an unresolvable colour. What the sweep does
+turn up is two things that are the ROM's rather than the reader's:
+
+- Seven bodies have fewer parts than joints — `BO_neopetit` and its two
+  variants, `BO_pkenb`, `BO_pdolob`, and, in the finished game, `BO_pbaba` and
+  `BO_gfrog`. The same bodies do it in the prototype, so a tree that uses twelve
+  of its eighteen joints is how they are built, not a truncated walk. The
+  motions are still written for eighteen.
+- `BO_moodybb` and `BO_moodycc`, the last two entries of the finished game's
+  table, name skin 23 and carry real texture pointers for it, but their records
+  in the roles table are not records — the table's structure runs to body 91 and
+  what follows at their offsets is other data. Without a chest and a hips role
+  there is nothing for a skin to join, and the game's own callback switches on
+  the same bytes, so it has no more to work with. They draw; they have no torso
+  seam.
+
+The prototype's own sweep flags one thing the finished game's does not: Tom and
+the two gmen each draw one model from bank 0 that their own parts never use.
+That is the shared gun hand, and it is correct — their bodies are in a chapter's
+bank and the hand they are handed is in the bank every chapter holds.
+
+#### Revision A, and what a shifted build is worth
+
+The finished game shipped in two revisions. MAME calls the later one `hotd` and
+the first `hotdo`, and they differ in one chip pair — `epr-19696a.15` and
+`epr-19697a.16`, the first megabyte of the program ROM, which is where every
+table the viewer reads out of it lives. The second pair and every mask ROM are
+the same chips, so the model table, the names, the bounds, the roles, the
+scales, the hit motions, the luma curve and the whole skin block do not move.
+
+28.5% of that megabyte's bytes differ, across 408 clusters, which looks like a
+rewrite and is not. It is an insertion. Running the same finders over Revision A
+that found the first revision's tables — the `BO_`/`MO_` name runs, the
+increasing XTRA_DATA run, the palette tables' four opening colours, the 24-byte
+placement records, the 50-byte zone lists, the sky's dome numbers — puts every
+table exactly sixteen bytes later than before, the colour block a hundred and
+twelve, with two exceptions: the skin index and its pointers moved a quarter of
+a megabyte back, and the stage scripts did not move at all.
+
+It is worth saying why this was still done with the finders rather than by
+adding sixteen to the profile. A constant offset is a *result* here, not a
+method. It is only trustworthy because each address was found independently and
+the offsets came out equal, and the two tables that broke the pattern are
+exactly what a blanket shift would have got wrong — silently, since a wrong
+skin-pointer base still reads plausible-looking numbers.
+
+The contents then check the addresses back. Every table that holds values rather
+than pointers is byte for byte the first revision's: the joint counts, the frame
+counts, the flat ankles, the top palette, the gain, the sky records, the texture
+patches, the bank table, all 94 skin indices and all 28 skins. Every table that
+holds pointers differs by exactly the shift. And the two builds produce the same
+eighteen stages with the same zone, placement, draw and triangle counts, and the
+same 94 bodies over 674 motions with 650 fitted and 55 skinned — which is the
+real test, because a single wrong base would have moved one of those numbers.
+
+#### Telling a merged set apart
+
+A merged MAME archive holds the parent and every clone at once, and it broke
+detection the first time one was loaded. `readZipDirectory` keys members on
+their basename so that a split set resolves, and under that rule the one archive
+satisfies all three House of the Dead profiles at the same time — `prg0.15` is
+in it, as `hotdp/prg0.15`, and so is `epr-19696.15` as `hotdo/epr-19696.15`. The
+answer came down to the order of the `GAMES` list, which is no answer at all.
+
+MAME's own convention settles it: the parent's chips are the ones at the top
+level, and a clone's are in a directory named for it. So the reader now records
+whether a member was nested, never lets a nested chip displace a top-level one
+of the same name, and `detectGame` prefers the profile whose members are all
+top-level, falling back to basenames only when none is. A merged archive then
+identifies as the parent, each standalone clone zip as itself.
+
+#### The sky, which the model names give away
+
+The sky is geometry in both builds: a dome a script opcode picks and turns, and
+`PN_skyuv02a`, a cut-out band, drawn over whichever dome is up. So the names
+find it. Eight of the finished game's models have `sky` in the name, six of them
+domes, and the one array in the program ROM that names any of those six names
+all six.
+
+It is not shaped like the prototype's. There, the models and their heights are
+two arrays of four and the drift rate is a constant in the code; here the three
+are folded into a sixteen-byte record per sky. The heights confirm it anyway:
+`PN_r2skyuvb` hangs at -200 in both builds and every other dome at -9.
+
+What the sky proves is not only itself. The stage scripts hand out the sky by
+opcode, and the chapters they hand it to are the chapters the artists named the
+models for — `PN_skyuv` and `PN_skyuvb` over the first chapter's courtyard and
+mansion, `PN_r2skyuv`, `PN_r2skyuvb` and `PN_r2skyuvc` over the second's three
+sets, `PN_skyuvst4a` over stage 4's last set, and nothing at all over the third
+chapter, which is indoors. Nothing in the placement, zone or script tables knows
+what those names say, so the agreement is a check on the script walk as much as
+on the sky.
+
 ### Colour and light for a second game
 
 The colour tables carried across as completely as the textures did.
@@ -1466,6 +1852,352 @@ The viewer does not draw them — it reads them, in `faceVariantModels`, to know
 they are the rig's, because a head the fighters wear is in texture set 1 like
 the rest of the rig and should be shaded through the ramp rather than flat. All
 324 of them decode, and 233 are named by no part table.
+
+### The animations that are not bodies
+
+A body is a tree of parts played by a baked motion, and everything in
+`js/bodies.js` is about that. The game's other animations — the blood, the
+breaking glass, the water, the drifting rubbish — are not that at all. They are
+*objects*, and this section is what has been read of them so far. None of it is
+implemented; it is written down because finding it was the work.
+
+#### What they are
+
+An effect animation is a **run of consecutive model numbers stepped one a
+frame**. The same trick the draw callback plays for Tom's coat and the Devilons'
+wings is how the whole effect system works, and the model names give the runs
+away — a family ending in three digits, contiguous in the table:
+
+| models | count | name | what it is |
+|---|---|---|---|
+| 6–35 | 30 | `PN_akabushu###a` | 赤 *aka* red + ブシュ *bushu* spurt — the blood spray |
+| 1417–1446 | 30 | `PN_shoubushu###a` | 小 *shou* small — the lesser spurt |
+| 1130–1187 | 57 | `PN_nikubaan###a` | 肉 *niku* flesh + バーン burst |
+| 4529–4648 | 120 | `PN_niku_###` | the flesh chunks |
+| 2602–2632 | 31 | `PN_suiteki###a` | 水滴 *suiteki* water droplet |
+| 2250–2309 | 60 | `PN_hamon###a` | 波紋 *hamon* ripple |
+| 3451–3549 | 99 | `PN_gara6_###a` | ガラス *garasu* glass, shattering |
+| 3092–3191 | 100 | `PN_madogaa###a` | a window going in |
+| 736–785 | 50 | `PN_item_kira###a` | キラキラ *kirakira*, an item's sparkle |
+| 4802–4901 | 100 | `PN_fuuu###a` | |
+| 522–611 | 90 | `PN_gee0a###a` | |
+| 879–948 | 70 | `PN_kibako_dam###a` | 木箱 *kibako* crate, breaking |
+| 1674–1743, 1744–1813 | 70 each | `PN_taru_yoko_###a`, `PN_tarun_dam_###a` | 樽 *taru* barrel |
+
+The gore colour finds the bloody ones on its own. Palette index 1023 is the one
+the test menu switches between red and green, and 1520 models name a colour in
+its range — among them every `_dam` body part's wound, and `akabushu`,
+`shoubushu` and `nikubaan` whole.
+
+#### How one is spawned
+
+The stage scripts already carry them. `js/placements.js` walks a script for the
+two opcodes it needs and steps over the rest; four of the ones it steps over —
+9, 10, 11 and 12 — are spawn lists. Each is the opcode, a `-1`-terminated list
+of pointers, and each pointer names a **40-byte record**.
+
+The record's shape is the spawner's, not what the fields look like from outside.
+`sub_30670` reads it whole:
+
+```
+ld   (r9), g4             ; +0x00 is the object's CLASS
+ld   off_AFDD0[g4*4], g0  ; which picks the routine that opens the task
+call _TaskOpen
+ld   4(r9), g4
+st   g4, 0x58(r8)         ; +0x04 is flags
+ldob 0x24(r9), g4
+stos g4, 0xCC(r8)         ; +0x24, a byte, is the object type
+ldos 0x20(r9), g4         ; whose low two bits say how the position reads
+addo r9, 8, g13           ; the position is three floats at +0x08
+ld   0x14(r9), g4
+st   g4, 0x2C(r8)         ; and +0x14, +0x18, +0x1C are the angles
+```
+
+Two fields decide whether a record stands a prop anywhere, and they are not the
+same field.
+
+**+0x00 is the class.** It indexes `off_AFDD0`, a table of the routines that
+open a task, and only one of them — `sub_389E0`, at index 0x80 — is the generic
+object that goes on to draw a type's model out of the tables below. The rest are
+the doors, the bodies, the effects and the waves, each with its own task. Every
+other field is filled in the same way whatever the class, which is exactly why
+they all looked like props: a record of class 0x8B has a perfectly good type
+byte and a perfectly good position, and stands nothing. Of the 993 records the
+four chapters' scripts reach, **238 are of the generic class and 181 of those
+are props**.
+
+That one gate is what put the two bookcases in the courtyard. `PN_book_tana` is
+a bank-6 model and the courtyard is set 1, so it could not have been drawn there
+at all; the records that named it were of another class entirely. With the gate
+in, every prop of every stage is either from the shared bank 0 or from a bank
+whose own set is the one it stands under — 182 and 146 of 328, and none left
+over. That is the check the hardware makes on its own: sheet 0 holds the shared
+bank always, sheet 1 holds one set at a time.
+
+**+0x24 is the type.** The first word is not it — which is why its values range
+to 191 while no object table holds that many types, and why reading it as the
+type made a third of the spawns look like they belonged to a type space nobody
+could find. There was no such space.
+
+**+0x14, +0x18 and +0x1C are the angles**, copied word for word to the task and
+counted as the scenery's turns are, a whole circle to 0x10000. All but six of
+the props that carry one carry yaw alone, and nearly all of those are a quarter
+turn: the corpses on the courtyard lawn lie at 281° and 56°, which is what puts
+them across the path rather than along it.
+
+The position reads three ways by the low bits of +0x20, and **every prop record
+uses mode 0** — three plain floats at +0x08 — so the other two are the effects'
+and need not be implemented to stand the furniture up.
+
+Reading it right puts the props on the floor. Over the first chapter the median
+prop stands at y = -20.8 against a floor at -24.5; taken from the first word the
+median was 0. The prototype says the same: 331 props where the wrong field gave
+109, and they come out as barrels, chairs, tables and pots rather than
+forty-two ladles.
+
+Over the finished game's four chapters there are **1246 such records naming 118
+distinct types**, and the counts are the shape of a game: 273 of one type, 170
+of another, and a long tail of ones and twos.
+
+#### The object table
+
+The type indexes a table at **0xAC2D0 on a 76-byte stride**, which the object's
+own init reaches with `ldos 0xCC(r4), g6 / mulo g4, 0x4C, g4 / ld unk_AC2FC(g4),
+g4` — the base plus 0x2C. Its first word is a model number, and read that way types
+0 to about 122 come out as exactly what a house is full of — `PN_isu` chairs,
+`PN_tabul` tables, `PN_tokei` a clock, `PN_sitai` a corpse, `PN_sara` plates,
+`PN_nabe` pots, `PN_tarun_dam` a breaking barrel, `PN_niku_001` the flesh, and
+at type 59 `PN_moon`, which is the moon the prototype's notes say is billboarded
+at the camera from the script's own object lists.
+
+Every type resolves there. The ones that appeared not to were records of another
+class, whose first word was never a type at all.
+
+#### An object, and what animates it
+
+An object is a task. Its handler is the task function, the model it draws this
+frame is the word at **+0x54**, and its type is the halfword at **+0xCC** — the
+same field a body uses for its body number, which is why the draw callback and
+these read the same offset.
+
+The small blood spurt is the whole system in two routines. `sub_429A0` opens a
+task on `sub_44250` and writes 1417, `PN_shoubushu000a`, into +0x54. Then every
+frame:
+
+```
+lda  0x54(g0), g0      ; the current-model field
+ld   (g0), g4
+addo g4, 1, g4         ; one model on
+lda  unk_5A7, g7       ; 1447, one past PN_shoubushu029a
+st   g4, (g0)
+cmpibne g4, g7, ...
+call loc_150D0         ; the end: close the task
+```
+
+Thirty frames and it is gone — a one-shot, not a loop. It draws at a quarter
+scale (`lda 0x3E800000`) on the position it reads out of its parent object, and
+what spawns it is the flesh-chunk handler: a chunk lands, and a spurt is opened
+where it landed.
+
+The chunks themselves loop instead. Their handler steps +0x54 the same way from
+4529 and wraps at 4649 — `lda loc_11B0+1` and `lda 0x78(g6)`, the base and the
+base plus 120 — so they tumble for as long as the chunk lives.
+
+#### Standing the props up
+
+The furniture is not placements and never was, which is why a room read as an
+empty shell. A placement is a chapter's scenery table; a chair is an object the
+stage scripts spawn, and the four spawn opcodes were the ones the script walk
+stepped over.
+
+So the walk reads them now. It already visits every opcode and already tracks
+which texture set is loaded as it goes — the same variable the zones are grouped
+by — so a prop lands in the stage whose section spawned it, under the set that
+section had loaded, with no new traversal. The type goes through the object
+table for its model, the position is taken from the record, and nothing is
+turned, because the word that looked like an angle is a flag.
+
+Where the table is, and what is in an entry, is worth getting from the routine
+that builds an object rather than from what the fields look like. `sub_417F0`:
+
+```
+ldis 0xCC(g0), g4      ; the type
+mulo g4, 0x4C, g4      ; 76 bytes an entry
+lda  unk_AC2D0(g4), g4 ; the table
+ld   (g4), g5          ; the model is its first word
+st   g5, 0x54(g0)      ; and becomes the object's current model
+```
+
+The model is at 0 and the sound is at 68 — and 68 is why the handlers are seen
+reaching the table as `unk_AC314`, which is its sound field, not its head.
+Reading the head as the sound and the model as 8 past it is off by exactly one
+entry: every type then draws the *next* type's model, which is how the first
+chapter's courtyard came to be full of room 4's walls.
+
+Type 0 is nothing: its entry names `PN_space` and its slot in the handler table
+is a null pointer.
+
+Not every type is a prop, either. Each has a handler, and 77 of the finished
+game's 125 share one — the routine that draws the table's model where the object
+stands and does nothing else. The rest are their own things: type 97 is a
+distance trigger against a global, drawing nothing, and 98 to 102 switch on
+`type - 98` into four behaviours whose models are room 4's walls and shutters.
+Only the types on the shared handler are stood up, and only for records of the
+generic class. The others are left out rather than guessed at.
+
+They come out as their own layer, so they can be switched off and so the camera
+frames the room rather than them. The first chapter stands 31 in the courtyard
+and 43 in the mansion; the prototype, whose table is the same one 78 types long,
+stands 31 and 45.
+
+The prototype's table was found by its own shape and then held against the
+finished game's: **73 of the 77 types both carry name the same model, type for
+type** — `PN_test_tubo01a`, `PN_tokei`, `PN_book_tana`, `PN_sika_atama01a`, and
+`PN_moon` at 59 in both.
+
+And Revision A moved it, as it moved everything. The three addresses a prop
+needs, per build:
+
+| | object table | handlers | classes | generic class |
+|---|---|---|---|---|
+| prototype | 0x84140 | 0x86990 | 0x86C10 | 0x2ECC0 |
+| first revision | 0xAC2D0 | 0xAF950 | 0xAFDD0 | 0x389E0 |
+| Revision A | 0xAC2E0 | 0xAF960 | 0xAFDE0 | 0x39930 |
+
+The class table was found the way IDA finds anything: the generic init is the
+only routine that indexes the handler table, so the literal of the handler
+table's address locates it, and the pointer *to* that routine locates the class
+table — in the prototype the instruction is at 0x2EE70, the pointer to its
+function at 0x86E10, and 0x86E10 less 0x80 entries is the base.
+
+#### Auditing the props
+
+The same questions the bodies were swept with, asked of every prop of every
+stage: does its model decode, does it name colours the stage's set resolves, is
+it from a bank the stage's scenery uses, does it stand where the room is, and is
+it the size of a prop rather than a piece of the room?
+
+What comes back is clean on the classes that have bitten before. Across the
+finished game's eighteen stages there are **35 distinct prop models**, every one
+of them between 1.3 and 25.5 units across and between 4 and 602 triangles — no
+model that fails to decode, none from a bank the stage never uses, and none a
+quarter of the room across, which is the check that would have caught room 4's
+walls standing in the courtyard. They read as what they are: `PN_test_tubo02a`
+a jar forty times, `PN_honeatama` a pile of bones thirty-six, `PN_kibako01a` a
+crate twenty, corpses, tables, chairs, pots, plates, a billiard table, a deer's
+head — and `PN_book_tana` a bookcase six times, in the library rather than out
+on the lawn.
+
+The audit's earlier run turned up four kinds of oddity, and **the class gate
+accounted for all four**. They were not the game being strange; they were
+records of other classes being stood up as furniture:
+
+- **Models naming a colour past the end of their section's set** — gone. Every
+  prop now resolves every colour it names under the set it is drawn under. The
+  fourteen that did not were bank-6 and bank-3 models being drawn under set 1.
+- **Props at the origin** — gone. A record at exactly (0, 0, 0) turned out to be
+  the signature of a class that positions itself: the nine `PN_tarun_dam_01a`
+  at the origin were all class 0x8B, a rolling barrel, not a standing one.
+- **The prop a long way out** — gone with it.
+- **Props doubled at one spot** — down from 26 to five, and the five that remain
+  are two models the mansion's own set genuinely lists twice.
+
+What is left is one flag, in both builds: **`PN_moon` is a prop**, type 59,
+radius 170 in a room 486 across. It is the moon, billboarded at the camera by
+its own handler, and it is not wrong so much as not yet special-cased.
+
+#### The order the sets are loaded in
+
+The first of those is the palette carrying between sets, and the order it
+carries in can be read rather than guessed. Each section starts with a set of
+its own and a script may load another part way through, so walking the sections
+in order and noting each set the first time it appears gives the order the game
+loads them. Done to the prototype it gives **[1, 3, 4, 5, 6, 7]**, which is the
+line its profile already carries — so the method is the one that wrote it. Done
+to the finished game it gives **[1, 3, 4, 5, 6, 7, 8, 10, 9, 11, 12]**, the same
+for both revisions. Set 2 is absent because no chapter loads it, which is what
+the prototype's notes say of its own bank 2.
+
+That it cannot break anything is worth measuring rather than arguing. Building
+every set's palette with the order and without it changes **1970 entries across
+the thirteen sets, and every one of them was unset before** — not one colour
+that already had a value moved. It could not: a set's own table is written last
+and over the top, so the order can only reach entries above where that table
+stops.
+
+The stages agree. Every stage without a sky renders pixel for pixel identically;
+the ones with a sky differ only because the dome is at a different point in its
+drift, and the lit sky pixels come to the same mean colour to a tenth and the
+same count exactly. What does change is what had no colour at all: six lamps in
+the mansion, a plate, two tables, and one piece of scenery under set 6 that
+names 837 and had been falling back to grey.
+
+No prop is left without a colour. The two that were — `PN_tabul_maru01a` and
+`PN_ose_cup_01a`, naming 786 and 831 under set 1, which nothing precedes — were
+not props of set 1 at all.
+
+#### What handles a type
+
+A second table, at **0xAF950**, gives each type its handler, and the dispatch is
+three instructions:
+
+```
+shlo 0x10, g5, g4        ; the type,
+shri 0x10, g4, g4        ; sign-extended from sixteen bits
+ld   unk_AF950[g4*4], g4 ; and straight into the table
+```
+
+No mask, and no bounds check. The table holds **125 entries, types 0 to 124**,
+and behind them are zeros and then floats. Nothing ever indexes it past 124,
+because the dispatch only runs for objects of the generic class, whose type came
+from the record's +0x24 — a byte, so it cannot exceed 255, and in the data it
+never exceeds 124.
+
+`+0xCC` does carry two things, but the class says which. For a generic object it
+is a type into the tables above; for an enemy it is a body index. The draw
+callback reads it as a body number, and so does the routine that scatters an
+enemy's parts: `ldis 0xCC(g5)` into a table at **0x14BA80** whose entries are
+lists of that body's `_DD` models — `dog_akos_DD`, `ff_mune_DD`, `hyum_kao_DD`,
+`boss4_mune_DD`, the spider's `taraba_bodya_DD`. That table runs to index 189 and
+ends in -1, but only its first 94 entries name anything: 94 is the body count,
+and 94 to 189 all point at lists of nothing.
+
+The enemy waves are their own tables. **0xAED40** and **0xAF620** hold 28-byte
+records whose first halfword is a *body* index and whose next three floats are a
+position — 0xAED40 is six of `BO_ebita`, one of `BO_ebitb` and three of
+`BO_tetuman`; 0xAF620 is six of `BO_boss4` with `BO_mummy2c`, `BO_burnerb` and
+`BO_hiru_b` behind them, which is a boss fight written out.
+
+Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
+and `sub_3B1A0` several more, which is what a table of furniture should look
+like. The distinct ones are the objects with behaviour.
+
+#### The runs, from the routines that step them
+
+Every effect start can be enumerated rather than guessed: find each `st reg,
+0x54(reg)` and walk back for the `lda` that fed it, and the function handed to
+`_TaskOpen` just before is the routine that will step it. That is **122 spawn
+sites**, each naming its first model and its stepper — and it checks out against
+what was already known, finding the Devilons' wing beats at 5121 and 6495 and
+Sophie's blink at 1468, which the draw callback carries independently.
+
+Three are read out fully:
+
+| effect | models | frames | ends |
+|---|---|---|---|
+| `PN_shoubushu###a` | 1417 → 1446 | 30 | closes itself; quarter scale |
+| `PN_nikubaan###a` | 1130 → 1187 | 58 | closes itself; 0.4 scale |
+| `PN_niku_###` | 4529 → 4648 | 120 | wraps and keeps going |
+
+The spurt is opened twice over, by `sub_429A0` on `sub_44250` and by `sub_3D640`
+and `sub_3E960` on `sub_41B60`, and the two steppers are the same seven
+instructions. The flesh burst is `sub_425C0` on `sub_43F20`. Only the chunks
+loop; the other two are one-shots that call the task-close themselves at the top
+of the run.
+
+Three more tables turned up on the way and are not read: **0xAA378**, **0xAED40**
+and **0xAF620**, all indexed with a 28-byte stride whose first halfword is an
+object type, which is what a wave of spawns would look like.
 
 ## Animation
 

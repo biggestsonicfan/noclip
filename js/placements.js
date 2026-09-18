@@ -53,6 +53,10 @@ const TWO_WORDS = new Set([13, 14, 15, 20, 32, 33, 40, 69, 70, 71, 72, 73, 74, 7
 const THREE_WORDS = new Set([26, 68, 76, 87]);
 /* Spawns and two list setters: the opcode, pointers, and a -1. */
 const LISTS = new Set([9, 10, 11, 12, 50, 51]);
+/* Of those, the four whose entries are pointers to a spawn record. 50 and 51
+ * carry plain numbers and are not read. */
+const SPAWN_OPS = new Set([9, 10, 11, 12]);
+const SPAWN_BYTES = 0x28;
 /* 92 halts and 93 moves on to the next script. */
 const ENDS = new Set([92, 93]);
 
@@ -87,6 +91,96 @@ function walkScript(rom, at, visit) {
     }
 }
 
+/*
+ * The props a spawn list puts in the room, as the object table names them.
+ *
+ * The record's shape is the spawn opcode's handler's, not a guess at it. It
+ * reads
+ *
+ *     ld   (r9), g4            ; +0x00 picks the task the object runs
+ *     ld   off_AFDD0[g4*4], g0
+ *     call _TaskOpen
+ *     ldob 0x24(r9), g4
+ *     stos g4, 0xCC(r8)        ; +0x24, a byte, is the object type
+ *     ldos 0x20(r9), g4        ; whose low two bits say how the position reads
+ *     addo r9, 8, g13          ; and the position is at +0x08
+ *
+ * So the type is the byte at 0x24 — the first word is which task it runs, which
+ * is why it ranges past any type the object table holds — and the position is
+ * three floats at 0x08 in every mode. The two modes past 1 interpolate a
+ * position between two points rather than standing one still; their first three
+ * floats are still where the object starts.
+ *
+ * Only the types the game treats as an ordinary standing object are put up.
+ * Each type also has a handler, and 77 of the finished game's 125 share one —
+ * the routine that draws the table's model where the object was spawned and
+ * does nothing else. The rest have handlers of their own and are not props at
+ * all: type 97 is a distance trigger that draws nothing, 98 to 102 switch on
+ * `type - 98` into four behaviours of their own, and their models are room 4's
+ * walls and shutters, which is what filled the first chapter's courtyard with
+ * PN_r4_04 pieces when every type was stood up. What those handlers do has not
+ * been read, so nothing is guessed at: they are left out.
+ *
+ * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
+ * null pointer — so the table's own shape excludes it.
+ *
+ * Records are keyed by their own address, because a script listed by two
+ * sections is walked twice and would otherwise stand its props up twice.
+ */
+function spawnProps(rom, at, set, out) {
+    const O = rom.game.objects;
+    if (!O) return;
+    const dv = rom.mainCpuView;
+    for (let q = at + 4; inRom(rom, q); q += 4) {
+        const rec = dv.getUint32(q, true);
+        if (rec === END) break;
+        if (!inRom(rom, rec, SPAWN_BYTES)) continue;
+        if (out.has(rec)) continue;
+        /*
+         * The word the spawner reads first is not the type: it is the object's
+         * class, an index into a table of the routines that open a task —
+         * `ld off_AFDD0[g4*4], g0 / call _TaskOpen`. Only one of them, the one
+         * the profile names, is the generic object that goes on to draw the
+         * type's model; the rest are the doors, the bodies and the effects,
+         * which stand nothing here. Every other field is filled the same way
+         * whatever the class, which is why they all looked like props.
+         */
+        const cls = dv.getUint32(rec, true);
+        if (!inRom(rom, O.classes + cls * 4)) continue;
+        if (dv.getUint32(O.classes + cls * 4, true) !== O.generic) continue;
+        const type = rom.maincpu[rec + O.type];
+        if (!(type > 0 && type < O.count)) continue;
+        if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
+        const model = dv.getUint32(O.table + type * O.stride + O.model, true);
+        if (!model || model >= rom.game.modelTable.count) continue;
+        /* The three words after the position are the angles, copied straight
+         * across to the task: `ld 0x14(r9), g4 / st g4, 0x2C(r8)` and the two
+         * that follow. They are the turn the scenery uses, a whole circle to
+         * 0x10000, and they are almost all a quarter turn of yaw. */
+        out.set(rec, {
+            type,
+            model,
+            set,
+            pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true),
+                dv.getFloat32(rec + 16, true)],
+            turn: [dv.getUint32(rec + 20, true) & 0xffff,
+                dv.getUint32(rec + 24, true) & 0xffff,
+                dv.getUint32(rec + 28, true) & 0xffff],
+        });
+    }
+}
+
+/* A prop's three angles, in the order and the sign the scenery's single turn
+ * already uses. Yaw is all but six of them carry. */
+function propTurn([x, y, z]) {
+    const deg = (v) => (v * 360) / 0x10000;
+    const out = [];
+    if (y) out.push(['r', deg(y)]);
+    if (x) out.push(['rx', deg(x)]);
+    if (z) out.push(['rz', -deg(z)]);
+    return out;
+}
+
 /* A -1-terminated list of pointers, as the section and script tables are. */
 function pointerList(rom, at) {
     const dv = rom.mainCpuView;
@@ -118,9 +212,13 @@ function readPlacement(rom, map, index) {
     if (!inRom(rom, at, PLACEMENT_BYTES)) return null;
     /* A non-zero cycle pointer overrides the model: the loop draws the next
      * entry of that -1-terminated list each time, and goes back to the first
-     * past the end. The far model at +0x14, drawn past 200 units, is zero on
-     * every placement this prototype has. */
-    const cycleAt = dv.getUint32(at + 0x10, true);
+     * past the end. Which of the record's two tail words holds it moved between
+     * the prototype and the finished game — 0x10 there, 0x14 here, with the
+     * other word carrying something the viewer does not read — so the profile
+     * says. Each game has exactly one placement that uses it, and it is the
+     * same one: the rain in the mansion corridor's windows, cycling 32 frames.
+     */
+    const cycleAt = dv.getUint32(at + (rom.game.stageTable.placements.cycle ?? 0x10), true);
     const cycle = cycleAt ? modelList(rom, cycleAt) : null;
     return {
         index,
@@ -145,16 +243,20 @@ function modelList(rom, at) {
 
 /*
  * How many placements a chapter's table holds. The program never says — the
- * draw loop only ever reaches a record through a zone — but both tables end in
- * a record whose model is 0, and nothing is placed as model 0. The first
- * chapter's closing record is zero throughout; the second's is followed at once
- * by the next table, so its model word is the only part of it to go by.
+ * draw loop only ever reaches a record through a zone — but a table ends in a
+ * record no zone names, and nothing is placed as model 0. The prototype's
+ * chapters close on a zero model; the finished game's close on a -1 model and a
+ * zero one behind it, so both words end the walk. Stopping only on zero there
+ * would take the -1 for a placement and index the model tables with it.
  */
 function placementCount(rom, map) {
     const dv = rom.mainCpuView;
     let n = 0;
-    while (n < 256 && inRom(rom, map + n * PLACEMENT_BYTES, PLACEMENT_BYTES)
-        && dv.getUint32(map + n * PLACEMENT_BYTES, true) !== 0) n++;
+    while (n < 256 && inRom(rom, map + n * PLACEMENT_BYTES, PLACEMENT_BYTES)) {
+        const model = dv.getUint32(map + n * PLACEMENT_BYTES, true);
+        if (model === 0 || model === END) break;
+        n++;
+    }
     return n;
 }
 
@@ -243,20 +345,26 @@ function skyDraws(rom, sky) {
     const S = rom.game.sky;
     if (!S || !sky?.on || sky.index >= S.count) return null;
     const dv = rom.mainCpuView;
-    const dome = dv.getUint32(S.models + sky.index * 4, true);
-    const y = dv.getFloat32(S.heights + sky.index * 4, true);
+    /* The prototype keeps the model and the height in two arrays of their own
+     * and the drift rate in the code; the finished game folds all three into a
+     * record per sky, so the profile gives a stride and, where the rate is in
+     * the data, where to read it. */
+    const stride = S.stride ?? 4;
+    const dome = dv.getUint32(S.models + sky.index * stride, true);
+    const y = dv.getFloat32(S.heights + sky.index * stride, true);
     if (!dome) return null;
+    /* Angle units of 65536 a frame, as the task's own counter counts. */
+    const rate = S.spins != null ? dv.getUint32(S.spins + sky.index * stride, true) : S.spin;
     return {
         index: sky.index, dome, band: S.band, y,
-        /* Angle units of 65536 a frame, as the task's own counter counts. */
-        spin: sky.spin ? S.spin : 0,
+        spin: sky.spin ? rate : 0,
     };
 }
 
 /* A stage entry in the shape the viewer's stage list takes. The set is the
  * atlas, the palette and the colour tables at once — sub_2B720 loads all three
  * from the one number. */
-function placementStage(stages, lit, chapter, { name, set, draws, sky = null, alternates = [], meta, mixedSets = false }) {
+function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, alternates = [], meta, mixedSets = false }) {
     stages.push({
         slot: stages.length,
         placements: true,
@@ -265,6 +373,7 @@ function placementStage(stages, lit, chapter, { name, set, draws, sky = null, al
         name,
         chapter,
         draws,
+        objects,
         sky,
         alternates,
         texSets: [set],
@@ -312,6 +421,9 @@ export function readPlacementStages(rom) {
          * machine: a set's sky is what is standing when its first zone is made
          * current, and whatever its own sections then ask for. */
         const sky = { index: 0, on: 0, spin: false };
+        /* The props the chapter's scripts spawn, each under the set that was
+         * loaded when its list ran — the same rule the zones are grouped by. */
+        const props = new Map();
         sections.forEach((section, number) => {
             let set = dv.getUint32(sectionSets + number * 4, true);
             for (const script of pointerList(rom, section)) {
@@ -328,6 +440,7 @@ export function readPlacementStages(rom) {
                         }
                         return;
                     }
+                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props); return; }
                     if (op !== OP_ZONE) return;
                     if (!groups.has(set)) {
                         groups.set(set, {
@@ -388,10 +501,12 @@ export function readPlacementStages(rom) {
             if (!widest || draws.length > widest.count) widest = { set, count: draws.length };
 
             const sky = skyDraws(rom, g.sky);
+            const objects = [...props.values()].filter((o) => o.set === set);
             placementStage(stages, lit, chapter, {
                 name: `Stage ${chapter + 1} · set ${set}`,
                 set,
                 draws,
+                objects,
                 sky,
                 alternates,
                 meta: [
@@ -399,6 +514,7 @@ export function readPlacementStages(rom) {
                     ['sections', runs(g.sections)],
                     ['zones', g.zones.size],
                     ['placements', draws.length],
+                    ...(objects.length ? [['props', objects.length]] : []),
                     ['sky', sky ? `${sky.dome}${sky.spin ? ', drifting' : ', held'}` : 'off'],
                     ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
@@ -435,11 +551,13 @@ export function readPlacementStages(rom) {
                 /* The sky of the set that draws most of the chapter, since that
                  * is the set this stage is framed as. */
                 sky: skyDraws(rom, groups.get(widest.set)?.sky),
+                objects: [...props.values()],
                 alternates,
                 mixedSets: true,
                 meta: [
                     ['texture set', `${[...new Set(all.map((d) => d.set))].sort((a, b) => a - b).join(', ')}, per part`],
                     ['placements', table.length],
+                    ...(props.size ? [['props', props.size]] : []),
                     ['in no reached zone', table.filter((d) => !reached.has(d.index)).length],
                     ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
@@ -472,7 +590,16 @@ export function buildPlacementDisplayList(stage) {
         });
         sky.push({ model: band, layer: 'sky', ops: at(0) });
     }
-    return sky.concat(stage.draws.map((d) => ({
+    /* The props go in under their own layer, so they can be turned off and so
+     * the camera frames on the room rather than on them. */
+    const objects = (stage.objects ?? []).map((o) => ({
+        model: o.model,
+        layer: 'objects',
+        set: o.set,
+        ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
+            ...propTurn(o.turn)],
+    }));
+    return sky.concat(objects, stage.draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
         anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,
         layer: 'scenery',
