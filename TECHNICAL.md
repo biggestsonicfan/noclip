@@ -2015,6 +2015,50 @@ reader failed safe when the address was wrong — at 0xAC314 Revision A reads
 `PN_space` for every type, so every prop was dropped rather than drawn in the
 wrong place, and the bug showed up as nothing rather than as nonsense.
 
+#### Auditing the props
+
+The same questions the bodies were swept with, asked of every prop of every
+stage: does its model decode, does it name colours the stage's set resolves, is
+it from a bank the stage's scenery uses, does it stand where the room is, and is
+it the size of a prop rather than a piece of the room?
+
+What comes back is clean on the classes that have bitten before. Across the
+finished game's eighteen stages there are **28 distinct prop models**, every one
+of them between 1.3 and 18.8 units across and between 4 and 602 triangles — no
+model that fails to decode, none from a bank the stage never uses, and none a
+quarter of the room across, which is the check that would have caught room 4's
+walls standing in the courtyard. They read as what they are: `PN_book_tana` a
+bookcase sixteen times, `PN_tantansu` a chest fourteen, `PN_sitai` a corpse ten,
+tables, chairs, pots, plates, lamps, a crate, a billiard table, a deer's head.
+
+Four things it does turn up, and **every one of them reproduces in the prototype
+as well** — two tables found by different routes, agreeing on the same
+anomalies, which is what says the reading is right and the oddity is the game's:
+
+- **Four models name a colour past the end of their section's set.**
+  `PN_tabul_maru01a` wants 786 under sets 1 and 12, `PN_ose_cup_01a` 831 under
+  set 1, `PN_ose_lamp_01a` 832 under set 6 six times over, `PN_sara01a` 674 under
+  set 10. This is the palette carrying between sets, which this game's profile
+  does not model because no model *bank* needed it — see `loadOrder` and the
+  note on the palette split. Three of the four would be covered by set 3, whose
+  table reaches 933 and which the chapters load before 6, 10 and 12. The two
+  under set 1 would not be: set 1 is the first a chapter loads and nothing
+  precedes it.
+- **Props at the origin.** Four in the finished game, three in the prototype, and
+  the same models in both — `PN_kkkdolam`, `PN_ose_cup_01a`, `PN_r2_01_futa`,
+  `PN_syokudai01a`, `PN_kibako01a`. A record whose position is exactly (0, 0, 0)
+  in a room that is nowhere near it is most likely positioned by its handler
+  rather than by the record.
+- **One prop a long way out.** `PN_billi01a` stands at (2550, 1120, -425) in a
+  room spanning 725 to 1469, in both builds.
+- **Three props doubled** on the mansion's set, each a model already standing at
+  that exact spot, in both builds.
+
+None of these is acted on. They are written down because a sweep that finds
+nothing proves nothing, and because the next thing to do about the first of them
+is to work out the order the chapters load their sets in and give the profile a
+`loadOrder`, which is a change to every stage's colours and wants its own look.
+
 #### What handles a type
 
 A second table, at **0xAF950**, gives each type its handler, and the dispatch is
