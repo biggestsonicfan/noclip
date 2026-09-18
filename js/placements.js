@@ -153,6 +153,14 @@ function spawnProps(rom, at, set, out) {
         if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
+        /* The size it is drawn at: the handler loads the type's float at
+         * +0x28 into the task and hands it to the draw on all three axes --
+         * `ld 0x94(r4), g4` written to 0x84, 0x88 and 0x8C of the matrix
+         * command. Fifty of the seventy-three types are 1.0, which is why only
+         * the ones that are not showed up: the vases at 0.5 and 1.4, the moon
+         * at 0.25, the pile of bones at 1.5. */
+        const scale = O.scale === undefined ? 1
+            : dv.getFloat32(O.table + type * O.stride + O.scale, true);
         /* The three words after the position are the angles, copied straight
          * across to the task: `ld 0x14(r9), g4 / st g4, 0x2C(r8)` and the two
          * that follow. They are the turn the scenery uses, a whole circle to
@@ -161,6 +169,7 @@ function spawnProps(rom, at, set, out) {
             type,
             model,
             set,
+            scale: scale > 0 ? scale : 1,
             pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true),
                 dv.getFloat32(rec + 16, true)],
             turn: [dv.getUint32(rec + 20, true) & 0xffff,
@@ -597,7 +606,8 @@ export function buildPlacementDisplayList(stage) {
         layer: 'objects',
         set: o.set,
         ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
-            ...propTurn(o.turn)],
+            ...propTurn(o.turn),
+            ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])],
     }));
     return sky.concat(objects, stage.draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,

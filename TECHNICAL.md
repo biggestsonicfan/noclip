@@ -1973,6 +1973,42 @@ at the camera from the script's own object lists.
 Every type resolves there. The ones that appeared not to were records of another
 class, whose first word was never a type at all.
 
+#### The size a prop is drawn at
+
+A prop is not drawn at the size its model decodes to. `sub_417F0`, which every
+generic object runs first, copies the type's float at **+0x28** into the task at
++0x94, and the draw hands it to the matrix on all three axes:
+
+```
+lda  0x9801313, g9       ; the command
+ld   0x94(r4), g4        ; the type's scale
+st   g9, 0x80(fp)
+st   g4, 0x84(fp)        ; x
+st   g4, 0x88(fp)        ; y
+st   g4, 0x8C(fp)        ; z
+ldq  0x80(fp), g8
+stq  g8, 0x884000
+ld   0x54(r4), g0        ; the model
+call sub_14120           ; draw
+```
+
+Which is the same shape as the effects' own draws — the small blood spurt builds
+the identical command with `lda 0x3E800000, r5 / mov r5, r6 / mov r5, r7`, a
+quarter on each axis, and that constant is what named the field.
+
+Across the seventy-three prop types the scale runs **0.25 to 1.5** and fifty of
+them are exactly 1.0, which is why it hid for so long: the corpses, the crates
+and the chairs are all 1.0 and looked right. The ones that are not are the ones
+that showed — `PN_test_tubo01a` at 0.5 and `PN_test_tubo02a` at 1.4, the vases
+that stood as tall as the corridor they line; `PN_honeatama` at 1.5;
+`PN_book_tana` at 0.8; and `PN_moon` at 0.25, which takes the moon from a radius
+of 170 to 42 and out of the audit's "bigger than a quarter of the room".
+
+The field was found the way the class was: `sub_417F0` reaches it with a
+register-relative `ld 0x28(g4), g4` after `lda unk_AC2D0(g4), g4`, so unlike the
+absolute forms it leaves no literal in the ROM to search for — it only turns up
+by reading the routine.
+
 #### An object, and what animates it
 
 An object is a task. Its handler is the task function, the model it draws this
@@ -2064,6 +2100,10 @@ needs, per build:
 | first revision | 0xAC2D0 | 0xAF950 | 0xAFDD0 | 0x389E0 |
 | Revision A | 0xAC2E0 | 0xAF960 | 0xAFDE0 | 0x39930 |
 
+The entry's own fields are the same in all three: the model at **+0x00**, a
+radius at **+0x14**, the **scale at +0x28**, a floor offset at **+0x2C**, a
+short array of further offsets from **+0x30**, and the sound at **+0x44**.
+
 The class table was found the way IDA finds anything: the generic init is the
 only routine that indexes the handler table, so the literal of the handler
 table's address locates it, and the pointer *to* that routine locates the class
@@ -2102,9 +2142,12 @@ records of other classes being stood up as furniture:
 - **Props doubled at one spot** — down from 26 to five, and the five that remain
   are two models the mansion's own set genuinely lists twice.
 
-What is left is one flag, in both builds: **`PN_moon` is a prop**, type 59,
-radius 170 in a room 486 across. It is the moon, billboarded at the camera by
-its own handler, and it is not wrong so much as not yet special-cased.
+What was left after that was one flag in both builds — `PN_moon` a prop of
+radius 170 in a room 486 across — and it turned out to be the next field rather
+than an oddity. See **The size a prop is drawn at** below. With the scale in and
+the room bounded by its geometry rather than by its placement origins, **328
+props across eighteen stages flag nothing at all**, and the prototype's 214
+across eight likewise.
 
 #### The order the sets are loaded in
 

@@ -707,6 +707,7 @@ const hotdp = {
     objects: {
         table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
         prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
+        scale: 0x28,
     },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
@@ -1113,6 +1114,7 @@ const hotdo = {
     objects: {
         table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
         prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
+        scale: 0x28,
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
