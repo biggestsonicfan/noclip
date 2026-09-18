@@ -66,7 +66,7 @@
 
     <div class="romnote">
       <p>Drop a ROM set and the viewer works out which game it is from the program
-         ROM inside it. Two are supported:</p>
+         ROM inside it. Four are supported:</p>
       <ul>
         <li><b>Sonic The Fighters</b> &mdash; stages, character rigs and motions.
             Built from that game's own program EPROMs, <code>epr-19001</code>&ndash;<code>epr-19004</code>,
@@ -74,10 +74,22 @@
             the parent set <b>Sonic Championship</b> (<code>schamp</code>). Drop
             <code>sfight.zip</code> on its own, or <code>schamp.zip</code> on its own, or both
             together if your set is split across the two.</li>
-        <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; the model explorer only, for
-            now. The model table is in the same place, because both games are built on the
-            same Sega library; its stage and motion tables are its own and have not been
-            located yet.</li>
+        <li><b>The House of the Dead</b> (<code>hotdo.zip</code>) &mdash; the finished game:
+            its four chapters as eighteen stages, 7477 models under their development names,
+            and 94 enemy bodies playing the 674 motions baked for their joint counts.
+            Revision A (<code>hotd.zip</code>) is recognised as well, and so is a merged
+            archive carrying both &mdash; a set is told apart by the chips inside it, not by
+            the name of the zip.</li>
+        <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
+            prototype the finished game grew out of, read the same way: its two playable
+            stages, its own models and 68 bodies with 507 motions.</li>
+        <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
+            arenas and 5413 table entries come out of it, because this game and Sonic The
+            Fighters are built on the same Sega library and the stage records, the model
+            table and the texture and colour pipelines all carried across. What is its own
+            has not been found: an arena stands still, since the object list its record
+            points at is unread; the arenas have no names, so each is shown by the number in
+            its own record; and there are no character rigs or motions, so no Animation tab.</li>
       </ul>
     </div>
 
