@@ -1314,7 +1314,256 @@ const hotd = {
     },
 };
 
-export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd];
+/* ---- Daytona USA (1993) -------------------------------------------------- */
+
+/*
+ * The `daytona93` set: Daytona USA as the Deluxe cabinet shipped it in 1993,
+ * and the first game here that is not on the 2A/2B boards.
+ *
+ * This is the original Model 2 — a Fujitsu TGP beside the i960 where the later
+ * titles have a SHARC, texture RAM at 0x12000000 rather than 0x11000000, and
+ * AM2's library two years younger. None of the addresses the other profiles
+ * carry survive that, and neither does the shape of some of the tables. What
+ * does survive is the board: the polygon format, the texture sheets, the
+ * 10-bit colorbase and the colorxlat/luma pair belong to the geometry engine
+ * and the rasteriser rather than to the game, so the decoders are used
+ * unchanged and only the numbers below are this game's own.
+ *
+ * Every one of them was read off the program ROM's own code with
+ * stf-tools/i960dis.mjs, since there is no symbol table for this title:
+ *
+ *   0x1786c   the draw routine — walks a model's records and hands the
+ *             geometry engine tpa, tha, oba and a count
+ *   0x1388    the texture upload — a bank of the data ROM into texture RAM
+ *   0x1314    the luma RAM upload
+ *   0x5418    the face palette upload
+ *   0xa74     the colorxlat build
+ *   0x4fec    the material upload, geometry-engine function 6
+ *   0x1134    g10 = 0x00800000 (the geometry engine), g11 = 0x00880000 (the
+ *             TGP's function port) and g12 = 0x4000, which is what makes a
+ *             store to `0x60(g10)` readable as engine function 6
+ *
+ * MAME calls the set `daytona93` and its chips come from two archives: the
+ * clone's own ten, and the rest from the parent `daytona`. Both are wanted.
+ */
+const daytona93 = {
+    id: 'daytona93',
+    name: 'Daytona USA (1993)',
+    /* The clone's own program pair, which is the one thing no other Daytona set
+     * carries and which MAME has never renamed. */
+    identify: ['epr-16530a.12', 'epr-16531a.13'],
+    regions: {
+        /* Two 128KB EPROMs, and the board maps the second half twice: at
+         * 0x20000 like any other and again at 0x00220000, which is the alias
+         * the program's own pointers use (`ld 0x22fd34` for the luma count).
+         * The offsets below are the region's, so that alias is just 0x200000
+         * subtracted. */
+        maincpu: {
+            size: 0x40000,
+            parts: [[0x00000, 'epr-16530a.12', 0x39e962b5, 'epr-16531a.13', 0x693126eb]],
+        },
+        /*
+         * Three pairs, where MAME's region is 32MB with the last megabyte
+         * mirrored up through it. Nothing the viewer reads is in the mirrors —
+         * the model table, the palette and the four texture banks are all below
+         * 0x900000 — so the region is cut where the chips end.
+         *
+         * The first pair is not addressed by anything here. The second holds
+         * the texture banks, and the third the model table and the palette.
+         */
+        mainData: {
+            size: 0xa00000,
+            parts: [
+                [0x000000, 'mpr-16528.10', 0x9ce591f6, 'mpr-16529.11', 0xf7095eaf],
+                [0x400000, 'epr-16526.8', 0x5273b8b5, 'epr-16527.9', 0xfc4cb0ef],
+                [0x800000, 'epr-16534a.6', 0x1bb0d72d, 'epr-16535.7', 0x459a8bfb],
+            ],
+        },
+        /* Three 4MB mask pairs and a 1MB EPROM pair, 13MB of the 16MB region.
+         * The model table's mesh pointers open a new band at each pair — the
+         * entries either side of 856, 1463 and 1599 step from the end of one
+         * pair to the head of the next — which is what says the pairing is
+         * right, since a mesh straddling a boundary would not open on a unit
+         * normal. */
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-16523.16', 0x2f484d42, 'mpr-16518.20', 0xdf683bf7],
+                [0x400000, 'mpr-16524.17', 0x34658bd7, 'mpr-16519.21', 0xfacd1c81],
+                [0x800000, 'mpr-16525.18', 0xfb517521, 'mpr-16520.22', 0xd66bd9bd],
+                [0xc00000, 'epr-16646.19', 0x7ba9fd6b, 'epr-16645.23', 0x78fe0b8a],
+            ],
+        },
+        /* Two pairs at the two offsets every game here uses, which on 2MB chips
+         * leaves 0x400000-0x800000 empty. This region is the UV and material
+         * streams only: the sheets themselves are raw in the data ROM. */
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-16522.25', 0x55d39a57, 'mpr-16521.24', 0xaf1934fb],
+                [0x800000, 'epr-16517.27', 0x4705d3dd, 'epr-16516.26', 0xa260d45d],
+            ],
+        },
+    },
+    /*
+     * 2822 models, and not a table the program indexes: it names each entry by
+     * address. 1959 of the program ROM's words point into this range and every
+     * one of them lands on a multiple of 20 from 0x887928, the lowest at entry
+     * 3 and the highest at 2822 — one past the end, which is where the palette
+     * begins. That fixes the base, the stride and the count at once.
+     *
+     * An entry is the four words the draw routine at 0x1786c reads —
+     *
+     *     ld (g0), r11 / addo 4      ; oba, and zero ends the list
+     *     ld (g0), r12 / addo 4      ; tpa
+     *     ld (g0), r13 / addo 4      ; tha
+     *     ld (g0), r14 / addo 4      ; the polygon count, added to a budget
+     *
+     * — and then a fifth word of zero, which is that terminator and what makes
+     * the stride 20. Every model in this game is a one-entry list.
+     *
+     * The order the three addresses reach the geometry engine is tpa, tha, oba
+     * (model2_v.cpp geo_object_data), the same three the 1995 games keep in the
+     * other order, so only `fields` changes.
+     *
+     * The count word is what confirms the reading: a mesh is 40-byte records
+     * and one word more, so consecutive entries' oba differ by
+     * (count + 1) * 10 + 1 words — which holds for 1999 of the 2815 pairs, and
+     * every exception is a chip boundary or one of the five entries whose mesh
+     * is in polygon RAM rather than in ROM (bit 23 clear, so meshOffsetOf puts
+     * them out of range and they decode to nothing, which is right: they are
+     * built at run time).
+     */
+    modelTable: {
+        offset: 0x887928, count: 2822, stride: 20,
+        fields: { mesh: 0, uv: 4, mat: 8 },
+    },
+    /* The board's arithmetic, not the game's: an object address with bit 23 set
+     * is a word index into the polygon ROM (geo_object_data's
+     * `polygon_rom[oba & mask]`), and this is that index in bytes. */
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /*
+     * The face palette, and the routine at 0x5418 states all three numbers:
+     *
+     *     lda 0x28955A0, r5     ; from data 0x8955A0
+     *     lda 0x1802000, r6     ; to palette RAM at colorbase 0 — model2rd.ipp
+     *                           ; reads a face's colour at m_palram[base+0x1000]
+     *     lda 0x2895D7E, r4 / subi r5, r4, r4 / shro 1, r4, r4   ; 1007 entries
+     *
+     * It starts exactly where the model table ends. The seventeen entries above
+     * 1007 are never written — the boot clear at 0x53F0 leaves 0xFC00 in them —
+     * so they are left as no colour rather than read on past the table.
+     */
+    paletteOffset: 0x8955a0,
+    paletteCount: 1007,
+    /*
+     * The sheets are raw here, as The House of the Dead's are, but dealt out by
+     * a routine of its own — 0x1388, which takes a bank and a sheet flag:
+     *
+     *   - 0x60000 halfwords straight into one sheet, which is its first
+     *     0xC0000 bytes: rows 0 to 767, the full-size area;
+     *   - then nine mip levels of 0x80, 0x40 ... 1 rows, each row 0x200
+     *     halfwords, alternating between the two sheets at the boundaries the
+     *     table at 0x1494 gives. Both sheet pointers advance on every halfword,
+     *     so the two sheets' mip halves come out exactly complementary.
+     *
+     * It is called twice per scene: the bank at data 0x500000 onto sheet 1
+     * (`not r14, 0, g9` at 0x1370), and the course's own bank onto sheet 0
+     * (`ldob 0x501460` then `ld 0x14BC[r5*4]` at 0x1354). A bank is a megabyte
+     * and the pair fills both sheets between them.
+     *
+     * `bankTable` is that four-entry array in the program ROM. It names data
+     * 0x200000, 0x400000, 0x300000 and 0x200000 again — three banks for the
+     * three courses, the fourth slot repeating the first.
+     *
+     * Which bank a given model is drawn against is not known: the course data
+     * has not been read, and coverage cannot answer it for raw banks because
+     * every bank fills the whole sheet. So the panel's picker decides, and
+     * `defaultSet` is what it opens on.
+     */
+    texture: {
+        raw: { layout: 'daytona', bankTable: 0x14bc, bootBank: 0x02500000 },
+        sets: 4,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * Luma RAM and colorxlat, both of which this game builds differently from
+     * every other set here — and both short enough to be exact.
+     *
+     * Luma is a straight copy out of the program ROM (0x1314): a band count at
+     * 0x2FD34, which is 66, and that many 128-byte bands from 0x2FD38. Band 0
+     * is the plain ramp and the rest are the shaped ones, all inside 0..0x3F.
+     *
+     * colorxlat is not copied from anywhere — the routine at 0xA74 computes it.
+     * For each of the 32 palette rows it writes 64 ramp entries and then 192 of
+     * a single value:
+     *
+     *     v = row * i * step ; if (v) v += bias ; v >>= 6 ; if (v >= 0x100) v = -1
+     *     tail = (step * row) ? (flat + step * row) >> 1 : 0
+     *
+     * with `step` counted out by `addo r9, r6, r6` against `r11` — 64 entries,
+     * because 0x300 / 12 is 64 — and the saturation stored as 0xFFFF, which the
+     * rasteriser reads as a full 0xFF. All three channels get the same value,
+     * because on this board the row is the palette colour's own five bits for
+     * that channel: there is no per-channel trim and no stage tint to apply.
+     *
+     * The four constants are the branch taken when 0x53E5D0 is zero, which is
+     * what work RAM holds at power-on. The other branch — step 9, bias 0x1D00,
+     * flat 0xE8 — is selected by something written at 0x27CB4 and below, which
+     * has not been read; both reach 255 at row 31.
+     *
+     * `solid` because an untextured face really does go through this table on
+     * this board: draw_scanline_solid indexes the row with the polygon's own
+     * luma cut to six bits, which is what js/viewer.js's uSolidRamp does.
+     */
+    colors: {
+        luma: { source: 'maincpu', count: 0x2fd34, data: 0x2fd38 },
+        ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+        solid: true,
+    },
+    /*
+     * The material table, uploaded whole at boot by the routine at 0x4FEC —
+     * geometry-engine function 6, index 0, count 32, and then a pair of words
+     * per slot taken from two parallel arrays rather than one interleaved
+     * table, which is why `stride` is 4 here and 8 in the other profiles:
+     *
+     *     st r3, 0x60(g10)          ; function 6
+     *     lda 0x5048, r4            ; {0, 32} — the index and the count
+     *     lda 0x50D0, r6            ; the distance coefficients, all 1.0
+     *     ... push *r4++ and *r6++ 32 times
+     *
+     * so the parameter words are the 32 at 0x5050. Slots 0 to 7 carry real
+     * pairs — 127/63, 127/47, 127/111, 255/255, 127/127, 79/95 — and 8 to 31
+     * are 255/255, which is unlit.
+     *
+     * The light is the one number here that is not a constant in the same
+     * sense. The draw routine hands function 0x0A three floats out of a view
+     * record, and the records are an array of six words at 0x35DB8 — a function
+     * modifier, two focal distances of 280, and the light. Record 0 is the one
+     * the main view uses (0x70C0, 0x72C8 and the default setter at 0x17CF0 all
+     * name it), and its light is (-0.45, -0.89, -0.45).
+     *
+     * On the board that vector is in the engine's post-transform frame, so it
+     * is a headlight rather than a world light; applied here as a world light
+     * it shades a model consistently from one side instead of following the
+     * camera, which is what a model viewer wants. Z is negated for the
+     * decoder's convention, as stageLight does for the other games.
+     *
+     * The stored normal is lit rather than the polygon's plane: the mode calls
+     * at 0x5150 set geometry mode 3 and then 1, and 1 is geo_parse_np_s —
+     * normals present.
+     */
+    lighting: {
+        light: [-0.45, -0.89, 0.45],
+        materials: { at: 0x5050, count: 32, stride: 4 },
+    },
+    /* No stage table and no rig: the course data and the cars' own structures
+     * have not been read, so the Models tab is the whole of it. */
+    features: { stages: false, characters: false, motions: false, bodies: false },
+};
+
+export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd, daytona93];
 
 /**
  * Pick the profile a set of zip member names belongs to.

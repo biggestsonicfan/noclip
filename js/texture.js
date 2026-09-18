@@ -566,6 +566,10 @@ export function texturePages(rom, texSet) {
  * @returns {{set:number, covered:number, tiles:number}|null} null if untextured
  */
 export function bestTextureSet(rom, decoded, setCount) {
+    /* Coverage cannot answer it for a game whose sheets are raw banks — every
+     * bank fills the whole sheet, so every set covers every tile — and such a
+     * game has no page lists to walk in the first place. See bankTextureSet. */
+    if (rom.game.texture.raw) return null;
     if (!decoded || !decoded.tiles.length) return null;
     const want = [];
     const seen = new Set();
@@ -646,6 +650,107 @@ function uploadRawBank(md, base, tex, toSheet1) {
     }
 }
 
+/* ---- Raw banks, Daytona USA's arrangement -------------------------------- */
+
+/*
+ * Daytona keeps its sheets raw too, but deals a bank out with a routine of its
+ * own — the one at 0x1388 in its program ROM, which this is a port of.
+ *
+ * A bank is a megabyte, and a sheet is a megabyte read as 1024 rows of 0x200
+ * halfwords. The first 0x60000 halfwords of the bank go straight into one
+ * sheet, filling its rows 0..767: the full-size area, and the loop that does it
+ * writes nothing to the other sheet. The remaining 0x20000 halfwords are nine
+ * mip levels of 0x80, 0x40, 0x20, 0x10, 8, 4, 2, 1 and 1 rows, and *those* are
+ * dealt between the two sheets: both sheet pointers advance on every halfword
+ * and only one of them is written, so what one sheet does not take the other
+ * does.
+ *
+ * Where it switches is the table at 0x1494, which is 0x200 >> k. Within a row
+ * the first run is always 0x100 halfwords; run k after that is 0x200 >> k,
+ * doubled while k is past the level number, which is what makes every level's
+ * runs add up to exactly one row:
+ *
+ *     level 0   0x200                                  (no switching at all)
+ *     level 1   0x100 0x100
+ *     level 2   0x100 0x80 0x80
+ *     level 3   0x100 0x80 0x40 0x40                   ... and so on
+ *
+ * The game calls it twice a scene: the bank at data 0x500000 onto sheet 1, and
+ * the course's bank onto sheet 0, each starting its mip runs on the sheet the
+ * other one did not take.
+ */
+
+/* One level's runs, as [halfwords, onTheStartingSheet] pairs. */
+function daytonaRuns(level) {
+    const out = [[0x100, true]];
+    let on = false;
+    let left = 0x100;
+    for (let k = 2; left > 0; k++) {
+        const n = Math.min((0x200 >> k) * (k > level ? 2 : 1), left);
+        out.push([n, on]);
+        left -= n;
+        on = !on;
+    }
+    return out;
+}
+
+const DAYTONA_LEVEL_ROWS = [0x80, 0x40, 0x20, 0x10, 8, 4, 2, 1, 1];
+/* Where the mip half starts: 0x60000 halfwords in, which is row 0x300. */
+const DAYTONA_FULL_ROWS = 0x300;
+
+function uploadDaytonaBank(md, base, tex, toSheet1) {
+    const near = toSheet1 ? SHEET1 : SHEET0;
+    const far = toSheet1 ? SHEET0 : SHEET1;
+    /* The full-size half, one sheet only. */
+    const full = DAYTONA_FULL_ROWS * ROW_PAIR;
+    if (base + full > md.length) return;
+    tex.set(md.subarray(base, base + full), near);
+
+    /* The mip half, which starts on the sheet the full-size half did not take. */
+    let src = base + full;
+    let row = DAYTONA_FULL_ROWS;
+    for (let level = 0; level < DAYTONA_LEVEL_ROWS.length; level++) {
+        const runs = daytonaRuns(level);
+        for (let r = 0; r < DAYTONA_LEVEL_ROWS[level]; r++, row++) {
+            let x = 0;
+            for (const [n, onFar] of runs) {
+                const dst = (onFar ? far : near) + row * ROW_PAIR + x * 2;
+                if (src + n * 2 > md.length) return;
+                tex.set(md.subarray(src, src + n * 2), dst);
+                src += n * 2;
+                x += n;
+            }
+        }
+    }
+}
+
+/*
+ * Texture RAM for Daytona: the boot bank on sheet 1, the course's bank on
+ * sheet 0, and their mip halves complementary. Which course a lone model
+ * belongs to is not known, so the set is whatever the caller asked for.
+ */
+function buildDaytonaTexram(rom, texSets) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const off = (a) => a - MAIN_DATA_BASE;
+
+    uploadDaytonaBank(md, off(raw.bootBank), tex, true);
+
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : null;
+    let pages = 1;
+    if (set !== null) {
+        const bank = cv.getUint32(raw.bankTable + set * 4, true);
+        if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
+            uploadDaytonaBank(md, off(bank), tex, false);
+            pages++;
+        }
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
 /*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
@@ -721,7 +826,11 @@ export function bankTextureSet(rom, index) {
 }
 
 export function buildTexram(rom, texSets) {
-    if (rom.game.texture.raw) return buildRawTexram(rom, texSets);
+    if (rom.game.texture.raw) {
+        return rom.game.texture.raw.layout === 'daytona'
+            ? buildDaytonaTexram(rom, texSets)
+            : buildRawTexram(rom, texSets);
+    }
     const md = rom.mainData;
     const dv = rom.mainDataView;
     const cv = rom.mainCpuView;

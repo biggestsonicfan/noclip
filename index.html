@@ -66,7 +66,7 @@
 
     <div class="romnote">
       <p>Drop a ROM set and the viewer works out which game it is from the program
-         ROM inside it. Four are supported:</p>
+         ROM inside it. Five are supported:</p>
       <ul>
         <li><b>Sonic The Fighters</b> &mdash; stages, character rigs and motions.
             Built from that game's own program EPROMs, <code>epr-19001</code>&ndash;<code>epr-19004</code>,
@@ -83,6 +83,16 @@
         <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
             prototype the finished game grew out of, read the same way: its two playable
             stages, its own models and 68 bodies with 507 motions.</li>
+        <li><b>Daytona USA</b> (<code>daytona93.zip</code> <i>and</i> <code>daytona.zip</code>)
+            &mdash; the 1993 Deluxe version, and the only one here on the original Model 2
+            board rather than the 2A/2B the rest run on. 2817 of its 2822 table entries
+            carry geometry: the grid of stock cars in their liveries, the three courses'
+            track sections and the scenery along them, textured from the course's own
+            texture bank and shaded through the colour tables the game computes at boot.
+            MAME's set is a clone, so both zips are wanted &mdash; the ten chips that are
+            its own, and the rest from the parent. There are no stages: how a course is
+            laid out has not been read, so the Models view is the whole of it, and which
+            of the three courses a model belongs to is the picker's to choose.</li>
         <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
             arenas and 5413 table entries come out of it, because this game and Sonic The
             Fighters are built on the same Sega library and the stage records, the model

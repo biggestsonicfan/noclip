@@ -113,8 +113,29 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         const newA = 2 * (vcount + 2);   /* vertex index of this pair's first vertex */
         const n = idx.length;
         switch (b25 & 3) {
-            case 0:   /* sentinel: previous group ended, start a fresh strip */
-                idx[n - 4] = -1; idx[n - 3] = -1; idx[n - 2] = -1; idx[n - 1] = -1;
+            case 0:   /* sentinel: previous group ended, start a fresh strip.
+                       *
+                       * Not at the head of a mesh, where there is no previous
+                       * group: the four vertices standing there are the two
+                       * points the mesh opens with and the two this link
+                       * brings, which is the first polygon the board draws
+                       * (model2_3d_push case 0x01 takes P0(n-1) from the pair
+                       * pushed before the attribute, and the relink switch at
+                       * the end of model2_3d_process_polygon runs after it).
+                       *
+                       * Every mesh that opens on this link type, in all four
+                       * sets this was measured over — Sonic The Fighters,
+                       * Fighting Vipers, the House of the Dead prototype and
+                       * Daytona USA — is the same one-link card, a 2x2 quad at
+                       * y = -2, the shadow AM2's library draws under things —
+                       * so wiping it left 70 entries in Sonic The Fighters,
+                       * 110 in Fighting Vipers and 813 in Daytona USA decoding
+                       * to nothing at all. Mid-mesh the wipe stands: this type
+                       * is 36348 of Sonic The Fighters' links and what it does
+                       * there was measured against the board. */
+                if (vcount > 0) {
+                    idx[n - 4] = -1; idx[n - 3] = -1; idx[n - 2] = -1; idx[n - 1] = -1;
+                }
                 idx.push(newA - 2, newA - 1, newA, newA + 1);
                 break;
             case 1:   /* carry the far edge of the previous face */

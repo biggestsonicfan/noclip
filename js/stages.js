@@ -187,8 +187,12 @@ export function gameLighting(rom) {
     if (!L) return null;
     const cv = rom.mainCpuView;
     const materials = [];
+    /* One 8-byte record a slot where the parameter word and the distance
+     * coefficient are interleaved, 4 where the upload reads them out of two
+     * arrays side by side — which is what Daytona USA's does. */
+    const stride = L.materials.stride ?? 8;
     for (let i = 0; i < MATERIAL_COUNT; i++) {
-        const at = L.materials.at + i * 8;
+        const at = L.materials.at + i * stride;
         if (i >= L.materials.count || at + 4 > rom.maincpu.length) {
             materials.push({ diffuse: 0, ambient: 0 });
             continue;
@@ -196,7 +200,10 @@ export function gameLighting(rom) {
         const w = cv.getUint32(at, true);
         materials.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
     }
-    return { light: stageLight(1, L.vecter[0], L.vecter[1]), materials };
+    /* A game whose light is a vector in its own ROM rather than the two angles
+     * a stage record carries gives it outright. */
+    const light = L.light ?? stageLight(1, L.vecter[0], L.vecter[1]);
+    return { light, materials };
 }
 
 /*

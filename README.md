@@ -7,7 +7,8 @@ which game it is from the program ROM inside.
 
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
 views below are its. *Fighting Vipers* has stages and models — see
-[Fighting Vipers](#fighting-vipers).
+[Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
+the original Model 2 board, has models — see [Daytona USA](#daytona-usa).
 
 Three views:
 
@@ -99,6 +100,67 @@ What else is missing: the character rigs and the motion tables, so there is no
 Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
 its own record until someone identifies it.
 
+## Daytona USA
+
+Drop `daytona93.zip` and `daytona.zip` together and the explorer loads *Daytona
+USA* — the 1993 Deluxe version, MAME's `daytona93` — with the Models tab. 2817
+of its 2822 table entries carry geometry: the grid of stock cars in their
+liveries, the three courses' track sections, and the scenery along them.
+
+It is the only set here that is not on a 2A or 2B board. This is the original
+Model 2: a Fujitsu TGP beside the i960 where the later titles have a SHARC,
+texture RAM at `0x12000000` rather than `0x11000000`, and AM2's library two
+years younger than Sonic The Fighters'. Not one address carried across, and
+neither did the shape of some of the tables. What did carry across is the board
+— the polygon format, the texture sheets, the 10-bit colorbase and the
+colorxlat/luma pair are the geometry engine's and the rasteriser's — so the
+decoders are used unchanged and only the numbers in
+[`js/games.js`](js/games.js) are this game's own.
+
+There was no symbol table for this one and no decompilation to read, so every
+number was taken off the program ROM's own instructions with stf-tools'
+`i960dis.mjs`. Three of them fix the rest:
+
+- `0x1134` sets `g10 = 0x00800000` and `g11 = 0x00880000`, which is what makes a
+  store to `0x60(g10)` readable as geometry-engine function 6 and a store to
+  `0x10(g11)` as a TGP maths call. Every upload below was found by its function
+  number after that.
+- `0x1786c` is the draw routine. It reads four words off a model record — the
+  object address, the texture-point address, the texture-header address and a
+  polygon count — and stops on a zero, so a record is 20 bytes: those four and
+  the terminator. The three addresses go to the engine as tpa, tha, oba, which
+  is the same three the 1995 games keep in a different order.
+- `0x5418` is the palette upload, and it states its own source, destination and
+  length: 1007 colours from data `0x8955A0` to palette RAM at colorbase 0.
+
+The model table is not indexed by the program — it names each entry by address.
+1959 words of the program ROM point into it, every one of them a multiple of 20
+from `0x887928`, the lowest at entry 3 and the highest at entry 2822, which is
+where the palette starts. That fixes the base, the stride and the count at once,
+and the palette confirms it from the other end: the highest colorbase any face
+in the game names is 1006, which is the last colour the upload writes.
+
+The sheets are raw here rather than compressed. The routine at `0x1388` copies
+0x60000 halfwords of a megabyte bank straight into one sheet and then deals the
+last 0x20000 out between the two, a run at a time, as nine mip levels; it is
+called twice a scene, once for the bank every course shares and once for the
+course's own, so the two banks' mip halves come out complementary. Which of the
+three courses a given model is drawn against is *not* known — the course data
+has not been read, and tile coverage cannot answer it when every bank fills the
+whole sheet — so the panel's picker decides and it opens on set 0.
+
+colorxlat is not uploaded at all: the routine at `0xA74` computes all 32 rows
+from four constants, and [`js/colors.js`](js/colors.js) is a transcription of
+it. Luma RAM is 66 bands copied out of the program ROM. The material table is
+uploaded whole at boot by `0x4FEC`, out of two parallel arrays rather than the
+interleaved one the other games use; the light is the vector in the view record
+the main view uses, which on the board is a headlight in the engine's own frame
+and is applied here as a world light so a model keeps one lit side as the camera
+moves.
+
+What is missing is the course: how a track is laid out, what is placed along it
+and in what order — so there are no stages, and the cars do not move.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -125,6 +187,13 @@ Championship (`schamp`), so a combined set is the least fuss:
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
+
+Daytona USA wants two: `daytona93.zip` for the ten chips the 1993 set has of its
+own, and `daytona.zip` for the rest, which MAME keeps in the parent. Member names
+are matched by checksum where the label does not match, so a set spelling those
+chips the way an older MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for
+`.ic23` — loads just the same.
+
 So is `hotdp.zip` for the House of the Dead prototype: its two playable stages,
 assembled from the game's own placement tables and split by the texture set each
 part is drawn under, every model by its development name, with the textures,

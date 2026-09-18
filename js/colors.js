@@ -137,8 +137,14 @@ function trim(v, tint) {
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
 export function buildLumaram(rom) {
-    const dv = rom.mainDataView;
-    const md = rom.mainData;
+    /* Daytona USA keeps both the count and the bands in its program ROM, where
+     * the other games keep them in the data ROM — `lda 0x22FD38` and
+     * `ld 0x22FD34` in the upload at 0x1314, which are that region's own
+     * offsets once the 0x00220000 alias is subtracted. Only the region the two
+     * reads come from changes; the two reads do not. */
+    const src = rom.game.colors.luma.source ?? 'mainData';
+    const dv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+    const md = src === 'maincpu' ? rom.maincpu : rom.mainData;
     /* The House of the Dead states no count: sub_1610 copies a fixed 0x4000
      * bytes, data 0xC8EB40..0xC92B3F, to the even addresses. */
     if (rom.game.colors.luma.bytes) {
@@ -152,12 +158,11 @@ export function buildLumaram(rom) {
      * XTRA_DATA mirror -- `lda unk_64266E0` -- which folds to a data offset like
      * any other, so both games are the same two reads. */
     const { count, data } = rom.game.colors.luma;
-    const src = data;
     const bands = dv.getUint32(count, true);
 
     const luma = new Uint8Array(LUMA_BYTES);
     const n = Math.min(bands * LUMA_BAND, LUMA_BYTES / 2);
-    for (let i = 0; i < n; i++) luma[i * 2] = md[src + i];
+    for (let i = 0; i < n; i++) luma[i * 2] = md[data + i];
     return luma;
 }
 
@@ -195,6 +200,55 @@ function colorTable(dv, src) {
     return src.indirect ? dv.getUint32(src.at, true) - MAIN_DATA_BASE : src.at;
 }
 
+/*
+ * colorxlat for a game that computes it rather than uploading one — Daytona
+ * USA, whose routine at 0xA74 is short enough to be a transcription:
+ *
+ *     for row in 0..31:
+ *       r6 = 0
+ *       do  r7 = row * r6 ; if (r7) r7 += bias ; r7 >>= 6
+ *           if (r7 >= 0x100) r7 = -1            ; saturate, stored as 0xFFFF
+ *           write r7 to all three channels ; r6 += step
+ *       while (r6 < span)                       ; span / step = 64 entries
+ *       r6 = step * row
+ *       r8 = r6 ? (flat + r6) >> 1 : 0
+ *       write r8 to all three channels 192 times
+ *
+ * 64 ramp entries and 192 flat ones is a whole 256-entry row, and the same
+ * value goes to all three channels because on this board the row is the
+ * palette colour's own five bits for that channel (model2rd.ipp indexes
+ * colortable_r by the red five, colortable_g by the green five and so on). So
+ * there is no scene, no tint and no ROM table in it at all: the whole of
+ * colorxlat is these four constants.
+ *
+ * Only luma 0..63 is ever read back — js/viewer.js caps the index at 63, as
+ * draw_scanline_tex does at 0x3F — so the flat tail is written for the sake of
+ * being what the board holds rather than because anything samples it.
+ */
+function buildRampColorxlat(rom) {
+    const { step, span, bias, flat } = rom.game.colors.ramp;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const view = new DataView(out.buffer);
+    const put = (row, luma, v) => {
+        for (let ch = 0; ch < 3; ch++) {
+            view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
+        }
+    };
+    const entries = Math.ceil(span / step);
+    for (let row = 0; row < 32; row++) {
+        for (let i = 0; i < entries; i++) {
+            let v = row * i * step;
+            if (v) v += bias;
+            v >>>= 6;
+            put(row, i, v >= 0x100 ? 0xffff : v);
+        }
+        const t = step * row;
+        const tail = t ? (flat + t) >>> 1 : 0;
+        for (let luma = entries; luma < CXLAT_ROW / 2; luma++) put(row, luma, tail);
+    }
+    return out;
+}
+
 /**
  * colorxlat for one scene.
  *
@@ -213,6 +267,7 @@ function colorTable(dv, src) {
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
+    if (rom.game.colors.ramp) return buildRampColorxlat(rom);
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);

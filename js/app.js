@@ -548,7 +548,11 @@ function modelTextureSet(idx) {
     const found = banked === null
         ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
         : { set: banked };
-    const set = found ? found.set : null;
+    /* Neither can answer for a game whose sheets are raw banks and which has no
+     * table saying which bank goes with which set — Daytona USA, whose course
+     * data is unread. It opens on the set its profile names and the picker
+     * moves it. */
+    const set = found ? found.set : (state.rom.game.texture.defaultSet ?? null);
     state.texSetCache.set(idx, set);
     return set;
 }
@@ -2356,7 +2360,16 @@ function describeModelScene(idx) {
         if (state.rom.game.palette) {
             return `drawn by no stage — sheets, palette and colour tables of set ${state.rom.paletteSet ?? 0}`;
         }
-        if (!state.stages.length) return 'shaded flat, on the face palette in the ROM';
+        if (!state.stages.length) {
+            /* A game with colour tables but no stage table has one set of them
+             * for the whole game, so there is no scene to name — only which
+             * sheets the model is standing on. */
+            if (state.rom.game.colors) {
+                const set = modelTextureSet(idx);
+                return `drawn by no stage — the game's own colour tables, sheets of set ${set ?? 0}`;
+            }
+            return 'shaded flat, on the face palette in the ROM';
+        }
         const stage = state.stages[state.stageIndex];
         return `drawn by no stage — shaded against ${stage ? stage.name : 'the loaded stage'}'s tables`;
     }

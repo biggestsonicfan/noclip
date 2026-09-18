@@ -57,16 +57,46 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
 
     const warnings = [];
     const cache = new Map();
+
+    /*
+     * Every member the zips hold, keyed by the checksum their directory records
+     * for it — which is how a chip is found when the label a recipe names is not
+     * the label this set spells it with.
+     *
+     * MAME renames chips between releases and the bytes do not change with the
+     * name: Daytona USA's `mpr-16526.8` was `epr-16526.8` in older sets, and its
+     * polygon EPROMs gained an `ic` on the socket. A recipe already states the
+     * checksum of every member it wants, and the zip's own directory states one
+     * per entry, so a missing name is looked for by that instead of failing the
+     * whole set. The bytes are checked as usual once the member is read.
+     */
+    const byCrc = new Map();
+    for (const s of sources) {
+        for (const [n, e] of s.dir) if (!byCrc.has(e.crc)) byCrc.set(e.crc, n);
+    }
+    /* The name a member really goes by in these zips, or null if nothing here
+     * is it. */
+    const resolve = (name, expectCrc) => {
+        if (names.has(name)) return name;
+        const other = byCrc.get(expectCrc);
+        return other ?? null;
+    };
+
     async function member(name, expectCrc) {
-        if (cache.has(name)) return cache.get(name);
+        const real = resolve(name, expectCrc);
+        if (real === null) throw new Error(`ROM member not found in any supplied zip: ${name}`);
+        if (cache.has(real)) return cache.get(real);
+        if (real !== name) {
+            warnings.push(`${name}: this set spells it ${real}, whose checksum is the one asked for`);
+        }
         for (const s of sources) {
-            if (!s.dir.has(name)) continue;
-            const data = await extractZipEntry(s.buf, s.dir, name);
+            if (!s.dir.has(real)) continue;
+            const data = await extractZipEntry(s.buf, s.dir, real);
             const actual = crc32(data);
             if (actual !== expectCrc) {
                 warnings.push(`${name}: CRC ${actual.toString(16)} != ${expectCrc.toString(16)}`);
             }
-            cache.set(name, data);
+            cache.set(real, data);
             return data;
         }
         throw new Error(`ROM member not found in any supplied zip: ${name}`);
@@ -80,7 +110,8 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
     for (const [key, spec] of regions) {
         /* A region the viewer can do without is left null rather than failing
          * the whole set when a zip does not carry its chips. */
-        if (spec.optional && !spec.parts.every(([, lo, , hi]) => names.has(lo) && names.has(hi))) {
+        if (spec.optional && !spec.parts.every(([, lo, loCrc, hi, hiCrc]) =>
+            resolve(lo, loCrc) !== null && resolve(hi, hiCrc) !== null)) {
             warnings.push(`${key}: chips not in the supplied zips, skipped`);
             out[key] = null;
             done += spec.parts.length * 2;
@@ -111,25 +142,35 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
 
 /* ---- Model table --------------------------------------------------------- */
 
-/* Each 16-byte entry is
- *   +0x00 uv_ptr    word index into the texture ROM (UV stream)
+/* An entry is the three addresses the geometry engine's OBJECT command takes —
+ * the texture-point address, the texture-header address and the object address
+ * (model2_v.cpp geo_object_data reads them in that order) — plus whatever else
+ * the game keeps beside them. The AM2 games of 1995 hold them as
+ *
+ *   +0x00 uv_ptr    half-word index into the texture ROM (UV stream)
  *   +0x04 mat_ptr   half-word index into the texture ROM (material records)
  *   +0x08 mesh_ptr  encoded pointer into the polygon ROM
  *   +0x0C unused by Sonic The Fighters; Fighting Vipers puts a pair of
  *         half-words here that the viewer does not read.
  *
- * Where the table starts and how many entries it has is per-game — both titles
- * happen to keep it at data offset 0x0E0004, because both are built on the same
- * Sega library, but the count differs. */
+ * in a 16-byte entry, and Daytona USA holds the same three in the other order,
+ * so `fields` says which offset is which and defaults to the 1995 layout.
+ *
+ * Where the table starts and how many entries it has is per-game — Sonic The
+ * Fighters and Fighting Vipers happen to keep it at data offset 0x0E0004,
+ * because both are built on the same Sega library, but the count differs. */
+
+const MODEL_FIELDS = { uv: 0, mat: 4, mesh: 8 };
 
 export function readModelEntry(rom, index) {
     const t = rom.game.modelTable;
+    const f = t.fields ?? MODEL_FIELDS;
     const off = t.offset + index * t.stride;
     const dv = rom.mainDataView;
     return {
-        uvPtr: dv.getUint32(off + 0, true),
-        matPtr: dv.getUint32(off + 4, true),
-        meshPtr: dv.getUint32(off + 8, true),
+        uvPtr: dv.getUint32(off + f.uv, true),
+        matPtr: dv.getUint32(off + f.mat, true),
+        meshPtr: dv.getUint32(off + f.mesh, true),
     };
 }
 
@@ -173,7 +214,11 @@ export function facePalette(rom) {
     const out = new Int32Array(1024).fill(-1);
     if (!p) {
         const md = rom.mainData;
-        for (let i = 0; i < 1024; i++) {
+        /* A game whose upload is shorter than the palette leaves the rest of it
+         * at whatever the boot clear put there, so the entries past the count
+         * are left as no colour rather than read out of the next table along. */
+        const n = Math.min(rom.game.paletteCount ?? 1024, 1024);
+        for (let i = 0; i < n; i++) {
             const o = rom.game.paletteOffset + i * 2;
             if (o + 2 > md.length) break;
             out[i] = md[o] | (md[o + 1] << 8);
