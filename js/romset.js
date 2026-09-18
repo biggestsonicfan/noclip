@@ -82,9 +82,20 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
         return other ?? null;
     };
 
+    /* A chip the set is short of, said in terms of the set: the game is known by
+     * this point — it was identified from the program ROM — so the caller can
+     * tell "this is not a set I know" from "this is a set I know, and one of its
+     * zips is not here", which are different things to do something about. */
+    const missing = (name) => {
+        const e = new Error(`${game.name}: no zip here carries ${name}`);
+        e.game = game;
+        e.member = name;
+        return e;
+    };
+
     async function member(name, expectCrc) {
         const real = resolve(name, expectCrc);
-        if (real === null) throw new Error(`ROM member not found in any supplied zip: ${name}`);
+        if (real === null) throw missing(name);
         if (cache.has(real)) return cache.get(real);
         if (real !== name) {
             warnings.push(`${name}: this set spells it ${real}, whose checksum is the one asked for`);
@@ -99,7 +110,7 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
             cache.set(real, data);
             return data;
         }
-        throw new Error(`ROM member not found in any supplied zip: ${name}`);
+        throw missing(name);
     }
 
     const regions = Object.entries(game.regions);

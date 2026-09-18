@@ -3,6 +3,7 @@
  */
 
 import { loadRomSet, readModelEntry, readModelName } from './romset.js';
+import { GAMES } from './games.js';
 import { decodeModel } from './model.js';
 import { readStageTable, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -184,7 +185,7 @@ async function bootWithBuffers(buffers) {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
         useCoproTrig(state.rom);
     } catch (err) {
-        return failToLoad(err, 'check that these are the sfight, schamp or fvipers ROM zips');
+        return failToLoad(err, romHint(err));
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
      * problem, and swapping to the app shell first would hide the message. */
@@ -193,6 +194,26 @@ async function bootWithBuffers(buffers) {
     } catch (err) {
         return failToLoad(err, 'the ROM set loaded, but the 3D view could not start');
     }
+}
+
+/*
+ * What to try next when a set will not load, which is two different things.
+ *
+ * If loadRomSet got as far as identifying the game, the zips are the right
+ * game's and one of them is missing — a MAME set is not always one archive, and
+ * a clone keeps only the chips that are its own, the rest being in the parent.
+ * Naming the game and the chip is the whole of the answer there. If it did not,
+ * nothing here recognised the program ROM, and the thing to say is what would
+ * be recognised; the list comes off the profiles so it cannot go stale.
+ */
+function romHint(err) {
+    if (err.game) {
+        return `that chip is in another zip of this set — a MAME clone carries only `
+            + `the chips that are its own and keeps the rest in the parent, so drop `
+            + `the parent's zip on as well`;
+    }
+    return `check that these are the ROM zips of a game the viewer knows: `
+        + `${GAMES.map((g) => g.name).join(', ')}`;
 }
 
 function failToLoad(err, hint) {
