@@ -704,7 +704,10 @@ const hotdp = {
      * It stops at 78 where the finished game's runs to 122, which is the
      * prototype being the smaller game.
      */
-    objects: { table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990, prop: 0x30670, type: 0x24 },
+    objects: {
+        table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
+        prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
+    },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
@@ -1107,7 +1110,10 @@ const hotdo = {
      * the note on +0xCC in TECHNICAL.md — and are left alone rather than looked
      * up here.
      */
-    objects: { table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950, prop: 0x3a210, type: 0x24 },
+    objects: {
+        table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
+        prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
+    },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
@@ -1288,7 +1294,11 @@ const hotd = {
      * for every type, so every prop was dropped rather than drawn wrong. */
     /* The handler moved further than the tables did — the tables are 0x10 on
      * and the routine is at 0x3B160 rather than 0x3A220. */
-    objects: { ...hotdo.objects, table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160 },
+    objects: {
+        ...hotdo.objects,
+        table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160,
+        classes: 0xafde0, generic: 0x39930,
+    },
     rig: {
         bodies: {
             ...hotdo.rig.bodies,

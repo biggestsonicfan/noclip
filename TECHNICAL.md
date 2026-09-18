@@ -1894,26 +1894,60 @@ its range — among them every `_dam` body part's wound, and `akabushu`,
 The stage scripts already carry them. `js/placements.js` walks a script for the
 two opcodes it needs and steps over the rest; four of the ones it steps over —
 9, 10, 11 and 12 — are spawn lists. Each is the opcode, a `-1`-terminated list
-of pointers, and each pointer names a sixteen-byte record:
+of pointers, and each pointer names a **40-byte record**.
 
-The record's shape is the opcode handler's, not what the fields look like from
-outside. Opcode 10's handler reads:
+The record's shape is the spawner's, not what the fields look like from outside.
+`sub_30670` reads it whole:
 
 ```
-ld   (r9), g4             ; +0x00 picks the task the object will run
-ld   off_AFDD0[g4*4], g0
+ld   (r9), g4             ; +0x00 is the object's CLASS
+ld   off_AFDD0[g4*4], g0  ; which picks the routine that opens the task
 call _TaskOpen
+ld   4(r9), g4
+st   g4, 0x58(r8)         ; +0x04 is flags
 ldob 0x24(r9), g4
 stos g4, 0xCC(r8)         ; +0x24, a byte, is the object type
 ldos 0x20(r9), g4         ; whose low two bits say how the position reads
-addo r9, 8, g13           ; and the position is three floats at +0x08
+addo r9, 8, g13           ; the position is three floats at +0x08
+ld   0x14(r9), g4
+st   g4, 0x2C(r8)         ; and +0x14, +0x18, +0x1C are the angles
 ```
 
-So a record is at least 0x28 bytes, the position is at 8, and **the type is the
-byte at 0x24**. The first word is which task the object runs — which is why its
-values range to 191 while no object table holds that many types, and why reading
-it as the type made a third of the spawns look like they belonged to a type
-space nobody could find. There was no such space.
+Two fields decide whether a record stands a prop anywhere, and they are not the
+same field.
+
+**+0x00 is the class.** It indexes `off_AFDD0`, a table of the routines that
+open a task, and only one of them — `sub_389E0`, at index 0x80 — is the generic
+object that goes on to draw a type's model out of the tables below. The rest are
+the doors, the bodies, the effects and the waves, each with its own task. Every
+other field is filled in the same way whatever the class, which is exactly why
+they all looked like props: a record of class 0x8B has a perfectly good type
+byte and a perfectly good position, and stands nothing. Of the 993 records the
+four chapters' scripts reach, **238 are of the generic class and 181 of those
+are props**.
+
+That one gate is what put the two bookcases in the courtyard. `PN_book_tana` is
+a bank-6 model and the courtyard is set 1, so it could not have been drawn there
+at all; the records that named it were of another class entirely. With the gate
+in, every prop of every stage is either from the shared bank 0 or from a bank
+whose own set is the one it stands under — 182 and 146 of 328, and none left
+over. That is the check the hardware makes on its own: sheet 0 holds the shared
+bank always, sheet 1 holds one set at a time.
+
+**+0x24 is the type.** The first word is not it — which is why its values range
+to 191 while no object table holds that many types, and why reading it as the
+type made a third of the spawns look like they belonged to a type space nobody
+could find. There was no such space.
+
+**+0x14, +0x18 and +0x1C are the angles**, copied word for word to the task and
+counted as the scenery's turns are, a whole circle to 0x10000. All but six of
+the props that carry one carry yaw alone, and nearly all of those are a quarter
+turn: the corpses on the courtyard lawn lie at 281° and 56°, which is what puts
+them across the path rather than along it.
+
+The position reads three ways by the low bits of +0x20, and **every prop record
+uses mode 0** — three plain floats at +0x08 — so the other two are the effects'
+and need not be implemented to stand the furniture up.
 
 Reading it right puts the props on the floor. Over the first chapter the median
 prop stands at y = -20.8 against a floor at -24.5; taken from the first word the
@@ -1927,17 +1961,17 @@ of another, and a long tail of ones and twos.
 
 #### The object table
 
-The type indexes a table at **0xAC314 on a 76-byte stride**, which the handlers
-reach with `ldis 0xCC(r4), g4 / mulo g4, 0x4C, g4 / ld unk_AC314(g4), g0`. Its
-first word is a sound id and its third a model number, and read that way types
+The type indexes a table at **0xAC2D0 on a 76-byte stride**, which the object's
+own init reaches with `ldos 0xCC(r4), g6 / mulo g4, 0x4C, g4 / ld unk_AC2FC(g4),
+g4` — the base plus 0x2C. Its first word is a model number, and read that way types
 0 to about 122 come out as exactly what a house is full of — `PN_isu` chairs,
 `PN_tabul` tables, `PN_tokei` a clock, `PN_sitai` a corpse, `PN_sara` plates,
 `PN_nabe` pots, `PN_tarun_dam` a breaking barrel, `PN_niku_001` the flesh, and
 at type 59 `PN_moon`, which is the moon the prototype's notes say is billboarded
 at the camera from the script's own object lists.
 
-Types of 128 and over do not resolve there, and what they are is not yet known.
-They are a third of the spawns.
+Every type resolves there. The ones that appeared not to were records of another
+class, whose first word was never a type at all.
 
 #### An object, and what animates it
 
@@ -2008,25 +2042,33 @@ game's 125 share one — the routine that draws the table's model where the obje
 stands and does nothing else. The rest are their own things: type 97 is a
 distance trigger against a global, drawing nothing, and 98 to 102 switch on
 `type - 98` into four behaviours whose models are room 4's walls and shutters.
-Only the types on the shared handler are stood up. The others are left out
-rather than guessed at, which takes the first chapter from 144 props to 60 and
-loses nothing that was a prop.
+Only the types on the shared handler are stood up, and only for records of the
+generic class. The others are left out rather than guessed at.
 
 They come out as their own layer, so they can be switched off and so the camera
-frames the room rather than them. The first chapter gains 59 props in the
-courtyard and 85 in the mansion, 144 over the whole table; the prototype, whose
-table is the same one 78 types long, gains 25 and 63.
+frames the room rather than them. The first chapter stands 31 in the courtyard
+and 43 in the mansion; the prototype, whose table is the same one 78 types long,
+stands 31 and 45.
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for
 type** — `PN_test_tubo01a`, `PN_tokei`, `PN_book_tana`, `PN_sika_atama01a`, and
 `PN_moon` at 59 in both.
 
-And Revision A moved it, as it moved everything: the finished game's first
-revision keeps it at 0xAC314 and Revision A at 0xAC324. Worth saying because the
-reader failed safe when the address was wrong — at 0xAC314 Revision A reads
-`PN_space` for every type, so every prop was dropped rather than drawn in the
-wrong place, and the bug showed up as nothing rather than as nonsense.
+And Revision A moved it, as it moved everything. The three addresses a prop
+needs, per build:
+
+| | object table | handlers | classes | generic class |
+|---|---|---|---|---|
+| prototype | 0x84140 | 0x86990 | 0x86C10 | 0x2ECC0 |
+| first revision | 0xAC2D0 | 0xAF950 | 0xAFDD0 | 0x389E0 |
+| Revision A | 0xAC2E0 | 0xAF960 | 0xAFDE0 | 0x39930 |
+
+The class table was found the way IDA finds anything: the generic init is the
+only routine that indexes the handler table, so the literal of the handler
+table's address locates it, and the pointer *to* that routine locates the class
+table — in the prototype the instruction is at 0x2EE70, the pointer to its
+function at 0x86E10, and 0x86E10 less 0x80 entries is the base.
 
 #### Auditing the props
 
@@ -2036,36 +2078,33 @@ it from a bank the stage's scenery uses, does it stand where the room is, and is
 it the size of a prop rather than a piece of the room?
 
 What comes back is clean on the classes that have bitten before. Across the
-finished game's eighteen stages there are **28 distinct prop models**, every one
-of them between 1.3 and 18.8 units across and between 4 and 602 triangles — no
+finished game's eighteen stages there are **35 distinct prop models**, every one
+of them between 1.3 and 25.5 units across and between 4 and 602 triangles — no
 model that fails to decode, none from a bank the stage never uses, and none a
 quarter of the room across, which is the check that would have caught room 4's
-walls standing in the courtyard. They read as what they are: `PN_book_tana` a
-bookcase sixteen times, `PN_tantansu` a chest fourteen, `PN_sitai` a corpse ten,
-tables, chairs, pots, plates, lamps, a crate, a billiard table, a deer's head.
+walls standing in the courtyard. They read as what they are: `PN_test_tubo02a`
+a jar forty times, `PN_honeatama` a pile of bones thirty-six, `PN_kibako01a` a
+crate twenty, corpses, tables, chairs, pots, plates, a billiard table, a deer's
+head — and `PN_book_tana` a bookcase six times, in the library rather than out
+on the lawn.
 
-Four things it does turn up, and **every one of them reproduces in the prototype
-as well** — two tables found by different routes, agreeing on the same
-anomalies, which is what says the reading is right and the oddity is the game's:
+The audit's earlier run turned up four kinds of oddity, and **the class gate
+accounted for all four**. They were not the game being strange; they were
+records of other classes being stood up as furniture:
 
-- **Four models name a colour past the end of their section's set.**
-  `PN_tabul_maru01a` wants 786 under sets 1 and 12, `PN_ose_cup_01a` 831 under
-  set 1, `PN_ose_lamp_01a` 832 under set 6 six times over, `PN_sara01a` 674 under
-  set 10. This is the palette carrying between sets, which this game's profile
-  does not model because no model *bank* needed it — see `loadOrder` and the
-  note on the palette split. Three of the four would be covered by set 3, whose
-  table reaches 933 and which the chapters load before 6, 10 and 12. The two
-  under set 1 would not be: set 1 is the first a chapter loads and nothing
-  precedes it.
-- **Props at the origin.** Four in the finished game, three in the prototype, and
-  the same models in both — `PN_kkkdolam`, `PN_ose_cup_01a`, `PN_r2_01_futa`,
-  `PN_syokudai01a`, `PN_kibako01a`. A record whose position is exactly (0, 0, 0)
-  in a room that is nowhere near it is most likely positioned by its handler
-  rather than by the record.
-- **One prop a long way out.** `PN_billi01a` stands at (2550, 1120, -425) in a
-  room spanning 725 to 1469, in both builds.
-- **Three props doubled** on the mansion's set, each a model already standing at
-  that exact spot, in both builds.
+- **Models naming a colour past the end of their section's set** — gone. Every
+  prop now resolves every colour it names under the set it is drawn under. The
+  fourteen that did not were bank-6 and bank-3 models being drawn under set 1.
+- **Props at the origin** — gone. A record at exactly (0, 0, 0) turned out to be
+  the signature of a class that positions itself: the nine `PN_tarun_dam_01a`
+  at the origin were all class 0x8B, a rolling barrel, not a standing one.
+- **The prop a long way out** — gone with it.
+- **Props doubled at one spot** — down from 26 to five, and the five that remain
+  are two models the mansion's own set genuinely lists twice.
+
+What is left is one flag, in both builds: **`PN_moon` is a prop**, type 59,
+radius 170 in a room 486 across. It is the moon, billboarded at the camera by
+its own handler, and it is not wrong so much as not yet special-cased.
 
 #### The order the sets are loaded in
 
@@ -2093,9 +2132,9 @@ same count exactly. What does change is what had no colour at all: six lamps in
 the mansion, a plate, two tables, and one piece of scenery under set 6 that
 names 837 and had been falling back to grey.
 
-Two props are still left without a colour — `PN_tabul_maru01a` and
-`PN_ose_cup_01a` name 786 and 831 under set 1, and set 1 is the first set a
-chapter loads, so nothing precedes it to have left those entries behind.
+No prop is left without a colour. The two that were — `PN_tabul_maru01a` and
+`PN_ose_cup_01a`, naming 786 and 831 under set 1, which nothing precedes — were
+not props of set 1 at all.
 
 #### What handles a type
 
@@ -2109,29 +2148,25 @@ ld   unk_AF950[g4*4], g4 ; and straight into the table
 ```
 
 No mask, and no bounds check. The table holds **125 entries, types 0 to 124**,
-and behind them are zeros and then floats — so a type of 128 cannot be reaching
-this dispatch at all, and 607 of the 1246 spawns are of such a type.
+and behind them are zeros and then floats. Nothing ever indexes it past 124,
+because the dispatch only runs for objects of the generic class, whose type came
+from the record's +0x24 — a byte, so it cannot exceed 255, and in the data it
+never exceeds 124.
 
-What that turns out to mean is that **+0xCC is two fields, not one**. For a
-scenery object it is a type into the tables above; for an enemy it is a body
-index. The draw callback already reads it as a body number, and so does the
-routine that scatters an enemy's parts: `ldis 0xCC(g5)` into a table at
-**0x14BA80** whose entries are lists of that body's `_DD` models — `dog_akos_DD`,
-`ff_mune_DD`, `hyum_kao_DD`, `boss4_mune_DD`, the spider's `taraba_bodya_DD`.
-That table runs to index 189 and ends in -1, but only its first 94 entries name
-anything: 94 is the body count, and 94 to 189 all point at lists of nothing.
+`+0xCC` does carry two things, but the class says which. For a generic object it
+is a type into the tables above; for an enemy it is a body index. The draw
+callback reads it as a body number, and so does the routine that scatters an
+enemy's parts: `ldis 0xCC(g5)` into a table at **0x14BA80** whose entries are
+lists of that body's `_DD` models — `dog_akos_DD`, `ff_mune_DD`, `hyum_kao_DD`,
+`boss4_mune_DD`, the spider's `taraba_bodya_DD`. That table runs to index 189 and
+ends in -1, but only its first 94 entries name anything: 94 is the body count,
+and 94 to 189 all point at lists of nothing.
 
-The enemy waves are their own tables, and they are plainly enemies rather than
-types. **0xAED40** and **0xAF620** hold 28-byte records whose first halfword is a
-*body* index and whose next three floats are a position — 0xAED40 is six of
-`BO_ebita`, one of `BO_ebitb` and three of `BO_tetuman`; 0xAF620 is six of
-`BO_boss4` with `BO_mummy2c`, `BO_burnerb` and `BO_hiru_b` behind them, which is
-a boss fight written out.
-
-So a spawn record's first word is a number in whichever space the opcode that
-spawns it uses, and the four spawn opcodes do not all use the same one. Which
-opcode means which is the open end now, and it needs the script interpreter's
-own opcode table, which has not been found in this build.
+The enemy waves are their own tables. **0xAED40** and **0xAF620** hold 28-byte
+records whose first halfword is a *body* index and whose next three floats are a
+position — 0xAED40 is six of `BO_ebita`, one of `BO_ebitb` and three of
+`BO_tetuman`; 0xAF620 is six of `BO_boss4` with `BO_mummy2c`, `BO_burnerb` and
+`BO_hiru_b` behind them, which is a boss fight written out.
 
 Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
 and `sub_3B1A0` several more, which is what a table of furniture should look

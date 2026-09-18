@@ -136,19 +136,49 @@ function spawnProps(rom, at, set, out) {
         if (rec === END) break;
         if (!inRom(rom, rec, SPAWN_BYTES)) continue;
         if (out.has(rec)) continue;
+        /*
+         * The word the spawner reads first is not the type: it is the object's
+         * class, an index into a table of the routines that open a task —
+         * `ld off_AFDD0[g4*4], g0 / call _TaskOpen`. Only one of them, the one
+         * the profile names, is the generic object that goes on to draw the
+         * type's model; the rest are the doors, the bodies and the effects,
+         * which stand nothing here. Every other field is filled the same way
+         * whatever the class, which is why they all looked like props.
+         */
+        const cls = dv.getUint32(rec, true);
+        if (!inRom(rom, O.classes + cls * 4)) continue;
+        if (dv.getUint32(O.classes + cls * 4, true) !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
         if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
+        /* The three words after the position are the angles, copied straight
+         * across to the task: `ld 0x14(r9), g4 / st g4, 0x2C(r8)` and the two
+         * that follow. They are the turn the scenery uses, a whole circle to
+         * 0x10000, and they are almost all a quarter turn of yaw. */
         out.set(rec, {
             type,
             model,
             set,
             pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true),
                 dv.getFloat32(rec + 16, true)],
+            turn: [dv.getUint32(rec + 20, true) & 0xffff,
+                dv.getUint32(rec + 24, true) & 0xffff,
+                dv.getUint32(rec + 28, true) & 0xffff],
         });
     }
+}
+
+/* A prop's three angles, in the order and the sign the scenery's single turn
+ * already uses. Yaw is all but six of them carry. */
+function propTurn([x, y, z]) {
+    const deg = (v) => (v * 360) / 0x10000;
+    const out = [];
+    if (y) out.push(['r', deg(y)]);
+    if (x) out.push(['rx', deg(x)]);
+    if (z) out.push(['rz', -deg(z)]);
+    return out;
 }
 
 /* A -1-terminated list of pointers, as the section and script tables are. */
@@ -566,7 +596,8 @@ export function buildPlacementDisplayList(stage) {
         model: o.model,
         layer: 'objects',
         set: o.set,
-        ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]]],
+        ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
+            ...propTurn(o.turn)],
     }));
     return sky.concat(objects, stage.draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
