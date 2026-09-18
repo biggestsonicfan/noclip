@@ -2054,10 +2054,35 @@ anomalies, which is what says the reading is right and the oddity is the game's:
 - **Three props doubled** on the mansion's set, each a model already standing at
   that exact spot, in both builds.
 
-None of these is acted on. They are written down because a sweep that finds
-nothing proves nothing, and because the next thing to do about the first of them
-is to work out the order the chapters load their sets in and give the profile a
-`loadOrder`, which is a change to every stage's colours and wants its own look.
+#### The order the sets are loaded in
+
+The first of those is the palette carrying between sets, and the order it
+carries in can be read rather than guessed. Each section starts with a set of
+its own and a script may load another part way through, so walking the sections
+in order and noting each set the first time it appears gives the order the game
+loads them. Done to the prototype it gives **[1, 3, 4, 5, 6, 7]**, which is the
+line its profile already carries — so the method is the one that wrote it. Done
+to the finished game it gives **[1, 3, 4, 5, 6, 7, 8, 10, 9, 11, 12]**, the same
+for both revisions. Set 2 is absent because no chapter loads it, which is what
+the prototype's notes say of its own bank 2.
+
+That it cannot break anything is worth measuring rather than arguing. Building
+every set's palette with the order and without it changes **1970 entries across
+the thirteen sets, and every one of them was unset before** — not one colour
+that already had a value moved. It could not: a set's own table is written last
+and over the top, so the order can only reach entries above where that table
+stops.
+
+The stages agree. Every stage without a sky renders pixel for pixel identically;
+the ones with a sky differ only because the dome is at a different point in its
+drift, and the lit sky pixels come to the same mean colour to a tenth and the
+same count exactly. What does change is what had no colour at all: six lamps in
+the mansion, a plate, two tables, and one piece of scenery under set 6 that
+names 837 and had been falling back to grey.
+
+Two props are still left without a colour — `PN_tabul_maru01a` and
+`PN_ose_cup_01a` name 786 and 831 under set 1, and set 1 is the first set a
+chapter loads, so nothing precedes it to have left those entries behind.
 
 #### What handles a type
 

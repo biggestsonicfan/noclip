@@ -897,13 +897,29 @@ const hotdo = {
      * read. Nine of the thirteen banks name a colour exactly at the end of
      * 500 + their set's count, none names one past its own set's end, and not
      * one face in the game names anything between the shared table's last
-     * entry at 212 and 500. No `loadOrder`: nothing here depends on what an
-     * earlier set left behind, which is the one thing the prototype needed it
-     * for.
+     * entry at 212 and 500.
+     *
+     * `loadOrder` is the order the chapters first load each set, read off the
+     * sections themselves: each section's own set as it starts and every set a
+     * script loads part way through, in the order the walk meets them. The same
+     * reading of the prototype gives [1, 3, 4, 5, 6, 7], which is what its
+     * profile carries, so the method is the one that wrote that line.
+     *
+     * No model bank needs it — each names colours only up to its own set's end.
+     * The props do: a set writes as many entries from `split` as its table
+     * holds and clears nothing above them, so a lamp that names 832 under set 6,
+     * whose table stops at 698, is wearing what set 3 left there, 3 being loaded
+     * two chapters earlier and reaching 933. Because every set's own table is
+     * written last and over the top, this can only fill in entries above a set's
+     * end and cannot move a colour any scenery uses.
+     *
+     * Set 2 is not in the order because no chapter loads it, which is the same
+     * thing the prototype's notes say of its own bank 2.
      */
     palette: {
         source: 'maincpu', tables: 0xa98f0, split: 500, sets: 13,
         top: 0xa35b8, fixed: [[1023, 0x801f]],
+        loadOrder: [1, 3, 4, 5, 6, 7, 8, 10, 9, 11, 12],
     },
     /*
      * The debug name table, in the same shape and at the same offset into
