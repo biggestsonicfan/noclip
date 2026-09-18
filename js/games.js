@@ -1510,6 +1510,22 @@ function daytonaBuild(spec) {
             courses: { ...spec.courses, count: 4, blocks: 256 },
             flat: true,
         },
+        /*
+         * The same depth arrangement The House of the Dead wants, and for the
+         * same reason: this board has no depth buffer, and a course is large
+         * plates with smaller ones laid on them in the one plane — the lane
+         * markings on the road, the kerbs against it, the infield grass
+         * against the apron. A depth test finds the same depth on both and
+         * hands the pixel to whichever the rounding favours, which is what
+         * broke the infield into mismatched patches of green.
+         *
+         * `recede: 0` for Fighting Vipers' reason as well: a bounded recede
+         * steps each face back by its own depth, so plates in one plane part
+         * by how they were cut and the parting moves with the camera. Nothing
+         * here is modelled behind a surface it shows through, which is what a
+         * recede is for.
+         */
+        depth: { recede: 0, nearMin: 0.02, layers: true },
         /* Stages, but no rig: this game has no motion tables of any kind. */
         features: { stages: true, characters: false, motions: false, bodies: false },
     };
