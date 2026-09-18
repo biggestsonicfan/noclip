@@ -8,7 +8,8 @@ which game it is from the program ROM inside.
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
 views below are its. *Fighting Vipers* has stages and models — see
 [Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
-the original Model 2 board, has models — see [Daytona USA](#daytona-usa).
+the original Model 2 board, has models in all eight of the builds it shipped as
+— see [Daytona USA](#daytona-usa).
 
 Three views:
 
@@ -102,9 +103,20 @@ its own record until someone identifies it.
 
 ## Daytona USA
 
-Drop `daytona93.zip` and `daytona.zip` together and the explorer loads *Daytona
-USA* — the 1993 Deluxe version, MAME's `daytona93` — with the Models tab. 2817
-of its 2822 table entries carry geometry: the grid of stock cars in their
+Drop a Daytona set and the explorer loads it with the Models tab. All eight of
+MAME's builds are recognised — the 1994 parent and its seven clones — and a
+merged archive carrying the lot is read as all eight at once: the panel grows a
+**Build** picker and swapping between them reassembles the set without the zips
+being handed over again.
+
+There are two sets of models behind those eight names, though, and the profiles
+say so rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
+its own data, its own fourth polygon pair and its own second texture pair: 2822
+table entries, 2817 of them with geometry. Every build after it — Revision A,
+the Special Edition, the Saturn-advert version and the four Kyle Hodgetts hacks
+— carries a **byte-identical** model table and palette: 3190 entries, 3163 with
+geometry. They differ in their program ROM and half a megabyte of data, not in
+what they draw. What comes out either way is the grid of stock cars in their
 liveries, the three courses' track sections, and the scenery along them.
 
 It is the only set here that is not on a 2A or 2B board. This is the original
@@ -118,8 +130,14 @@ decoders are used unchanged and only the numbers in
 [`js/games.js`](js/games.js) are this game's own.
 
 There was no symbol table for this one and no decompilation to read, so every
-number was taken off the program ROM's own instructions with stf-tools'
-`i960dis.mjs`. Three of them fix the rest:
+number was taken off the program ROM's own instructions — and, with eight of
+them to read, not by hand. stf-tools' `daytona-tables.mjs` finds each routine by
+the instruction that names its table and prints the profile block; `--check`
+holds what it finds against what `js/games.js` carries, and all eight pass. It
+was written against the 1993 build, whose numbers had already been read by hand,
+and reproduced every one of them before it was pointed at the other seven.
+
+Three signatures fix the rest:
 
 - `0x1134` sets `g10 = 0x00800000` and `g11 = 0x00880000`, which is what makes a
   store to `0x60(g10)` readable as geometry-engine function 6 and a store to
@@ -158,8 +176,20 @@ the main view uses, which on the board is a headlight in the engine's own frame
 and is applied here as a world light so a model keeps one lit side as the camera
 moves.
 
-What is missing is the course: how a track is laid out, what is placed along it
-and in what order — so there are no stages, and the cars do not move.
+What is missing is the course, and it is missing because Daytona does not keep
+one. The other games here describe a scene in a table — a placement, a zone
+list, a stage record — and this one draws it in code: the routine that hands the
+geometry engine a model has 75 call sites, 28 of which name a model by its
+address outright and the rest of which index a per-object array. There is no
+placement table to read, so there is no Stages tab. The track surface is not in
+the polygon ROM either; it comes off the 4MB coprocessor data ROM, four
+megabytes that open on a 4x4 identity matrix and are a third plausible floats,
+and the TGP builds the road from it. Reaching it means porting that, which is a
+different job from reading a table.
+
+Nor are there animations. This game has no rig and no motion tables — nothing
+like the `BO_`/`MO_` arrays The House of the Dead carries — so there is nothing
+of that kind to play.
 
 And one thing is missing from the checking. Sonic The Fighters' texture and
 colour ports are held against a capture of the real board; this one is not,
@@ -201,11 +231,13 @@ Championship (`schamp`), so a combined set is the least fuss:
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
-Daytona USA wants two: `daytona93.zip` for the ten chips the 1993 set has of its
-own, and `daytona.zip` for the rest, which MAME keeps in the parent. Member names
-are matched by checksum where the label does not match, so a set spelling those
-chips the way an older MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for
-`.ic23` — loads just the same.
+Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
+all seven clones and loads as any of them. Split sets work too: the 1993 version
+wants `daytona93.zip` for the ten chips it has of its own and `daytona.zip` for
+the rest, which MAME keeps in the parent. Member names are matched by checksum
+where the label does not match, so a set spelling those chips the way an older
+MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for `.ic23` — loads just the
+same.
 
 So is `hotdp.zip` for the House of the Dead prototype: its two playable stages,
 assembled from the game's own placement tables and split by the texture set each

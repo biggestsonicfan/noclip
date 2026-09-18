@@ -185,7 +185,11 @@ export function stageLight(bright, vecterX, vecterY) {
 export function gameLighting(rom) {
     const L = rom.game.lighting;
     if (!L) return null;
-    const cv = rom.mainCpuView;
+    /* The table is in the program ROM for every game here but Daytona USA after
+     * 1993, which moved it into the data ROM along with its luma bands. */
+    const src = L.materials.source ?? 'maincpu';
+    const cv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+    const len = src === 'maincpu' ? rom.maincpu.length : rom.mainData.length;
     const materials = [];
     /* One 8-byte record a slot where the parameter word and the distance
      * coefficient are interleaved, 4 where the upload reads them out of two
@@ -193,7 +197,7 @@ export function gameLighting(rom) {
     const stride = L.materials.stride ?? 8;
     for (let i = 0; i < MATERIAL_COUNT; i++) {
         const at = L.materials.at + i * stride;
-        if (i >= L.materials.count || at + 4 > rom.maincpu.length) {
+        if (i >= L.materials.count || at + 4 > len) {
             materials.push({ diffuse: 0, ambient: 0 });
             continue;
         }

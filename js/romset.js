@@ -10,7 +10,7 @@
  */
 
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
-import { detectGame } from './games.js';
+import { detectGames } from './games.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -33,10 +33,15 @@ function interleave32(dest, lo, hi, baseOffset) {
  * supplied zip, so passing one self-contained archive works and so does adding
  * a second to cover a MAME parent/clone split.
  *
+ * A set that matches more than one profile — a merged archive of a game that
+ * shipped in several builds — loads as the first and reports the rest on
+ * `variants`, so a caller can offer the choice and ask for one by id.
+ *
  * @param {ArrayBuffer[]} zipBuffers
  * @param {(msg:string, frac:number)=>void} [onProgress]
+ * @param {{game?: string}} [opts]  `game` names which profile to load as
  */
-export async function loadRomSet(zipBuffers, onProgress = () => {}) {
+export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
     const sources = zipBuffers.map((buf) => ({ buf, dir: readZipDirectory(buf) }));
 
     const names = new Set();
@@ -52,7 +57,8 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
         }
     }
 
-    const game = detectGame(names, nested);
+    const variants = detectGames(names, nested);
+    const game = (opts.game && variants.find((g) => g.id === opts.game)) || variants[0];
     if (!game) throw new Error('unrecognised ROM set — no supported game found in these zips');
 
     const warnings = [];
@@ -117,7 +123,9 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}) {
     const totalParts = regions.reduce((a, [, r]) => a + r.parts.length * 2, 0);
     let done = 0;
 
-    const out = { game };
+    /* Every build this archive could be loaded as, so the panel can offer them
+     * without reading the zip a second time. */
+    const out = { game, variants: variants.map((g) => ({ id: g.id, name: g.name })) };
     for (const [key, spec] of regions) {
         /* A region the viewer can do without is left null rather than failing
          * the whole set when a zip does not carry its chips. */

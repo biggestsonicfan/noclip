@@ -51,6 +51,9 @@ const el = (tag, cls, html) => {
 
 const state = {
     rom: null,
+    /* The zips as they were handed over, so a build swap can assemble the set
+     * again without asking for them twice — see switchBuild. */
+    romBuffers: null,
     stages: [],
     viewer: null,
     /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
@@ -181,6 +184,9 @@ function setStatus(msg, frac) {
 
 async function bootWithBuffers(buffers) {
     $('#loader-error').hidden = true;
+    /* Kept so a build swap can assemble the set again without asking for the
+     * zips a second time — see switchBuild. */
+    state.romBuffers = buffers;
     try {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
         useCoproTrig(state.rom);
@@ -214,6 +220,106 @@ function romHint(err) {
     }
     return `check that these are the ROM zips of a game the viewer knows: `
         + `${GAMES.map((g) => g.name).join(', ')}`;
+}
+
+/*
+ * Load the same zips as a different build.
+ *
+ * MAME keeps a game's revisions and its hacks as clones of one parent, and a
+ * merged archive is all of them at once — Daytona USA is eight. Which one a
+ * drop "is" has no single right answer there, so the set reports every profile
+ * it matches and this swaps between them without the zips being handed over
+ * again. Only what the build decides is rebuilt: the renderer, the canvas and
+ * the wiring outlive the swap, so nothing is disposed and nothing is wired
+ * twice.
+ */
+async function switchBuild(id) {
+    if (!state.romBuffers || !state.rom || id === state.rom.game.id) return;
+    $('#loader').hidden = false;
+    $('#loader-error').hidden = true;
+    try {
+        state.rom = await loadRomSet(state.romBuffers, (m, f) => setStatus(m, f), { game: id });
+        useCoproTrig(state.rom);
+    } catch (err) {
+        return failToLoad(err, romHint(err));
+    }
+    resetRomState();
+    loadGameContent();
+}
+
+/*
+ * Everything in `state` that is about the ROM set rather than about the page.
+ *
+ * All of it is indexed by, or decoded from, the build that was loaded — a model
+ * cache keyed on a table index, sheets keyed on a texture number, the stage
+ * list, the rig — so a swap has to throw the lot away. What survives is the
+ * renderer, the panel's own switches and where the camera is pointing.
+ */
+function resetRomState() {
+    state.stages = [];
+    state.modelCache.clear();
+    state.texSetCache.clear();
+    state.skyTextures.clear();
+    state.skyPanoAspect.clear();
+    state.skyTopColor.clear();
+    state.modelScenes = null;
+    state.rigOwners = null;
+    state.frames = null;
+    state.bodies = null;
+    state.motionRanks = null;
+    state.motion.list = null;
+    state.motion.decoded = null;
+    state.motion.parts = [];
+    state.motion.skeleton = null;
+    state.sky = null;
+    state.cxlat = null;
+    state.texramKey = null;
+    state.lutKey = null;
+    /* A dropped texture-RAM dump is a capture of one build's RAM, so it does
+     * not carry over to another. */
+    state.texramPinned = false;
+    state.lutsPinned = false;
+    state.texSetChoice = null;
+    state.stageIndex = 0;
+    state.charIndex = 0;
+    state.anim.frame = -1;
+    state.anim.entries = [];
+    state.anim.phases = [];
+    state.anim.geom.clear();
+    state.anim.billboards = [];
+    state.viewer.clear();
+    state.viewer.clearSetMaterials();
+}
+
+/*
+ * The builds this archive could be loaded as, when there is more than one.
+ *
+ * Every Daytona build after 1993 carries a byte-identical model table and
+ * palette — they differ in their program ROM and half a megabyte of data, not
+ * in their models — so the list is longer than the number of distinct things
+ * there are to look at. It names them anyway: which build a set is is a fact
+ * about the set, and a picker that hid seven of them would be deciding for the
+ * person which one they dropped.
+ */
+function renderBuildPicker() {
+    const field = $('#build-field');
+    if (!field) return;
+    const variants = state.rom.variants ?? [];
+    if (variants.length < 2) { field.hidden = true; return; }
+    const sel = $('#build-select');
+    sel.innerHTML = '';
+    for (const v of variants) {
+        const o = el('option');
+        o.value = v.id;
+        o.textContent = v.name;
+        sel.appendChild(o);
+    }
+    sel.value = state.rom.game.id;
+    if (!sel.dataset.wired) {
+        sel.dataset.wired = '1';
+        sel.addEventListener('change', () => switchBuild(sel.value));
+    }
+    field.hidden = false;
 }
 
 function failToLoad(err, hint) {
@@ -2985,14 +3091,17 @@ function applyGameFeatures() {
     return on;
 }
 
-function start() {
-    /* Build the viewer before swapping panels, so a renderer failure still has
-     * the loading screen to report itself on. */
-    $('#app').hidden = false;
-    state.viewer = new Viewer($('#view'), { touch: isMobile() });
+/*
+ * Everything the loaded build decides, as against everything the page decides.
+ *
+ * A ROM set can be more than one build — a merged Daytona archive is eight —
+ * and swapping between them replaces the tables, the models and the sheets but
+ * not the renderer, the canvas or the wiring. So the two are separated: start()
+ * runs once and this runs again on every swap.
+ */
+function loadGameContent() {
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
-    state.viewer.backfaceCull($('#opt-cull').checked);
     const on = applyGameFeatures();
     if (on.stage) {
         state.stages = state.rom.game.stageTable.placements
@@ -3023,9 +3132,19 @@ function start() {
     if (modelsPickTextures()) renderTextureSetPicker();
     if (state.rom.game.modelNames) $('#model-search').placeholder = 'Model index, range (500-520) or name';
     if (on.anim) renderCharacterSelect();
+    renderBuildPicker();
     renderModelList();
-    wireOptions();
     switchTab(on.stage ? 'stage' : 'model');
+}
+
+function start() {
+    /* Build the viewer before swapping panels, so a renderer failure still has
+     * the loading screen to report itself on. */
+    $('#app').hidden = false;
+    state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    state.viewer.backfaceCull($('#opt-cull').checked);
+    loadGameContent();
+    wireOptions();
     state.viewer.resize();
 
     let frames = 0;

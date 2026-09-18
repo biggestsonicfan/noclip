@@ -83,16 +83,17 @@
         <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
             prototype the finished game grew out of, read the same way: its two playable
             stages, its own models and 68 bodies with 507 motions.</li>
-        <li><b>Daytona USA</b> (<code>daytona93.zip</code> <i>and</i> <code>daytona.zip</code>)
-            &mdash; the 1993 Deluxe version, and the only one here on the original Model 2
-            board rather than the 2A/2B the rest run on. 2817 of its 2822 table entries
-            carry geometry: the grid of stock cars in their liveries, the three courses'
-            track sections and the scenery along them, textured from the course's own
-            texture bank and shaded through the colour tables the game computes at boot.
-            MAME's set is a clone, so both zips are wanted &mdash; the ten chips that are
-            its own, and the rest from the parent. There are no stages: how a course is
-            laid out has not been read, so the Models view is the whole of it, and which
-            of the three courses a model belongs to is the picker's to choose.</li>
+        <li><b>Daytona USA</b> (<code>daytona.zip</code>) &mdash; the only one here on the
+            original Model 2 board rather than the 2A/2B the rest run on, and the only one
+            that shipped in eight builds. All eight are recognised, and a merged archive
+            is read as all of them at once: the panel grows a <b>Build</b> picker and
+            swapping is instant. Two of them are distinct &mdash; the 1993 Deluxe version
+            has 2822 table entries and every build after it 3190, byte for byte the same
+            table in all seven. Out comes the grid of stock cars in their liveries, the
+            courses' track sections and the scenery along them, textured from the course's
+            own bank and shaded through the colour tables the game computes at boot.
+            There are no stages and no animations: this game draws its courses in code
+            rather than describing them in a table, and carries no rig.</li>
         <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
             arenas and 5413 table entries come out of it, because this game and Sonic The
             Fighters are built on the same Sega library and the stage records, the model
@@ -127,6 +128,13 @@
   <aside id="sidebar">
     <header>
       <div class="title" id="game-title">Sega Model 2</div>
+      <!-- Only when the archive matches more than one build. MAME keeps a
+           game's revisions and hacks as clones of one parent, and a merged set
+           is all of them at once, so which one was dropped is a choice. -->
+      <div class="field" id="build-field" hidden>
+        <label for="build-select">Build</label>
+        <select id="build-select"></select>
+      </div>
       <nav id="tabs">
         <button data-tab="stage" class="active">Stages</button>
         <button data-tab="model">Models</button>
