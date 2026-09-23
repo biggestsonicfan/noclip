@@ -1368,12 +1368,25 @@ function bossDisp({ push, pushBackdrop, pushTpd, sx, frames }) {
 /* ---- draw_sphynx_head: the Flying Carpet's second object ----
  * See the note above sphynxOps for where the head belongs, and the one above
  * carpetWorld for why it alone of these three carries the arena's frame. */
-function sphynxDisp({ push, sx, fs }) {
+function sphynxDisp({ push, pushConceding, sx, fs }) {
     push(SPHYNX_HEAD, (f) => sphynxOps(carpetAt(f)));
     for (let i = 0; i < 4; i++) {
         push(SPHYNX_CORNER, [['s', [sx, sx, sx]], ['r', i * 90]]);
     }
-    push(SPHYNX_PLATE, [['s', [fs, fs, fs]]]);
+    /* The plate is one flat quad at y = 0, as wide as the rug, and the rug's
+     * floor ripples a tenth of a unit either side of that plane. The board
+     * never compares the two a pixel at a time: the plate and every strip of
+     * the rug each take one z, their farthest corner, and the plate's is the
+     * rug's far edge, so every strip is in front of it. MAME never shows it.
+     *
+     * The bounded recede does not get there. The plate is some fourteen units
+     * deep along the board's own camera, so it keeps the depth the projection
+     * gives it, while the strips are shallow and step back to their far
+     * corners -- and the troughs of the ripple step back behind the plate,
+     * which paints the rug its own ground colour, flat, with the pattern gone
+     * (noclip issue 23). Conceding the bound puts the plate back where the
+     * board has it: behind the lot. */
+    pushConceding(SPHYNX_PLATE, [['s', [fs, fs, fs]]]);
 }
 
 /*
@@ -1847,6 +1860,12 @@ export function buildStageDisplayList(stage, frames = null) {
              * js/viewer.js. */
             pushStanding: (model, ops) => {
                 if (model) out.push({ model, layer: OBJECT_LAYER, standing: true, ops });
+            },
+            /* A plate that everything lying on it beats outright on the board,
+             * which stands the whole z-sort bound back the way the open water
+             * does — see concedeMaterial in js/viewer.js. */
+            pushConceding: (model, ops) => {
+                if (model) out.push({ model, layer: OBJECT_LAYER, concede: true, ops });
             },
             /* A draw the routine makes with the matrix reset to the identity
              * rather than built on the camera's, which is the board's way of
