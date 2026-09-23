@@ -57,6 +57,16 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; f
 .romnote code { color: var(--accent); }
 .romnote b { color: var(--text); font-weight: 600; }
 
+.linknote {
+    text-align: left; margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-dim); border-radius: 8px;
+    background: var(--panel-2);
+    font-size: 12px; line-height: 1.5;
+}
+.linknote code { color: var(--accent); }
+.linknote[hidden] { display: none; }
+
 .ack {
     display: flex; gap: 8px; align-items: flex-start;
     text-align: left; margin-bottom: 14px;
@@ -221,6 +231,15 @@ main { position: relative; flex: 1; min-width: 0; }
 html.mobile #tools { top: 6px; right: 8px; }
 html.mobile #tools button { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
 html.mobile #tools a span { display: none; }
+
+#link-note {
+    position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5;
+    max-width: min(560px, calc(100vw - 32px));
+    background: rgba(18, 21, 29, 0.92); border: 1px solid var(--accent-dim);
+    padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.5;
+    color: var(--text); cursor: pointer;
+}
+#link-note[hidden] { display: none; }
 
 #fly-hint {
     position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);

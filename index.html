@@ -135,6 +135,10 @@
       </ul>
     </div>
 
+    <!-- Filled in when the page was opened from a report's link: which build it
+         wants, since the link cannot carry the ROM set. See js/viewlink.js. -->
+    <p id="loader-link" class="linknote" hidden></p>
+
     <label class="ack"><input type="checkbox" id="loader-ack">
       <span>I understand that assistive AI was used in the generation of this project.</span></label>
 
@@ -357,6 +361,8 @@
     <span>GitHub</span>
   </a>
 </div>
+<!-- Said when a report's link names a build these zips are not. -->
+<div id="link-note" hidden></div>
 
 <script type="module" src="./js/app.js"></script>
 </body>

@@ -350,6 +350,18 @@ loader gave. Nothing is read off the ROM but the profile it matched and the
 names of the files, and nothing is sent anywhere — the text goes to your
 clipboard, for you to read before you paste it.
 
+The report also carries a link, **Open this view**, to
+`https://noclip.sonicthefighte.rs/` with the view in the fragment after the `#`:
+the build, the tab, the stage, model or fighter and motion (its frame, and
+whether it was paused), the stage clock, the layers switched off, the panel's
+switches, the phone or desktop layout, orbit or noclip, and the camera to the
+third decimal. A ROM set cannot travel in a link, so opening one puts the build
+it wants on the loading screen — drop that set's zips and the explorer loads
+that build out of them and opens where the report was filed. Zips that turn out
+to be another game still load, on the default view, with a note saying so. The
+link lives in the fragment because the fragment never goes to the server, and
+because the query string belongs to the `?mobile` / `?desktop` switch.
+
 The one thing worth adding by hand is a screenshot. Drag it into the issue.
 
 ## Deploying

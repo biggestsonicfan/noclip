@@ -805,6 +805,14 @@ class FlyControls {
         this.pitch = e.x;
     }
 
+    /** Face a heading given as yaw and pitch, as a report's link carries it. */
+    face(yaw, pitch) {
+        const lim = Math.PI / 2 - 0.001;
+        this.yaw = yaw;
+        this.pitch = Math.max(-lim, Math.min(lim, pitch));
+        this._apply();
+    }
+
     _apply() {
         this.camera.quaternion.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
     }
