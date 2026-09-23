@@ -27,7 +27,13 @@
  *
  *   CG list      pairs of (source, destination) until the source is zero. A
  *                source is a count followed by that many 32-byte tiles, which
- *                is 8x8 at four bits a pixel.
+ *                is 8x8 at four bits a pixel. The tile chip is a 16-bit
+ *                big-endian part (System 24's) on the i960's little-endian
+ *                bus, so a halfword's left pixels are in its second byte:
+ *                pixels 0 and 1 are byte 1's high and low nibble, 2 and 3
+ *                byte 0's. Reading the bytes in address order swapped every
+ *                pair of pixels, which combed Daytona's clouds and sea into
+ *                vertical streaks and broke up Fighting Vipers' dithering.
  *   palette list blocks of (destination, halfword count, data) until the
  *                destination is zero.
  *   pattern      a header whose 0x04 is the row count, then rows of 32 tilemap
@@ -242,7 +248,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes) {
                 if (base + TILE_BYTES > chars.length) continue;
                 for (let py = 0; py < 8; py++) {
                     for (let px = 0; px < 8; px++) {
-                        const byte = chars[base + py * 4 + (px >> 1)];
+                        const byte = chars[base + py * 4 + ((px >> 1) ^ 1)];
                         const nib = (px & 1) ? (byte & 15) : (byte >> 4);
                         const v = pal[group * 16 + nib];
                         const x = (c * PATTERN_TILES + tx) * 8 + px;
