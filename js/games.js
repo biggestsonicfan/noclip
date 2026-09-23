@@ -1529,6 +1529,15 @@ function daytonaBuild(spec) {
         /* What stands along the courses — see DAYTONA_OBJECTS_A. */
         objects: spec.objects ?? null,
         /*
+         * The sky, which is not geometry but the tile layer's panorama: 256
+         * tiles round the full turn, eight patterns of 32, streamed into the
+         * tilemap as the car turns (js/scroll.js, buildCourseSky). `table` is
+         * the four-course table change_course_bank indexes by sel_course; the
+         * first word of each row is that course's sky. Found by daytona-tables.mjs
+         * by the shape of what it points at.
+         */
+        sky: spec.sky ?? null,
+        /*
          * The same depth arrangement The House of the Dead wants, and for the
          * same reason: this board has no depth buffer, and a course is large
          * plates with smaller ones laid on them in the one plane — the lane
@@ -1685,6 +1694,7 @@ const daytona93 = daytonaBuild({
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
+    sky: { table: 0x3a48 },
     objects: DAYTONA_OBJECTS_93,
 });
 
@@ -1701,6 +1711,7 @@ const daytona = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 
@@ -1717,6 +1728,7 @@ const daytonase = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x47c8 },
     objects: DAYTONA_OBJECTS_SE,
 });
 
@@ -1733,6 +1745,7 @@ const daytonas = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 
@@ -1749,6 +1762,7 @@ const daytonat = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 
@@ -1765,6 +1779,7 @@ const daytonata = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 
@@ -1781,6 +1796,7 @@ const daytonam = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 
@@ -1797,6 +1813,7 @@ const daytonagtx = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
 });
 

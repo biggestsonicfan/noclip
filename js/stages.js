@@ -15,6 +15,7 @@
 export const STAGE_DATA_ADDR = 0x0008f3d0;
 import { xtraResolve } from './romset.js';
 import { readObjectRecords, courseObjectDraws, courseGround } from './daytona.js';
+import { buildCourseSky } from './scroll.js';
 
 export const STAGE_STRIDE = 256;
 export const STAGE_COUNT = 16;
@@ -463,9 +464,10 @@ export function readCourseStages(rom) {
             draws,
             objects: [],
             /* Null rather than empty: buildPlacementDisplayList tests the
-             * field, and an empty array is truthy. The sky is geometry on this
-             * board and which model it is has not been read. */
+             * field, and an empty array is truthy. The sky is not geometry on
+             * this board but the tile layer's panorama — `panorama` below. */
             sky: null,
+            panorama: rom.game.sky ? () => buildCourseSky(rom, c) : null,
             alternates: [],
             texSets: [c],
             texSet: [c, c],
@@ -476,9 +478,8 @@ export function readCourseStages(rom) {
             colorCycles: [],
             flags: 0,
             floorSize: 0,
-            /* The board draws its sky as geometry rather than as a backdrop
-             * colour, and which model that is has not been read, so the
-             * backdrop is left alone. */
+            /* Behind the panorama's top row is the backdrop, which the app
+             * takes from that row itself when there is a panorama. */
             bgColor555: 0,
             meta: [['course', c], ['blocks', draws.length],
                 ...(rom.game.objects ? [['objects', readObjectRecords(rom, c).length]] : [])],

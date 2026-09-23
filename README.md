@@ -316,6 +316,32 @@ and the covered walkway's — 64 frames of sky each, picked by where the car
 stands — which show their first, since the TGP functions that choose one are
 not ported.
 
+### The sky
+
+The sky is not geometry. It is the tile chip's panorama, the same machinery as
+Fighting Vipers' sky: a course's four-course table row names its sky, which is
+a CG list, a palette list and eight patterns of 32 tiles, 256 tiles round the
+full turn. The board streams it into the 64-tile tilemap a column at a time as
+the car turns (`heading >> 13` picks the pattern, `heading >> 5` is the X
+scroll), and [`js/scroll.js`](js/scroll.js) lays all eight side by side and
+puts them on a cylinder. Unlike Fighting Vipers' strips, these carry what lies
+below the horizon too — the grass round the Speedway, the sea off Seaside
+Street Galaxy, the floor of cloud under Dinosaur Canyon — and panorama row 144
+goes on the eye line, the row the board's scroll arithmetic puts there on
+every course. Graded against the tile chip's RAM captured from MAME in the
+attract race: the characters are byte-identical, and every one of the 64
+columns in the name table is a whole column of the decoded panorama, starting
+at the tilemap row this assumes. Which compass direction each part of the sky
+faces has not been checked against the board.
+
+### Mip levels
+
+The texture sheets are graded against texture RAM captured from MAME running
+the game — Revision A and 1993, all three courses — and match byte for byte,
+full size and all nine mip levels (stf-tools' `test-daytona-texram.mjs`). The
+first mip level had been dealt onto the wrong sheet, which is why a distant
+tree could show a shrunken piece of some other texture.
+
 And one thing is missing from the checking. Sonic The Fighters' texture and
 colour ports are held against a capture of the real board; this one is not,
 because the game cannot be made to reach its own uploads here. It boots in MAME

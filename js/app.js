@@ -107,6 +107,7 @@ const state = {
     sky: null,
     skyTextures: new Map(),
     skyPanoAspect: new Map(),
+    skyHorizon: new Map(),
     skyTopColor: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
      * a texture number. null is "work it out from the model"; a number is the
@@ -268,6 +269,7 @@ function resetRomState() {
     state.texSetCache.clear();
     state.skyTextures.clear();
     state.skyPanoAspect.clear();
+    state.skyHorizon.clear();
     state.skyTopColor.clear();
     state.modelScenes = null;
     state.rigOwners = null;
@@ -1094,18 +1096,23 @@ function useModelScene(idx) {
  * frame depends on the projection rather than on anything in the data. The
  * height below puts the panorama's foot on the horizon and scales the rest by
  * the same pixels-per-degree the horizontal mapping implies, which lands the
- * cloud band where the captures put it.
+ * cloud band where the captures put it. A panorama that carries what lies
+ * below the horizon as well — Daytona USA's — says which row is the horizon,
+ * and that row goes on the eye line instead.
  */
 const SKY_RADIUS = 600;
 
 function addSkyPanorama(slot) {
     const v = state.viewer;
-    if (!state.rom.game.stageTable.scroll) return;
+    /* A stage may carry its own way to its panorama — Daytona USA's courses,
+     * whose skies are found through the course rather than a stage record. */
+    const stage = state.stages[slot];
+    if (!state.rom.game.stageTable.scroll && !stage?.panorama) return;
 
     state.sky = null;
     let tex = state.skyTextures.get(slot);
     if (tex === undefined) {
-        const pano = buildSkyPanorama(state.rom, slot);
+        const pano = stage?.panorama ? stage.panorama() : buildSkyPanorama(state.rom, slot);
         /* Not makeDataTexture: that one is for the single-channel lookup
          * tables the fill shader reads, and this is an image. */
         tex = pano
@@ -1121,6 +1128,9 @@ function addSkyPanorama(slot) {
             tex.wrapS = THREE.RepeatWrapping;
             tex.needsUpdate = true;
             state.skyPanoAspect.set(slot, pano.height / pano.width);
+            /* The row that sits on the eye line, as a fraction down the
+             * strip: its foot unless the panorama says otherwise. */
+            state.skyHorizon.set(slot, (pano.horizon ?? pano.height) / pano.height);
             state.skyTopColor.set(slot, pano.topColor.map((c) => c / 255));
         }
         state.skyTextures.set(slot, tex);
@@ -1140,7 +1150,7 @@ function addSkyPanorama(slot) {
     mesh.userData.layer = 'sky';
     mesh.frustumCulled = false;
     v.root.add(mesh);
-    state.sky = { mesh, height };
+    state.sky = { mesh, height, horizon: state.skyHorizon.get(slot) ?? 1 };
     stepSky();
 }
 
@@ -1158,7 +1168,7 @@ function stepSky() {
     const sky = state.sky;
     if (!sky) return;
     const c = state.viewer.camera;
-    sky.mesh.position.set(c.position.x, c.position.y + sky.height / 2, c.position.z);
+    sky.mesh.position.set(c.position.x, c.position.y + sky.height * (sky.horizon - 0.5), c.position.z);
 }
 
 /* ---- Stage view ---------------------------------------------------------- */
@@ -2423,8 +2433,10 @@ function renderStageSelect() {
 }
 
 function renderStagePanel(stage, counts, totals, list) {
+    /* The models' triangles: the sky panorama's cylinder is not a model, and
+     * its indexed geometry would add a fraction. */
     const totalTris = state.viewer.root.children
-        .filter((c) => c.isMesh)
+        .filter((c) => c.isMesh && c !== state.sky?.mesh)
         .reduce((a, m) => a + m.geometry.attributes.position.count / 3, 0);
     /* A stage built from placements has no record fields to show, and says what
      * it was assembled from instead. */
