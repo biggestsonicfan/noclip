@@ -226,7 +226,10 @@ function colorTable(dv, src) {
  * being what the board holds rather than because anything samples it.
  */
 function buildRampColorxlat(rom) {
-    const { step, span, bias, flat } = rom.game.colors.ramp;
+    /* Which set is the test menu's CABINET setting (see DAYTONA_CABINETS in
+     * js/games.js); the panel's switch puts its choice on the ROM set. */
+    const C = rom.game.colors;
+    const { step, span, bias, flat } = C.cabinets?.[rom.cabinet ?? C.cabinet]?.ramp ?? C.ramp;
     const out = new Uint8Array(CXLAT_BYTES);
     const view = new DataView(out.buffer);
     const put = (row, luma, v) => {

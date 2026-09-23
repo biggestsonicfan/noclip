@@ -473,7 +473,7 @@ export function readCourseStages(rom) {
              * field, and an empty array is truthy. The sky is not geometry on
              * this board but the tile layer's panorama — `panorama` below. */
             sky: null,
-            panorama: rom.game.sky ? () => buildCourseSky(rom, c) : null,
+            panorama: rom.game.sky ? (cxlat) => buildCourseSky(rom, c, cxlat) : null,
             alternates: [],
             texSets: [c],
             texSet: [c, c],

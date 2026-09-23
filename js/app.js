@@ -1137,7 +1137,16 @@ function addSkyPanorama(slot) {
     state.sky = null;
     let tex = state.skyTextures.get(slot);
     if (tex === undefined) {
-        const pano = stage?.panorama ? stage.panorama() : buildSkyPanorama(state.rom, slot);
+        /* On the board the palette goes through the scene's colour tables,
+         * which useRomColorLuts has just put in place for this stage. Daytona
+         * USA's are the board's byte for byte, so its sky takes them.
+         * Fighting Vipers' stays raw for now: the column its palette reads,
+         * luma 0x40, runs 28..224 as js/colors.js builds it where a MAME dump
+         * runs 68..202, and going through a wrong table is no better than
+         * going through none. */
+        const pano = stage?.panorama
+            ? stage.panorama(state.cxlat)
+            : buildSkyPanorama(state.rom, slot);
         /* Not makeDataTexture: that one is for the single-channel lookup
          * tables the fill shader reads, and this is an image. */
         tex = pano
@@ -3320,6 +3329,19 @@ function wireOptions() {
         v.material.uniforms.uTransfer.value = state.transfer;
         applyBackdropTransfer();
     });
+    /* The cabinet changes colorxlat, and everything built from it goes with it:
+     * the scene's tables, the per-set materials that carry their own, and the
+     * sky, whose palette went through the old one. Then the view is rebuilt
+     * where it stands. A pinned dump is a real machine's table, so it stays. */
+    $('#cabinet-mode').addEventListener('change', (e) => {
+        state.rom.cabinet = +e.target.value;
+        state.lutKey = null;
+        v.clearSetMaterials();
+        for (const t of state.skyTextures.values()) t?.dispose?.();
+        state.skyTextures.clear();
+        if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera: true });
+        else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera: true });
+    });
     $('#opt-wire').addEventListener('change', (e) => {
         state.wireframe = e.target.checked;
         applyWireVisibility();
@@ -3462,6 +3484,21 @@ function applyGameFeatures() {
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
+
+    /* The cabinet, for a game whose colour table depends on it: this build's
+     * own test-menu list, opening on the profile's choice. */
+    const colors = state.rom.game.colors;
+    const cabinets = colors?.cabinets;
+    $('#cabinet-field').hidden = !cabinets;
+    const cab = $('#cabinet-mode');
+    cab.innerHTML = '';
+    for (const [i, c] of (cabinets ?? []).entries()) {
+        const o = el('option');
+        o.value = String(i);
+        o.textContent = c.same ? `${c.name} (same colours as ${c.same})` : c.name;
+        cab.appendChild(o);
+    }
+    if (cabinets) cab.value = String(state.rom.cabinet ?? colors.cabinet);
     return on;
 }
 

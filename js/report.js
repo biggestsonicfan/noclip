@@ -112,6 +112,9 @@ export function collectDiagnostics(state) {
             ? document.getElementById('loader-error').textContent : undefined;
     }
     d.view.transfer = state?.transfer;
+    if (rom?.game.colors?.cabinets) {
+        d.view.cabinet = rom.game.colors.cabinets[rom.cabinet ?? rom.game.colors.cabinet]?.name;
+    }
     d.view.wireframe = !!state?.wireframe;
     d.view.animate = !!state?.animate;
     d.view.texramPinned = !!state?.texramPinned;

@@ -57,6 +57,7 @@
  */
 
 import { xtraResolve } from './romset.js';
+import { palette555ToBytes } from './atlas.js';
 
 const CHAR_BASE = 0x01080000;
 const PAL_BASE = 0x01800000;
@@ -87,9 +88,11 @@ function ptrOk(rom, addr) {
  *
  * @param {object} rom    loaded ROM set
  * @param {number} slot   stage slot
+ * @param {?Uint8Array} cxlat  the scene's colorxlat, which the palette goes
+ *                         through as it does on the board; null for raw colour
  * @returns {null|{width:number, height:number, rgba:Uint8Array}}
  */
-export function buildSkyPanorama(rom, slot) {
+export function buildSkyPanorama(rom, slot, cxlat = null) {
     const S = rom.game.stageTable.scroll;
     if (!S) return null;
 
@@ -111,7 +114,7 @@ export function buildSkyPanorama(rom, slot) {
         const p = L.view.getUint32(L.off + 4 + i * 4, true);
         patterns.push(word(S.patternTable + p * 4));
     }
-    return decodePanorama(rom, cgList, palList, patterns, S.charBytes);
+    return decodePanorama(rom, cgList, palList, patterns, S.charBytes, cxlat);
 }
 
 /**
@@ -128,8 +131,9 @@ export function buildSkyPanorama(rom, slot) {
  *
  * @param {object} rom     loaded ROM set
  * @param {number} course  sel_course
+ * @param {?Uint8Array} cxlat  as for buildSkyPanorama
  */
-export function buildCourseSky(rom, course) {
+export function buildCourseSky(rom, course, cxlat = null) {
     const T = rom.game.sky;
     if (!T) return null;
     const word = (addr) => {
@@ -145,7 +149,7 @@ export function buildCourseSky(rom, course) {
     if (!sky || !ptrOk(rom, sky)) return null;
     const patterns = [];
     for (let i = 0; i < DAYTONA_PATTERNS; i++) patterns.push(word(sky + 8 + i * 4));
-    const pano = decodePanorama(rom, word(sky), word(sky + 4), patterns, DAYTONA_CHAR_BYTES);
+    const pano = decodePanorama(rom, word(sky), word(sky + 4), patterns, DAYTONA_CHAR_BYTES, cxlat);
     if (pano) pano.horizon = DAYTONA_HORIZON_ROW;
     return pano;
 }
@@ -175,8 +179,16 @@ const DAYTONA_CHAR_BYTES = 0x80000;
 /*
  * The panorama from a CG list, a palette list and the patterns laid side by
  * side, each 32 tiles across.
+ *
+ * The tile chip does not show its palette entries as they are. palette_w
+ * (MAME model2.cpp) puts each through colorxlat at luma 0x40 and the gamma
+ * table, the same path a textured face takes at full brightness, so the sky's
+ * colours are the scene's colour tables as much as its own. Shown raw,
+ * Seaside Street Galaxy's sky is (0,74,165) where the board's is (0,108,181);
+ * through the tables every sky pixel the overlay and the 3D leave uncovered in
+ * a MAME snapshot of the attract race matches exactly.
  */
-function decodePanorama(rom, cgList, palList, patternPtrs, charBytes) {
+function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
     /* ---- the tile pixels ---- */
     const chars = new Uint8Array(charBytes);
     {
@@ -219,6 +231,16 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes) {
     }
     if (!written) return null;
 
+    /* Each palette entry's colour, worked out the first time a pixel uses it. */
+    const rgb = new Int32Array(0x8000).fill(-1);
+    const colour = (v) => {
+        if (rgb[v] < 0) {
+            const [r, g, b] = palette555ToBytes(cxlat, v);
+            rgb[v] = (r << 16) | (g << 8) | b;
+        }
+        return rgb[v];
+    };
+
     /* ---- the patterns, side by side ---- */
     const cols = [];
     let rows = 0;
@@ -250,12 +272,12 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes) {
                     for (let px = 0; px < 8; px++) {
                         const byte = chars[base + py * 4 + ((px >> 1) ^ 1)];
                         const nib = (px & 1) ? (byte & 15) : (byte >> 4);
-                        const v = pal[group * 16 + nib];
+                        const v = colour(pal[group * 16 + nib] & 0x7fff);
                         const x = (c * PATTERN_TILES + tx) * 8 + px;
                         const o = ((ty * 8 + py) * width + x) * 4;
-                        rgba[o] = Math.round((v & 31) * 255 / 31);
-                        rgba[o + 1] = Math.round(((v >> 5) & 31) * 255 / 31);
-                        rgba[o + 2] = Math.round(((v >> 10) & 31) * 255 / 31);
+                        rgba[o] = v >> 16;
+                        rgba[o + 1] = (v >> 8) & 255;
+                        rgba[o + 2] = v & 255;
                         rgba[o + 3] = 255;
                     }
                 }
