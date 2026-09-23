@@ -14,7 +14,7 @@
 
 export const STAGE_DATA_ADDR = 0x0008f3d0;
 import { xtraResolve } from './romset.js';
-import { readObjectRecords, courseObjectDraws, courseGround } from './daytona.js';
+import { readObjectRecords, courseObjectDraws, courseGround, courseReach } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 
 export const STAGE_STRIDE = 256;
@@ -446,7 +446,13 @@ export function readCourseStages(rom) {
         const draws = [];
         /* Which grid block each draw is, for the ground under an object. */
         const blockAt = [];
+        /* The blocks the board can draw — courseReach in js/daytona.js. The
+         * rest are never in view of a car, and one is a copse of trees in the
+         * sea off Seaside Street Galaxy. */
+        const reach = courseReach(rom, c);
+        let unreached = 0;
         for (let b = 0; b < C.blocks; b++) {
+            if (reach && !reach.has(b)) { unreached++; continue; }
             const idx = (dv.getUint32(off + b * 4, true) - base) / t.stride;
             if (!Number.isInteger(idx) || idx < 0 || idx >= t.count) continue;
             blockAt.push(b);
@@ -482,6 +488,7 @@ export function readCourseStages(rom) {
              * takes from that row itself when there is a panorama. */
             bgColor555: 0,
             meta: [['course', c], ['blocks', draws.length],
+                ...(unreached ? [['never in view', unreached]] : []),
                 ...(rom.game.objects ? [['objects', readObjectRecords(rom, c).length]] : [])],
             /* What stands along it — js/daytona.js. Built when the course is
              * opened rather than now, since the pylons stand on the road and
