@@ -227,6 +227,8 @@ main { position: relative; flex: 1; min-width: 0; }
 #tools button:hover, #tools a:hover { color: var(--text); border-color: var(--accent-dim); }
 #tools button.done { color: var(--accent); border-color: var(--accent-dim); }
 #tools svg { display: block; }
+#tools #tool-build { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
+#tools #tool-build.stale { color: #ffcf5a; border-color: #ffcf5a; }
 
 /* On a phone the label would take most of the width, so the report button keeps
  * its own and GitHub keeps only its mark. */
