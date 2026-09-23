@@ -487,10 +487,10 @@ export function readCourseStages(rom) {
              * finding it decodes the blocks under them; `getModel` is the
              * caller's cache, so a block is not decoded twice. */
             objectDraws: rom.game.objects
-                ? (getModel) => {
+                ? (getModel, mode) => {
                     const blockOf = new Map(draws.map((d, i) => [blockAt[i], d.model]));
                     const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null));
-                    return courseObjectDraws(rom, c, ground);
+                    return courseObjectDraws(rom, c, ground, mode);
                 }
                 : null,
         });

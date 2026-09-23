@@ -1559,9 +1559,9 @@ function daytonaBuild(spec) {
  * table Sega Racing Classic's d1a.exe carries.
  *
  * Revision A and the five sets built on it share one layout; the Special
- * Edition moved its tables and added a second crowd. The 1993 version
- * writes these routines differently — a checkpoint is a routine of its own
- * rather than an id into a table — and has not been read, so it has none.
+ * Edition moved its tables and put back the second crowd the 1993 version
+ * had. The 1993 version writes several routines its own way — see
+ * DAYTONA_OBJECTS_93.
  */
 const DAYTONA_KINDS_A = {
     0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
@@ -1570,12 +1570,13 @@ const DAYTONA_KINDS_A = {
     0x20e54: 'jeffry', 0x210a0: 'checkpoint', 0x211fc: 'flags', 0x212a4: 'light',
     0x212e4: 'none', 0x21618: 'runs', 0x21664: 'pylon', 0x21698: 'pylon',
     0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'window', 0x21ef8: 'window',
-    0x22018: 'world', 0x22080: 'none', 0x22314: 'birds', 0x224f8: 'bigBird',
-    0x22608: 'horse', 0x22a20: 'none',
+    0x22018: 'world', 0x22080: 'flock', 0x22314: 'birds', 0x224f8: 'bigBird',
+    0x22608: 'horse', 0x22a20: 'curtainCall',
 };
 const DAYTONA_OBJECTS_A = {
     at: 0x33bfc, kinds: DAYTONA_KINDS_A,
-    cycles: 0x236b40, checkpoints: 0x236d60, rankBoard: 0x23607c,
+    cycles: 0x236b40, checkpoints: 0x236d60, spinY: -0x100,
+    rankBoard: 0x23607c, rankCars: 0x2360b8,
     windmill: { sails: 0x2361b0, still: [0x2843e6c, 0x2843e80] },
     birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
     crowds: [{ list: 0x236e38, count: 12 }],
@@ -1590,14 +1591,81 @@ const DAYTONA_OBJECTS_SE = {
         0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
         0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
         0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
-        0x220e4: 'world', 0x2214c: 'none', 0x223e0: 'birds', 0x225c4: 'bigBird',
-        0x226d4: 'horse', 0x22aec: 'none',
+        0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
+        0x226d4: 'horse', 0x22aec: 'curtainCall',
     },
-    cycles: 0x23780c, checkpoints: 0x237a2c, rankBoard: 0x236d48,
+    cycles: 0x23780c, checkpoints: 0x237a2c, spinY: -0x100,
+    rankBoard: 0x236d48, rankCars: 0x236d84,
     windmill: { sails: 0x236e7c, still: [0x2843e6c, 0x2843e80] },
     birds: 0x234848, horses: 0x2347c8, jeffry: 0x28478a0,
     crowds: [{ list: 0x237c44, count: 9 }, { list: 0x237b24, count: 12 }],
     pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+};
+
+/*
+ * The 1993 build, which writes the same routines its own way: every check point
+ * is a routine of its own with its scale and list inline (`checkpointsAt`), one
+ * of its two prop routines walks a list of its own (`lists`), the dice turn the
+ * other way, and the crowd routine draws both crowds an instruction at a time,
+ * traced by daytona-tables.mjs into `groups`.
+ */
+const DAYTONA_OBJECTS_93 = {
+    at: 0x36940,
+    kinds: {
+        0x2024c: 'cycle4', 0x20304: 'ship', 0x203a4: 'static', 0x20450: 'static',
+        0x204fc: 'slot', 0x209e4: 'light', 0x20a7c: 'light', 0x20b14: 'spinZ',
+        0x20be4: 'spinY', 0x20d44: 'cycle', 0x2108c: 'crowd', 0x21d24: 'world',
+        0x21dd8: 'rank', 0x21f10: 'windmill', 0x22030: 'checkpointAt', 0x22090: 'checkpointAt',
+        0x2214c: 'checkpointAt', 0x22264: 'jeffry', 0x22594: 'checkpointAt', 0x22678: 'checkpointAt',
+        0x2275c: 'checkpointAt', 0x22840: 'checkpointAt', 0x22c48: 'flags', 0x22cf0: 'light',
+        0x22d30: 'none', 0x2302c: 'runs', 0x23078: 'pylon', 0x230ac: 'pylon',
+        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'window', 0x23bc0: 'window',
+        0x23ce0: 'world', 0x23d48: 'flock', 0x2430c: 'birds', 0x24730: 'bigBird',
+        0x24854: 'horse', 0x24cd0: 'curtainCall',
+    },
+    lists: { 0x2024c: 0x238b04 },
+    cycles: 0x220e7c,
+    checkpointsAt: {
+        0x22030: { scale: 1, list: null, world: true },
+        0x22090: { scale: 1, list: 0x2391b8, world: true },
+        0x2214c: { scale: 0.69, list: 0x239548, world: false },
+        0x22594: { scale: 0.75, list: null, world: false },
+        0x22678: { scale: 1.2, list: null, world: false },
+        0x2275c: { scale: 1, list: null, world: false },
+        0x22840: { scale: 1.1, list: null, world: false },
+    },
+    spinY: 0x100,
+    rankBoard: 0x238dc0, rankCars: 0x238dfc,
+    windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
+    birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
+    crowds: [{
+        groups: [
+            /* The plaza's, while its block is in view. */
+            { at: [-798, 33.58, 176.8], turns: [['y', 23301]], list: 0x238d20 },
+            { at: [-813, 33.58, 187.7], turns: [['y', 21845]], list: 0x238d30 },
+            { at: [-804, 33.58, 174], turns: [['y', 22573]], list: 0x238d50 },
+            { at: [-804.5, 33.58, 186.4], turns: [['y', 21845]], list: 0x238d60 },
+            { at: [-810, 33.58, 196], turns: [['y', 21116]], list: 0x238d70 },
+            { at: [-788.5, 33.58, 165], turns: [['y', 25667]], list: 0x238d80 },
+            { at: [-783.5, 33.58, 162], turns: [['y', 26942]], list: 0x238d90 },
+            { at: [-807, 33.58, 191], turns: [['y', 22027]], list: 0x238da0 },
+            { at: [-802, 33.58, 182.5], turns: [['y', 22209]], list: 0x238db0 },
+            /* The shuttle's, while the player is on its stretch. */
+            { at: [491.8, 14.5, -923], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d20 },
+            { at: [390, 13.7, -970.8], turns: [['z', 0], ['y', 31675], ['x', 0]], list: 0x238d30 },
+            { at: [479.5, 13.9, -935], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d50 },
+            { at: [397.3, 13.7, -971.5], turns: [['z', 0], ['y', 32221], ['x', 0]], list: 0x238d60 },
+            { at: [473.9, 13.8, -940.4], turns: [['z', -1094], ['y', -24577], ['x', -366]], list: 0x238d70 },
+            { at: [497.2, 15, -917.6], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d80 },
+            { at: [485, 14, -929.7], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d90 },
+            { at: [500.7, 15.3, -914], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238db0 },
+            { at: [381.3, 13.7, -969.6], turns: [['z', 0], ['y', 30765], ['x', 0]], list: 0x238da0 },
+            { at: [536.5, 18.7, -873], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238d20 },
+            { at: [523, 17.5, -886.5], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238d30 },
+            { at: [528, 18, -881], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238da0 },
+        ],
+    }],
+    pylons: { 0x23078: 0x2896d94, 0x230ac: 0x2896da4, 0x230e0: 0x2896db4, 0x23114: 0x2896d84 },
 };
 
 const daytona93 = daytonaBuild({
@@ -1617,6 +1685,7 @@ const daytona93 = daytonaBuild({
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
+    objects: DAYTONA_OBJECTS_93,
 });
 
 const daytona = daytonaBuild({

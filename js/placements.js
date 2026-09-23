@@ -586,7 +586,7 @@ export function readPlacementStages(rom) {
  * The board turns Y by the negated angle and its Z is the viewer's reversed,
  * which leaves a board turn of +a as an ordinary Y turn of +a here.
  */
-export function buildPlacementDisplayList(stage, getModel = null) {
+export function buildPlacementDisplayList(stage, getModel = null, mode = undefined) {
     const sky = [];
     if (stage.sky) {
         const { dome, band, y, spin } = stage.sky;
@@ -611,7 +611,8 @@ export function buildPlacementDisplayList(stage, getModel = null) {
     }));
     /* Objects a stage builds itself, already in the draw list's own shape —
      * Daytona USA's, whose routines are in js/daytona.js. */
-    const built = (stage.objectDraws?.(getModel) ?? []).map((d) => ({ layer: 'objects', set: stage.texSets?.[0], ...d }));
+    const built = (stage.objectDraws?.(getModel, mode) ?? [])
+        .map((d) => ({ layer: 'objects', set: stage.texSets?.[0], ...d }));
     return sky.concat(objects, built, stage.draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
         anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,

@@ -8,8 +8,8 @@ which game it is from the program ROM inside.
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
 views below are its. *Fighting Vipers* has stages and models — see
 [Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
-the original Model 2 board, has its models and its courses in all eight of the
-builds it shipped as, and the animated trackside objects in seven of them — see
+the original Model 2 board, has its models, its courses and the animated
+trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa).
 
 Three views:
@@ -110,9 +110,9 @@ merged archive carrying the lot is read as all eight at once: the panel grows a
 **Build** picker and swapping between them reassembles the set without the zips
 being handed over again.
 
-Each build opens on the Stages tab with its four course grids — and, in every
-build but the 1993 one, what stands along them, moving: see [The trackside
-objects](#the-trackside-objects) — and the Models tab has the rest. There are
+Each build opens on the Stages tab with its four course grids — and what stands
+along them, moving: see [The trackside objects](#the-trackside-objects) — and
+the Models tab has the rest. There are
 two sets of models behind those eight names, though, and the profiles say so
 rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
 its own data, its own fourth polygon pair and its own second texture pair: 2822
@@ -282,17 +282,39 @@ them and held against the profile with `--check`. The routine names travel by
 record rather than by address: all eight builds place the same 130 records in
 the same order, so the Nth record's routine is the same routine in each.
 Revision A and the five sets built on it share one layout; the Special Edition
-moved its tables and added a second crowd. **The 1993 version has none**: it
-writes these routines differently — each check point is a routine of its own
-rather than an id into a table — and it has not been read.
+moved its tables and put back a second crowd. The 1993 version writes several
+routines its own way — each check point is a routine with its scale and list
+inline rather than an id into a table, the dice turn the other way, and the
+crowd routine draws both crowds an instruction at a time, which the tool traces
+into a list of groups — and all of it is in its profile too.
 
-What is left out: the cones are drawn standing, not flying off when hit, and
-stood on the road the course draws rather than on the collision polygons the
-board asks the TGP about, which are in its own ROM and not read; the horses do
-not bolt; and the few things drawn only in attract mode or at one point in a
-race — a third group of gulls, the horses' curtain call, the statue's turn —
-are drawn as a course opens, which for the first two is not at all. Two
-windows that turn their picture to follow the camera show their first.
+**The horses bolt.** On the board a horse that the car comes within 8 of takes
+the car's heading and half again its speed, runs straight along it over the
+ground until its block is out of view, and is back on its ellipse 2560 frames
+later. In the explorer the camera is the car: fly at a horse and it runs the
+way you are going. The camera can stand still or jump, so the speed it lends a
+horse is kept between 1 and 6 units a frame — the explorer's numbers, not the
+board's — and "out of view" is the 5×5 blocks round the camera that
+`set_area_block` marks, less the heading clip it takes off them.
+
+**Game state.** The routines test two things besides the course: the mode
+(`M_mode` is `1 << B_mode`, so `0x10000000` is `STAFF_DSP`, the ending) and a
+flag `gear_select` sets when a button is held at the transmission select,
+which `entry_car_event_open` reads to enter no rival cars — time attack. So a
+picker on the Stages panel draws a course as a race (which is also what attract
+mode draws), in time attack — six more flocks of gulls that grow as the race
+goes on, a third group over the first, and the rank board showing your own
+number — or in the ending, with the third group of gulls and the horses'
+curtain call.
+
+What is left out: the cones stand where they are placed and are not knocked
+flying, stood on the road the course draws rather than on the collision
+polygons the board asks the TGP about, which are in its own ROM and not read;
+the Jeffry statue's turn, which the board saves for a player who stops beside
+it and presses the view button; and the reflections in the grandstand's glass
+and the covered walkway's — 64 frames of sky each, picked by where the car
+stands — which show their first, since the TGP functions that choose one are
+not ported.
 
 And one thing is missing from the checking. Sonic The Fighters' texture and
 colour ports are held against a capture of the real board; this one is not,

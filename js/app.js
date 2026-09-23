@@ -8,6 +8,7 @@ import { wireReportButtons } from './report.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
+import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
@@ -80,6 +81,9 @@ const state = {
      * the per-motion script — which the viewer does not run, so which chest he
      * stands in is a switch here. See js/exhaust.js. */
     jetExhaust: true,
+    /* Which of the game's states Daytona's courses are drawn in — race,
+     * time attack or the ending. See MODES in js/daytona.js. */
+    objectMode: 'race',
     /* The fighter's motion. `frame` is the game's own: an integer that starts
      * at 1 and is stepped once a vsync until it passes the motion's length, so
      * it is derived from elapsed time the way the stage clock is. `slot` is
@@ -290,6 +294,7 @@ function resetRomState() {
     state.anim.phases = [];
     state.anim.geom.clear();
     state.anim.billboards = [];
+    state.anim.liveCam = null;
     state.viewer.clear();
     state.viewer.clearSetMaterials();
 }
@@ -638,7 +643,7 @@ async function loadTexramFiles(files) {
  * there are none to apply here.
  */
 function stageDisplayList(stage) {
-    if (stage.placements) return buildPlacementDisplayList(stage, getModel);
+    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
@@ -1208,7 +1213,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
 
         /* A draw that moves gets its geometry from the frame cache from the
          * start, so swapping a frame in is a pointer assignment. */
-        const moves = Boolean(entry.anim || entry.band || entry.scroll) ||
+        const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
             typeof entry.ops === 'function';
         const geom = entry.anim ? frameGeometry(entry.model) : null;
         const { mesh, lines } = addModelToScene(d, {
@@ -1521,6 +1526,33 @@ function stepBillboards() {
     }
 }
 
+/*
+ * The camera as a `live` draw sees it: where it stands in the board's frame
+ * (the decoder's Z negated back), the heading it faces as a board angle — the
+ * one a model turned by it faces, (-sin h, cos h) across the ground — and how
+ * far it has moved per frame since it was last asked. Computed once a frame.
+ */
+const LIVE_POS = new THREE.Vector3();
+const LIVE_FWD = new THREE.Vector3();
+const LIVE_INV = new THREE.Matrix4();
+function liveCamera(frame) {
+    const a = state.anim;
+    if (a.liveCam && a.liveCam.frame === frame) return a.liveCam;
+    const { camera, root } = state.viewer;
+    camera.updateMatrixWorld();
+    root.updateMatrixWorld();
+    LIVE_INV.copy(root.matrixWorld).invert();
+    LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
+    camera.getWorldDirection(LIVE_FWD).transformDirection(LIVE_INV);
+    const x = LIVE_POS.x, y = LIVE_POS.y, z = -LIVE_POS.z;
+    const heading = Math.round((Math.atan2(-LIVE_FWD.x, -LIVE_FWD.z) * 65536) / (2 * Math.PI)) & 0xffff;
+    const prev = a.liveCam;
+    const frames = prev ? Math.max(1, frame - prev.frame) : 1;
+    const speed = prev ? Math.hypot(x - prev.x, z - prev.z) / frames : 0;
+    a.liveCam = { frame, x, y, z, heading, speed };
+    return a.liveCam;
+}
+
 /** Advance every animated draw on this stage to whatever frame we are on. */
 function stepStageAnimation(now) {
     const a = state.anim;
@@ -1570,7 +1602,21 @@ function stepStageAnimation(now) {
                 a.needsUpdate = true;
             }
         }
-        if (typeof entry.ops === 'function') {
+        if (entry.live) {
+            /* A draw with state of its own, stepped with the camera — the
+             * Daytona horses, which bolt from it. It picks its own model. */
+            const r = entry.live(frame, liveCamera(frame));
+            if (r.model !== it.model) {
+                it.model = r.model;
+                const g = frameGeometry(r.model);
+                it.mesh.geometry = g.mesh;
+                if (it.lines) it.lines.geometry = g.edges;
+            }
+            it.mesh.visible = !r.hidden && state.layerOn[entry.layer] !== false;
+            composeOps(ANIM_SCRATCH, r.ops);
+            it.mesh.matrix.copy(ANIM_SCRATCH);
+            if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
+        } else if (typeof entry.ops === 'function') {
             composeOps(ANIM_SCRATCH, entry.ops(frame));
             it.mesh.matrix.copy(ANIM_SCRATCH);
             if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
@@ -2400,6 +2446,7 @@ function renderStagePanel(stage, counts, totals, list) {
      * other thirteen the checkbox would be a control over nothing. */
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
+    $('#mode-field').hidden = !stage.objectDraws;
     if (rides) {
         $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
@@ -2914,6 +2961,15 @@ function wireOptions() {
     });
 
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
+    /* Which of the game's states a Daytona course is drawn in — see MODES in
+     * js/daytona.js. */
+    const modeSelect = $('#mode-select');
+    for (const [value, label] of OBJECT_MODES) modeSelect.add(new Option(label, value));
+    modeSelect.value = state.objectMode;
+    modeSelect.addEventListener('change', (e) => {
+        state.objectMode = e.target.value;
+        loadStage(state.stageIndex, { keepCamera: true });
+    });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
 
