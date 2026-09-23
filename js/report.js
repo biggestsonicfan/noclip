@@ -23,12 +23,17 @@
  *     path is GLSL ES 3.00 and its output is not identical on every driver;
  *   - whatever went to the console, out of the ring buffer index.html installs
  *     before any module loads — a module that fails to parse leaves no other
- *     trace.
+ *     trace;
+ *   - a link that opens the explorer on the same view — build, tab, stage or
+ *     model or motion, switches and camera — once the same zips are dropped on
+ *     it, out of js/viewlink.js.
  *
  * What does not go in: nothing is read off the ROM but the profile it matched
  * and the labels of the files, nothing is sent anywhere by this module, and the
  * text is put on the clipboard for the reader to read before it is pasted.
  */
+
+import { viewLink } from './viewlink.js';
 
 const REPO = 'https://github.com/biggestsonicfan/noclip';
 
@@ -65,6 +70,8 @@ export function collectDiagnostics(state) {
     const d = { site: {}, build: {}, romset: {}, view: {}, renderer: {}, browser: {}, log: [] };
 
     d.site.url = location.href;
+    d.site.link = viewLink(state);
+    d.site.linked = Boolean(state?.rom);
     d.site.stamp = buildStamp();
     d.site.layout = document.documentElement.classList.contains('mobile') ? 'phone' : 'desktop';
 
@@ -145,7 +152,8 @@ function section(title, obj) {
 /** The issue body: the parts only the reader can write, then the diagnostics. */
 export function issueBody(d) {
     const diag = [
-        section('Site', d.site),
+        section('Site', { url: d.site.url, stamp: d.site.stamp, layout: d.site.layout,
+            link: d.site.linked ? d.site.link : undefined }),
         section('Build', d.build),
         section('ROM set', { files: d.romset.files, warnings: d.romset.warnings }),
         section('View', d.view),
@@ -164,7 +172,10 @@ export function issueBody(d) {
 
 ### How to get back to it
 
-<!-- Which zips you dropped, which build, which stage or model, and where you
+${d.site.linked ? `[Open this view](${d.site.link}) — drop the same zips on it and it opens on
+the build, the view and the camera this report was filed from.
+
+` : ''}<!-- Which zips you dropped, which build, which stage or model, and where you
      had to put the camera. The diagnostics below already say where it was when
      you pressed the button. -->
 

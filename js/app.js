@@ -5,6 +5,7 @@
 import { loadRomSet, readModelEntry, readModelName } from './romset.js';
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
+import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -160,6 +161,10 @@ const state = {
     lutKey: null,       /* which scene the colour tables were built for */
     transfer: 0,        /* 0 = none, 1 = linear->gamma, 2 = gamma->linear */
     bgRGB: [0, 0, 0],   /* the stage backdrop, before any transfer */
+    /* The view a report's link asks for — see js/viewlink.js. Read once, at
+     * boot, and spent on the first set loaded: a build swap afterwards is the
+     * reader's own choice and opens on that build's defaults. */
+    link: readViewLink(),
 };
 
 /* ---- Colour transfer ------------------------------------------------------ */
@@ -202,10 +207,21 @@ async function bootWithBuffers(buffers) {
      * zips a second time — see switchBuild. */
     state.romBuffers = buffers;
     try {
-        state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
+        /* A linked build is asked for by name, since a merged archive is more
+         * than one build and the one it defaults to need not be the reporter's. */
+        state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac),
+            state.link ? { game: state.link.game } : {});
         useCoproTrig(state.rom);
     } catch (err) {
         return failToLoad(err, romHint(err));
+    }
+    /* Zips that are not the linked build still load — they are what the reader
+     * has — but the view is that build's and means nothing against another. */
+    if (state.link && state.link.game !== state.rom.game.id) {
+        const want = GAMES.find((g) => g.id === state.link.game)?.name ?? state.link.game;
+        showLinkNote(`The link was for ${want}, but these zips are ${state.rom.game.name} — `
+            + `opened on the default view instead.`);
+        state.link = null;
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
      * problem, and swapping to the app shell first would hide the message. */
@@ -3485,6 +3501,20 @@ function loadGameContent() {
             if (getModel(i)?.positions.length) { state.modelIndex = i; break; }
         }
     }
+    /* What a report's link was looking at, set before anything is drawn so the
+     * first scene built is that one and not the default thrown away after. The
+     * rest of the link — the switches and the camera — waits for the panel to
+     * be wired; see restoreLinkedView. */
+    const link = state.link;
+    let tab = on.stage ? 'stage' : 'model';
+    if (link) {
+        if (link.tab && on[link.tab]) tab = link.tab;
+        if (link.stage !== null && state.stages[link.stage]) state.stageIndex = link.stage;
+        if (link.model !== null && link.model >= 0 && link.model < modelCount()) state.modelIndex = link.model;
+        const roster = state.bodies ?? CHARACTERS;
+        if (link.char !== null && roster.some((c) => c.index === link.char)) state.charIndex = link.char;
+        for (const k of link.off) if (k in state.layerOn) state.layerOn[k] = false;
+    }
     $('#loader').hidden = true;
 
     if (on.stage) renderStageSelect();
@@ -3495,7 +3525,82 @@ function loadGameContent() {
     if (on.anim) renderCharacterSelect();
     renderBuildPicker();
     renderModelList();
-    switchTab(on.stage ? 'stage' : 'model');
+    switchTab(tab);
+}
+
+/*
+ * The rest of a report's link, once the panel is wired: loadGameContent has
+ * already opened the tab and what it was showing, and this puts back the
+ * clock, the switches, the motion and, last, the camera.
+ *
+ * The order is the one the camera needs. The link's camera was written in the
+ * frame the scene stood in at that moment, and on a stage that flies, where the
+ * scene stands depends on the clock and on whether the arena is being ridden —
+ * so both are put back first and the camera is placed into the result.
+ */
+function restoreLinkedView() {
+    const link = state.link;
+    state.link = null;
+    if (!link) return;
+    const v = state.viewer;
+    const m = state.motion;
+
+    if (state.tab === 'stage' && link.t !== null && link.t >= 0) {
+        /* Half a frame in, so the clock does not land on the edge and read one
+         * frame short. Stepped by hand, since a held stage is not stepped by
+         * the render loop. */
+        state.anim.start = performance.now() - ((link.t + 0.5) / GAME_HZ) * 1000;
+        stepStageAnimation(performance.now());
+    }
+
+    applyLinkControls(link, state.tab);
+
+    if (state.tab === 'anim' && m.list) {
+        const c = state.character;
+        const slot = !state.bodies && link.slot !== null && link.slot >= 0
+            && link.slot < ACTION_SLOT_COUNT ? link.slot : -1;
+        const id = slot >= 0 ? c.motions[slot] : link.motion;
+        const known = slot >= 0 || (id !== null
+            && (state.bodies ? Boolean(m.list[id]) : m.list.some((e) => e.id === id)));
+        if (known) setMotion(id, slot);
+        if (m.decoded && link.tick !== null && link.tick >= 0) {
+            m.tick = link.tick;
+            m.frame = 1 + (link.tick % m.decoded.frames);
+            m.start = performance.now() - (m.tick / GAME_HZ) * 1000;
+            m.playing = !link.paused;
+            poseRig();
+            renderMotionPanel();
+        }
+    }
+
+    /* The rig first, through its own button so the hint and the touch stick
+     * follow; then the camera, which the switch would otherwise re-sync. */
+    if (link.cam !== v.mode) $(`#camera-mode [data-mode="${link.cam}"]`)?.click();
+    if (link.pos) v.camera.position.set(...link.pos);
+    if (link.target) v.orbit.target.set(...link.target);
+    if (v.mode === 'fly' && link.look) {
+        v.fly.face(link.look[0], link.look[1]);
+    } else {
+        v.camera.lookAt(v.orbit.target);
+        v.fly.syncFromCamera();
+        v.orbit.update();
+    }
+    if (link.speed) v.fly.speed = link.speed;
+    v.frameFar();
+    updateHud();
+}
+
+/* A line over the view about a link that could not be followed. It goes on a
+ * click, and on its own after a while. */
+function showLinkNote(msg) {
+    const note = $('#link-note');
+    if (!note) return;
+    note.textContent = msg;
+    note.hidden = false;
+    const hide = () => { note.hidden = true; };
+    note.addEventListener('click', hide, { once: true });
+    setTimeout(hide, 12000);
+    console.warn(msg);
 }
 
 function start() {
@@ -3507,6 +3612,7 @@ function start() {
     loadGameContent();
     wireOptions();
     state.viewer.resize();
+    restoreLinkedView();
 
     let frames = 0;
     const tick = () => {
@@ -3534,6 +3640,12 @@ function start() {
 }
 
 wireDropTarget();
+/* A report's link cannot bring the ROM set with it, so the loading screen says
+ * which one it wants. */
+if (state.link) {
+    $('#loader-link').innerHTML = describeViewLink(state.link);
+    $('#loader-link').hidden = false;
+}
 /* Wired before anything is loaded: the report worth most is the one about a
  * ROM set that would not load at all. */
 wireReportButtons(state);
