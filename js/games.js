@@ -1369,8 +1369,10 @@ const hotd = {
  * still a model record gives the base and the count. Every one of the program
  * ROM's own pointers into that range then has to land on an entry, and does.
  *
- * What is missing in every build is the course: how a track is laid out and
- * what is placed along it has not been read, so there are no stages.
+ * The courses are `courses` below, a 16x16 grid of block models; what stands
+ * along them is `objects`, read in js/daytona.js. Neither was found by the
+ * first pass over this game, and this paragraph used to say there were no
+ * stages.
  */
 
 /* The chips the builds share, which is most of them. Daytona's 1993 version is
@@ -1459,9 +1461,9 @@ function daytonaBuild(spec) {
          * once for the course's own, so the two banks' mip halves come out
          * complementary.
          *
-         * Which bank a given model is drawn against is not known: the course
-         * data has not been read, and coverage cannot answer it for raw banks
-         * because every bank fills the whole sheet. So the panel's picker
+         * Coverage cannot say which bank a model is drawn against, because
+         * every bank fills the whole sheet. A model a course draws takes that
+         * course's (see `stageTable` below); for the rest the panel's picker
          * decides, and `defaultSet` is what it opens on.
          */
         texture: {
@@ -1524,6 +1526,17 @@ function daytonaBuild(spec) {
             courses: { ...spec.courses, count: 4, blocks: 256 },
             flat: true,
         },
+        /* What stands along the courses — see DAYTONA_OBJECTS_A. */
+        objects: spec.objects ?? null,
+        /*
+         * The sky, which is not geometry but the tile layer's panorama: 256
+         * tiles round the full turn, eight patterns of 32, streamed into the
+         * tilemap as the car turns (js/scroll.js, buildCourseSky). `table` is
+         * the four-course table change_course_bank indexes by sel_course; the
+         * first word of each row is that course's sky. Found by daytona-tables.mjs
+         * by the shape of what it points at.
+         */
+        sky: spec.sky ?? null,
         /*
          * The same depth arrangement The House of the Dead wants, and for the
          * same reason: this board has no depth buffer, and a course is large
@@ -1545,6 +1558,125 @@ function daytonaBuild(spec) {
     };
 }
 
+/*
+ * The trackside objects, which js/daytona.js reads and draws: where each
+ * course's table of object records is, what each routine a record starts in
+ * draws, and the tables those routines read. Every number here is an operand of
+ * the instruction in the routine that uses it, and stf-tools'
+ * `daytona-tables.mjs` finds them that way and holds them against these with
+ * `--check`. The names in the comments are the board's own, out of the symbol
+ * table Sega Racing Classic's d1a.exe carries.
+ *
+ * Revision A and the five sets built on it share one layout; the Special
+ * Edition moved its tables and put back the second crowd the 1993 version
+ * had. The 1993 version writes several routines its own way — see
+ * DAYTONA_OBJECTS_93.
+ */
+const DAYTONA_KINDS_A = {
+    0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+    0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+    0x20948: 'crowd', 0x20a54: 'world', 0x20b08: 'rank', 0x20d34: 'windmill',
+    0x20e54: 'jeffry', 0x210a0: 'checkpoint', 0x211fc: 'flags', 0x212a4: 'light',
+    0x212e4: 'none', 0x21618: 'runs', 0x21664: 'pylon', 0x21698: 'pylon',
+    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'window', 0x21ef8: 'window',
+    0x22018: 'world', 0x22080: 'flock', 0x22314: 'birds', 0x224f8: 'bigBird',
+    0x22608: 'horse', 0x22a20: 'curtainCall',
+};
+const DAYTONA_OBJECTS_A = {
+    at: 0x33bfc, kinds: DAYTONA_KINDS_A,
+    cycles: 0x236b40, checkpoints: 0x236d60, spinY: -0x100,
+    rankBoard: 0x23607c, rankCars: 0x2360b8,
+    windmill: { sails: 0x2361b0, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
+    crowds: [{ list: 0x236e38, count: 12 }],
+    pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+};
+const DAYTONA_OBJECTS_SE = {
+    at: 0x348c8,
+    kinds: {
+        0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+        0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+        0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
+        0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
+        0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
+        0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+        0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
+        0x226d4: 'horse', 0x22aec: 'curtainCall',
+    },
+    cycles: 0x23780c, checkpoints: 0x237a2c, spinY: -0x100,
+    rankBoard: 0x236d48, rankCars: 0x236d84,
+    windmill: { sails: 0x236e7c, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x234848, horses: 0x2347c8, jeffry: 0x28478a0,
+    crowds: [{ list: 0x237c44, count: 9 }, { list: 0x237b24, count: 12 }],
+    pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+};
+
+/*
+ * The 1993 build, which writes the same routines its own way: every check point
+ * is a routine of its own with its scale and list inline (`checkpointsAt`), one
+ * of its two prop routines walks a list of its own (`lists`), the dice turn the
+ * other way, and the crowd routine draws both crowds an instruction at a time,
+ * traced by daytona-tables.mjs into `groups`.
+ */
+const DAYTONA_OBJECTS_93 = {
+    at: 0x36940,
+    kinds: {
+        0x2024c: 'cycle4', 0x20304: 'ship', 0x203a4: 'static', 0x20450: 'static',
+        0x204fc: 'slot', 0x209e4: 'light', 0x20a7c: 'light', 0x20b14: 'spinZ',
+        0x20be4: 'spinY', 0x20d44: 'cycle', 0x2108c: 'crowd', 0x21d24: 'world',
+        0x21dd8: 'rank', 0x21f10: 'windmill', 0x22030: 'checkpointAt', 0x22090: 'checkpointAt',
+        0x2214c: 'checkpointAt', 0x22264: 'jeffry', 0x22594: 'checkpointAt', 0x22678: 'checkpointAt',
+        0x2275c: 'checkpointAt', 0x22840: 'checkpointAt', 0x22c48: 'flags', 0x22cf0: 'light',
+        0x22d30: 'none', 0x2302c: 'runs', 0x23078: 'pylon', 0x230ac: 'pylon',
+        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'window', 0x23bc0: 'window',
+        0x23ce0: 'world', 0x23d48: 'flock', 0x2430c: 'birds', 0x24730: 'bigBird',
+        0x24854: 'horse', 0x24cd0: 'curtainCall',
+    },
+    lists: { 0x2024c: 0x238b04 },
+    cycles: 0x220e7c,
+    checkpointsAt: {
+        0x22030: { scale: 1, list: null, world: true },
+        0x22090: { scale: 1, list: 0x2391b8, world: true },
+        0x2214c: { scale: 0.69, list: 0x239548, world: false },
+        0x22594: { scale: 0.75, list: null, world: false },
+        0x22678: { scale: 1.2, list: null, world: false },
+        0x2275c: { scale: 1, list: null, world: false },
+        0x22840: { scale: 1.1, list: null, world: false },
+    },
+    spinY: 0x100,
+    rankBoard: 0x238dc0, rankCars: 0x238dfc,
+    windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
+    birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
+    crowds: [{
+        groups: [
+            /* The plaza's, while its block is in view. */
+            { at: [-798, 33.58, 176.8], turns: [['y', 23301]], list: 0x238d20 },
+            { at: [-813, 33.58, 187.7], turns: [['y', 21845]], list: 0x238d30 },
+            { at: [-804, 33.58, 174], turns: [['y', 22573]], list: 0x238d50 },
+            { at: [-804.5, 33.58, 186.4], turns: [['y', 21845]], list: 0x238d60 },
+            { at: [-810, 33.58, 196], turns: [['y', 21116]], list: 0x238d70 },
+            { at: [-788.5, 33.58, 165], turns: [['y', 25667]], list: 0x238d80 },
+            { at: [-783.5, 33.58, 162], turns: [['y', 26942]], list: 0x238d90 },
+            { at: [-807, 33.58, 191], turns: [['y', 22027]], list: 0x238da0 },
+            { at: [-802, 33.58, 182.5], turns: [['y', 22209]], list: 0x238db0 },
+            /* The shuttle's, while the player is on its stretch. */
+            { at: [491.8, 14.5, -923], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d20 },
+            { at: [390, 13.7, -970.8], turns: [['z', 0], ['y', 31675], ['x', 0]], list: 0x238d30 },
+            { at: [479.5, 13.9, -935], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d50 },
+            { at: [397.3, 13.7, -971.5], turns: [['z', 0], ['y', 32221], ['x', 0]], list: 0x238d60 },
+            { at: [473.9, 13.8, -940.4], turns: [['z', -1094], ['y', -24577], ['x', -366]], list: 0x238d70 },
+            { at: [497.2, 15, -917.6], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d80 },
+            { at: [485, 14, -929.7], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d90 },
+            { at: [500.7, 15.3, -914], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238db0 },
+            { at: [381.3, 13.7, -969.6], turns: [['z', 0], ['y', 30765], ['x', 0]], list: 0x238da0 },
+            { at: [536.5, 18.7, -873], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238d20 },
+            { at: [523, 17.5, -886.5], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238d30 },
+            { at: [528, 18, -881], turns: [['z', -912], ['y', -24577], ['x', -728]], list: 0x238da0 },
+        ],
+    }],
+    pylons: { 0x23078: 0x2896d94, 0x230ac: 0x2896da4, 0x230e0: 0x2896db4, 0x23114: 0x2896d84 },
+};
+
 const daytona93 = daytonaBuild({
     id: 'daytona93',
     name: 'Daytona USA (1993)',
@@ -1562,6 +1694,8 @@ const daytona93 = daytonaBuild({
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
+    sky: { table: 0x3a48 },
+    objects: DAYTONA_OBJECTS_93,
 });
 
 const daytona = daytonaBuild({
@@ -1577,6 +1711,8 @@ const daytona = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonase = daytonaBuild({
@@ -1592,6 +1728,8 @@ const daytonase = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x47c8 },
+    objects: DAYTONA_OBJECTS_SE,
 });
 
 const daytonas = daytonaBuild({
@@ -1607,6 +1745,8 @@ const daytonas = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonat = daytonaBuild({
@@ -1622,6 +1762,8 @@ const daytonat = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonata = daytonaBuild({
@@ -1637,6 +1779,8 @@ const daytonata = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonam = daytonaBuild({
@@ -1652,6 +1796,8 @@ const daytonam = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonagtx = daytonaBuild({
@@ -1667,6 +1813,8 @@ const daytonagtx = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    sky: { table: 0x4770 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,

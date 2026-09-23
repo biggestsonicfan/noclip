@@ -8,8 +8,9 @@ which game it is from the program ROM inside.
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
 views below are its. *Fighting Vipers* has stages and models — see
 [Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
-the original Model 2 board, has models in all eight of the builds it shipped as
-— see [Daytona USA](#daytona-usa).
+the original Model 2 board, has its models, its courses and the animated
+trackside objects in all eight of the builds it shipped as — see
+[Daytona USA](#daytona-usa).
 
 Three views:
 
@@ -112,9 +113,11 @@ merged archive carrying the lot is read as all eight at once: the panel grows a
 **Build** picker and swapping between them reassembles the set without the zips
 being handed over again.
 
-Each build opens on the Stages tab with its four course grids, and the Models
-tab has the rest. There are two sets of models behind those eight names, though,
-and the profiles say so rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
+Each build opens on the Stages tab with its four course grids — and what stands
+along them, moving: see [The trackside objects](#the-trackside-objects) — and
+the Models tab has the rest. There are
+two sets of models behind those eight names, though, and the profiles say so
+rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
 its own data, its own fourth polygon pair and its own second texture pair: 2822
 table entries, 2817 of them with geometry. Every build after it — Revision A,
 the Special Edition, the Saturn-advert version and the four Kyle Hodgetts hacks
@@ -166,10 +169,11 @@ The sheets are raw here rather than compressed. The routine at `0x1388` copies
 0x60000 halfwords of a megabyte bank straight into one sheet and then deals the
 last 0x20000 out between the two, a run at a time, as nine mip levels; it is
 called twice a scene, once for the bank every course shares and once for the
-course's own, so the two banks' mip halves come out complementary. Which of the
-three courses a given model is drawn against is *not* known — the course data
-has not been read, and tile coverage cannot answer it when every bank fills the
-whole sheet — so the panel's picker decides and it opens on set 0.
+course's own, so the two banks' mip halves come out complementary. Tile coverage
+cannot say which course's bank a model is drawn against when every bank fills
+the whole sheet; the courses can, since a course's bank is its own number (see
+below), so a model a course draws — a block or an object along it — takes that
+course's, and for the rest the panel's picker decides and it opens on set 0.
 
 colorxlat is not uploaded at all: the routine at `0xA74` computes all 32 rows
 from four constants, and [`js/colors.js`](js/colors.js) is a transcription of
@@ -204,11 +208,18 @@ it: it draws all 256.
 
 `set_course_parms` picks the table with `ld <array>[sel_course*4]`, and the
 array names four of them. Three are the courses the game lets you pick — the
-Three-Seven Speedway oval at 10,290 triangles, Dinosaur Canyon at 46,585 and
-Seaside Street Galaxy at 25,163 — and the fourth is a flat square of coloured
+Three-Seven Speedway oval at 10,290 triangles, Seaside Street Galaxy at 46,585
+and Dinosaur Canyon at 25,163 — and the fourth is a flat square of coloured
 lane stripes with sample objects scattered over it, a test track. The
 Saturn-advert build points its fourth slot back at the third, which is the
 clearest statement that the fourth is not a course.
+
+Which course is which is read off the lap counts, since the ROM carries no
+names: the same routine loads the race's laps from a table indexed by
+`sel_course`, and on the normal setting it reads 8, 2, 4 — Beginner eight laps,
+Expert two, Advanced four. The second and third were named the other way round
+until the trackside objects below put the Jeffry statue and a row of traffic
+cones in the city street of the second.
 
 The same `sel_course` indexes the texture bank in `send_tex_map`, so a course's
 texture set is its own number. That is what finally answers which sheets a
@@ -221,9 +232,118 @@ data ROM, four megabytes that open on a 4x4 identity matrix and are a third
 plausible floats. The viewer does not need it to draw the course, and does not
 read it.
 
-Nor are there animations. This game has no rig and no motion tables — nothing
-like the `BO_`/`MO_` arrays The House of the Dead carries — so there is nothing
-of that kind to play. The cars do not move.
+There are no character animations. This game has no rig and no motion tables —
+nothing like the `BO_`/`MO_` arrays The House of the Dead carries — so there is
+nothing of that kind to play, and the cars do not move. What does move is the
+course's own furniture, below.
+
+### The trackside objects
+
+Everything that stands along a course besides its blocks — the slot machine and
+the lucky dice on the Three-Seven Speedway, the horses, gulls, crowds, cones and
+the Jeffry statue on Seaside Street Galaxy, the wind farm, boat, water and
+check-point banners of Dinosaur Canyon — is drawn on the **objects** layer, and
+moves the way the board moves it. [`js/daytona.js`](js/daytona.js) is the
+port.
+
+These have names. Sega Racing Classic, the 2009 Ringwide release, ships a PC
+emulator whose `d1a.exe` still carries the board's own symbol table — 651
+addresses — and its program ROM is a later build of the same one. The object
+routines are all named: `ship`, `slot`, `jeffly`, `tori` (birds), `uma`
+(horses), `z_kaitenn` (Z rotation), `hata_3` (flags), `ctykya`, `wing`,
+`pylon2` and a dozen more.
+
+They are kept the way the course is, by grid block. `set_course_parms` stores
+the course's table at `0x501444`, and at the start of a race one routine walks
+all 256 blocks of it; a non-null block is a count and that many 24-byte
+records — `{x, y, z, angle, id, init, arg}` — and each becomes a task whose
+init routine installs a display routine. Every display routine is small: it
+checks its block is in view, pushes the TGP's matrix, builds a transform out of
+translate (function `0x12`), scale (`0x13`) and the three turns (`0x14`–`0x16`),
+draws a model or one of a list of them, and pops. A good third of them draw no
+matrix at all, because their models are in world space like the blocks, and
+move only by drawing the next model in a list each frame — the boat is 64
+models at half speed, the flags 32, the water and the lights 64.
+
+The rest are a line or two of arithmetic each, ported as they stand: the slot
+machine's three reels stepping at a half, one and two a frame; the dice
+turning `-0x100` a frame about Y and the roulette `+0x100` about Z; the horses
+galloping round an ellipse 25 across and 35 deep, TGP functions `0x1D` and
+`0x1E` being the sine and cosine of the phase, turned to run along it; the
+gulls orbiting at 15 with a wing table indexed for three beats and a glide; the
+wind farm's blades walking 64 models beside two parts that do not.
+
+Which way the TGP turns was settled by the slot machine: its reels are turned
+`0x382D`, and with the sign the other way they face into the rock behind the
+housing. The horses then confirm both the orbit and the heading, since they
+only run forwards if both come out right.
+
+Each build's numbers — where the table is, which routine each record starts in,
+and the tables the routines read — are in [`js/games.js`](js/games.js), found
+per build by stf-tools' `daytona-tables.mjs` out of the instructions that use
+them and held against the profile with `--check`. The routine names travel by
+record rather than by address: all eight builds place the same 130 records in
+the same order, so the Nth record's routine is the same routine in each.
+Revision A and the five sets built on it share one layout; the Special Edition
+moved its tables and put back a second crowd. The 1993 version writes several
+routines its own way — each check point is a routine with its scale and list
+inline rather than an id into a table, the dice turn the other way, and the
+crowd routine draws both crowds an instruction at a time, which the tool traces
+into a list of groups — and all of it is in its profile too.
+
+**The horses bolt.** On the board a horse that the car comes within 8 of takes
+the car's heading and half again its speed, runs straight along it over the
+ground until its block is out of view, and is back on its ellipse 2560 frames
+later. In the explorer the camera is the car: fly at a horse and it runs the
+way you are going. The camera can stand still or jump, so the speed it lends a
+horse is kept between 1 and 6 units a frame — the explorer's numbers, not the
+board's — and "out of view" is the 5×5 blocks round the camera that
+`set_area_block` marks, less the heading clip it takes off them.
+
+**Game state.** The routines test two things besides the course: the mode
+(`M_mode` is `1 << B_mode`, so `0x10000000` is `STAFF_DSP`, the ending) and a
+flag `gear_select` sets when a button is held at the transmission select,
+which `entry_car_event_open` reads to enter no rival cars — time attack. So a
+picker on the Stages panel draws a course as a race (which is also what attract
+mode draws), in time attack — six more flocks of gulls that grow as the race
+goes on, a third group over the first, and the rank board showing your own
+number — or in the ending, with the third group of gulls and the horses'
+curtain call.
+
+What is left out: the cones stand where they are placed and are not knocked
+flying, stood on the road the course draws rather than on the collision
+polygons the board asks the TGP about, which are in its own ROM and not read;
+the Jeffry statue's turn, which the board saves for a player who stops beside
+it and presses the view button; and the reflections in the grandstand's glass
+and the covered walkway's — 64 frames of sky each, picked by where the car
+stands — which show their first, since the TGP functions that choose one are
+not ported.
+
+### The sky
+
+The sky is not geometry. It is the tile chip's panorama, the same machinery as
+Fighting Vipers' sky: a course's four-course table row names its sky, which is
+a CG list, a palette list and eight patterns of 32 tiles, 256 tiles round the
+full turn. The board streams it into the 64-tile tilemap a column at a time as
+the car turns (`heading >> 13` picks the pattern, `heading >> 5` is the X
+scroll), and [`js/scroll.js`](js/scroll.js) lays all eight side by side and
+puts them on a cylinder. Unlike Fighting Vipers' strips, these carry what lies
+below the horizon too — the grass round the Speedway, the sea off Seaside
+Street Galaxy, the floor of cloud under Dinosaur Canyon — and panorama row 144
+goes on the eye line, the row the board's scroll arithmetic puts there on
+every course. Graded against the tile chip's RAM captured from MAME in the
+attract race: the characters are byte-identical, and every one of the 64
+columns in the name table is a whole column of the decoded panorama, starting
+at the tilemap row this assumes. Which compass direction each part of the sky
+faces has not been checked against the board.
+
+### Mip levels
+
+The texture sheets are graded against texture RAM captured from MAME running
+the game — Revision A and 1993, all three courses — and match byte for byte,
+full size and all nine mip levels (stf-tools' `test-daytona-texram.mjs`). The
+first mip level had been dealt onto the wrong sheet, which is why a distant
+tree could show a shrunken piece of some other texture.
 
 And one thing is missing from the checking. Sonic The Fighters' texture and
 colour ports are held against a capture of the real board; this one is not,

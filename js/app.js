@@ -8,6 +8,7 @@ import { wireReportButtons } from './report.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
+import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
@@ -86,6 +87,9 @@ const state = {
     jetExhaust: true,
     /* The afterimage trails the motion's script turns on. See js/zanzou.js. */
     showTrails: true,
+    /* Which of the game's states Daytona's courses are drawn in — race,
+     * time attack or the ending. See MODES in js/daytona.js. */
+    objectMode: 'race',
     /* The fighter's motion. `frame` is the game's own: an integer that starts
      * at 1 and is stepped once a vsync until it passes the motion's length, so
      * it is derived from elapsed time the way the stage clock is. `slot` is
@@ -109,6 +113,7 @@ const state = {
     sky: null,
     skyTextures: new Map(),
     skyPanoAspect: new Map(),
+    skyHorizon: new Map(),
     skyTopColor: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
      * a texture number. null is "work it out from the model"; a number is the
@@ -270,6 +275,7 @@ function resetRomState() {
     state.texSetCache.clear();
     state.skyTextures.clear();
     state.skyPanoAspect.clear();
+    state.skyHorizon.clear();
     state.skyTopColor.clear();
     state.modelScenes = null;
     state.rigOwners = null;
@@ -296,6 +302,7 @@ function resetRomState() {
     state.anim.phases = [];
     state.anim.geom.clear();
     state.anim.billboards = [];
+    state.anim.liveCam = null;
     state.viewer.clear();
     state.viewer.clearSetMaterials();
 }
@@ -644,7 +651,7 @@ async function loadTexramFiles(files) {
  * there are none to apply here.
  */
 function stageDisplayList(stage) {
-    if (stage.placements) return buildPlacementDisplayList(stage);
+    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
@@ -1098,18 +1105,23 @@ function useModelScene(idx) {
  * frame depends on the projection rather than on anything in the data. The
  * height below puts the panorama's foot on the horizon and scales the rest by
  * the same pixels-per-degree the horizontal mapping implies, which lands the
- * cloud band where the captures put it.
+ * cloud band where the captures put it. A panorama that carries what lies
+ * below the horizon as well — Daytona USA's — says which row is the horizon,
+ * and that row goes on the eye line instead.
  */
 const SKY_RADIUS = 600;
 
 function addSkyPanorama(slot) {
     const v = state.viewer;
-    if (!state.rom.game.stageTable.scroll) return;
+    /* A stage may carry its own way to its panorama — Daytona USA's courses,
+     * whose skies are found through the course rather than a stage record. */
+    const stage = state.stages[slot];
+    if (!state.rom.game.stageTable.scroll && !stage?.panorama) return;
 
     state.sky = null;
     let tex = state.skyTextures.get(slot);
     if (tex === undefined) {
-        const pano = buildSkyPanorama(state.rom, slot);
+        const pano = stage?.panorama ? stage.panorama() : buildSkyPanorama(state.rom, slot);
         /* Not makeDataTexture: that one is for the single-channel lookup
          * tables the fill shader reads, and this is an image. */
         tex = pano
@@ -1125,6 +1137,9 @@ function addSkyPanorama(slot) {
             tex.wrapS = THREE.RepeatWrapping;
             tex.needsUpdate = true;
             state.skyPanoAspect.set(slot, pano.height / pano.width);
+            /* The row that sits on the eye line, as a fraction down the
+             * strip: its foot unless the panorama says otherwise. */
+            state.skyHorizon.set(slot, (pano.horizon ?? pano.height) / pano.height);
             state.skyTopColor.set(slot, pano.topColor.map((c) => c / 255));
         }
         state.skyTextures.set(slot, tex);
@@ -1144,7 +1159,7 @@ function addSkyPanorama(slot) {
     mesh.userData.layer = 'sky';
     mesh.frustumCulled = false;
     v.root.add(mesh);
-    state.sky = { mesh, height };
+    state.sky = { mesh, height, horizon: state.skyHorizon.get(slot) ?? 1 };
     stepSky();
 }
 
@@ -1162,7 +1177,7 @@ function stepSky() {
     const sky = state.sky;
     if (!sky) return;
     const c = state.viewer.camera;
-    sky.mesh.position.set(c.position.x, c.position.y + sky.height / 2, c.position.z);
+    sky.mesh.position.set(c.position.x, c.position.y + sky.height * (sky.horizon - 0.5), c.position.z);
 }
 
 /* ---- Stage view ---------------------------------------------------------- */
@@ -1217,7 +1232,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
 
         /* A draw that moves gets its geometry from the frame cache from the
          * start, so swapping a frame in is a pointer assignment. */
-        const moves = Boolean(entry.anim || entry.band || entry.scroll) ||
+        const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
             typeof entry.ops === 'function';
         const geom = entry.anim ? frameGeometry(entry.model) : null;
         const { mesh, lines } = addModelToScene(d, {
@@ -1531,6 +1546,33 @@ function stepBillboards() {
     }
 }
 
+/*
+ * The camera as a `live` draw sees it: where it stands in the board's frame
+ * (the decoder's Z negated back), the heading it faces as a board angle — the
+ * one a model turned by it faces, (-sin h, cos h) across the ground — and how
+ * far it has moved per frame since it was last asked. Computed once a frame.
+ */
+const LIVE_POS = new THREE.Vector3();
+const LIVE_FWD = new THREE.Vector3();
+const LIVE_INV = new THREE.Matrix4();
+function liveCamera(frame) {
+    const a = state.anim;
+    if (a.liveCam && a.liveCam.frame === frame) return a.liveCam;
+    const { camera, root } = state.viewer;
+    camera.updateMatrixWorld();
+    root.updateMatrixWorld();
+    LIVE_INV.copy(root.matrixWorld).invert();
+    LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
+    camera.getWorldDirection(LIVE_FWD).transformDirection(LIVE_INV);
+    const x = LIVE_POS.x, y = LIVE_POS.y, z = -LIVE_POS.z;
+    const heading = Math.round((Math.atan2(-LIVE_FWD.x, -LIVE_FWD.z) * 65536) / (2 * Math.PI)) & 0xffff;
+    const prev = a.liveCam;
+    const frames = prev ? Math.max(1, frame - prev.frame) : 1;
+    const speed = prev ? Math.hypot(x - prev.x, z - prev.z) / frames : 0;
+    a.liveCam = { frame, x, y, z, heading, speed };
+    return a.liveCam;
+}
+
 /** Advance every animated draw on this stage to whatever frame we are on. */
 function stepStageAnimation(now) {
     const a = state.anim;
@@ -1580,7 +1622,21 @@ function stepStageAnimation(now) {
                 a.needsUpdate = true;
             }
         }
-        if (typeof entry.ops === 'function') {
+        if (entry.live) {
+            /* A draw with state of its own, stepped with the camera — the
+             * Daytona horses, which bolt from it. It picks its own model. */
+            const r = entry.live(frame, liveCamera(frame));
+            if (r.model !== it.model) {
+                it.model = r.model;
+                const g = frameGeometry(r.model);
+                it.mesh.geometry = g.mesh;
+                if (it.lines) it.lines.geometry = g.edges;
+            }
+            it.mesh.visible = !r.hidden && state.layerOn[entry.layer] !== false;
+            composeOps(ANIM_SCRATCH, r.ops);
+            it.mesh.matrix.copy(ANIM_SCRATCH);
+            if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
+        } else if (typeof entry.ops === 'function') {
             composeOps(ANIM_SCRATCH, entry.ops(frame));
             it.mesh.matrix.copy(ANIM_SCRATCH);
             if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
@@ -2557,8 +2613,10 @@ function renderStageSelect() {
 }
 
 function renderStagePanel(stage, counts, totals, list) {
+    /* The models' triangles: the sky panorama's cylinder is not a model, and
+     * its indexed geometry would add a fraction. */
     const totalTris = state.viewer.root.children
-        .filter((c) => c.isMesh)
+        .filter((c) => c.isMesh && c !== state.sky?.mesh)
         .reduce((a, m) => a + m.geometry.attributes.position.count / 3, 0);
     /* A stage built from placements has no record fields to show, and says what
      * it was assembled from instead. */
@@ -2580,6 +2638,7 @@ function renderStagePanel(stage, counts, totals, list) {
      * other thirteen the checkbox would be a control over nothing. */
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
+    $('#mode-field').hidden = !stage.objectDraws;
     if (rides) {
         $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
@@ -3161,6 +3220,15 @@ function wireOptions() {
     });
 
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
+    /* Which of the game's states a Daytona course is drawn in — see MODES in
+     * js/daytona.js. */
+    const modeSelect = $('#mode-select');
+    for (const [value, label] of OBJECT_MODES) modeSelect.add(new Option(label, value));
+    modeSelect.value = state.objectMode;
+    modeSelect.addEventListener('change', (e) => {
+        state.objectMode = e.target.value;
+        loadStage(state.stageIndex, { keepCamera: true });
+    });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
 

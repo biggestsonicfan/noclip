@@ -14,6 +14,8 @@
 
 export const STAGE_DATA_ADDR = 0x0008f3d0;
 import { xtraResolve } from './romset.js';
+import { readObjectRecords, courseObjectDraws, courseGround } from './daytona.js';
+import { buildCourseSky } from './scroll.js';
 
 export const STAGE_STRIDE = 256;
 export const STAGE_COUNT = 16;
@@ -388,13 +390,17 @@ const MAIN_DATA_BASE = 0x02000000;
 /* ---- Daytona USA's courses ------------------------------------------------ */
 
 /* The three the game lets you pick, in the order its own course table names
- * them. They are identified by what comes out rather than by a string in the
- * ROM, which carries none: the first is the small banked oval, the second the
- * largest by far and the only one with three hundred units of height in it, and
- * the third is the one whose blocks are the city street with the shopfronts and
- * the pedestrian crossing. The fourth table the array names is not one of them
- * and is left to be shown by number. */
-const COURSE_NAMES = ['Three-Seven Speedway', 'Dinosaur Canyon', 'Seaside Street Galaxy'];
+ * them. The ROM carries no names, but it does carry the lap counts:
+ * `set_course_parms` loads the race's laps from `<table>[sel_course*4]`, and
+ * the table for the normal setting reads 8, 2, 4 — Beginner is eight laps,
+ * Advanced four and Expert two. So the second is the Expert course, Seaside
+ * Street Galaxy, which is also the one whose blocks are the city with the
+ * shopfronts and the harbour; and the third is Dinosaur Canyon, the one in the
+ * cliffs. (These two were the other way round here until the trackside
+ * objects were drawn and put the Jeffry statue and the cones in a city street.)
+ * The fourth table the array names is not one of them and is left to be shown
+ * by number. */
+const COURSE_NAMES = ['Three-Seven Speedway', 'Seaside Street Galaxy', 'Dinosaur Canyon'];
 
 /**
  * Daytona USA's courses, which are a grid rather than a placement list.
@@ -438,9 +444,12 @@ export function readCourseStages(rom) {
         if (seen.has(ptr)) continue;
         seen.add(ptr);
         const draws = [];
+        /* Which grid block each draw is, for the ground under an object. */
+        const blockAt = [];
         for (let b = 0; b < C.blocks; b++) {
             const idx = (dv.getUint32(off + b * 4, true) - base) / t.stride;
             if (!Number.isInteger(idx) || idx < 0 || idx >= t.count) continue;
+            blockAt.push(b);
             /* Every block is drawn where it is, so the placement is the origin
              * and the display list's translate comes out as the identity. */
             draws.push({ model: idx, pos: [0, 0, 0], set: c });
@@ -455,9 +464,10 @@ export function readCourseStages(rom) {
             draws,
             objects: [],
             /* Null rather than empty: buildPlacementDisplayList tests the
-             * field, and an empty array is truthy. The sky is geometry on this
-             * board and which model it is has not been read. */
+             * field, and an empty array is truthy. The sky is not geometry on
+             * this board but the tile layer's panorama — `panorama` below. */
             sky: null,
+            panorama: rom.game.sky ? () => buildCourseSky(rom, c) : null,
             alternates: [],
             texSets: [c],
             texSet: [c, c],
@@ -468,11 +478,22 @@ export function readCourseStages(rom) {
             colorCycles: [],
             flags: 0,
             floorSize: 0,
-            /* The board draws its sky as geometry rather than as a backdrop
-             * colour, and which model that is has not been read, so the
-             * backdrop is left alone. */
+            /* Behind the panorama's top row is the backdrop, which the app
+             * takes from that row itself when there is a panorama. */
             bgColor555: 0,
-            meta: [['course', c], ['blocks', draws.length]],
+            meta: [['course', c], ['blocks', draws.length],
+                ...(rom.game.objects ? [['objects', readObjectRecords(rom, c).length]] : [])],
+            /* What stands along it — js/daytona.js. Built when the course is
+             * opened rather than now, since the pylons stand on the road and
+             * finding it decodes the blocks under them; `getModel` is the
+             * caller's cache, so a block is not decoded twice. */
+            objectDraws: rom.game.objects
+                ? (getModel, mode) => {
+                    const blockOf = new Map(draws.map((d, i) => [blockAt[i], d.model]));
+                    const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null));
+                    return courseObjectDraws(rom, c, ground, mode);
+                }
+                : null,
         });
     }
     return stages;

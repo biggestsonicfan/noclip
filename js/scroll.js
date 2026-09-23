@@ -92,11 +92,89 @@ export function buildSkyPanorama(rom, slot) {
     const listPtr = rec.view.getUint32(rec.off + S.fields.patterns, true);
     if (!ptrOk(rom, listPtr)) return null;
 
-    /* ---- _ScrollCG_Initialize: the tile pixels ---- */
-    const chars = new Uint8Array(S.charBytes);
+    /* _ScrollCG_Initialize and _ScrollColor_Initialize take two neighbouring
+     * entries of one pointer array: the tile pixels and then the palette. */
+    const word = (addr) => { const t = at(rom, addr); return t.view.getUint32(t.off, true); };
+    const cgList = word(S.cgTable + cg * 4);
+    const palList = word(S.cgTable + (cg + 1) * 4);
+
+    /* The eighteen patterns, by number through the pattern table. */
+    const L = at(rom, listPtr);
+    const patterns = [];
+    for (let i = 0; i < PATTERNS; i++) {
+        const p = L.view.getUint32(L.off + 4 + i * 4, true);
+        patterns.push(word(S.patternTable + p * 4));
+    }
+    return decodePanorama(rom, cgList, palList, patterns, S.charBytes);
+}
+
+/**
+ * Daytona USA's sky for one course.
+ *
+ * The same tile chip and the same three formats, reached another way.
+ * `change_course_bank` takes a row of a four-course table, `<table>[sel_course
+ * * 4]`, and the first word of that row is the course's sky: the CG list, the
+ * palette list, and eight patterns. The routine that runs the sky each frame
+ * picks the pattern by `heading >> 13 & 7` and the column within it by
+ * `heading >> 8 & 31`, and scrolls the layer by `heading >> 5` — so the eight
+ * are 45 degrees each, 32 tiles to the pattern and 256 round the full turn,
+ * streamed into the 64-tile tilemap a column at a time as the car turns.
+ *
+ * @param {object} rom     loaded ROM set
+ * @param {number} course  sel_course
+ */
+export function buildCourseSky(rom, course) {
+    const T = rom.game.sky;
+    if (!T) return null;
+    const word = (addr) => {
+        if (addr >= 0x02000000) {
+            const o = addr - 0x02000000;
+            return o >= 0 && o + 4 <= rom.mainData.length ? rom.mainDataView.getUint32(o, true) : 0;
+        }
+        const o = addr >= 0x00200000 ? addr - 0x00200000 : addr;
+        return o >= 0 && o + 4 <= rom.maincpu.length ? rom.mainCpuView.getUint32(o, true) : 0;
+    };
+    const row = word(T.table + course * 4);
+    const sky = row && word(row);
+    if (!sky || !ptrOk(rom, sky)) return null;
+    const patterns = [];
+    for (let i = 0; i < DAYTONA_PATTERNS; i++) patterns.push(word(sky + 8 + i * 4));
+    const pano = decodePanorama(rom, word(sky), word(sky + 4), patterns, DAYTONA_CHAR_BYTES);
+    if (pano) pano.horizon = DAYTONA_HORIZON_ROW;
+    return pano;
+}
+
+/*
+ * The panorama row that sits on the eye line.
+ *
+ * Unlike Fighting Vipers' strips, which end at the horizon, these carry what
+ * lies below it too — the grass round the Three-Seven Speedway, the sea off
+ * Seaside Street Galaxy, a floor of cloud under Dinosaur Canyon — so the
+ * strip's foot is not the eye line. Which row is comes out of two things the
+ * board does the same way on every course: the streamer writes a panorama's
+ * first row into tilemap row 6, 48 pixels down, and camd_99 sets the layer's Y
+ * scroll from nothing but the camera — its height and pitch and the view
+ * record — through TGP functions that are not ported. Level, that scroll
+ * hovers round zero (MAME, the attract race), which puts tilemap pixel 192,
+ * the middle of the 384-line screen, on the eye line: panorama row 144,
+ * eighteen tiles down. It is where the Speedway and the Canyon paint their
+ * horizons; Seaside Street Galaxy paints its sea line at row 185, and on the
+ * board it sits that much below the eye line, as it does here.
+ */
+const DAYTONA_HORIZON_ROW = 144;
+const DAYTONA_PATTERNS = 8;
+/* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
+const DAYTONA_CHAR_BYTES = 0x80000;
+
+/*
+ * The panorama from a CG list, a palette list and the patterns laid side by
+ * side, each 32 tiles across.
+ */
+function decodePanorama(rom, cgList, palList, patternPtrs, charBytes) {
+    /* ---- the tile pixels ---- */
+    const chars = new Uint8Array(charBytes);
     {
-        const t = at(rom, S.cgTable + cg * 4);
-        let a = t.view.getUint32(t.off, true), guard = 0;
+        let a = cgList, guard = 0;
         while (ptrOk(rom, a) && guard++ < 32) {
             const e = at(rom, a);
             const src = e.view.getUint32(e.off, true);
@@ -113,12 +191,11 @@ export function buildSkyPanorama(rom, slot) {
         }
     }
 
-    /* ---- _ScrollColor_Initialize: the palette ---- */
+    /* ---- the palette ---- */
     const pal = new Uint16Array(0x8000);
     let written = 0;
     {
-        const t = at(rom, S.cgTable + (cg + 1) * 4);
-        let a = t.view.getUint32(t.off, true), guard = 0;
+        let a = palList, guard = 0;
         while (ptrOk(rom, a) && guard++ < 32) {
             const e = at(rom, a);
             const dest = e.view.getUint32(e.off, true);
@@ -136,15 +213,11 @@ export function buildSkyPanorama(rom, slot) {
     }
     if (!written) return null;
 
-    /* ---- the eighteen patterns, side by side ---- */
-    const L = at(rom, listPtr);
+    /* ---- the patterns, side by side ---- */
     const cols = [];
     let rows = 0;
-    for (let i = 0; i < PATTERNS; i++) {
-        const p = L.view.getUint32(L.off + 4 + i * 4, true);
-        const t = at(rom, S.patternTable + p * 4);
-        const pr = t.view.getUint32(t.off, true);
-        if (!ptrOk(rom, pr)) { cols.push(null); continue; }
+    for (const pr of patternPtrs) {
+        if (!pr || !ptrOk(rom, pr)) { cols.push(null); continue; }
         const R = at(rom, pr);
         const h = R.view.getUint32(R.off + 4, true);
         if (h > 128) { cols.push(null); continue; }
@@ -153,11 +226,11 @@ export function buildSkyPanorama(rom, slot) {
     }
     if (!rows) return null;
 
-    const width = PATTERNS * PATTERN_TILES * 8;
+    const width = cols.length * PATTERN_TILES * 8;
     const height = rows * 8;
     const rgba = new Uint8Array(width * height * 4);
 
-    for (let c = 0; c < PATTERNS; c++) {
+    for (let c = 0; c < cols.length; c++) {
         const col = cols[c];
         if (!col) continue;
         for (let ty = 0; ty < col.h; ty++) {
