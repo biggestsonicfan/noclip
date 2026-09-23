@@ -775,7 +775,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    groundPlate = false, standing = false, planeBias = 0, material = null,
+    groundPlate = false, standing = false, concede = false, planeBias = 0, material = null,
 } = {}) {
     const v = state.viewer;
     /* The ground plate takes the material that stands one step back, because
@@ -788,6 +788,9 @@ function addModelToScene(decoded, {
      * The open water takes the one that stands the whole bound back, because
      * the board sorts it by a corner hundreds of units out and nothing in the
      * arena is modelled under it — see waterMaterial.
+     * A draw that asks to concede takes the same bound a pixel at a time: the
+     * plate under the Flying Carpet's rug, which the board sorts behind every
+     * strip of it and the camera stands over — see concedeMaterial.
      * A draw standing on a floor that has things modelled under it keeps its
      * own depth, since that floor cannot concede — see standingMaterial.
      * A draw that names a material of its own is one whose texture set is not
@@ -796,9 +799,10 @@ function addModelToScene(decoded, {
         material ?? (backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
                 : layer === 'water' ? v.waterMaterial
-                    : standing ? v.standingMaterial
-                        : planeBias ? v.planeMaterials[planeBias]
-                            : v.material));
+                    : concede ? v.concedeMaterial
+                        : standing ? v.standingMaterial
+                            : planeBias ? v.planeMaterials[planeBias]
+                                : v.material));
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
     mesh.userData.layer = layer;
@@ -1264,6 +1268,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
             layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
             groundPlate: entry.groundPlate,
             standing: entry.standing,
+            concede: entry.concede,
             planeBias: entry.planeBias,
             material: partMaterial,
         });

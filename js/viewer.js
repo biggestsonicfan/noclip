@@ -307,8 +307,16 @@ const FRAG_SHADER = /* glsl */`
     flat in float vLayer;
     flat in vec4 vPlane;
     uniform mat4 projectionMatrix;
+    uniform float uZsortRecede;
 
     out vec4 fragColor;
+
+    // The depth buffer's value for a point at view z, which runs negative into
+    // the screen.
+    float viewDepth(float z) {
+        return 0.5 * (projectionMatrix[2][2] * z + projectionMatrix[3][2])
+            / (projectionMatrix[2][3] * z + projectionMatrix[3][3]) + 0.5;
+    }
 
     // Stable pseudo-colour for a tile rect, so distinct textures read as
     // distinct surfaces even when the atlas is unavailable.
@@ -509,6 +517,11 @@ const FRAG_SHADER = /* glsl */`
             }
         }
         gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
+#endif
+#ifdef ZSORT_CONCEDE_PIXEL
+        // The whole bound behind this pixel's own point, in place of any depth
+        // the face would otherwise have had -- see concedeMaterial.
+        gl_FragDepth = clamp(viewDepth(vViewPos.z - uZsortRecede), 0.0, 1.0);
 #endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
@@ -1073,6 +1086,23 @@ export class Viewer {
         this.standingMaterial.uniforms = this.material.uniforms;
         this.standingMaterial.defines = { ZSORT_KEEP: '1' };
         /*
+         * And the water's concession again, taken a pixel at a time, for a
+         * plate the camera can stand over.
+         *
+         * The vertex shader concedes the bound only at a vertex the camera is in
+         * front of (see ZSORT_CONCEDE there), and a plate the eye hangs over has
+         * corners behind the lens. Those keep the depth the projection gave
+         * them, and the interpolation carries it most of the way across the
+         * plate. The Flying Carpet's rug plate is that plate: the board's own
+         * camera rides a few units over the rug, inside the plate's bounds, and
+         * the near half of the rug still went flat wherever the ripple dipped
+         * under it. Stepping back from the view position the fragment already
+         * has is the same concession with no vertex to lose. See sphynxDisp.
+         */
+        this.concedeMaterial = createModelMaterial();
+        this.concedeMaterial.uniforms = this.material.uniforms;
+        this.concedeMaterial.defines = { ZSORT_CONCEDE: '1', ZSORT_CONCEDE_PIXEL: '1' };
+        /*
          * Depth bias for surfaces that share a plane exactly.
          *
          * The board has no depth buffer. Co-planar polygons land in one z
@@ -1217,7 +1247,7 @@ export class Viewer {
         /* Only a game whose draws carry layers pays for writing the depth from
          * the fragment shader, which turns off the early depth test. */
         for (const m of [this.material, this.backdropMaterial, this.floorMaterial,
-            this.waterMaterial, this.standingMaterial, ...this.planeMaterials,
+            this.waterMaterial, this.standingMaterial, this.concedeMaterial, ...this.planeMaterials,
             ...this.setMaterials.values()]) {
             const has = 'FACE_LAYERS' in (m.defines ?? {});
             if (has === layers) continue;
