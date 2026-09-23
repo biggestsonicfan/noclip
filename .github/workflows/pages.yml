@@ -49,13 +49,28 @@ jobs:
       # the reader's own ROM set, so without this there is no way to tell which
       # version of the site a report is about. Staged, not committed: a working
       # checkout keeps saying "dev".
+      #
+      # The same stamp goes on every URL the page loads from this site, as a
+      # query: the stylesheet, the entry module and each relative import inside
+      # the modules. The CDN in front of Pages hands the scripts out with four
+      # hours of browser cache, the page itself with ten minutes, so without
+      # this a fresh page can run on yesterday's modules until a hard reload.
+      # With it a new build is a new set of URLs the browser has never seen.
+      # Pages ignores the query, so the files themselves stay where they are.
       - name: Stage the site
         run: |
+          v=${GITHUB_SHA::7}
           mkdir _site
           cp index.html style.css CNAME _site/
           cp -r js _site/js
-          sed -i "s|<meta name=\"build\" content=\"dev\">|<meta name=\"build\" content=\"${GITHUB_SHA::7}\">|" _site/index.html
+          sed -i "s|<meta name=\"build\" content=\"dev\">|<meta name=\"build\" content=\"$v\">|" _site/index.html
+          sed -i -e "s|href=\"\./style\.css\"|href=\"./style.css?v=$v\"|" \
+                 -e "s|src=\"\./js/app\.js\"|src=\"./js/app.js?v=$v\"|" _site/index.html
+          sed -i -E "s#(from '\./[A-Za-z0-9_]+\.js)'#\1?v=$v'#" _site/js/*.js
           grep -o '<meta name="build"[^>]*>' _site/index.html
+          grep -o "style\.css?v=$v\|app\.js?v=$v" _site/index.html
+          # Every relative import was stamped: none is left bare.
+          ! grep -n "from '\./[A-Za-z0-9_]*\.js'" _site/js/*.js
 
       - uses: actions/upload-pages-artifact@v3
         with:

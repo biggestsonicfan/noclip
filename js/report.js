@@ -290,4 +290,46 @@ export function wireReportButtons(state) {
     if (button) button.addEventListener('click', () => fileIssue(state, button));
     const shot = document.getElementById('tool-shot');
     if (shot) shot.addEventListener('click', () => saveScreenshot(state, shot));
+    wireBuildBadge();
+}
+
+/* The short hash beside the GitHub link, so a reader can see which build they
+ * are looking at without opening a report. On the published site it also asks
+ * for the page again, past every cache, and compares the stamp: a tab opened
+ * before a deploy, or a browser that kept an old copy, says so and reloads on
+ * a click. Asked again whenever the tab comes back into view, at most every
+ * five minutes. A working checkout says "dev" and asks nothing. */
+function wireBuildBadge() {
+    const badge = document.getElementById('tool-build');
+    if (!badge) return;
+    const mine = buildStamp();
+    badge.textContent = mine;
+    badge.href = mine === 'dev' || mine === 'unknown' ? REPO : `${REPO}/commit/${mine}`;
+    badge.title = `The build this page is running: ${mine}`;
+    badge.hidden = false;
+    if (mine === 'dev' || mine === 'unknown') return;
+
+    let newer = null;
+    let asked = 0;
+    badge.addEventListener('click', (e) => {
+        if (!newer) return;
+        e.preventDefault();
+        location.reload();
+    });
+    const ask = async () => {
+        if (newer || Date.now() - asked < 5 * 60 * 1000) return;
+        asked = Date.now();
+        try {
+            const res = await fetch(location.pathname, { cache: 'no-store' });
+            if (!res.ok) return;
+            const live = /<meta name="build" content="([^"]*)">/.exec(await res.text())?.[1];
+            if (!live || live === mine || live === 'dev') return;
+            newer = live;
+            badge.textContent = `${mine} → ${live}`;
+            badge.title = `A newer build (${live}) is live — click to reload`;
+            badge.classList.add('stale');
+        } catch (e) { /* offline, say; the badge still names this build */ }
+    };
+    ask();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) ask(); });
 }
