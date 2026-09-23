@@ -59,14 +59,17 @@ Three views:
   steps it: Metal Sonic's jet plume and the chest that opens to light it, the
   Final Eggman Boss's arms swinging through their sixteen-model ping-pong, and
   the Egg Minion's head stretching, spinning and shrinking for 48 frames out of
-  every 256. The hammer-squished form is a checkbox: a second skeleton with
+  every 256. The afterimage trails a punch or a spin kick leaves come from the
+  motion's own script and run on a port of the coprocessor's trail ring, marked
+  in the motion list. The hammer-squished form is a checkbox: a second skeleton with
   every bone halved, and the second sixteen meshes in the part table to go on
   it. It is checked against a real machine: over 300 frames captured out of
   MAME, the joint angles come back bit-identical.
   See [Animation](TECHNICAL.md#animation), [Sway chains](TECHNICAL.md#sway-chains-jsosagejs),
   [Tails' tails](TECHNICAL.md#tails-tails), [Metal Sonic's jet
-  exhaust](TECHNICAL.md#metal-sonics-jet-exhaust) and [The Egg robots' timed
-  animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs).
+  exhaust](TECHNICAL.md#metal-sonics-jet-exhaust), [The Egg robots' timed
+  animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs) and
+  [Afterimages](TECHNICAL.md#afterimages-jszanzoujs).
 
 ## Fighting Vipers
 

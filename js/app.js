@@ -21,7 +21,8 @@ import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
     useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
 import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
 import {
-    readTails, tailParts, PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
+    readTails, tailParts, propellerPart, PROPELLER_HELI,
+    PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
 } from './tails.js';
 import {
     readMechArms, readRoboHead, readRoboAnims, armModel, headFrame,
@@ -32,7 +33,8 @@ import {
     readExhaust, exhaustPart, chestModel, exhaustDrawn,
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
-import { decodeMotion, sampleMotion, listMotions } from './motion.js';
+import { decodeMotion, sampleMotion, listMotions, readMotionScript, scriptStateAt } from './motion.js';
+import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trailDraws, liveCopies } from './zanzou.js';
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, rankMotions, partDraws, readSkin, skinMesh,
 } from './bodies.js';
@@ -76,10 +78,14 @@ const state = {
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
-     * not one of the two closed ones, and the chest is swapped by an opcode in
-     * the per-motion script — which the viewer does not run, so which chest he
-     * stands in is a switch here. See js/exhaust.js. */
+     * not one of the two closed ones, and the chest is swapped by op 0x10 in the
+     * per-motion script. The script says it for the frames after its command;
+     * the chest is not reset when a motion starts, so before that he stands in
+     * whatever the last motion left, which is what this switch stands for. See
+     * js/exhaust.js. */
     jetExhaust: true,
+    /* The afterimage trails the motion's script turns on. See js/zanzou.js. */
+    showTrails: true,
     /* The fighter's motion. `frame` is the game's own: an integer that starts
      * at 1 and is stepped once a vsync until it passes the motion's length, so
      * it is derived from elapsed time the way the stage clock is. `slot` is
@@ -1899,12 +1905,35 @@ function rebuildRig({ keepCamera = true } = {}) {
             }
         }
     }
+    /* The propeller replaces the pair while the script has it on: one mesh,
+     * swapping between the two blurred discs on the counter's parity. */
+    m.propPart = null;
+    if (m.tails) {
+        const cycle = buildCycle(m.tails.blur);
+        if (cycle) {
+            const { mesh, lines } = addModelToScene(cycle[0].decoded,
+                { matrix: new THREE.Matrix4(), geom: cycle[0] });
+            if (lines) { lines.matrixAutoUpdate = false; }
+            mesh.visible = false;
+            m.propPart = { mesh, lines, cycle, phase: 0 };
+        }
+    }
 
     /* Metal Sonic's flame is a cycle of eight on the chest's own matrix, and
-     * whether it is drawn at all is the routine's own test on the chest object
-     * — which `slotModel` has just answered by installing one. */
+     * whether it is drawn at all is the routine's own test on the chest object.
+     * The script changes the chest mid-motion, so the flame is built whenever
+     * he has one and shown frame by frame, and both chests are built up front
+     * for the slot to swap between. */
     m.exhaustPart = null;
-    if (m.exhaust && exhaustDrawn(slotModel(c, EXHAUST_CHEST_SLOT))) {
+    m.chestGeoms = new Map();
+    if (m.exhaust && !state.useSquished) {
+        for (const id of m.exhaust.bodies) {
+            const d = getModel(id);
+            if (d) m.chestGeoms.set(id, { decoded: d, mesh: buildGeometry(d),
+                edges: d.edges.length ? buildEdgeGeometry(d) : null });
+        }
+    }
+    if (m.exhaust) {
         const cycle = buildCycle(m.exhaust.cycle);
         const p = cycle && exhaustPart(restPoseFor(c), m.exhaust, 0);
         if (p) {
@@ -2034,6 +2063,132 @@ function placeOsage(m, pose, board) {
     return settleOsage(m.osageSim, pose, board);
 }
 
+/* Show or hide one built part, keeping its wire overlay with it. */
+function showPart(part, shown) {
+    if (!part) return;
+    part.mesh.visible = shown;
+    if (part.lines) {
+        part.lines.userData.hidden = !shown;
+        part.lines.visible = shown && state.wireframe;
+    }
+}
+
+/*
+ * Metal Sonic's chest on this frame: the entry op 0x10 last installed on slot
+ * 1 this motion, or, before any, the chest the switch says he came in with.
+ * The squished form keeps its own chest, which neither entry names.
+ */
+function placeChest(m, c) {
+    const base = slotModel(c, EXHAUST_CHEST_SLOT);
+    m.chestFromScript = false;
+    m.chestNow = base;
+    if (!m.exhaust || state.useSquished || !m.chestGeoms?.size) return;
+    const entry = m.scriptState.parts[EXHAUST_CHEST_SLOT];
+    if (entry != null && m.exhaust.bodies[entry] != null) {
+        m.chestNow = m.exhaust.bodies[entry];
+        m.chestFromScript = true;
+    }
+    const part = m.parts.find((p) => p.slot === EXHAUST_CHEST_SLOT && !p.eye);
+    const g = m.chestGeoms.get(m.chestNow);
+    if (!part || !g || part.mesh.userData.modelIndex === m.chestNow) return;
+    part.mesh.geometry = g.mesh;
+    part.mesh.userData.modelIndex = m.chestNow;
+    if (part.lines && g.edges) part.lines.geometry = g.edges;
+}
+
+/* How many display frames the trail ring is stepped through to catch up, as the
+ * chains are. Past that it is replayed from the motion's first frame. */
+const TRAIL_CATCH_UP = 8;
+/* One mesh per ring slot, each swapping geometry for the model its copy is. */
+const TRAIL_POOL = 128;
+
+/*
+ * Run the coprocessor's afterimage ring on to the current display frame and
+ * put its copies on screen.
+ *
+ * The ring remembers — a copy laid ten frames ago is still fading — so like the
+ * chains it is stepped a frame at a time while the counter moves on by one or a
+ * few. Anything else starts it empty at the first frame of the motion's current
+ * pass and runs it forward to the frame on screen, which is what the board
+ * would show on a motion played from its start. The step is the display
+ * counter's, and each tick is the motion frame it lands on, so a motion that
+ * loops lays its trail again from the top, onto what the last pass left.
+ */
+function placeTrails(m, c, pose, poseAt) {
+    const key = `${m.id}:${c.charIndex}:${state.useSquished}`;
+    if (m.trailKey !== key) {
+        m.trailKey = key;
+        m.trails = m.decoded
+            ? readTrails(state.rom, m.id, c.charIndex, { squished: state.useSquished })
+            : null;
+        m.trailSim = null;
+        m.trailGeoms = new Map();
+        if (m.trails) {
+            for (const id of trailModels(m.trails)) {
+                const d = getModel(id);
+                if (d) m.trailGeoms.set(id, { decoded: d, mesh: buildGeometry(d),
+                    edges: d.edges.length ? buildEdgeGeometry(d) : null });
+            }
+        }
+    }
+    const pool = m.trailPool ?? [];
+    if (!m.trails || !m.trailGeoms.size) {
+        for (const p of pool) { p.mesh.visible = false; if (p.lines) p.lines.visible = false; }
+        return;
+    }
+
+    const len = m.decoded.frames;
+    const frameOf = (tick) => 1 + (((tick % len) + len) % len);
+    const sim = m.trailSim;
+    const step = sim ? m.tick - sim.tick : 0;
+    if (sim && step >= 1 && step <= TRAIL_CATCH_UP) {
+        for (let t = sim.tick + 1; t <= m.tick; t++) {
+            stepTrails(sim, frameOf(t), t === m.tick ? pose : poseAt(frameOf(t)));
+        }
+        sim.tick = m.tick;
+    } else if (!sim || step !== 0) {
+        const fresh = createTrailSim(m.trails);
+        for (let f = 1; f <= m.frame; f++) stepTrails(fresh, f, f === m.frame ? pose : poseAt(f));
+        fresh.tick = m.tick;
+        m.trailSim = fresh;
+    }
+
+    /* The pool lives in the scene the rig was built into; a rebuilt rig has
+     * cleared it. */
+    if (!pool.length || pool[0].mesh.parent !== state.viewer.root) {
+        const first = m.trailGeoms.values().next().value;
+        m.trailPool = [];
+        for (let i = 0; i < TRAIL_POOL; i++) {
+            const { mesh, lines } = addModelToScene(first.decoded,
+                { matrix: new THREE.Matrix4(), geom: first });
+            if (lines) lines.matrixAutoUpdate = false;
+            m.trailPool.push({ mesh, lines, model: first.decoded.index });
+        }
+    }
+
+    const draws = state.showTrails ? trailDraws(m.trailSim, m.tick) : [];
+    m.trailPool.forEach((p, i) => {
+        const d = draws[i];
+        const g = d && m.trailGeoms.get(d.model);
+        const shown = Boolean(g);
+        p.mesh.visible = shown;
+        if (p.lines) {
+            p.lines.userData.hidden = !shown;
+            p.lines.visible = shown && state.wireframe;
+        }
+        if (!shown) return;
+        if (p.model !== d.model) {
+            p.model = d.model;
+            p.mesh.geometry = g.mesh;
+            p.mesh.userData.modelIndex = d.model;
+            if (p.lines && g.edges) p.lines.geometry = g.edges;
+        }
+        const mat = viewerMatrix(d);
+        p.mesh.matrix.fromArray(mat);
+        if (p.lines) p.lines.matrix.fromArray(mat);
+    });
+}
+
 /** Solve the current frame of the current motion onto the parts on screen. */
 function poseRig() {
     if (state.bodies) return poseBodyRig();
@@ -2066,6 +2221,14 @@ function poseRig() {
         p.mesh.matrix.fromArray(mats[p.slot]);
         if (p.lines) p.lines.matrix.fromArray(mats[p.slot]);
     }
+    /* What the motion's script has switched by this frame. */
+    if (m.scriptId !== m.id || m.scriptOf !== m.decoded) {
+        m.scriptId = m.id;
+        m.scriptOf = m.decoded;
+        m.script = m.decoded ? readMotionScript(state.rom, m.id) : [];
+    }
+    m.scriptState = scriptStateAt(state.rom, m.script, m.frame);
+    placeChest(m, c);
     /* The sway chains hang off the pose, so they follow it frame by frame. */
     if (m.osage) {
         /* With no motion the pose has its waist at the origin and no ground
@@ -2080,7 +2243,16 @@ function poseRig() {
     /* Tails' pair: placed from the pose, but stepped through their own cycle by
      * the display counter, which is why the tails keep turning on a motion held
      * on one frame only if that frame is being stepped. */
-    if (m.tails) {
+    const prop = m.tails && propellerPart(pose, m.tails, m.scriptState.propeller, m.tick);
+    showPart(m.propPart, Boolean(prop));
+    for (const part of m.tailParts ?? []) showPart(part, !prop);
+    if (prop && m.propPart) {
+        const mat = viewerMatrix(prop);
+        m.propPart.mesh.matrix.fromArray(mat);
+        if (m.propPart.lines) m.propPart.lines.matrix.fromArray(mat);
+        stepCycle(m.propPart, prop.phase);
+    }
+    if (m.tails && !prop) {
         const placed = tailParts(pose, m.tails, m.tick);
         for (let i = 0; i < m.tailParts.length && i < placed.length; i++) {
             const part = m.tailParts[i];
@@ -2092,6 +2264,7 @@ function poseRig() {
     }
     /* Metal Sonic's flame: the chest's matrix as `rob_disp` leaves it, with no
      * step of its own, and the plume on it stepped by the same counter. */
+    showPart(m.exhaustPart, exhaustDrawn(m.chestNow));
     if (m.exhaustPart) {
         const part = m.exhaustPart;
         const placed = exhaustPart(pose, m.exhaust, m.tick);
@@ -2100,6 +2273,9 @@ function poseRig() {
         if (part.lines) part.lines.matrix.fromArray(mat);
         stepCycle(part, placed.phase);
     }
+    /* The afterimages: the coprocessor's ring, run on the pose frame by frame. */
+    placeTrails(m, c, pose,
+        (f) => buildPose(skeleton, sampleMotion(state.rom, m.decoded, f), opts));
 
     /* The boss's arms ride the chest exactly as `rob_disp` leaves it — the
      * routine adds no transform of its own, only a model. */
@@ -2625,7 +2801,8 @@ function renderTailsPanel() {
     $('#tails-readout').innerHTML =
         `cycle 0x${t.cycleAddr.toString(16)} — ${ids.length} poses, models ${span}`
         + `<br>drawn twice off slot ${TAILS_PELVIS_SLOT}, ±22.5° and ${TAILS_LEAD} entries apart`
-        + `<br>propeller 0x${t.blurAddr.toString(16)} — models ${t.blur.join(', ')}, not drawn`;
+        + `<br>propeller 0x${t.blurAddr.toString(16)} — models ${t.blur.join(', ')}, while the script has it on`
+        + `<br><span id="tails-now"></span>`;
 }
 
 /* Metal Sonic's jet, shown only for the two roster entries that carry it. The
@@ -2643,15 +2820,21 @@ function renderExhaustPanel() {
     /* Why the flame is up or down, in the routine's own terms: it is the chest
      * object that decides, and in the squished form neither chest is installed
      * — which is a state the guard has no case for, so the flame stays lit. */
+    const script = (m.script ?? []).filter((c) => c.op === 0x10
+        && state.rom.maincpu[c.at + 3] === EXHAUST_CHEST_SLOT);
     const why = state.useSquished
         ? `squished chest ${chest} is neither closed chest — flame always up`
-        : exhaustDrawn(chest) ? 'vent open — flame up' : 'chest closed — no flame';
+        : script.length
+            ? `script: ${script.map((c) => `f${c.frame} ${state.rom.maincpu[c.at + 4] ? 'open' : 'closed'}`).join(' · ')}`
+              + '; the switch is the chest before that'
+            : 'this motion leaves the chest alone: the switch is it';
     $('#exhaust-readout').innerHTML =
         `cone 0x${e.coneAddr.toString(16)} — models ${e.cone.join(', ')}`
         + `<br>burst 0x${e.burstAddr.toString(16)} — models ${e.burst.join(', ')}`
         + `<br>${EXHAUST_CYCLE_LENGTH} frames, one a frame off slot ${EXHAUST_CHEST_SLOT}, alternating`
         + `<br>chests 0x${e.bodyAddr.toString(16)} — ${e.bodies.join(' closed, ')} open`
-        + `<br>${why}`;
+        + `<br>${why}`
+        + `<br><span id="exhaust-now"></span>`;
 }
 
 /* What the sway chains are made of, shown only for the five fighters that have
@@ -2760,6 +2943,7 @@ function renderMotionPanel() {
 
     const sel = $('#motion-select');
     sel.innerHTML = '';
+    const trailed = trailedMotions();
     const actions = el('optgroup');
     actions.label = 'This fighter\'s action slots';
     for (let i = 0; i < ACTION_SLOT_COUNT; i++) {
@@ -2767,7 +2951,8 @@ function renderMotionPanel() {
         const d = decodeMotion(state.rom, id);
         const o = el('option');
         o.value = `slot:${i}`;
-        o.textContent = `${String(i).padStart(2)} · motion ${id}` + (d ? ` · ${d.frames}f` : ' · empty');
+        o.textContent = `${String(i).padStart(2)} · motion ${id}` + (d ? ` · ${d.frames}f` : ' · empty')
+            + (d && trailed.has(id) ? ' · trail' : '');
         actions.appendChild(o);
     }
     sel.appendChild(actions);
@@ -2777,7 +2962,7 @@ function renderMotionPanel() {
     for (const e of m.list) {
         const o = el('option');
         o.value = `id:${e.id}`;
-        o.textContent = `motion ${e.id} · ${e.frames}f`;
+        o.textContent = `motion ${e.id} · ${e.frames}f` + (trailed.has(e.id) ? ' · trail' : '');
         all.appendChild(o);
     }
     sel.appendChild(all);
@@ -2798,13 +2983,71 @@ function renderMotionPanel() {
     scrub.disabled = !d;
     $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
     $('#motion-play').disabled = !d;
+    renderTrailPanel();
+    renderExhaustPanel();
     updateMotionFrameReadout();
+}
+
+/* The motions whose scripts lay a trail. Almost none of them are in a fighter's
+ * 52 action slots — they are attacks, which the game reaches another way — so
+ * the list marks them where the whole table is browsed. */
+const trailedByRom = new WeakMap();
+function trailedMotions() {
+    let set = trailedByRom.get(state.rom);
+    if (!set) {
+        set = new Set(state.motion.list
+            .filter((e) => readMotionScript(state.rom, e.id).some((c) => c.op === 0x26))
+            .map((e) => e.id));
+        trailedByRom.set(state.rom, set);
+    }
+    return set;
+}
+
+/* What the motion's script does with the trail, command by command. */
+function renderTrailPanel() {
+    const t = state.motion.trails;
+    const field = $('#trail-field');
+    field.hidden = !t;
+    if (!t) return;
+    $('#trail-show').checked = state.showTrails;
+    const parts = (mask) => SLOT_NAMES.filter((_, i) => mask >> i & 1).join('+');
+    const cmds = t.records.map((r) => r.mask
+        ? `f${r.frame} ${parts(r.mask)} step ${r.step}`
+            + (r.turn ? ` turn 0x${r.turn.toString(16)}` : '')
+            + (Math.abs(r.spacing - 0.1) > 1e-6 ? ` every ${r.spacing.toFixed(2)}` : '')
+        : `f${r.frame} off`);
+    const used = [...new Set(t.records.flatMap((r) =>
+        SLOT_NAMES.map((_, i) => i).filter((i) => r.mask >> i & 1)))];
+    const models = used.map((i) => `${SLOT_NAMES[i]} ${t.models[i].join('/')}`);
+    $('#trail-readout').innerHTML =
+        `script: ${cmds.join(' · ')}`
+        + `<br>fades through ${models.join(', ') || '—'}`
+        + `<br>bone ${t.bone.toFixed(3)}, skeleton type ${t.skeletonType}`
+        + `<br><span id="trail-live"></span>`;
 }
 
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
     $('#motion-frame-val').textContent = m.decoded ? `${m.frame} / ${n}` : '—';
+    const jet = $('#exhaust-now');
+    if (jet && m.exhaust) {
+        jet.textContent = `frame ${m.frame}: chest ${m.chestNow}`
+            + (m.chestFromScript ? ' from the script' : ' carried in')
+            + (exhaustDrawn(m.chestNow) ? ' — flame up' : ' — no flame');
+    }
+    const heli = $('#tails-now');
+    if (heli && m.tails) {
+        const mode = m.scriptState?.propeller ?? 0;
+        heli.textContent = !mode ? `frame ${m.frame}: tails`
+            : `frame ${m.frame}: propeller ${mode}, `
+              + (((mode - 1) & 1) === 0 ? 'at the waist (tails_heli_disp)' : 'on the hip (tails_screw_disp)');
+    }
+    const live = $('#trail-live');
+    if (live && m.trails && m.trailSim) {
+        const on = trailMaskAt(m.trails, m.frame);
+        live.textContent = `${on ? 'laying' : 'off'} — ${liveCopies(m.trailSim)} of 128 copies alive`;
+    }
     const scrub = $('#motion-frame');
     if (scrub && document.activeElement !== scrub) scrub.value = String(m.frame);
 }
@@ -2924,9 +3167,13 @@ function wireOptions() {
         rebuildRig({ keepCamera: true });
         renderAnimPanel();
     });
+    $('#trail-show').addEventListener('change', (e) => {
+        state.showTrails = e.target.checked;
+        poseRig();
+    });
     $('#exhaust-open').addEventListener('change', (e) => {
         state.jetExhaust = e.target.checked;
-        rebuildRig({ keepCamera: true });
+        poseRig();
         renderAnimPanel();
     });
     $('#char-travel').addEventListener('change', (e) => {

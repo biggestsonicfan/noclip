@@ -39,8 +39,8 @@
  * `metal_and_lunar_fox_exhaust` at `0x97568` is the same eight ids in that
  * order as `u32`, which is a second statement of the sequence in data.
  *
- * **What the viewer cannot know is *when*.** The flame is gated on the chest
- * object, and the chest is swapped by an opcode in the per-motion script —
+ * **When is the script's.** The flame is gated on the chest object, and the
+ * chest is swapped by op 0x10 in the per-motion script —
  * `player_body_change_action` at `0x33308`, which reads
  * `player_body_animation[char]` at `0xC6710` and stores the entry the command's
  * byte names into `0x40(g7)[slot*4]`. Metal Sonic is the only character in that
@@ -48,8 +48,9 @@
  * chest he stands in, and 2461, the same chest with its vent open — 0.06 taller
  * along the axis the flame runs down. The guard above rejects the two closed
  * chests by id, so the pair is one effect: the vent opens and the flame lights
- * together. Nothing in the keyframe block says which frames the script fires it
- * on, so the viewer, which plays a motion and not an action, makes it a switch.
+ * together. The chest is not reset when a motion starts, so the viewer follows
+ * the script's command on the frames after it and a switch stands for the chest
+ * he came in with (`placeChest` in js/app.js).
  */
 
 /* The slot the flame is drawn on, and so the frame it is drawn in. */

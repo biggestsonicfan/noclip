@@ -2579,21 +2579,28 @@ forever. `state.motion.tick` is the counter — the same clock the motion frame
 comes off, before it is folded — so playing steps both at 60 Hz and a scrub
 steps both by the same amount.
 
-Two branches of the routine are not reproduced, and cannot be from a motion
-alone.
+Two more branches of the routine are decided outside the keyframe block.
 
 **The propeller.** Bit 16 of `0x7F0(g7)` swaps the cycle for the pair beside it
 — 1221 and 1222 for Tails — alternating on the frame parity and turned by
 `0x500020 * 0xD80` about Y, which is 19° a frame: the blurred disc his flight
-moves are drawn with. `0x7F4(g7)` picks between drawing it at the fighter's
-world root (`0x1AC58`, which rebuilds from the view matrix at `0x5010F8`, his
-world position at `0x1F4(g7)` and his facing at `0x26(g7)`) and on the hip like
-the cycle (`0x1AD84`). Both are turned on by an opcode at `0x1C970` in the
-per-motion **script** — `motion_flags[id]` at `0xCE380`, whose record is
-thirteen bytes of flags followed by a byte-code stream the action interpreter at
-`0x1C090` walks a command at a time. Nothing in the keyframe block says the flag
-is set or on which frame, so the viewer, which plays a motion and not an action,
-has no way to know. The panel names the two models and says they are not drawn.
+moves are drawn with. The motion script sets it: op `0x27` sets the bit and
+stores its signed byte at `0x7F4(g7)`, op `0x28` clears both, and `set_mot_dat`
+clears the bit when a motion starts (see [Afterimages](#afterimages-jszanzoujs)
+for the script). Nine motions use it. `tails_shippo_func_exec` (`0x1AC38`)
+picks a routine by `(0x7F4 - 1) & 1`:
+
+- `1`, `tails_heli_disp` (`0x1AC58`): the view matrix at `0x5010F8`, `set_pos` by
+  `0x1F4(g7)`, `ang_y` by the facing at `0x26(g7)`, then `set_pos 0.14, 0.18,
+  -0.17`. `0x1F4` is the waist: `calc_unit_mat` stores it from `0x07800F0F`
+  straight after placing slot 0. So the disc rides the waist, turned with him
+  but not with the body's lean — the flying moves 301, 466 and 495, which carry
+  him eight units up.
+- `2`, `tails_screw_disp` (`0x1AD84`): on the pelvis's matrix, `set_pos 0.15,
+  -0.2, -0.15`, `ang_z 0xF000`, `ang_x 0x8000` — the dashes 365, 366 and 396–399.
+
+Either replaces the pair: the tails are not drawn while it is up. The viewer
+reads the script, draws it on the frames it is on, and the panel says which.
 
 **The `0x8000` roll.** `ang_z` is `0x8000` rather than `0xC000` when bit 16 of
 `0x1A4(g7)` is set. That word is initialised per motion, at `0x1B4EC`, where bit
@@ -2658,8 +2665,9 @@ appear a second time, in that interleaved order, as `u32` at `0x97568` —
 `metal_and_lunar_fox_exhaust`. Getting the stride, the base or which table goes
 with an even frame wrong fails against it.
 
-**What the viewer cannot know is *when*.** The flame is gated on the chest
-object, and the chest is swapped by an opcode in the per-motion script:
+**When is the script's.** The flame is gated on the chest object, and the
+chest is swapped by op `0x10` in the per-motion script (see
+[Afterimages](#afterimages-jszanzoujs)):
 `player_body_change_action` at `0x33308` reads `player_body_animation[char]` at
 `0xC6710` and stores the entry the command's byte names into `0x40(g7)[slot*4]`
 — the same sixteen-entry array `rob_disp` draws each slot from, which
@@ -2674,10 +2682,15 @@ his is two ids long:
 
 So the pair is one effect — the vent opens and the flame lights together — and
 2020, the guard's other rejection, is 397's mesh and texture points under a
-second set of face colours. Nothing in the keyframe block says which frames the
-script fires it on, so the viewer, which plays a motion and not an action, makes
-it a switch: **vent open** on the Animation tab picks which chest slot 1 is
-drawn with, and the flame follows by the routine's own test.
+second set of face colours. Op `0x10` is `[slot][entry]`: `load_action_from_list`
+(`0x330D0`) indexes `player_action_list` by the slot byte, and slot 1's handler
+is this one. 86 commands name slot 1 — about eighty generic motions close the
+vent on their first frame, and 320, 326, 327, 328 and 459 open it. The chest is
+**not** reset when a motion starts (`set_mot_dat` resets only the two hands), so
+a motion that says nothing keeps whatever the last one left. The viewer follows
+the script on the frames after its command, and **vent open coming in** on the
+Animation tab stands for the chest before that; the flame follows by the
+routine's own test, and the panel says which of the two decided it.
 
 One consequence of implementing that test rather than the switch: the
 hammer-squished chest is 1652, which is neither of the two ids the guard rejects,
@@ -2774,6 +2787,97 @@ held pose is the middle of the ramp and not of the sixteen, 48 of every 256
 frames move the head, the spin closes a full turn and reverses on bit 8, and
 the fourth quarter draws nothing because its routine *is* the address the
 guards branch to when the robot is not the minion at all.
+
+### Afterimages (`js/zanzou.js`)
+
+A fast hand, a spin kick or a dash leaves a streak of copies behind it. None of
+it is in the keyframe block, and almost none of it is the main CPU's: the
+coprocessor keeps the trail. The viewer runs the same machinery from the three
+places it is decided.
+
+**The motion script turns it on.** The 13-byte record `mot_list` points at is
+only a head. `set_mot_dat` walks on through a setup byte-code (dispatch at
+`0x1B558`, 25 handlers at `0x1B568`, each moving `r11` on by its own length)
+until op 0, no script, or op 8, whose next byte is where `P1+0x82C` is left. The
+play script behind it is what `play_motion` walks each frame from `0x1C088`:
+
+```
+[op][frame u16][operands...]      ; runs once P1+0x1AA reaches the frame
+ld   _uk_player_actions[r3*4], r5 ; 44 handlers at 0x1D1AC
+bx   (r5)
+ldob byte_1D01F(r3), r7           ; a command passed over skips by this
+```
+
+Every handler adds to `g4` exactly what `byte_1D01F` says for its op, so that
+one table walks any script (`readMotionScript` in `js/motion.js`). All 518
+motions walk cleanly to their terminators. Action **0x26** is the trail:
+
+```
+[0x26|0x80][frame][mask u16 -> P1+0xC60][step s16 -> +0xC62]
+                  [turn u16 -> +0xA1E][spacing f32 -> zanzou_ma]
+```
+
+The mask is the sixteen rig slots (`0x20` the left hand, `0x100` the right,
+`0x9000` both feet, `0x200` the pelvis); zero turns the trail off, and
+`set_mot_dat` zeroes it whenever a motion starts. 134 of them sit in 50 motions,
+every one inside its motion's length. Only 322 and 323 (Metal and Super Sonic)
+are in an action table; the rest are attacks, which is why the motion list marks
+them.
+
+**`zanzou_control` (`0x8AA38`) feeds the coprocessor** once a frame: the spacing,
+`Fn_zanzou_inc` (0x82) to age every copy, then per fighter
+`Fn_zanzou_kill_timer_buffer` (0x86) if its mask is zero or
+`Fn_zanzou_reserve` (0x80) if not. The reserve carries the mask (left and right
+swapped for a fighter facing the other way), the step, a bone length from
+`0xB5258[skeleton][char]` — 0.5 for everyone — and for each part in the mask the
+three models its copies fade through, u16s at `table[char] + part * 8`, where
+the table is `0xB540C[skeleton]`, or `0xB55BC` while the fighter holds an option
+(`P1+0` bit 27, which changes nothing but the mirror Sonic's). The models are
+single streak cards: Sonic's hands are 2220–2222.
+
+**The coprocessor's ring** is ported from m2-hle2's `sharc_zanzou.h`
+(cpres1 PM `0x208E1`–`0x20A8E`). The firmware measures the farthest any trailing
+part moved since last frame — its joint, and a point one bone length out along
+its own +X — and lays one copy per `spacing` of that into a 128-slot ring, each a
+linear blend of last frame's matrix towards this one's, at most 100 a part.
+More than 13 squared units is a teleport and lays nothing. A part's first copy
+starts at life 0 — `send_zanzou_data` writes 3 there at boot, but
+`Fn_zanzou_init` clears it when a fight sets up and nothing writes it again —
+and life climbs by one per copy while the trail runs; the
+step takes it back down each frame, and the model is picked by what is left.
+The matrices are the unit cache's, the ones each part is drawn with, so the ring
+runs on `buildPose` as it stands.
+
+**`zanzou_disp` (`0x8ACD0`) draws.** For each ring slot with life left:
+
+```
+ld    frame_counter, r4
+addo  r3, r4, r4              ; + the slot
+bbc   0, r4, skip             ; drawn on odd sums only
+push; 0x84 slot matrix; ang_x(mod_fa_tobi+0x5C); set_obj(model); pop
+```
+
+There is no translucency: a trail fades by flickering, neighbouring copies out
+of step. The X turn is a halfword of the projectile module's header that no
+instruction writes; read live in m2-hle2 through attract and its fight it is 0.
+
+The ring remembers, so the viewer steps it a frame at a time and replays the
+motion from its first frame after a scrub back or a jump; playing and stepping
+give the same copies.
+
+It is held against the board by `stf-tools/test-zanzou-mame.mjs`, on a MAME
+capture of a coined fight (attract never brings up the projectile module
+`zanzou_control` belongs to). A fight lays too few trails of its own, so the
+capture writes P1's trail fields case by case; what the i960 sends and what the
+SHARC lays are the board's. Before each reserve it snapshots the SHARC's data
+memory at the firmware's first store to the part-model table — header done,
+nothing laid — so the snapshots chain: the port is started from one, aged a
+frame at a time and held against the next. All 900 reserves of a 900-frame
+capture reproduce the firmware's next ring exactly, matrices to 4e-7; all 901
+reserves carry the mask, step, turn, spacing, bone length and models the tables
+here say; and the script's trail command and propeller agree with work RAM on
+every fighter-frame. That first run is what showed a fight's first copy starts
+at life 0 rather than the boot value of 3.
 
 ### Holding it against the machine
 
