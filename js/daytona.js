@@ -597,23 +597,9 @@ export function gridBlock(x, z) {
  * drawn (null).
  */
 export function courseReach(rom, course) {
-    const table = rom.game.sky?.table;
-    if (table == null) return null;
-    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
-    const row = u32(rom, table + course * 4);
-    if (!inData(row, 20)) return null;
-    const lines = u32(rom, row + 16);
-    if (!inData(lines, CAR_LANES * 8)) return null;
-    const on = new Set();
-    for (let l = 0; l < CAR_LANES; l++) {
-        const p = u32(rom, lines + l * 8), n = u32(rom, lines + l * 8 + 4);
-        if (!n || !inData(p, n * 28)) return null;
-        for (let i = 0; i < n; i++) {
-            const x = f32(rom, p + i * 28), z = f32(rom, p + i * 28 + 8);
-            if (!(Math.abs(x) < 1024 && Math.abs(z) < 1024)) return null;
-            on.add(boardBlock(x, z));
-        }
-    }
+    const lanes = carLanes(rom, course);
+    if (!lanes) return null;
+    const on = new Set(lanes.map(([x, , z]) => boardBlock(x, z)));
     const reach = new Set();
     for (const b of on) {
         for (let dz = -AREA_REACH; dz <= AREA_REACH; dz++) {
@@ -627,6 +613,30 @@ export function courseReach(rom, course) {
 }
 const CAR_LANES = 8;
 const AREA_REACH = 2;
+
+/* Every point on a course's eight car lanes as [x, y, z] — the height is at +4,
+ * between the two the grid reads — or null where the row names no lanes. */
+export function carLanes(rom, course) {
+    const table = rom.game.sky?.table;
+    if (table == null) return null;
+    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const row = u32(rom, table + course * 4);
+    if (!inData(row, 20)) return null;
+    const lines = u32(rom, row + 16);
+    if (!inData(lines, CAR_LANES * 8)) return null;
+    const out = [];
+    for (let l = 0; l < CAR_LANES; l++) {
+        const p = u32(rom, lines + l * 8), n = u32(rom, lines + l * 8 + 4);
+        if (!n || !inData(p, n * 28)) return null;
+        for (let i = 0; i < n; i++) {
+            const q = p + i * 28;
+            const x = f32(rom, q), y = f32(rom, q + 4), z = f32(rom, q + 8);
+            if (!(Math.abs(x) < 1024 && Math.abs(z) < 1024)) return null;
+            out.push([x, y, z]);
+        }
+    }
+    return out;
+}
 /* get_m_block as the board computes it, cvtri truncating toward zero. */
 const boardBlock = (x, z) => ((((Math.trunc(z) + 1024) >> 7) & 15) << 4) | (((Math.trunc(x) + 1024) >> 7) & 15);
 
@@ -636,13 +646,17 @@ const boardBlock = (x, z) => ((((Math.trunc(z) + 1024) >> 7) & 15) << 4) | (((Ma
  *
  * Only the block the point is in and the eight round it are looked at, which
  * is a few thousand triangles rather than the course's fifty thousand, and
- * each is decoded once. What is taken is the highest face under the point that
- * faces up: a pylon stands on the road, and nothing in the three courses runs
- * a road over one. Its normal gives the tip — the board turns X and then Z to
- * stand the model on the slope, and the two angles that carry +Y onto the
- * normal in that order are these.
+ * each is decoded once. More than one face that faces up can be under a point:
+ * a pylon set against a wall has the wall's flat top over the road, and Seaside
+ * Street Galaxy's barriers stood on it, 9 up (#13). What is taken is the face
+ * nearest the height of the closest car-lane point, since the lanes run on the
+ * road — under every pylon of every course the road is within a tenth of that
+ * height and the wall top 9 above it. With no lanes, the highest face.
+ * Its normal gives the tip — the board turns X and then Z to stand the model
+ * on the slope, and the two angles that carry +Y onto the normal in that order
+ * are these.
  */
-export function courseGround(blockModel) {
+export function courseGround(blockModel, lanes = null) {
     const cache = new Map();
     const tris = (b) => {
         if (!cache.has(b)) cache.set(b, blockModel(b)?.positions ?? null);
@@ -652,6 +666,17 @@ export function courseGround(blockModel) {
         /* The decoder has negated Z, so the point is (x, -z) in its frame. */
         const px = x, pz = -z;
         const bx = ((Math.round(x) + 1024) >> 7) & 15, bz = ((Math.round(z) + 1024) >> 7) & 15;
+        let road = null;
+        if (lanes?.length) {
+            let near = Infinity;
+            for (const [lx, ly, lz] of lanes) {
+                const d = (lx - x) ** 2 + (lz - z) ** 2;
+                if (d < near) { near = d; road = ly; }
+            }
+        }
+        const better = (hit, best) => (road == null
+            ? hit.y > best.y
+            : Math.abs(hit.y - road) < Math.abs(best.y - road));
         let best = null;
         for (let dz = -1; dz <= 1; dz++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -661,7 +686,7 @@ export function courseGround(blockModel) {
                 if (!p) continue;
                 for (let i = 0; i + 9 <= p.length; i += 9) {
                     const hit = underPoint(p, i, px, pz);
-                    if (hit && (!best || hit.y > best.y)) best = hit;
+                    if (hit && (!best || better(hit, best))) best = hit;
                 }
             }
         }
