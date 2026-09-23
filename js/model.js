@@ -115,27 +115,23 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         switch (b25 & 3) {
             case 0:   /* sentinel: previous group ended, start a fresh strip.
                        *
-                       * Not at the head of a mesh, where there is no previous
-                       * group: the four vertices standing there are the two
-                       * points the mesh opens with and the two this link
-                       * brings, which is the first polygon the board draws
-                       * (model2_3d_push case 0x01 takes P0(n-1) from the pair
-                       * pushed before the attribute, and the relink switch at
-                       * the end of model2_3d_process_polygon runs after it).
+                       * The group standing here is wiped because the board
+                       * never draws it: the rasterizer culls any polygon whose
+                       * own link type is 0 before anything else is looked at
+                       * (MAME check_culling, called from
+                       * model2_3d_process_polygon ahead of the raster), and
+                       * the geometry engine hands the ROM attribute through
+                       * with these bits intact.
                        *
-                       * Every mesh that opens on this link type, in all four
-                       * sets this was measured over — Sonic The Fighters,
+                       * That holds at the head of a mesh too. Every mesh that
+                       * opens on this link type — in Sonic The Fighters,
                        * Fighting Vipers, the House of the Dead prototype and
                        * Daytona USA — is the same one-link card, a 2x2 quad at
-                       * y = -2, the shadow AM2's library draws under things —
-                       * so wiping it left 70 entries in Sonic The Fighters,
-                       * 110 in Fighting Vipers and 813 in Daytona USA decoding
-                       * to nothing at all. Mid-mesh the wipe stands: this type
-                       * is 36348 of Sonic The Fighters' links and what it does
-                       * there was measured against the board. */
-                if (vcount > 0) {
-                    idx[n - 4] = -1; idx[n - 3] = -1; idx[n - 2] = -1; idx[n - 1] = -1;
-                }
+                       * y = -2 whose only polygon is this one, so it draws
+                       * nothing: 70 entries in Sonic The Fighters, 110 in
+                       * Fighting Vipers and 813 in Daytona USA. Keeping that
+                       * polygon stood a square on screen that the board culls. */
+                idx[n - 4] = -1; idx[n - 3] = -1; idx[n - 2] = -1; idx[n - 1] = -1;
                 idx.push(newA - 2, newA - 1, newA, newA + 1);
                 break;
             case 1:   /* carry the far edge of the previous face */
