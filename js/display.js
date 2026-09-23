@@ -705,7 +705,7 @@ export function readIcePillars(rom) {
     });
 }
 
-function auroraDisp({ push, pushTpd, fs, frames }) {
+function auroraDisp({ push, pushStanding, pushTpd, fs, frames }) {
     const scroll = { ...AURORA_SCROLL, points: frames?.auroraPoints ?? null };
     pushTpd(AURORA_BOREALIS, scroll, []);
     push(AURORA_SKY, []);
@@ -725,8 +725,11 @@ function auroraDisp({ push, pushTpd, fs, frames }) {
      * out exactly when the barrier they stand behind does. That is a cull
      * against the board's own camera, and this viewer's can be anywhere, so it
      * is left out here the same way the ice pillars' is below.
+     *
+     * The standing pair and the pillars are drawn as standing on the ice, so
+     * they keep their own depth rather than sinking through it.
      */
-    push(AURORA_WALRUSES, []);
+    pushStanding(AURORA_WALRUSES, []);
     push(AURORA_WALRUSES_REFLECTED, [MIRROR_Y]);
     push(AURORA_FLOOR, [['s', [fs, 1.6, fs]]]);
     pushTpd(AURORA_BOREALIS, scroll, [MIRROR_Y]);
@@ -735,7 +738,7 @@ function auroraDisp({ push, pushTpd, fs, frames }) {
      * leaves the screen; a camera that can go anywhere wants all eight. */
     for (const p of frames?.pillars ?? []) {
         const stand = [['t', [p.x, 0, -p.z]], ['r', p.angle * ANGLE_DEG]];
-        push(p.pillar, [...stand, ['s', p.scale]]);
+        pushStanding(p.pillar, [...stand, ['s', p.scale]]);
         const top = [...stand, ['t', [0, p.height, 0]]];
         push(p.dark, [...top, ['s', [2, 2, 2]]]);
         push(p.light, (f) => [...top, ['r', f * ICE_DIAMOND_SPIN * ANGLE_DEG],
@@ -1839,6 +1842,12 @@ export function buildStageDisplayList(stage, frames = null) {
             fs,
             cageY,
             push: (model, ops) => push(model, OBJECT_LAYER, ops),
+            /* A solid standing on a floor that keeps its own depth, which must
+             * keep its own too or it sinks through — see standingMaterial in
+             * js/viewer.js. */
+            pushStanding: (model, ops) => {
+                if (model) out.push({ model, layer: OBJECT_LAYER, standing: true, ops });
+            },
             /* A draw the routine makes with the matrix reset to the identity
              * rather than built on the camera's, which is the board's way of
              * saying background rather than scenery: it goes behind the horizon

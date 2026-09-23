@@ -752,7 +752,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    groundPlate = false, planeBias = 0, material = null,
+    groundPlate = false, standing = false, planeBias = 0, material = null,
 } = {}) {
     const v = state.viewer;
     /* The ground plate takes the material that stands one step back, because
@@ -765,14 +765,17 @@ function addModelToScene(decoded, {
      * The open water takes the one that stands the whole bound back, because
      * the board sorts it by a corner hundreds of units out and nothing in the
      * arena is modelled under it — see waterMaterial.
+     * A draw standing on a floor that has things modelled under it keeps its
+     * own depth, since that floor cannot concede — see standingMaterial.
      * A draw that names a material of its own is one whose texture set is not
      * the scene's — see materialForSet. */
     const mesh = new THREE.Mesh(geom ? geom.mesh : buildGeometry(decoded),
         material ?? (backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
                 : layer === 'water' ? v.waterMaterial
-                    : planeBias ? v.planeMaterials[planeBias]
-                        : v.material));
+                    : standing ? v.standingMaterial
+                        : planeBias ? v.planeMaterials[planeBias]
+                            : v.material));
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
     mesh.userData.layer = layer;
@@ -1220,6 +1223,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
         const { mesh, lines } = addModelToScene(d, {
             layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
             groundPlate: entry.groundPlate,
+            standing: entry.standing,
             planeBias: entry.planeBias,
             material: partMaterial,
         });
