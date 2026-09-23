@@ -263,7 +263,9 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
      * water planes and the waterfall. Bits 5 and 6 carry the face's z source,
      * which is not a texture property at all — see the note below emitTri —
      * and neither is bit 7, which says the board draws the face from behind as
-     * well as in front; see the note on the facing point. */
+     * well as in front; see the note on the facing point. Bits 8 and 9 let the
+     * filter blend across the tile's edge in X and Y (bits 6 and 7); a face
+     * without them is clamped there. */
     let faceFlags = 0;
     /* Which of the 32 material slots the geometry engine lights this polygon
      * with — bits 18-22 of the attribute word. The slots themselves are per
@@ -442,6 +444,14 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                  * the middle of the Flying Carpet's desert. */
                 if ((th0 >> 8) & 1) faceFlags |= 8;
                 if ((th0 >> 9) & 1) faceFlags |= 16;
+                /* Bits 6 and 7 let the filter blend across the tile's edge into
+                 * its far side. Without them the board clamps there instead
+                 * (fetch_bilinear_texel, `!tex_wrap_x && u1 == 0`), which is
+                 * what a picture cut across several tiles needs: South Island's
+                 * sky ring is one panorama over four, and filtering each tile's
+                 * last row into its own first put a thin seam at every join. */
+                if ((th0 >> 6) & 1) faceFlags |= 256;
+                if ((th0 >> 7) & 1) faceFlags |= 512;
                 tx = 32 * (th2 & 0x3f);
                 ty = 32 * ((th2 >> 6) & 0x1f) + sheet * 1024;  /* sheets stack */
                 tw = textured ? texw : 0;

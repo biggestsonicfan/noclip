@@ -30,7 +30,7 @@ const VERT_SHADER = /* glsl */`
     in vec3 aFacePt;     // the point the board tests the normal against
     in float aLayer;     // how many coplanar faces lie under this one (js/layers.js)
     in vec4 aPlane;      // the plane its group takes depth from, n.p = w; zeros if none
-    // bit 7 of aFlags = drawn from both sides
+    // bit 7 of aFlags = drawn from both sides; 256/512 = filter wraps in X/Y
 
     // Set per game -- see ZSORT_RECEDE below.
     uniform float uZsortRecede;
@@ -45,9 +45,16 @@ const VERT_SHADER = /* glsl */`
     // a tile width of 32 arriving as 31.99999 makes tileTexel wrap modulo 31,
     // and a lumabase one short reads a neighbouring palette colour. Only the
     // texel coordinate and the normals vary across a face.
+    //
+    // The texel coordinate is centroid-sampled. With multisampling on, a pixel
+    // the face only partly covers is still shaded at the pixel's centre, which
+    // can lie outside the face, and the coordinate extrapolated there runs past
+    // the tile's edge and wraps round to its far side. Where one tile meets
+    // the next, that put a one-pixel line of the wrong edge's texels at every
+    // join of South Island's sky ring.
     flat out vec3 vColor;
     out vec3 vNormal;
-    out vec2 vTexel;
+    centroid out vec2 vTexel;
     flat out vec4 vTile;
     flat out float vLumaBase;
     flat out float vFlags;
@@ -289,7 +296,7 @@ const FRAG_SHADER = /* glsl */`
 
     flat in vec3 vColor;
     in vec3 vNormal;
-    in vec2 vTexel;
+    centroid in vec2 vTexel;
     flat in vec4 vTile;
     flat in float vLumaBase;
     flat in float vFlags;
@@ -438,6 +445,14 @@ const FRAG_SHADER = /* glsl */`
         vec2 t = vTexel / exp2(float(L)) - 0.5;   // the board's half-texel offset
         ivec2 i0 = ivec2(floor(t));
         vec2 f = fract(t);
+
+        // Where the pair straddles the tile's edge, a face without the smooth
+        // wrap bit is clamped rather than blended into the tile's far side: the
+        // board takes whichever of the two texels is nearer (model2rd.ipp
+        // fetch_bilinear_texel, where !tex_wrap_x and u1 == 0).
+        ivec2 edge = (i0 + tile.zw * 8) % tile.zw;
+        if (!flags(256) && edge.x == tile.z - 1) f.x = step(0.5, f.x);
+        if (!flags(512) && edge.y == tile.w - 1) f.y = step(0.5, f.y);
 
         float t00 = tileTexel(tile, i0);
         float t10 = tileTexel(tile, i0 + ivec2(1, 0));
