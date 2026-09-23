@@ -680,8 +680,17 @@ function uploadRawBank(md, base, tex, toSheet1) {
  * other one did not take.
  */
 
-/* One level's runs, as [halfwords, onTheStartingSheet] pairs. */
+/* One level's runs, as [halfwords, onTheStartingSheet] pairs.
+ *
+ * Level 0 is the one whole run the table above says it is: every row of the
+ * first mip level goes to the starting sheet, none to the other. This used to
+ * start it with a run of 0x100 like the rest, which dealt the second half of
+ * each of those 128 rows onto the wrong sheet; graded against texture RAM
+ * captured from a running board (stf-tools' mame-daytona-texram.lua), that was
+ * the only difference in either sheet, and it put the other bank's art where
+ * every texture's first mip should be. */
 function daytonaRuns(level) {
+    if (level === 0) return [[0x200, true]];
     const out = [[0x100, true]];
     let on = false;
     let left = 0x100;
