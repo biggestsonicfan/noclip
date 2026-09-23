@@ -660,8 +660,9 @@ function composeOps(out, ops) {
         /* A billboard needs the camera, which composing does not have. It is
          * the identity here, which leaves the draw standing where it stands
          * unrotated — what the parts panel and the camera bounds want, and what
-         * stepBillboards then replaces once a frame with the real thing. */
-        if (kind === 'b') continue;
+         * stepBillboards then replaces once a frame with the real thing. The
+         * camera's heading is the same. */
+        if (kind === 'b' || kind === 'cy') continue;
         if (kind === 's') OP_SCRATCH.makeScale(v[0], v[1], v[2]);
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
@@ -1106,7 +1107,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
                 uvs: entry.scroll ? d.uvs : null,
             });
         }
-        if (opsAt(entry, 0).some((op) => op[0] === 'b')) {
+        if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
             state.anim.billboards.push({ entry, mesh, lines });
         }
     }
@@ -1329,23 +1330,54 @@ function resetStageAnimation() {
  * (camera rotation) x (the ops after the op), rebuilt here rather than when the
  * stage was built, because the camera was not standing anywhere in particular
  * then and does not stay where it was put now.
+ *
+ * A turn to the camera's heading ('cy') is stepped here too. It keeps what the
+ * matrix has reached and adds a yaw: the one that brings the draw's +Z round to
+ * the camera's own +Z, seen from above in the draw's frame, which is what the
+ * billboard does to +Z with the pitch left out. Ahead of a billboard it is
+ * thrown away with the rest of the rotation.
+ *
+ * Both are worked in the scene root's frame, which is where a draw's matrix
+ * lives. The root is not always the world: under a moving arena it carries the
+ * inverse of the flight, which turns with the carpet's heading, so the camera's
+ * rotation is taken into the root's before it is used.
  */
 const BB_HEAD = new THREE.Matrix4();
 const BB_TAIL = new THREE.Matrix4();
 const BB_POS = new THREE.Vector3();
 const BB_ONE = new THREE.Vector3(1, 1, 1);
+const BB_INV = new THREE.Matrix4();
+const BB_BACK = new THREE.Vector3();
+const BB_YAW = new THREE.Matrix4();
+const BB_ROOT_Q = new THREE.Quaternion();
+const BB_Q = new THREE.Quaternion();
 function stepBillboards() {
     const list = state.anim.billboards;
     if (!list.length) return;
-    const camera = state.viewer.camera;
+    const { camera, root } = state.viewer;
     camera.updateMatrixWorld();
+    root.updateMatrixWorld();
+    BB_ROOT_Q.setFromRotationMatrix(root.matrixWorld).invert();
+    /* The camera's rotation, and its +Z (its back), in the root's frame. */
+    BB_Q.multiplyQuaternions(BB_ROOT_Q, camera.quaternion);
     for (const it of list) {
         const ops = opsAt(it.entry, state.anim.frame > 0 ? state.anim.frame : 0);
-        const at = ops.findIndex((op) => op[0] === 'b');
-        composeOps(BB_HEAD, ops.slice(0, at));
+        let at = ops.findIndex((op) => op[0] === 'b');
+        if (at >= 0) {
+            composeOps(BB_HEAD, ops.slice(0, at));
+            BB_POS.setFromMatrixPosition(BB_HEAD);
+            BB_HEAD.compose(BB_POS, BB_Q, BB_ONE);
+        } else {
+            at = ops.findIndex((op) => op[0] === 'cy');
+            composeOps(BB_HEAD, ops.slice(0, at));
+            /* ...and then in the draw's own frame. */
+            BB_BACK.set(0, 0, 1).applyQuaternion(BB_Q);
+            BB_INV.copy(BB_HEAD).invert();
+            BB_BACK.transformDirection(BB_INV);
+            BB_YAW.makeRotationY(Math.atan2(BB_BACK.x, BB_BACK.z));
+            BB_HEAD.multiply(BB_YAW);
+        }
         composeOps(BB_TAIL, ops.slice(at + 1));
-        BB_POS.setFromMatrixPosition(BB_HEAD);
-        BB_HEAD.compose(BB_POS, camera.quaternion, BB_ONE);
         it.mesh.matrix.multiplyMatrices(BB_HEAD, BB_TAIL);
         if (it.lines) it.lines.matrix.copy(it.mesh.matrix);
     }

@@ -1183,7 +1183,11 @@ which is the strobe.
 Five things move without a table:
 
 - **The flames pulse.** `pole_disp` emits an extra uniform 1.25 scale on the
-  frames where bit 0 of the counter is clear, and nothing on the others.
+  frames where bit 0 of the counter is clear, and nothing on the others. It
+  faces each flame at the camera first (op 16, `0x253D4`), which also drops
+  the post's 1.6, so a flame is drawn at its own size or 1.25 of it. The posts
+  under them are turned to the camera's heading (`0x25388`, the yaw at
+  `fa_camera+0x26`), which the viewer takes from its own camera.
 - **The horizon drifts.** `doom_cnt` keeps a 16-bit yaw at `0x500464` and adds 2
   to it every frame on the stages whose flag bit `0x1B` is set (South Island,
   its two alternates, and the Flying Carpet). That is a shade under 0.011° a
@@ -1254,12 +1258,15 @@ Working those angles out needs the head's own position in the frame the
 fighters' coordinates live in, and the routine gets it by handing the
 coprocessor a matrix built for the purpose — identity, translate by the negated
 stage position, scale 1.6 — and asking it to transform that point (`0x14802929`,
-model→world). The 1.6 is the quirk: the draw itself never applies one, so the
-head is aimed as though it stood 1.6× further out than where it is drawn, and
-lags what it is aiming at by as much as 162° as the carpet passes closest.
-`stf-tools/test-carpet.mjs` pins both halves — that some fixed axis of the model
-follows the look-at exactly (it is the model's `+Z`), and how far that look-at
-then falls behind the arena.
+model→world). The draw is at that same 1.6, though it builds no scale of its
+own: before its translate it sends `0x44` with 8, loading inner slot 8 over the
+prologue, and slot 8 is what `camera_init` stored at `0x1FC7C` — the prologue
+again, scaled 1.6. So the head stands where the probe measured it and is drawn
+at 1.6× its model's size, like the body under it. An earlier reading missed the
+load, took the 1.6 for a bug in the probe, and drew the head at its model's own
+size. `m2-hle2`'s `tools/grade-stages.mjs` is what caught it: the head only
+matched the board's draws with the scale put back. `stf-tools/test-carpet.mjs`
+pins that the model's `+Z` follows the look-at exactly.
 
 The same function draws two more things the stage record does not carry: four
 corner pieces on the carpet at `stage_x / 6`, a quarter turn apart, and one flat
@@ -1374,7 +1381,7 @@ What the routines do, in the same terms as the frame tables above:
 | its roulette wheel | stood up by an `ang_z` of `0xD000`, spun about its own Y | 128 frames |
 | its three slot reels | `ang_x` at `0x400` a frame, starting `0`, `0x6000`, `0xB000` | 64 frames |
 | its floating cards | one of 32 models a frame | 32 frames |
-| Dynamite Plant's gears | two `ang_z` at ±250 a frame, turning opposite ways | 262 frames |
+| Dynamite Plant's gears | two `ang_z` at ±250 a frame, turning opposite ways, starting `0` and `0x800` | 262 frames |
 | its swinging pair | a float walking 0..5.4 in steps of 0.05, pinned at each end | 216 frames |
 | its conveyor | one of 32 models every other frame | 64 frames |
 | Aurora Icefield's diamonds | `ang_y` at `0x100` a frame | 256 frames |
@@ -1567,6 +1574,12 @@ up, so on the board the horizon tips under a camera riding the wing. A free
 camera wants the horizon, so the viewer hangs the scene on the roll's inverse and
 the plane banks under it instead — the same argument, and the same
 `stageWorldFrame`, as the carpet's.
+
+`giant_wing_disp` draws the floor at `floor_stage_size_0`, pops it, and draws
+everything after — the body, its haze and the six clouds — from inner slot 8
+(`0x44` with 8, at `0x76E3C`), which `camera_init` stores as the world's
+prologue at 1.6. So those take the roll the floor does not, and the clouds'
+offsets are in that frame too, 1.6× as far out as their numbers.
 
 #### Canyon Cruise flies the canyon
 

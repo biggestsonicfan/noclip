@@ -186,6 +186,18 @@ export function opsAt(entry, frame) {
  */
 export const BILLBOARD = ['b'];
 
+/*
+ * Turn to the camera's heading — an ang_y by the angle the game keeps at
+ * +0x26 of fa_camera. Unlike the billboard it throws nothing away: it is an
+ * ordinary yaw post-multiplied onto what the matrix has reached, whose angle
+ * happens to be the camera's, so it cancels the view's own yaw and leaves its
+ * pitch. What it draws turns about its own Y to keep one side to the camera.
+ *
+ * The camera here is the viewer's, so the angle is its heading, taken the way
+ * stepBillboards takes the billboard's rotation.
+ */
+export const CAMERA_YAW = ['cy'];
+
 /* cage_corners — the four posts pole_disp puts around South Island, alternating
  * between two models. */
 const SOUTH_ISLAND_CAGE_CORNERS = [519, 554, 519, 554];
@@ -382,9 +394,8 @@ function worldPrologue(at) {
  * world position to work those angles out, and gets it by handing the
  * coprocessor a matrix built for the purpose — identity, translate by the
  * negated stage position, scale 1.6 — and asking it to transform the point
- * (0x14802929, model→world). So the look-at is measured with a 1.6 the draw
- * itself never applies, and without the orientation the draw does apply; both
- * are reproduced as written rather than reconciled.
+ * (0x14802929, model→world). The look-at is measured without the orientation
+ * the draw applies, which is reproduced as written.
  *
  * There are no fighters here, so the target is the middle of the carpet — where
  * they stand, and where their midpoint sits whenever they are not moving. That
@@ -395,30 +406,24 @@ function worldPrologue(at) {
  * one flat plate under it at floor_stage_size_0. Neither moves with the world —
  * they are drawn after the prologue is popped.
  *
- * The 1.6 is the ROM's own bug, and the head is drawn here at the position the
- * ROM meant rather than the one it reached. Disassembling the routine settles
- * what it intended, because it computes the right answer and then discards it:
+ * The probe and the draw agree. The draw does not build its own scale: it
+ * loads inner slot 8 over the prologue it has just emitted, and slot 8 is what
+ * camera_init stored there (0x1FC7C) — the same prologue, scaled 1.6:
  *
  *   0x72214  scale 1.6, 1.6, 1.6          the probe matrix
  *   0x72244  cop 0x29, (-7.85, 7, 52)     transform that point to world
- *   0x7225C  read it back into g0,g1,g2   the head's true world position
+ *   0x7225C  read it back into g0,g1,g2   the head's world position
  *   0x72274  ... used for the two angles
- *   0x7237C  translate r4, r5, r6         drawn at the raw constants instead
+ *   0x7235C  cop 0x44, 8                  the arena frame, at 1.6
+ *   0x7237C  translate r4, r5, r6         the same constants, in that frame
  *
- * — no scale anywhere in the draw. The arena is at 1.6, so a point in its model
- * coordinates put into world space unscaled lands 1/1.6 of the way out, which
- * leaves the head about half its own width off the neck: the body's neck sits
- * 1.8 units from 1.6 x the drawn position, and 9.7 from the drawn position.
- * Invisible from the board's own camera, where the head overlaps the body
- * anyway; not from a free one.
- *
- * Following the probe rather than the draw also makes the aim consistent: the
- * angles were always computed for the scaled position, so putting the head
- * there is what makes it point at the arena instead of trailing it.
+ * So the head stands at 1.6x the constants, where the probe measured it, and is
+ * drawn at 1.6x its model's size, like the body it sits on. Leaving out the load
+ * leaves it a head at 1/1.6 the size, half its width off the neck.
  */
 const SPHYNX_HEAD = 322;
 const SPHYNX_AT = [-7.85, 7.0, 52.0];   /* 0xC0FB3333, 0x40E00000, 0x42500000 */
-/* The scale the routine's probe applies, and that its draw forgets. */
+/* The scale of the probe, and of inner slot 8 the draw loads. */
 const SPHYNX_SCALE = 1.6;
 const SPHYNX_CORNER = 1287;
 const SPHYNX_PLATE = 3332;
@@ -433,9 +438,9 @@ function sphynxOps(at) {
     const pitch = Math.atan2(h[1], Math.hypot(h[0], h[2])) * TO_ANGLE;
     return [
         ...worldPrologue(at),
-        /* Where the probe says it is, which is where it belongs — see above. */
-        ['t', [SPHYNX_AT[0] * SPHYNX_SCALE, SPHYNX_AT[1] * SPHYNX_SCALE,
-               -SPHYNX_AT[2] * SPHYNX_SCALE]],
+        /* Inner slot 8: the prologue again, at 1.6. */
+        ['s', [SPHYNX_SCALE, SPHYNX_SCALE, SPHYNX_SCALE]],
+        ['t', [SPHYNX_AT[0], SPHYNX_AT[1], -SPHYNX_AT[2]]],
         ['r', yaw * ANGLE_DEG],
         ['rx', pitch * ANGLE_DEG],
     ];
@@ -745,9 +750,11 @@ const DYNAMITE_BOMB = 1862;         /* 0x746 — the pair that swing */
 const DYNAMITE_GEAR = 2265;         /* 0x8D9 */
 const DYNAMITE_GEAR_YAW = 0xe000;
 const DYNAMITE_GEAR_STEP = 250;     /* 0xFF06 one way, 0xFA the other */
+/* dynamite_init starts the first gear's angle (+0x40) at 0 and the second's
+ * (+0x42) at 1 << 11, so their teeth are an eighth of a turn apart. */
 const DYNAMITE_GEARS = [
-    { at: [-10.64, 2.7, 24.11], step: -DYNAMITE_GEAR_STEP, tail: [] },
-    { at: [-13.56, 6.7, 22.45], step: DYNAMITE_GEAR_STEP, tail: [['s', [1.2, 1.2, 1.2]]] },
+    { at: [-10.64, 2.7, 24.11], step: -DYNAMITE_GEAR_STEP, start: 0, tail: [] },
+    { at: [-13.56, 6.7, 22.45], step: DYNAMITE_GEAR_STEP, start: 0x800, tail: [['s', [1.2, 1.2, 1.2]]] },
 ];
 /* The swinging pair: one rides the value up and the other rides 5.4 minus it
  * down, and each turns 16384 angle units per unit of height. */
@@ -814,7 +821,7 @@ function dynamiteDisp({ push, pushAnim }) {
             ['s', [1.6, 1.6, 1.6]],
             ['t', g.at],
             ['r', DYNAMITE_GEAR_YAW * ANGLE_DEG],
-            ['rz', -(g.step * clock(f)) * ANGLE_DEG],
+            ['rz', -(g.start + g.step * clock(f)) * ANGLE_DEG],
             ...g.tail,
         ]);
     }
@@ -878,14 +885,18 @@ function cloudAt(c, n) {
     return c.limit - c.step * ((n - first) % span);
 }
 
-function giantWingDisp({ push, fs }) {
+function giantWingDisp({ push, pushWorld, fs }) {
     push(GIANT_WING_FLOOR, [['s', [fs, fs, fs]]]);
-    push(GIANT_WING_BODY, []);
+    /* Everything after the floor is drawn from inner slot 8 (0x76E3C), which
+     * camera_init stores as the world's prologue at 1.6 — so these take the
+     * roll the floor does not, and the clouds' offsets are scaled too. */
+    const arena = ['s', [1.6, 1.6, 1.6]];
+    pushWorld(GIANT_WING_BODY, OBJECT_LAYER, [arena]);
     /* Both of these are offset by a field the continuation never touches, so
      * they sit where object_init left them. */
-    for (const m of GIANT_WING_HAZE) push(m, []);
+    for (const m of GIANT_WING_HAZE) pushWorld(m, OBJECT_LAYER, [arena]);
     for (const c of GIANT_WING_CLOUDS) {
-        push(c.model, (f) => [['t', [c.x, 0, -cloudAt(c, f)]]]);
+        pushWorld(c.model, OBJECT_LAYER, (f) => [arena, ['t', [c.x, 0, -cloudAt(c, f)]]]);
     }
 }
 
@@ -1779,9 +1790,8 @@ export function buildStageDisplayList(stage, frames = null) {
         }
     } else if (slot === FLYING_CARPET_SLOT) {
         /* loc_25300: corners sit at fixed coordinates rather than on quarter
-         * turns, are scaled uniformly, and each carries a flame. The game also
-         * yaws them to face the camera; with a free camera there is no such
-         * angle to copy, so they are left unrotated. */
+         * turns, are yawed to the camera's heading (0x25388, fa_camera+0x26),
+         * scaled uniformly, and each carries a flame. */
         const k = STAGE_X / CARPET_CORNER_DIV;
         CARPET_CORNERS.forEach(([cx, cz], i) => {
             /* The board puts these at (-8,+8), (-8,-8), (+8,-8), (+8,+8) in its
@@ -1789,9 +1799,12 @@ export function buildStageDisplayList(stage, frames = null) {
              * translate here. The four are symmetric, so getting it wrong left
              * each post standing in a real post's place and only moved which
              * flame phase burned on which corner. */
-            const at = [['t', [cx * k, 0, -cz * k]], ['s', [1.6, 1.6, 1.6]]];
+            const at = [['t', [cx * k, 0, -cz * k]], CAMERA_YAW, ['s', [1.6, 1.6, 1.6]]];
             push(stage.cagePole, 'poles', at);
-            const lift = [...at, ['t', [0, CARPET_FLAME_Y, 0]]];
+            /* The flame goes up 4.1 in the post's scaled frame, then faces the
+             * camera (0x253D4) — which also drops the post's 1.6, so the flame
+             * is drawn at its own size, or 1.25 of it on a pulse. */
+            const lift = [...at, ['t', [0, CARPET_FLAME_Y, 0]], BILLBOARD];
             const big = [...lift, ['s', CARPET_FLAME_FLICKER]];
             pushAnim('carpetFlame', CARPET_FLAME_SHIFT, CARPET_FLAME_PHASE * i, 'poles',
                 (f) => (f & 1 ? lift : big));
@@ -1813,9 +1826,9 @@ export function buildStageDisplayList(stage, frames = null) {
 
     /* ---- object_control: the stage's own objects, drawn after the arena ----
      * An object is drawn in the arena's frame, which is what keeps the Flying
-     * Carpet's corner pieces riding round with it and banks Giant Wing's clouds
-     * with the plane. canyon_env_disp is the one that asks for the world's
-     * instead, by loading the matrix camera_init saved there — pushWorld. */
+     * Carpet's corner pieces riding round with it. canyon_env_disp and
+     * giant_wing_disp ask for the world's instead, by loading a matrix
+     * camera_init saved there — pushWorld. */
     for (const object of stage.objects ?? []) {
         const routine = OBJECT_ROUTINES.get(object.disp);
         if (!routine) continue;
@@ -1862,6 +1875,7 @@ export function buildStageDisplayList(stage, frames = null) {
 export function describeOps(ops) {
     return ops.map(([kind, v]) => {
         if (kind === 'b') return 'billboard';
+        if (kind === 'cy') return 'camera yaw';
         if (kind === 's') return `×${v.map((n) => n.toFixed(2)).join('/')}`;
         if (kind === 'r') return `${Math.round(v)}°`;
         if (kind === 'rx') return `${Math.round(v)}°x`;
