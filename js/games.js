@@ -1415,6 +1415,33 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  * arithmetic, the record layout, the sheet layout — are the board's and are set
  * here once.
  */
+/*
+ * colorxlat's four constants, which are two sets rather than one.
+ *
+ * The routine that computes the table (0xA74 in every build) tests the test
+ * menu's CABINET setting — backup RAM 0x1D0001A, 0 DELUXE, 1 TWIN, 2 UPLIGHT,
+ * copied to work RAM 0x5FE5E2 — and takes the first set for DELUXE and the
+ * second for the other two. The Special Edition tests bit 0 of its own copy
+ * at 0x5FE602 instead; the 1993 build tests 0x53E5D0 and has a second set of
+ * its own. The twin set starts every row brighter and climbs it more gently:
+ * a monitor calibration, and it moves every colour on screen, the sky's among
+ * them, since the tile chip's palette goes through this table too.
+ *
+ * `DAYTONA_CABINET` picks which the explorer shows. It is the twin set because
+ * MAME's backup RAM holds TWIN, and a MAME capture is what the explorer is
+ * graded against: dumped from the attract race with the Rev A ROMs, the whole
+ * of colorxlat, all 0xC000 bytes, is the twin set's arithmetic exactly.
+ */
+const DAYTONA_RAMP = {
+    deluxe: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    twin: { step: 10, span: 0x280, bias: 0x1920, flat: 0xc9 },
+};
+const DAYTONA_RAMP_93 = {
+    deluxe: DAYTONA_RAMP.deluxe,
+    twin: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8 },
+};
+const DAYTONA_CABINET = 'twin';
+
 function daytonaBuild(spec) {
     return {
         id: spec.id,
@@ -1491,7 +1518,8 @@ function daytonaBuild(spec) {
         /*
          * Luma is a straight copy out of the program ROM: a band count and that
          * many 128-byte bands. colorxlat is not copied from anywhere — the
-         * routine computes all 32 rows from these four constants:
+         * routine computes all 32 rows from four constants, which of two sets
+         * depending on the cabinet (DAYTONA_RAMP):
          *
          *   v = row * i * step ; if (v) v += bias ; v >>= 6 ; if (v >= 0x100) v = -1
          *   tail = (step * row) ? (flat + step * row) >> 1 : 0
@@ -1507,7 +1535,7 @@ function daytonaBuild(spec) {
          */
         colors: {
             luma: { ...spec.luma },
-            ramp: spec.ramp,
+            ramp: spec.ramp[DAYTONA_CABINET],
             solid: true,
         },
         /*
@@ -1706,7 +1734,7 @@ const daytona93 = daytonaBuild({
     paletteOffset: 0x8955a0, paletteCount: 1007,
     bankTable: 0x14bc, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'maincpu', count: 0x2fd34, data: 0x2fd38 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP_93,
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
@@ -1723,7 +1751,7 @@ const daytona = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1740,7 +1768,7 @@ const daytonase = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1757,7 +1785,7 @@ const daytonas = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1774,7 +1802,7 @@ const daytonat = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1791,7 +1819,7 @@ const daytonata = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1808,7 +1836,7 @@ const daytonam = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1825,7 +1853,7 @@ const daytonagtx = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    ramp: DAYTONA_RAMP,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },

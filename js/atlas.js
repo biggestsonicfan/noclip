@@ -110,3 +110,19 @@ export function palette555ToRGB(cxlat, bgr555) {
         return Math.max(raw - 64, 0) * (255 / 191) / 255;
     });
 }
+
+/* The same, as the bytes MAME's pen gets: its gamma table is u8, so the value
+ * is floored rather than rounded. For an image built pixel by pixel out of
+ * palette colours — the scroll layer's sky — where a capture can be compared
+ * with it exactly.
+ *
+ * @returns {[number, number, number]} components in 0..255
+ */
+export function palette555ToBytes(cxlat, bgr555) {
+    const c5 = [bgr555 & 0x1f, (bgr555 >> 5) & 0x1f, (bgr555 >> 10) & 0x1f];
+    if (!cxlat || cxlat.length < 0xc000) return c5.map((v) => Math.round(v * 255 / 31));
+    return c5.map((v, ch) => {
+        const raw = cxlat[ch * 0x4000 + (((v << 8) + 0x40) * 2)];
+        return Math.floor(Math.max(raw - 64, 0) * 255 / 191);
+    });
+}
