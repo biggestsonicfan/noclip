@@ -128,8 +128,20 @@ const sfight = {
     },
     /* How a polygon's board depth is carried into the depth buffer — the bound
      * on the far-corner recede, and the least the near plane may be. The note on
-     * ZSORT_RECEDE in js/viewer.js is where these numbers come from. */
-    depth: { recede: 12, nearMin: 0.02 },
+     * ZSORT_RECEDE in js/viewer.js is where these numbers come from.
+     *
+     * `layers` as well, because the recede alone cannot part a decal from a
+     * face it lies on when that face is too deep to recede or seen square on.
+     * Flying Carpet's floor, model 580, carries the pyramids' shadows as
+     * checker polygons in the floor's own plane, and the floor's faces are a
+     * hundred units deep, so they keep their depth and the shadows came out in
+     * shards. Casino Night's slot machine, model 188, has its two JACKPOT
+     * panels 0.02 and 0.03 in front of the faces they are painted on, which is
+     * under the depth buffer's resolution at the stage's own framing, and the
+     * cabinet's orange showed through them. js/layers.js ranks both the way
+     * the board's sort does. Faces it ranks do not recede; everything else
+     * still does. */
+    depth: { recede: 12, nearMin: 0.02, layers: true },
     scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
