@@ -1369,8 +1369,10 @@ const hotd = {
  * still a model record gives the base and the count. Every one of the program
  * ROM's own pointers into that range then has to land on an entry, and does.
  *
- * What is missing in every build is the course: how a track is laid out and
- * what is placed along it has not been read, so there are no stages.
+ * The courses are `courses` below, a 16x16 grid of block models; what stands
+ * along them is `objects`, read in js/daytona.js. Neither was found by the
+ * first pass over this game, and this paragraph used to say there were no
+ * stages.
  */
 
 /* The chips the builds share, which is most of them. Daytona's 1993 version is
@@ -1459,9 +1461,9 @@ function daytonaBuild(spec) {
          * once for the course's own, so the two banks' mip halves come out
          * complementary.
          *
-         * Which bank a given model is drawn against is not known: the course
-         * data has not been read, and coverage cannot answer it for raw banks
-         * because every bank fills the whole sheet. So the panel's picker
+         * Coverage cannot say which bank a model is drawn against, because
+         * every bank fills the whole sheet. A model a course draws takes that
+         * course's (see `stageTable` below); for the rest the panel's picker
          * decides, and `defaultSet` is what it opens on.
          */
         texture: {
@@ -1524,6 +1526,8 @@ function daytonaBuild(spec) {
             courses: { ...spec.courses, count: 4, blocks: 256 },
             flat: true,
         },
+        /* What stands along the courses — see DAYTONA_OBJECTS_A. */
+        objects: spec.objects ?? null,
         /*
          * The same depth arrangement The House of the Dead wants, and for the
          * same reason: this board has no depth buffer, and a course is large
@@ -1544,6 +1548,57 @@ function daytonaBuild(spec) {
         features: { stages: true, characters: false, motions: false, bodies: false },
     };
 }
+
+/*
+ * The trackside objects, which js/daytona.js reads and draws: where each
+ * course's table of object records is, what each routine a record starts in
+ * draws, and the tables those routines read. Every number here is an operand of
+ * the instruction in the routine that uses it, and stf-tools'
+ * `daytona-tables.mjs` finds them that way and holds them against these with
+ * `--check`. The names in the comments are the board's own, out of the symbol
+ * table Sega Racing Classic's d1a.exe carries.
+ *
+ * Revision A and the five sets built on it share one layout; the Special
+ * Edition moved its tables and added a second crowd. The 1993 version
+ * writes these routines differently — a checkpoint is a routine of its own
+ * rather than an id into a table — and has not been read, so it has none.
+ */
+const DAYTONA_KINDS_A = {
+    0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+    0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+    0x20948: 'crowd', 0x20a54: 'world', 0x20b08: 'rank', 0x20d34: 'windmill',
+    0x20e54: 'jeffry', 0x210a0: 'checkpoint', 0x211fc: 'flags', 0x212a4: 'light',
+    0x212e4: 'none', 0x21618: 'runs', 0x21664: 'pylon', 0x21698: 'pylon',
+    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'window', 0x21ef8: 'window',
+    0x22018: 'world', 0x22080: 'none', 0x22314: 'birds', 0x224f8: 'bigBird',
+    0x22608: 'horse', 0x22a20: 'none',
+};
+const DAYTONA_OBJECTS_A = {
+    at: 0x33bfc, kinds: DAYTONA_KINDS_A,
+    cycles: 0x236b40, checkpoints: 0x236d60, rankBoard: 0x23607c,
+    windmill: { sails: 0x2361b0, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
+    crowds: [{ list: 0x236e38, count: 12 }],
+    pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+};
+const DAYTONA_OBJECTS_SE = {
+    at: 0x348c8,
+    kinds: {
+        0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+        0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+        0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
+        0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
+        0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
+        0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+        0x220e4: 'world', 0x2214c: 'none', 0x223e0: 'birds', 0x225c4: 'bigBird',
+        0x226d4: 'horse', 0x22aec: 'none',
+    },
+    cycles: 0x23780c, checkpoints: 0x237a2c, rankBoard: 0x236d48,
+    windmill: { sails: 0x236e7c, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x234848, horses: 0x2347c8, jeffry: 0x28478a0,
+    crowds: [{ list: 0x237c44, count: 9 }, { list: 0x237b24, count: 12 }],
+    pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+};
 
 const daytona93 = daytonaBuild({
     id: 'daytona93',
@@ -1577,6 +1632,7 @@ const daytona = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonase = daytonaBuild({
@@ -1592,6 +1648,7 @@ const daytonase = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_SE,
 });
 
 const daytonas = daytonaBuild({
@@ -1607,6 +1664,7 @@ const daytonas = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonat = daytonaBuild({
@@ -1622,6 +1680,7 @@ const daytonat = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonata = daytonaBuild({
@@ -1637,6 +1696,7 @@ const daytonata = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonam = daytonaBuild({
@@ -1652,6 +1712,7 @@ const daytonam = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonagtx = daytonaBuild({
@@ -1667,6 +1728,7 @@ const daytonagtx = daytonaBuild({
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
+    objects: DAYTONA_OBJECTS_A,
 });
 
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,

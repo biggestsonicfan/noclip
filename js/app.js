@@ -638,7 +638,7 @@ async function loadTexramFiles(files) {
  * there are none to apply here.
  */
 function stageDisplayList(stage) {
-    if (stage.placements) return buildPlacementDisplayList(stage);
+    if (stage.placements) return buildPlacementDisplayList(stage, getModel);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
