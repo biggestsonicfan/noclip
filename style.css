@@ -222,6 +222,8 @@ main { position: relative; flex: 1; min-width: 0; }
     padding: 7px 11px; border-radius: 6px; cursor: pointer;
     text-decoration: none; white-space: nowrap;
 }
+#tools [hidden] { display: none; }
+#tools #tool-shot { padding: 6px 9px; }
 #tools button:hover, #tools a:hover { color: var(--text); border-color: var(--accent-dim); }
 #tools button.done { color: var(--accent); border-color: var(--accent-dim); }
 #tools svg { display: block; }

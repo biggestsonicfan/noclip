@@ -3608,6 +3608,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    $('#tool-shot').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
     loadGameContent();
     wireOptions();

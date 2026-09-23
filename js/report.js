@@ -238,10 +238,56 @@ export async function fileIssue(state, button) {
     return { copied, body };
 }
 
-/** Wire the two buttons in the corner of the view. */
+/* What the file is called: the build and what was on screen, then the time, so
+ * a folder of them sorts by game and a pair taken a second apart do not clash. */
+function screenshotName(state) {
+    const parts = ['noclip', state?.rom?.game?.id];
+    if (state?.tab === 'stage') parts.push(`stage${state.stageIndex}`);
+    else if (state?.tab === 'model') parts.push(`model${state.modelIndex}`);
+    else if (state?.tab === 'anim') parts.push(`char${state.charIndex}`, state.motion?.id);
+    const t = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    parts.push(`${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}`
+        + `-${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}`);
+    return `${parts.filter((p) => p !== undefined && p !== null && p !== '').join('-')}.png`;
+}
+
+/**
+ * Save the view as a PNG, at the canvas's own resolution.
+ *
+ * The renderer is made without preserveDrawingBuffer, so once a frame has been
+ * handed to the compositor the buffer reads back blank. Drawing a frame here and
+ * reading it in the same task gets the picture without paying for a preserved
+ * buffer every frame: toBlob copies the bitmap when it is called and only the
+ * encode happens later.
+ */
+export function saveScreenshot(state, button) {
+    const viewer = state?.viewer;
+    if (!viewer) return;
+    viewer.render();
+    const name = screenshotName(state);
+    viewer.canvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        if (button) {
+            button.classList.add('done');
+            setTimeout(() => button.classList.remove('done'), 1500);
+        }
+    }, 'image/png');
+}
+
+/** Wire the buttons in the corner of the view. */
 export function wireReportButtons(state) {
     const link = document.getElementById('tool-repo');
     if (link) link.href = REPO;
     const button = document.getElementById('tool-report');
     if (button) button.addEventListener('click', () => fileIssue(state, button));
+    const shot = document.getElementById('tool-shot');
+    if (shot) shot.addEventListener('click', () => saveScreenshot(state, shot));
 }

@@ -454,11 +454,17 @@ checkout. The reasoning, and the trap of letting a port grade itself, are in
 
 ## Reporting something wrong
 
-Two buttons sit in the top right of the window, over everything: **GitHub**, and
-**Copy diagnostics and file an issue**.
+Three buttons sit in the top right of the window, over everything: **Copy
+diagnostics and file an issue**, a camera, and **GitHub**.
 
-The second one exists because of how this thing runs. Everything happens in your
-browser, against your ROM set, on your GPU — so from the other end a report that
+The camera saves what the view is showing as a PNG, at the canvas's own
+resolution and without the panel or the hud over it, named after the build, what
+was on screen and the time. It appears once a ROM set has loaded. It is there
+for anyone who just wants a picture, and for dragging into an issue — the
+template asks for one.
+
+The report button exists because of how this thing runs. Everything happens in
+your browser, against your ROM set, on your GPU — so from the other end a report that
 says "the road flickers" cannot be acted on. The button gathers what it would
 take to sit down and reproduce it: which of the thirteen builds is loaded and
 which zips it was assembled out of, every complaint `loadRomSet` made about
