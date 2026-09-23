@@ -82,6 +82,108 @@ export function motionSkeletonType(rom, id) {
     return dv.getUint8(rec + 0x0c);
 }
 
+/*
+ * The motion's script: what the game does on which frame of it.
+ *
+ * The 13 bytes above are only the record's head. `set_mot_dat` walks on from
+ * there through a setup byte-code — its dispatch at `0x1B558`, 25 handlers at
+ * `0x1B568` — each handler moving `r11` on by its own length. Op 0 ends it with
+ * no script to play; op 8 ends it and the play script starts on the next byte,
+ * which is where `P1+0x82C` is left pointing.
+ *
+ * `play_motion` then walks that pointer every frame from `0x1C088`. A command is
+ * an opcode byte, then the frame it fires on as a u16, then its own operands;
+ * it runs once `p1_frame` (`P1+0x1AA`) has reached its frame, and the walk stops
+ * at the first one that has not. The 44 handlers are at `_uk_player_actions`
+ * (`0x1D1AC`), and a command that is passed over rather than run skips by
+ * `byte_1D01F[op]` — which is also, handler by handler, exactly what each one
+ * adds to `g4`, so that one table is enough to walk the whole script. An opcode
+ * whose low seven bits are zero ends it.
+ */
+const SETUP_LENGTH = {
+    0x01: 3, 0x02: 7, 0x03: 14, 0x04: 18, 0x05: 14, 0x06: 6, 0x07: 3, 0x09: 15,
+    0x0a: 6, 0x0b: 11, 0x0c: 4, 0x0d: 3, 0x0e: 15, 0x0f: 3, 0x11: 7, 0x12: 7,
+    0x13: 7, 0x14: 3, 0x15: 6, 0x16: 5, 0x17: 3, 0x18: 13,
+};
+/* Op 0x10 is a count byte and that many u16s: `lda (r4)[r3*2], r11`. */
+const SETUP_LIST = 0x10;
+const SETUP_END = 0x00, SETUP_PLAY = 0x08;
+const PLAY_LENGTHS = 0x0001d01f;
+const PLAY_OPS = 0x2c;
+const MOT_RECORD_HEAD = 0x0d;
+
+/**
+ * The play script of one motion, in order.
+ * @returns {Array<{op:number, frame:number, at:number}>} `at` is the command's
+ *   address in the program ROM, where its operands start three bytes on. Empty
+ *   when the motion has none or it does not walk.
+ */
+export function readMotionScript(rom, id) {
+    const m = rom.maincpu, dv = rom.mainCpuView;
+    if (id < 0 || id >= MOTION_COUNT) return [];
+    const rec = dv.getUint32(MOT_LIST_ADDR + id * 4, true);
+    if (!rec || rec + MOT_RECORD_HEAD >= m.length) return [];
+
+    let p = rec + MOT_RECORD_HEAD;
+    for (;;) {
+        if (p >= m.length) return [];
+        const op = m[p];
+        if (op === SETUP_END) return [];
+        if (op === SETUP_PLAY) { p++; break; }
+        if (op === SETUP_LIST) { p += 2 + m[p + 1] * 2; continue; }
+        if (!SETUP_LENGTH[op]) return [];
+        p += SETUP_LENGTH[op];
+    }
+
+    const out = [];
+    while (p + 3 <= m.length) {
+        const op = m[p] & 0x7f;
+        if (op === 0 || op >= PLAY_OPS) break;
+        out.push({ op, frame: dv.getUint16(p + 1, true), at: p });
+        p += m[PLAY_LENGTHS + op];
+    }
+    return out;
+}
+
+/**
+ * The commands of a script that have run by `frame`, in order. The walk stops
+ * at the first command whose frame has not come, as `play_motion` does, so a
+ * command out of frame order waits for the one ahead of it.
+ */
+export function commandsBy(script, frame) {
+    let n = 0;
+    while (n < script.length && script[n].frame <= frame) n++;
+    return script.slice(0, n);
+}
+
+/* Op 0x10 hands `[slot][entry]` to `load_action_from_list` (`0x330D0`), which
+ * indexes `player_action_list` by the slot byte — 1 the body, 2 the head, 5 and
+ * 8 the hands — and the handler stores `table[char][entry]` into `0x40(g7)` for
+ * that slot, the array `rob_disp` draws each slot from. */
+const OP_PART_CHANGE = 0x10;
+/* Ops 0x27 and 0x28 set and clear bit 16 of `P1+0x7F0`, the first also storing
+ * its signed byte at `P1+0x7F4`; `set_mot_dat` clears the bit when a motion
+ * starts. */
+const OP_PROPELLER_ON = 0x27, OP_PROPELLER_OFF = 0x28;
+
+/**
+ * What the script has switched by `frame`.
+ * @returns {{propeller:number, parts:Object<number,number>}} `propeller` is 0,
+ *   or the byte `0x7F4` holds while it is on; `parts` maps a slot to the entry
+ *   the script last installed on it, for the slots it has touched this motion.
+ */
+export function scriptStateAt(rom, script, frame) {
+    const m = rom.maincpu;
+    let propeller = 0;
+    const parts = {};
+    for (const c of commandsBy(script, frame)) {
+        if (c.op === OP_PART_CHANGE) parts[m[c.at + 3]] = m[c.at + 4];
+        else if (c.op === OP_PROPELLER_ON) propeller = (m[c.at + 3] << 24) >> 24;
+        else if (c.op === OP_PROPELLER_OFF) propeller = 0;
+    }
+    return { propeller, parts };
+}
+
 export const OBJECT_COUNT = 20;      /* 12 angle objects + 8 float objects */
 export const ANGLE_OBJECTS = 12;
 export const FLOAT_OBJECTS = 8;
