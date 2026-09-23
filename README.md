@@ -7,7 +7,9 @@ which game it is from the program ROM inside.
 
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
 views below are its. *Fighting Vipers* has stages and models — see
-[Fighting Vipers](#fighting-vipers).
+[Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
+the original Model 2 board, has models in all eight of the builds it shipped as
+— see [Daytona USA](#daytona-usa).
 
 Three views:
 
@@ -99,6 +101,140 @@ What else is missing: the character rigs and the motion tables, so there is no
 Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
 its own record until someone identifies it.
 
+## Daytona USA
+
+Drop a Daytona set and the explorer loads it with the Models tab. All eight of
+MAME's builds are recognised — the 1994 parent and its seven clones — and a
+merged archive carrying the lot is read as all eight at once: the panel grows a
+**Build** picker and swapping between them reassembles the set without the zips
+being handed over again.
+
+Each build opens on the Stages tab with its four course grids, and the Models
+tab has the rest. There are two sets of models behind those eight names, though,
+and the profiles say so rather than implying otherwise. The 1993 Deluxe version (`daytona93`) has
+its own data, its own fourth polygon pair and its own second texture pair: 2822
+table entries, 2817 of them with geometry. Every build after it — Revision A,
+the Special Edition, the Saturn-advert version and the four Kyle Hodgetts hacks
+— carries a **byte-identical** model table and palette: 3190 entries, 3163 with
+geometry. They differ in their program ROM and half a megabyte of data, not in
+what they draw. What comes out either way is the grid of stock cars in their
+liveries, the three courses' track sections, and the scenery along them.
+
+It is the only set here that is not on a 2A or 2B board. This is the original
+Model 2: a Fujitsu TGP beside the i960 where the later titles have a SHARC,
+texture RAM at `0x12000000` rather than `0x11000000`, and AM2's library two
+years younger than Sonic The Fighters'. Not one address carried across, and
+neither did the shape of some of the tables. What did carry across is the board
+— the polygon format, the texture sheets, the 10-bit colorbase and the
+colorxlat/luma pair are the geometry engine's and the rasteriser's — so the
+decoders are used unchanged and only the numbers in
+[`js/games.js`](js/games.js) are this game's own.
+
+There was no symbol table for this one and no decompilation to read, so every
+number was taken off the program ROM's own instructions — and, with eight of
+them to read, not by hand. stf-tools' `daytona-tables.mjs` finds each routine by
+the instruction that names its table and prints the profile block; `--check`
+holds what it finds against what `js/games.js` carries, and all eight pass. It
+was written against the 1993 build, whose numbers had already been read by hand,
+and reproduced every one of them before it was pointed at the other seven.
+
+Three signatures fix the rest:
+
+- `0x1134` sets `g10 = 0x00800000` and `g11 = 0x00880000`, which is what makes a
+  store to `0x60(g10)` readable as geometry-engine function 6 and a store to
+  `0x10(g11)` as a TGP maths call. Every upload below was found by its function
+  number after that.
+- `0x1786c` is the draw routine. It reads four words off a model record — the
+  object address, the texture-point address, the texture-header address and a
+  polygon count — and stops on a zero, so a record is 20 bytes: those four and
+  the terminator. The three addresses go to the engine as tpa, tha, oba, which
+  is the same three the 1995 games keep in a different order.
+- `0x5418` is the palette upload, and it states its own source, destination and
+  length: 1007 colours from data `0x8955A0` to palette RAM at colorbase 0.
+
+The model table is not indexed by the program — it names each entry by address.
+1959 words of the program ROM point into it, every one of them a multiple of 20
+from `0x887928`, the lowest at entry 3 and the highest at entry 2822, which is
+where the palette starts. That fixes the base, the stride and the count at once,
+and the palette confirms it from the other end: the highest colorbase any face
+in the game names is 1006, which is the last colour the upload writes.
+
+The sheets are raw here rather than compressed. The routine at `0x1388` copies
+0x60000 halfwords of a megabyte bank straight into one sheet and then deals the
+last 0x20000 out between the two, a run at a time, as nine mip levels; it is
+called twice a scene, once for the bank every course shares and once for the
+course's own, so the two banks' mip halves come out complementary. Which of the
+three courses a given model is drawn against is *not* known — the course data
+has not been read, and tile coverage cannot answer it when every bank fills the
+whole sheet — so the panel's picker decides and it opens on set 0.
+
+colorxlat is not uploaded at all: the routine at `0xA74` computes all 32 rows
+from four constants, and [`js/colors.js`](js/colors.js) is a transcription of
+it. Luma RAM is 66 bands copied out of the program ROM. The material table is
+uploaded whole at boot by `0x4FEC`, out of two parallel arrays rather than the
+interleaved one the other games use; the light is the vector in the view record
+the main view uses, which on the board is a headlight in the engine's own frame
+and is applied here as a world light so a model keeps one lit side as the camera
+moves.
+
+### The courses
+
+The courses are a table after all, and a very plain one. This was written up
+once as *not* being one — the routine that hands a model to the geometry engine
+has 75 call sites, 28 of them naming a model outright, which looked like a game
+that draws its scenery in code. It was the wrong conclusion drawn from the right
+evidence: those call sites are the cars and the trackside objects, and the
+course is somewhere else entirely. What found it was a symbol table — the
+board's own names, 243 of them, in an IDA database of the Saturn-advert build —
+and three of those names are the whole answer:
+
+- `get_m_block` cuts the world into a 16x16 grid of 128-unit blocks and indexes
+  it `(z << 4) | x` off the camera position;
+- `set_area_block` turns that into the list of blocks in view;
+- `dsp_area_block` draws one model per block — `ld (g0)[r9*4], g0` then
+  `set_obj_cont` — **with no matrix of any kind**.
+
+So a block's geometry is already in world space, as Fighting Vipers' arenas are,
+and a course is simply its 256 models drawn where they lie. The grid is a
+visibility index and nothing else, which is why the viewer does not reproduce
+it: it draws all 256.
+
+`set_course_parms` picks the table with `ld <array>[sel_course*4]`, and the
+array names four of them. Three are the courses the game lets you pick — the
+Three-Seven Speedway oval at 10,290 triangles, Dinosaur Canyon at 46,585 and
+Seaside Street Galaxy at 25,163 — and the fourth is a flat square of coloured
+lane stripes with sample objects scattered over it, a test track. The
+Saturn-advert build points its fourth slot back at the third, which is the
+clearest statement that the fourth is not a course.
+
+The same `sel_course` indexes the texture bank in `send_tex_map`, so a course's
+texture set is its own number. That is what finally answers which sheets a
+model is drawn against: every one of the 1024 block models now takes its
+course's, and only the models no course claims still need the picker.
+
+What is still missing is the track *surface* as the game drives on it — the
+collision and height data is not in the polygon ROM but in the 4MB coprocessor
+data ROM, four megabytes that open on a 4x4 identity matrix and are a third
+plausible floats. The viewer does not need it to draw the course, and does not
+read it.
+
+Nor are there animations. This game has no rig and no motion tables — nothing
+like the `BO_`/`MO_` arrays The House of the Dead carries — so there is nothing
+of that kind to play. The cars do not move.
+
+And one thing is missing from the checking. Sonic The Fighters' texture and
+colour ports are held against a capture of the real board; this one is not,
+because the game cannot be made to reach its own uploads here. It boots in MAME
+and then spins at `0x228240` on `ldob 0x1C00040` — the dual-port RAM the Model 1
+I/O board answers on, and that board's MCU ROM is not in the sets to hand, so
+texture RAM and colorxlat stay empty however long it runs. What the board did
+confirm is smaller but real: the sixteen-entry palette init the boot sequence
+copies from program ROM `0xCCC` lands byte for byte at palram 0 *and* at palram
+`0x2000`, which is the face-palette base this profile uploads to. The rest rests
+on the instructions the addresses were read out of, on the 2817 meshes that
+decode, and on the highest colorbase in the game being 1006 against a palette
+upload of 1007.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -125,6 +261,15 @@ Championship (`schamp`), so a combined set is the least fuss:
 - **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
+
+Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
+all seven clones and loads as any of them. Split sets work too: the 1993 version
+wants `daytona93.zip` for the ten chips it has of its own and `daytona.zip` for
+the rest, which MAME keeps in the parent. Member names are matched by checksum
+where the label does not match, so a set spelling those chips the way an older
+MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for `.ic23` — loads just the
+same.
+
 So is `hotdp.zip` for the House of the Dead prototype: its two playable stages,
 assembled from the game's own placement tables and split by the texture set each
 part is drawn under, every model by its development name, with the textures,
@@ -183,6 +328,29 @@ without being the game's bytes. stf-tools' `extract-texram.mjs` rebuilds the
 binaries from your own ROM set when they are wanted, and writes them outside the
 checkout. The reasoning, and the trap of letting a port grade itself, are in
 [TECHNICAL.md](TECHNICAL.md#checking-against-the-board-without-carrying-its-data).
+
+## Reporting something wrong
+
+Two buttons sit in the top right of the window, over everything: **GitHub**, and
+**Copy diagnostics and file an issue**.
+
+The second one exists because of how this thing runs. Everything happens in your
+browser, against your ROM set, on your GPU — so from the other end a report that
+says "the road flickers" cannot be acted on. The button gathers what it would
+take to sit down and reproduce it: which of the thirteen builds is loaded and
+which zips it was assembled out of, every complaint `loadRomSet` made about
+them, the tab and the stage or model on screen, the texture set, the shading
+switches, where the camera is, the renderer string, and the last forty lines the
+console saw. It puts that on your clipboard and opens a new issue with the
+template already in it.
+
+It works before anything has loaded, too, which is the report worth most: a set
+that will not open carries the names of the zips you dropped and the error the
+loader gave. Nothing is read off the ROM but the profile it matched and the
+names of the files, and nothing is sent anywhere — the text goes to your
+clipboard, for you to read before you paste it.
+
+The one thing worth adding by hand is a screenshot. Drag it into the issue.
 
 ## Deploying
 

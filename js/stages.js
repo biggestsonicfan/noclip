@@ -185,18 +185,29 @@ export function stageLight(bright, vecterX, vecterY) {
 export function gameLighting(rom) {
     const L = rom.game.lighting;
     if (!L) return null;
-    const cv = rom.mainCpuView;
+    /* The table is in the program ROM for every game here but Daytona USA after
+     * 1993, which moved it into the data ROM along with its luma bands. */
+    const src = L.materials.source ?? 'maincpu';
+    const cv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+    const len = src === 'maincpu' ? rom.maincpu.length : rom.mainData.length;
     const materials = [];
+    /* One 8-byte record a slot where the parameter word and the distance
+     * coefficient are interleaved, 4 where the upload reads them out of two
+     * arrays side by side — which is what Daytona USA's does. */
+    const stride = L.materials.stride ?? 8;
     for (let i = 0; i < MATERIAL_COUNT; i++) {
-        const at = L.materials.at + i * 8;
-        if (i >= L.materials.count || at + 4 > rom.maincpu.length) {
+        const at = L.materials.at + i * stride;
+        if (i >= L.materials.count || at + 4 > len) {
             materials.push({ diffuse: 0, ambient: 0 });
             continue;
         }
         const w = cv.getUint32(at, true);
         materials.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
     }
-    return { light: stageLight(1, L.vecter[0], L.vecter[1]), materials };
+    /* A game whose light is a vector in its own ROM rather than the two angles
+     * a stage record carries gives it outright. */
+    const light = L.light ?? stageLight(1, L.vecter[0], L.vecter[1]);
+    return { light, materials };
 }
 
 /*
@@ -368,4 +379,101 @@ function readMaterials(rom, slot) {
         out.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
     }
     return out;
+}
+
+/* The data region as the i960 sees it, which is what every pointer in a
+ * course table is expressed in. */
+const MAIN_DATA_BASE = 0x02000000;
+
+/* ---- Daytona USA's courses ------------------------------------------------ */
+
+/* The three the game lets you pick, in the order its own course table names
+ * them. They are identified by what comes out rather than by a string in the
+ * ROM, which carries none: the first is the small banked oval, the second the
+ * largest by far and the only one with three hundred units of height in it, and
+ * the third is the one whose blocks are the city street with the shopfronts and
+ * the pedestrian crossing. The fourth table the array names is not one of them
+ * and is left to be shown by number. */
+const COURSE_NAMES = ['Three-Seven Speedway', 'Dinosaur Canyon', 'Seaside Street Galaxy'];
+
+/**
+ * Daytona USA's courses, which are a grid rather than a placement list.
+ *
+ * `get_m_block` cuts the world into a 16x16 grid of 128-unit blocks and indexes
+ * it `(z << 4) | x` off the camera; `set_area_block` turns that into the list of
+ * blocks in view, and `dsp_area_block` draws one model per block —
+ *
+ *     ld   (g0)[r9*4], g0      ; the block's model record
+ *     call set_obj_cont
+ *
+ * — with no matrix of any kind. So a block's geometry is already in world space,
+ * as Fighting Vipers' arenas are, and a course is simply its 256 models drawn
+ * where they lie. The grid is a visibility index and nothing more, which is why
+ * nothing here has to reproduce it.
+ *
+ * `set_course_parms` picks the table with `ld <array>[sel_course*4]`, and the
+ * same `sel_course` indexes the texture bank in `send_tex_map` — so a course's
+ * texture set is its own number, which is what finally answers which sheets a
+ * course's models are drawn against.
+ *
+ * The array names four tables. The Saturn-advert build points its fourth slot
+ * back at the third, so that one is repeated rather than a course; the other
+ * builds have four distinct ones, and the fourth is a flat square the game's
+ * own course select does not reach.
+ */
+export function readCourseStages(rom) {
+    const C = rom.game.stageTable.courses;
+    const av = C.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+    const dv = rom.mainDataView;
+    const t = rom.game.modelTable;
+    const base = MAIN_DATA_BASE + t.offset;
+    const lit = gameLighting(rom);
+    const stages = [];
+    const seen = new Set();
+    for (let c = 0; c < C.count; c++) {
+        if (C.at + c * 4 + 4 > (C.source === 'maincpu' ? rom.maincpu.length : rom.mainData.length)) break;
+        const ptr = av.getUint32(C.at + c * 4, true);
+        const off = ptr - MAIN_DATA_BASE;
+        if (off < 0 || off + C.blocks * 4 > rom.mainData.length) continue;
+        if (seen.has(ptr)) continue;
+        seen.add(ptr);
+        const draws = [];
+        for (let b = 0; b < C.blocks; b++) {
+            const idx = (dv.getUint32(off + b * 4, true) - base) / t.stride;
+            if (!Number.isInteger(idx) || idx < 0 || idx >= t.count) continue;
+            /* Every block is drawn where it is, so the placement is the origin
+             * and the display list's translate comes out as the identity. */
+            draws.push({ model: idx, pos: [0, 0, 0], set: c });
+        }
+        stages.push({
+            slot: stages.length,
+            placements: true,
+            mixedSets: false,
+            num: c,
+            name: COURSE_NAMES[c] ?? `Course ${c}`,
+            chapter: c,
+            draws,
+            objects: [],
+            /* Null rather than empty: buildPlacementDisplayList tests the
+             * field, and an empty array is truthy. The sky is geometry on this
+             * board and which model it is has not been read. */
+            sky: null,
+            alternates: [],
+            texSets: [c],
+            texSet: [c, c],
+            tint: [1, 1, 1],
+            bright: 1,
+            light: lit.light,
+            materials: lit.materials,
+            colorCycles: [],
+            flags: 0,
+            floorSize: 0,
+            /* The board draws its sky as geometry rather than as a backdrop
+             * colour, and which model that is has not been read, so the
+             * backdrop is left alone. */
+            bgColor555: 0,
+            meta: [['course', c], ['blocks', draws.length]],
+        });
+    }
+    return stages;
 }

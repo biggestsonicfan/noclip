@@ -195,6 +195,33 @@ main { position: relative; flex: 1; min-width: 0; }
 }
 #hud b { color: var(--text); }
 
+/* ---- the corner tools ----
+ *
+ * Top right of the view, opposite the hud. They sit over the canvas rather than
+ * in the panel because the panel is a different thing on the phone site — a
+ * sheet that is usually shut — and a way to report a fault should not be behind
+ * a drag. */
+#tools {
+    position: absolute; top: 8px; right: 10px;
+    display: flex; gap: 6px; align-items: center; z-index: 5;
+}
+#tools button, #tools a {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(18, 21, 29, 0.86); border: 1px solid var(--line);
+    color: var(--dim); font: inherit; font-size: 12px; line-height: 1;
+    padding: 7px 11px; border-radius: 6px; cursor: pointer;
+    text-decoration: none; white-space: nowrap;
+}
+#tools button:hover, #tools a:hover { color: var(--text); border-color: var(--accent-dim); }
+#tools button.done { color: var(--accent); border-color: var(--accent-dim); }
+#tools svg { display: block; }
+
+/* On a phone the label would take most of the width, so the report button keeps
+ * its own and GitHub keeps only its mark. */
+html.mobile #tools { top: 6px; right: 8px; }
+html.mobile #tools button { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+html.mobile #tools a span { display: none; }
+
 #fly-hint {
     position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
     background: rgba(10, 13, 19, 0.82); border: 1px solid var(--line);

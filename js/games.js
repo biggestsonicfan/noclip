@@ -128,8 +128,20 @@ const sfight = {
     },
     /* How a polygon's board depth is carried into the depth buffer — the bound
      * on the far-corner recede, and the least the near plane may be. The note on
-     * ZSORT_RECEDE in js/viewer.js is where these numbers come from. */
-    depth: { recede: 12, nearMin: 0.02 },
+     * ZSORT_RECEDE in js/viewer.js is where these numbers come from.
+     *
+     * `layers` as well, because the recede alone cannot part a decal from a
+     * face it lies on when that face is too deep to recede or seen square on.
+     * Flying Carpet's floor, model 580, carries the pyramids' shadows as
+     * checker polygons in the floor's own plane, and the floor's faces are a
+     * hundred units deep, so they keep their depth and the shadows came out in
+     * shards. Casino Night's slot machine, model 188, has its two JACKPOT
+     * panels 0.02 and 0.03 in front of the faces they are painted on, which is
+     * under the depth buffer's resolution at the stage's own framing, and the
+     * cabinet's orange showed through them. js/layers.js ranks both the way
+     * the board's sort does. Faces it ranks do not recede; everything else
+     * still does. */
+    depth: { recede: 12, nearMin: 0.02, layers: true },
     scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
@@ -1316,7 +1328,349 @@ const hotd = {
     },
 };
 
-export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd];
+/* ---- Daytona USA --------------------------------------------------------- */
+
+/*
+ * Daytona USA, which shipped in eight builds, and the only game here that is
+ * not on a 2A or 2B board.
+ *
+ * This is the original Model 2 — a Fujitsu TGP beside the i960 where the later
+ * titles have a SHARC, texture RAM at 0x12000000 rather than 0x11000000, and
+ * AM2's library two years younger. None of the addresses the other profiles
+ * carry survive that, and neither does the shape of some of the tables. What
+ * does survive is the board: the polygon format, the texture sheets, the
+ * 10-bit colorbase and the colorxlat/luma pair belong to the geometry engine
+ * and the rasteriser rather than to the game, so the decoders are used
+ * unchanged and only the numbers below are this game's own.
+ *
+ * There is no symbol table for this title and no decompilation, so every
+ * address here was read off an instruction. Reading eight program ROMs by hand
+ * would be eight chances to transcribe a number wrongly, so they were not read
+ * by hand: stf-tools' `daytona-tables.mjs` finds each routine by the
+ * instruction that names its table and prints the block, and `--check` holds
+ * what it finds against what is written here. The signatures it goes by:
+ *
+ *   0x1134    g10 = 0x00800000 (the geometry engine), g11 = 0x00880000 (the
+ *             TGP's function port) and g12 = 0x4000, which is what makes a
+ *             store to `0x60(g10)` readable as engine function 6
+ *   the draw routine   walks a model's records and hands the engine tpa, tha,
+ *             oba and a count — four words and a zero that ends the list
+ *   `lda 0x1802000`    the face palette upload, which states its own source,
+ *             destination and length
+ *   `lda 0x12200000` beside `lda 0x12600000`   the texture bank upload; its
+ *             callers give the bank table and the bank every build shares
+ *   `lda 0x12800000`   the luma RAM upload
+ *   a store at +0x10000 from 0x1800000   the colorxlat build
+ *   a store at +0x60 from the engine's base   the material upload
+ *
+ * The model table is not indexed by the program — it names each entry by
+ * address — so it is found from the other end: it ends where the palette
+ * begins, and stepping back from there a stride at a time while the record is
+ * still a model record gives the base and the count. Every one of the program
+ * ROM's own pointers into that range then has to land on an entry, and does.
+ *
+ * What is missing in every build is the course: how a track is laid out and
+ * what is placed along it has not been read, so there are no stages.
+ */
+
+/* The chips the builds share, which is most of them. Daytona's 1993 version is
+ * the one that differs deepest — its own data pair, its own fourth polygon pair
+ * and its own second texture pair — and everything after it is the same board
+ * with a patched program and a patched half-megabyte of data. */
+const DAYTONA_DATA0 = [0x000000, 'mpr-16528.10', 0x9ce591f6, 'mpr-16529.11', 0xf7095eaf];
+const DAYTONA_DATA4 = [0x400000, 'mpr-16808.8', 0x44f1f5a0, 'mpr-16809.9', 0x37a2dd12];
+const DAYTONA_POLY = [
+    [0x000000, 'mpr-16523.ic16', 0x2f484d42, 'mpr-16518.ic20', 0xdf683bf7],
+    [0x400000, 'mpr-16524.ic17', 0x34658bd7, 'mpr-16519.ic21', 0xfacd1c81],
+    [0x800000, 'mpr-16525.ic18', 0xfb517521, 'mpr-16520.ic22', 0xd66bd9bd],
+];
+const DAYTONA_POLYC = [0xc00000, 'mpr-16772.ic19', 0x770ed912, 'mpr-16771.ic23', 0xa2205124];
+const DAYTONA_TEX0 = [0x000000, 'mpr-16522.25', 0x55d39a57, 'mpr-16521.24', 0xaf1934fb];
+const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe57429e9];
+
+/*
+ * One build.
+ *
+ * `program` and `data8` are the pair that is this build's own; everything else
+ * defaults to the chips above. The table block is what daytona-tables.mjs found
+ * in that program ROM, and the fields that do not vary — the mesh-pointer
+ * arithmetic, the record layout, the sheet layout — are the board's and are set
+ * here once.
+ */
+function daytonaBuild(spec) {
+    return {
+        id: spec.id,
+        name: spec.name,
+        /* This build's own program pair, which no other Daytona set carries. */
+        identify: [spec.program[1], spec.program[3]],
+        regions: {
+            /* Two 128KB EPROMs, and the board maps the second half twice: at
+             * 0x20000 like any other and again at 0x00220000, which is the
+             * alias the program's own pointers use. Offsets here are the
+             * region's, so that alias is just 0x200000 subtracted. */
+            maincpu: { size: 0x40000, parts: [spec.program] },
+            /* Three pairs. MAME's region is 32MB with the last one mirrored up
+             * through it; nothing the viewer reads is in the mirrors, so the
+             * region is cut where the chips end. The first pair is not
+             * addressed by anything here, the second holds the texture banks,
+             * and the third the model table and the palette. */
+            mainData: {
+                size: spec.dataSize ?? 0x900000,
+                parts: [spec.data0 ?? DAYTONA_DATA0, spec.data4 ?? DAYTONA_DATA4, spec.data8],
+            },
+            /* Four pairs, 13MB of the 16MB region. The model table's mesh
+             * pointers open a new band at each pair, which is what says the
+             * pairing is right: a mesh straddling a boundary would not open on
+             * a unit normal. */
+            polygons: {
+                size: 0x1000000,
+                parts: [...DAYTONA_POLY, spec.polyC ?? DAYTONA_POLYC],
+            },
+            /* Two pairs at the two offsets every game here uses, which on 2MB
+             * chips leaves 0x400000-0x800000 empty. This region is the UV and
+             * material streams only: the sheets are raw in the data ROM. */
+            textures: {
+                size: 0x1000000,
+                parts: [DAYTONA_TEX0, spec.tex8 ?? DAYTONA_TEX8],
+            },
+        },
+        /* An entry is the four words the draw routine reads — oba, tpa, tha and
+         * a polygon count — and then the zero that ends the list, which is what
+         * makes the stride 20. Every model in this game is a one-entry list.
+         * The order the three addresses reach the geometry engine is tpa, tha,
+         * oba (model2_v.cpp geo_object_data), the same three the 1995 games
+         * keep in the other order, so only `fields` changes. */
+        modelTable: { ...spec.modelTable, stride: 20, fields: { mesh: 0, uv: 4, mat: 8 } },
+        /* The board's arithmetic, not the game's: an object address with bit 23
+         * set is a word index into the polygon ROM (geo_object_data's
+         * `polygon_rom[oba & mask]`), and this is that index in bytes. */
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        /* Where the model table ends. The entries above the count are never
+         * written — the boot clear leaves 0xFC00 in them — so they are left as
+         * no colour rather than read on past the table. */
+        paletteOffset: spec.paletteOffset,
+        paletteCount: spec.paletteCount,
+        /*
+         * The sheets are raw, as The House of the Dead's are, but dealt out by
+         * a routine of Daytona's own: 0x60000 halfwords straight into one sheet
+         * — its first 0xC0000 bytes, the full-size area — and then nine mip
+         * levels of 0x80, 0x40 ... 1 rows alternating between the two sheets.
+         * It is called twice a scene, once for the bank every course shares and
+         * once for the course's own, so the two banks' mip halves come out
+         * complementary.
+         *
+         * Which bank a given model is drawn against is not known: the course
+         * data has not been read, and coverage cannot answer it for raw banks
+         * because every bank fills the whole sheet. So the panel's picker
+         * decides, and `defaultSet` is what it opens on.
+         */
+        texture: {
+            raw: { layout: 'daytona', bankTable: spec.bankTable, bootBank: spec.bootBank },
+            sets: spec.texSets,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        /*
+         * Luma is a straight copy out of the program ROM: a band count and that
+         * many 128-byte bands. colorxlat is not copied from anywhere — the
+         * routine computes all 32 rows from these four constants:
+         *
+         *   v = row * i * step ; if (v) v += bias ; v >>= 6 ; if (v >= 0x100) v = -1
+         *   tail = (step * row) ? (flat + step * row) >> 1 : 0
+         *
+         * 64 ramp entries and 192 flat ones is a whole 256-entry row, and all
+         * three channels get the same value because on this board the row is
+         * the palette colour's own five bits for that channel. There is no
+         * per-channel trim and no stage tint in it at all.
+         *
+         * `solid` because an untextured face really does go through this table
+         * here: draw_scanline_solid indexes the row with the polygon's own luma
+         * cut to six bits, which is what js/viewer.js's uSolidRamp does.
+         */
+        colors: {
+            luma: { ...spec.luma },
+            ramp: spec.ramp,
+            solid: true,
+        },
+        /*
+         * The material table, uploaded whole at boot as geometry-engine
+         * function 6 out of two parallel arrays rather than one interleaved
+         * table, which is why `stride` is 4 here and 8 in the other profiles.
+         *
+         * The light is three floats out of a view record. On the board that
+         * vector is in the engine's post-transform frame, so it is a headlight
+         * rather than a world light; applied here as a world light it shades a
+         * model consistently from one side instead of following the camera,
+         * which is what a model viewer wants. Z is negated for the decoder's
+         * convention, as stageLight does for the other games.
+         *
+         * The stored normal is lit rather than the polygon's plane: the mode
+         * calls set geometry mode 3 and then 1, and 1 is geo_parse_np_s.
+         */
+        lighting: { light: spec.light, materials: spec.materials },
+        /*
+         * The courses, which are a grid rather than a placement list: the world
+         * is cut into a 16x16 grid of 128-unit blocks and each block is one
+         * model, drawn with no matrix at all. `courses` is the array that names
+         * one 256-entry block table per course — in the data ROM for every build
+         * but the 1993 one, which keeps it in the program ROM. See
+         * readCourseStages in js/stages.js for the routines this is read off.
+         *
+         * `flat` because the geometry really is already in world space, as
+         * Fighting Vipers' arenas are — and because it keeps the Models tab's
+         * texture picker, which the models no course claims still need.
+         */
+        stageTable: {
+            courses: { ...spec.courses, count: 4, blocks: 256 },
+            flat: true,
+        },
+        /*
+         * The same depth arrangement The House of the Dead wants, and for the
+         * same reason: this board has no depth buffer, and a course is large
+         * plates with smaller ones laid on them in the one plane — the lane
+         * markings on the road, the kerbs against it, the infield grass
+         * against the apron. A depth test finds the same depth on both and
+         * hands the pixel to whichever the rounding favours, which is what
+         * broke the infield into mismatched patches of green.
+         *
+         * `recede: 0` for Fighting Vipers' reason as well: a bounded recede
+         * steps each face back by its own depth, so plates in one plane part
+         * by how they were cut and the parting moves with the camera. Nothing
+         * here is modelled behind a surface it shows through, which is what a
+         * recede is for.
+         */
+        depth: { recede: 0, nearMin: 0.02, layers: true },
+        /* Stages, but no rig: this game has no motion tables of any kind. */
+        features: { stages: true, characters: false, motions: false, bodies: false },
+    };
+}
+
+const daytona93 = daytonaBuild({
+    id: 'daytona93',
+    name: 'Daytona USA (1993)',
+    program: [0x00000, 'epr-16530a.12', 0x39e962b5, 'epr-16531a.13', 0x693126eb],
+    data4: [0x400000, 'mpr-16526.8', 0x5273b8b5, 'mpr-16527.9', 0xfc4cb0ef],
+    data8: [0x800000, 'epr-16534a.6', 0x1bb0d72d, 'epr-16535a.7', 0x459a8bfb],
+    dataSize: 0xa00000,
+    polyC: [0xc00000, 'epr-16646.ic19', 0x7ba9fd6b, 'epr-16645.ic23', 0x78fe0b8a],
+    tex8: [0x800000, 'mpr-16517.27', 0x4705d3dd, 'mpr-16516.26', 0xa260d45d],
+    modelTable: { offset: 0x887928, count: 2822 },
+    paletteOffset: 0x8955a0, paletteCount: 1007,
+    bankTable: 0x14bc, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'maincpu', count: 0x2fd34, data: 0x2fd38 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'maincpu', at: 0x39b0 },
+});
+
+const daytona = daytonaBuild({
+    id: 'daytona',
+    name: 'Daytona USA (Revision A)',
+    program: [0x00000, 'epr-16722a.12', 0x48b94318, 'epr-16723a.13', 0x8af8b32d],
+    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonase = daytonaBuild({
+    id: 'daytonase',
+    name: 'Daytona USA Special Edition (Revision A)',
+    program: [0x00000, 'epr-17369a.12', 0x3bc6ca62, 'epr-17370a.13', 0x5d1c74e4],
+    data8: [0x800000, 'epr-17371.6', 0x7478f0d2, 'epr-17372.7', 0x308a06a9],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonas = daytonaBuild({
+    id: 'daytonas',
+    name: 'Daytona USA (with Saturn advertisements)',
+    program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
+    data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonat = daytonaBuild({
+    id: 'daytonat',
+    name: 'Daytona USA (Turbo hack, set 1)',
+    program: [0x00000, 'turbo1.12', 0x4b41a341, 'turbo2.13', 0x6ca580fa],
+    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonata = daytonaBuild({
+    id: 'daytonata',
+    name: 'Daytona USA (Turbo hack, set 2)',
+    program: [0x00000, 'dayturbo.12', 0xaec6857a, 'dayturbo.13', 0xcb657edc],
+    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonam = daytonaBuild({
+    id: 'daytonam',
+    name: 'Daytona USA (To The MAXX)',
+    program: [0x00000, 'maxx.12', 0x604ef2d9, 'maxx.13', 0x7d319970],
+    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+const daytonagtx = daytonaBuild({
+    id: 'daytonagtx',
+    name: 'Daytona USA (GTX 2004 Edition)',
+    program: [0x00000, 'gtx.12', 0x08283a6f, 'gtx.13', 0xf9b356ae],
+    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
+    modelTable: { offset: 0x83fbb4, count: 3190 },
+    paletteOffset: 0x84f4ec, paletteCount: 1007,
+    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
+    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    ramp: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
+    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
+    light: [-0.45, -0.89, 0.45],
+    courses: { source: 'mainData', at: 0x805298 },
+});
+
+export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx];
 
 /**
  * Pick the profile a set of zip member names belongs to.
@@ -1337,9 +1691,29 @@ export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd];
  * @returns {null|object} the profile, or null if none matches
  */
 export function detectGame(names, nested = null) {
+    return detectGames(names, nested)[0] ?? null;
+}
+
+/**
+ * Every profile a set of zip member names matches, best first.
+ *
+ * One archive can be more than one game. A merged MAME set carries the parent
+ * and every clone at once, and where the clones are separate *games* rather
+ * than revisions of one — Daytona USA ships as eight builds, three of them with
+ * their own courses and cars — there is no single right answer to which one was
+ * dropped. So the caller is told all of them and can offer the choice; `nested`
+ * still decides the default, because MAME's convention is that the parent's
+ * chips are the ones at the top level.
+ *
+ * @param {Set<string>|string[]} names  every member name across the zips
+ * @param {Set<string>} [nested]  those of them that exist only inside a
+ *   clone's directory
+ * @returns {object[]} the profiles, the top-level one first
+ */
+export function detectGames(names, nested = null) {
     const have = names instanceof Set ? names : new Set(names);
     const has = (m) => have.has(m);
-    return GAMES.find((g) => g.identify.every((m) => has(m) && !nested?.has(m)))
-        || GAMES.find((g) => g.identify.every(has))
-        || null;
+    const all = GAMES.filter((g) => g.identify.every(has));
+    const top = all.filter((g) => g.identify.every((m) => !nested?.has(m)));
+    return [...top, ...all.filter((g) => !top.includes(g))];
 }

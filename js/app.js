@@ -3,8 +3,10 @@
  */
 
 import { loadRomSet, readModelEntry, readModelName } from './romset.js';
+import { GAMES } from './games.js';
+import { wireReportButtons } from './report.js';
 import { decodeModel } from './model.js';
-import { readStageTable, stageLight, gameLighting } from './stages.js';
+import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { coplanarLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -50,6 +52,11 @@ const el = (tag, cls, html) => {
 
 const state = {
     rom: null,
+    /* The zips as they were handed over, so a build swap can assemble the set
+     * again without asking for them twice — see switchBuild. */
+    romBuffers: null,
+    /* The dropped archives by name and size, for js/report.js. */
+    romFiles: [],
     stages: [],
     viewer: null,
     /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
@@ -180,11 +187,14 @@ function setStatus(msg, frac) {
 
 async function bootWithBuffers(buffers) {
     $('#loader-error').hidden = true;
+    /* Kept so a build swap can assemble the set again without asking for the
+     * zips a second time — see switchBuild. */
+    state.romBuffers = buffers;
     try {
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac));
         useCoproTrig(state.rom);
     } catch (err) {
-        return failToLoad(err, 'check that these are the sfight, schamp or fvipers ROM zips');
+        return failToLoad(err, romHint(err));
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
      * problem, and swapping to the app shell first would hide the message. */
@@ -193,6 +203,126 @@ async function bootWithBuffers(buffers) {
     } catch (err) {
         return failToLoad(err, 'the ROM set loaded, but the 3D view could not start');
     }
+}
+
+/*
+ * What to try next when a set will not load, which is two different things.
+ *
+ * If loadRomSet got as far as identifying the game, the zips are the right
+ * game's and one of them is missing — a MAME set is not always one archive, and
+ * a clone keeps only the chips that are its own, the rest being in the parent.
+ * Naming the game and the chip is the whole of the answer there. If it did not,
+ * nothing here recognised the program ROM, and the thing to say is what would
+ * be recognised; the list comes off the profiles so it cannot go stale.
+ */
+function romHint(err) {
+    if (err.game) {
+        return `that chip is in another zip of this set — a MAME clone carries only `
+            + `the chips that are its own and keeps the rest in the parent, so drop `
+            + `the parent's zip on as well`;
+    }
+    return `check that these are the ROM zips of a game the viewer knows: `
+        + `${GAMES.map((g) => g.name).join(', ')}`;
+}
+
+/*
+ * Load the same zips as a different build.
+ *
+ * MAME keeps a game's revisions and its hacks as clones of one parent, and a
+ * merged archive is all of them at once — Daytona USA is eight. Which one a
+ * drop "is" has no single right answer there, so the set reports every profile
+ * it matches and this swaps between them without the zips being handed over
+ * again. Only what the build decides is rebuilt: the renderer, the canvas and
+ * the wiring outlive the swap, so nothing is disposed and nothing is wired
+ * twice.
+ */
+async function switchBuild(id) {
+    if (!state.romBuffers || !state.rom || id === state.rom.game.id) return;
+    $('#loader').hidden = false;
+    $('#loader-error').hidden = true;
+    try {
+        state.rom = await loadRomSet(state.romBuffers, (m, f) => setStatus(m, f), { game: id });
+        useCoproTrig(state.rom);
+    } catch (err) {
+        return failToLoad(err, romHint(err));
+    }
+    resetRomState();
+    loadGameContent();
+}
+
+/*
+ * Everything in `state` that is about the ROM set rather than about the page.
+ *
+ * All of it is indexed by, or decoded from, the build that was loaded — a model
+ * cache keyed on a table index, sheets keyed on a texture number, the stage
+ * list, the rig — so a swap has to throw the lot away. What survives is the
+ * renderer, the panel's own switches and where the camera is pointing.
+ */
+function resetRomState() {
+    state.stages = [];
+    state.modelCache.clear();
+    state.texSetCache.clear();
+    state.skyTextures.clear();
+    state.skyPanoAspect.clear();
+    state.skyTopColor.clear();
+    state.modelScenes = null;
+    state.rigOwners = null;
+    state.frames = null;
+    state.bodies = null;
+    state.motionRanks = null;
+    state.motion.list = null;
+    state.motion.decoded = null;
+    state.motion.parts = [];
+    state.motion.skeleton = null;
+    state.sky = null;
+    state.cxlat = null;
+    state.texramKey = null;
+    state.lutKey = null;
+    /* A dropped texture-RAM dump is a capture of one build's RAM, so it does
+     * not carry over to another. */
+    state.texramPinned = false;
+    state.lutsPinned = false;
+    state.texSetChoice = null;
+    state.stageIndex = 0;
+    state.charIndex = 0;
+    state.anim.frame = -1;
+    state.anim.entries = [];
+    state.anim.phases = [];
+    state.anim.geom.clear();
+    state.anim.billboards = [];
+    state.viewer.clear();
+    state.viewer.clearSetMaterials();
+}
+
+/*
+ * The builds this archive could be loaded as, when there is more than one.
+ *
+ * Every Daytona build after 1993 carries a byte-identical model table and
+ * palette — they differ in their program ROM and half a megabyte of data, not
+ * in their models — so the list is longer than the number of distinct things
+ * there are to look at. It names them anyway: which build a set is is a fact
+ * about the set, and a picker that hid seven of them would be deciding for the
+ * person which one they dropped.
+ */
+function renderBuildPicker() {
+    const field = $('#build-field');
+    if (!field) return;
+    const variants = state.rom.variants ?? [];
+    if (variants.length < 2) { field.hidden = true; return; }
+    const sel = $('#build-select');
+    sel.innerHTML = '';
+    for (const v of variants) {
+        const o = el('option');
+        o.value = v.id;
+        o.textContent = v.name;
+        sel.appendChild(o);
+    }
+    sel.value = state.rom.game.id;
+    if (!sel.dataset.wired) {
+        sel.dataset.wired = '1';
+        sel.addEventListener('change', () => switchBuild(sel.value));
+    }
+    field.hidden = false;
 }
 
 function failToLoad(err, hint) {
@@ -207,6 +337,10 @@ function failToLoad(err, hint) {
 
 async function readRomFiles(zips) {
     setStatus(`reading ${zips.map((f) => f.name).join(', ')}…`, 0);
+    /* Kept for a bug report: which archives a set was assembled out of is
+     * half of what it takes to reproduce one. Names and sizes only — a
+     * File gives no path, and none of the bytes are held here. */
+    state.romFiles = zips.map((f) => ({ name: f.name, size: f.size }));
     try {
         bootWithBuffers(await Promise.all(zips.map((f) => f.arrayBuffer())));
     } catch (err) {
@@ -548,7 +682,11 @@ function modelTextureSet(idx) {
     const found = banked === null
         ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
         : { set: banked };
-    const set = found ? found.set : null;
+    /* Neither can answer for a game whose sheets are raw banks and which has no
+     * table saying which bank goes with which set — Daytona USA, whose course
+     * data is unread. It opens on the set its profile names and the picker
+     * moves it. */
+    const set = found ? found.set : (state.rom.game.texture.defaultSet ?? null);
     state.texSetCache.set(idx, set);
     return set;
 }
@@ -2388,7 +2526,16 @@ function describeModelScene(idx) {
         if (state.rom.game.palette) {
             return `drawn by no stage — sheets, palette and colour tables of set ${state.rom.paletteSet ?? 0}`;
         }
-        if (!state.stages.length) return 'shaded flat, on the face palette in the ROM';
+        if (!state.stages.length) {
+            /* A game with colour tables but no stage table has one set of them
+             * for the whole game, so there is no scene to name — only which
+             * sheets the model is standing on. */
+            if (state.rom.game.colors) {
+                const set = modelTextureSet(idx);
+                return `drawn by no stage — the game's own colour tables, sheets of set ${set ?? 0}`;
+            }
+            return 'shaded flat, on the face palette in the ROM';
+        }
         const stage = state.stages[state.stageIndex];
         return `drawn by no stage — shaded against ${stage ? stage.name : 'the loaded stage'}'s tables`;
     }
@@ -2983,19 +3130,25 @@ function applyGameFeatures() {
     return on;
 }
 
-function start() {
-    /* Build the viewer before swapping panels, so a renderer failure still has
-     * the loading screen to report itself on. */
-    $('#app').hidden = false;
-    state.viewer = new Viewer($('#view'), { touch: isMobile() });
+/*
+ * Everything the loaded build decides, as against everything the page decides.
+ *
+ * A ROM set can be more than one build — a merged Daytona archive is eight —
+ * and swapping between them replaces the tables, the models and the sheets but
+ * not the renderer, the canvas or the wiring. So the two are separated: start()
+ * runs once and this runs again on every swap.
+ */
+function loadGameContent() {
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
-    state.viewer.backfaceCull($('#opt-cull').checked);
     const on = applyGameFeatures();
     if (on.stage) {
-        state.stages = state.rom.game.stageTable.placements
-            ? readPlacementStages(state.rom)
-            : readStageTable(state.rom);
+        /* Three shapes of stage data: a record per arena, a placement
+         * table per chapter, and Daytona USA's grid of blocks. */
+        const T = state.rom.game.stageTable;
+        if (T.courses) state.stages = readCourseStages(state.rom);
+        else if (T.placements) state.stages = readPlacementStages(state.rom);
+        else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
     if (on.anim && state.rom.game.rig) {
@@ -3021,9 +3174,19 @@ function start() {
     if (modelsPickTextures()) renderTextureSetPicker();
     if (state.rom.game.modelNames) $('#model-search').placeholder = 'Model index, range (500-520) or name';
     if (on.anim) renderCharacterSelect();
+    renderBuildPicker();
     renderModelList();
-    wireOptions();
     switchTab(on.stage ? 'stage' : 'model');
+}
+
+function start() {
+    /* Build the viewer before swapping panels, so a renderer failure still has
+     * the loading screen to report itself on. */
+    $('#app').hidden = false;
+    state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    state.viewer.backfaceCull($('#opt-cull').checked);
+    loadGameContent();
+    wireOptions();
     state.viewer.resize();
 
     let frames = 0;
@@ -3049,8 +3212,13 @@ function start() {
 
     if (state.rom.warnings.length) console.warn('ROM warnings:', state.rom.warnings);
 
-    /* Handy from the console when checking placements against the real game. */
-    window.stf = state;
 }
 
 wireDropTarget();
+/* Wired before anything is loaded: the report worth most is the one about a
+ * ROM set that would not load at all. */
+wireReportButtons(state);
+/* Handy from the console when checking placements against the real game, and
+ * put here rather than after a successful load so that a set which would not
+ * load can be looked at too. */
+window.stf = state;
