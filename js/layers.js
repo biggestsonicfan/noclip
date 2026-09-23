@@ -157,15 +157,21 @@ function laterShare(f, g) {
  *
  * @param {{decoded: object, matrix: ArrayLike<number>}[]} draws in the order the
  *   game submits them; `matrix` is the draw's column-major 4x4
- * @param {{gap?: number, tie?: number, cosine?: number}} [opts] how far apart two
- *   faces may stand and still be ordered, how far apart counts as one plane,
- *   and the least cosine between their normals
+ * @param {{gap?: number, tie?: number, cosine?: number, keepFar?: boolean,
+ *   leaveApart?: boolean}} [opts] how far apart two faces may stand and still be
+ *   ordered, how far apart counts as one plane, and the least cosine between
+ *   their normals; and the two departures a game can ask for (see below):
+ *   `keepFar` leaves a face sorted by its farthest corner with no layer and no
+ *   plane, and `leaveApart` leaves a pair held apart by more than the tie and
+ *   asking for the same corner to the depth buffer
  * @returns {{layer: Float32Array, plane: Float32Array}[]} per draw, one layer
  *   per vertex (0 almost everywhere) and four numbers per vertex: the plane its
  *   face takes its depth from, n.p = d in the draw's own space, or zeros for a
  *   face that keeps its own depth
  */
-export function coplanarLayers(draws, { gap = 0.5, tie = 0.02, cosine = 0.999, stats = null } = {}) {
+export function coplanarLayers(draws, {
+    gap = 0.5, tie = 0.02, cosine = 0.999, keepFar = false, leaveApart = false, stats = null,
+} = {}) {
     const faces = [];
     const out = draws.map(({ decoded }) => {
         const count = decoded ? decoded.positions.length / 3 : 0;
@@ -293,7 +299,16 @@ export function coplanarLayers(draws, { gap = 0.5, tie = 0.02, cosine = 0.999, s
                  * corner. Held apart by more than that and facing the same way
                  * about it, they are what they look like, and the nearer one is
                  * in front for the depth buffer as it is for the board. */
-                const share = Math.abs(behind) <= tie || f.zmode !== g.zmode ? laterShare(f, g) : 0.5;
+                const bySort = Math.abs(behind) <= tie || f.zmode !== g.zmode;
+                /* `leaveApart` takes that at its word and does not order such a
+                 * pair at all, so neither joins a group and neither is moved onto
+                 * the other's plane. Sonic The Fighters needs it: a fighter's
+                 * glove (1813, 1818) is a few tenths across with parallel faces
+                 * 0.07 to 0.15 apart, and one plane for all of them lays the
+                 * faces on each other. m2-hle2's grade against MAME
+                 * (tools/grade-zsort.mjs, issue #75) is where that showed. */
+                if (leaveApart && !bySort) continue;
+                const share = bySort ? laterShare(f, g) : 0.5;
                 let top;
                 if (window || share >= 0.75) top = j;
                 else if (share <= 0.25) top = i;
@@ -342,6 +357,18 @@ export function coplanarLayers(draws, { gap = 0.5, tie = 0.02, cosine = 0.999, s
     let planes = 0;
     faces.forEach((f, i) => {
         const o = out[f.draw];
+        /* `keepFar`: a face sorted by its farthest corner (or the board's "very
+         * far") keeps the recede and nothing else. Its orderings still count, so
+         * a face laid on it is still raised over it; it just takes neither a
+         * layer nor its group's plane, either of which would stop it stepping
+         * back. In Sonic The Fighters that step back is what stands a backing
+         * plane out of the way of other models: Casino Night's floor emblem,
+         * model 194, is mode 2 over faces held a little below it, and layered it
+         * covered the green MAME shows beside it (m2-hle2 issue #75). The
+         * decals this is all for are mode 1 over mode-2 surfaces — Flying
+         * Carpet's shadows on the sand, the slot machine's JACKPOT art — so they
+         * keep their layers. */
+        if (keepFar && f.zmode >= 2) return;
         if (layer[i]) o.layer.fill(layer[i], f.t0 * 3, (f.t1 + 1) * 3);
         if (!ordered[i]) return;
         const ref = faces[largest.get(find(i))];
