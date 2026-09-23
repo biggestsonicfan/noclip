@@ -204,6 +204,11 @@ const VERT_SHADER = /* glsl */`
         // are standing on it -- see waterMaterial.
         zf = min(zf, mv.z - ZSORT_RECEDE);
 #endif
+#ifdef ZSORT_KEEP
+        // And a draw standing on a floor that cannot concede keeps its own
+        // depth outright -- see standingMaterial.
+        zf = mv.z;
+#endif
         // Carried as z/w rather than as a depth, so the clipper keeps it: it
         // interpolates z and w together and their ratio is what survives.
         //
@@ -1019,6 +1024,32 @@ export class Viewer {
         this.waterMaterial.uniforms = this.material.uniforms;
         this.waterMaterial.defines = { ZSORT_CONCEDE: '1' };
         /*
+         * And the other side of that bargain, for a floor that cannot make it.
+         *
+         * Aurora Icefield's ice is 1602, four wedges hundreds of units across
+         * that the board sorts by a corner out at the tip, so the ice pillars
+         * and the walrus statues standing on it win every pixel they cover. It
+         * cannot concede the way the sea does, because the stage hangs things
+         * under it -- the walruses' reflection and the lower half of the cage,
+         * which the concession would stand up through it (see ZSORT_RECEDE in
+         * the vertex shader). So the ice keeps its depth, and what stands on it
+         * was left to recede: every face of the pillars and the walruses asks
+         * for its farthest corner, and those faces are shallow, so each stepped
+         * back by up to its own depth -- through the ice it stands on. The ice
+         * cut the pillars' flared bases off flat and the walruses' feet with
+         * them. Inside a pillar each face was flattened to its far corner too,
+         * so the inside of the far wall came through the near one as streaks
+         * of the wrong panel.
+         *
+         * A draw that says it stands on such a floor keeps the depth the
+         * projection gave it. Each of these is a closed solid, which a depth
+         * buffer resolves on its own, and where the board's order is what
+         * counts -- the solid over the ice -- the true depth gives the same.
+         */
+        this.standingMaterial = createModelMaterial();
+        this.standingMaterial.uniforms = this.material.uniforms;
+        this.standingMaterial.defines = { ZSORT_KEEP: '1' };
+        /*
          * Depth bias for surfaces that share a plane exactly.
          *
          * The board has no depth buffer. Co-planar polygons land in one z
@@ -1163,7 +1194,8 @@ export class Viewer {
         /* Only a game whose draws carry layers pays for writing the depth from
          * the fragment shader, which turns off the early depth test. */
         for (const m of [this.material, this.backdropMaterial, this.floorMaterial,
-            this.waterMaterial, ...this.planeMaterials, ...this.setMaterials.values()]) {
+            this.waterMaterial, this.standingMaterial, ...this.planeMaterials,
+            ...this.setMaterials.values()]) {
             const has = 'FACE_LAYERS' in (m.defines ?? {});
             if (has === layers) continue;
             m.defines = { ...(m.defines ?? {}) };

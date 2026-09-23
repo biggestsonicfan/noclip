@@ -920,6 +920,24 @@ board's front/back test — the board would never draw either of them. The viewe
 showed them then because it drew every face from both sides; it now takes that
 test too, and see *Which side the board draws* below for what that changed.
 
+**And a floor that cannot concede keeps what stands on it.** Aurora Icefield's
+ice is `stage_extra`, 1602: four wedges hundreds of units deep, so it keeps its
+own depth. It has to, because the stage hangs things under it, the walruses'
+reflection and the lower half of the cage, and conceding would stand them up
+through it. But the ice pillars 4278 and the walrus statues 1601 stand on it, and
+every one of their faces asks for its farthest corner. Those faces are a few units
+deep, so each receded in full, through the ice it stands on. The ice cut the
+pillars' flared bases off flat and the walruses' feet with them, and inside a
+pillar every face flattened to its far corner, so the inside of the far wall came
+through the near one as streaks of the wrong panel. On the board the ice is sorted
+by a corner out at its tip, and both solids win every pixel they cover. So
+`aurora_disp`'s draws of them are marked `standing`, and `standingMaterial` gives
+them the depth the projection gave them, with no recede at all. A closed solid is
+something a depth buffer resolves on its own, and over the ice the true depth
+gives the board's answer. Aurora's texture RAM was checked byte for byte against
+m2-hle2's for the same scene before blaming the depth: the texels were never
+wrong.
+
 #### The floor plate concedes a tie
 
 Depth precision is no answer at all to two surfaces that are not near each other
