@@ -14,7 +14,7 @@
 
 export const STAGE_DATA_ADDR = 0x0008f3d0;
 import { xtraResolve } from './romset.js';
-import { readObjectRecords, courseObjectDraws, courseGround, courseReach } from './daytona.js';
+import { readObjectRecords, courseObjectDraws, courseGround, courseReach, carLanes } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 
 export const STAGE_STRIDE = 256;
@@ -497,7 +497,7 @@ export function readCourseStages(rom) {
             objectDraws: rom.game.objects
                 ? (getModel, mode) => {
                     const blockOf = new Map(draws.map((d, i) => [blockAt[i], d.model]));
-                    const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null));
+                    const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null), carLanes(rom, c));
                     return courseObjectDraws(rom, c, ground, mode);
                 }
                 : null,
