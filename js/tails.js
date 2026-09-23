@@ -38,19 +38,10 @@
  * matrix is the pelvis's and the offset above is in its frame. The pair comes
  * out 0.1 below and 0.25 behind the waist, along the tails' own vertical.
  *
- * Two branches of the routine are not reproduced, and cannot be from a motion
- * alone:
+ * Two more branches of the routine are decided outside the keyframe block:
  *
- * - The propeller. Bit 16 of `0x7F0(g7)` swaps the cycle for a spinning disc:
- *   two models alternating on the frame parity — 1221 and 1222 for Tails —
- *   turned by `0x500020 * 0xD80` about Y, which is 19° a frame. `0x7F4(g7)`
- *   picks between drawing it at the fighter's world root (`0x1AC58`) and on the
- *   hip like the cycle (`0x1AD84`). Both are turned on by an opcode at
- *   `0x1C970` in the per-motion script — `motion_flags[id]` at `0xCE380`, whose
- *   record carries thirteen bytes of flags and then a byte-code stream the
- *   game's action interpreter walks. Nothing in the keyframe block says the
- *   flag is set or when, so the viewer, which plays a motion and not an action,
- *   has no way to know.
+ * - The propeller. Bit 16 of `0x7F0(g7)` swaps the cycle for a spinning disc,
+ *   and the motion script sets and clears it — see `propellerPart` below.
  *
  * - The 0x8000 roll. `ang_z` is 0x8000 rather than 0xC000 when bit 16 of
  *   `0x1A4(g7)` is set. That word is initialised per motion — bit 16 comes from
@@ -104,8 +95,8 @@ export function readTails(rom, charIndex) {
         cycleAddr: t.cycle,
         blurAddr: t.blur,
         cycle,
-        /* The propeller pair. Read because the table is right there and it says
-         * which models they are; nothing places them — see the header. */
+        /* The propeller pair, drawn instead of the cycle while the motion's
+         * script has it on — see `propellerPart`. */
         blur: [dv.getUint16(t.blur, true), dv.getUint16(t.blur + 2, true)],
     };
 }
@@ -146,4 +137,60 @@ export function tailParts(pose, tails, frame = 0) {
         r: turnedBy(b.r, 0, s.ay, ROLL),
         t: t.slice(),
     }));
+}
+
+/*
+ * The propeller: what `tails_tail_disp` draws instead of the pair while bit 16
+ * of `P1+0x7F0` is set, which script ops 0x27 and 0x28 set and clear (see
+ * `scriptStateAt` in js/motion.js). `tails_shippo_func_exec` (`0x1AC38`) picks
+ * one of two routines by `(P1+0x7F4 - 1) & 1`, the byte op 0x27 carries:
+ *
+ *   1  `tails_heli_disp` (`0x1AC58`): the view matrix, `set_pos` by the
+ *      fighter's world position `P1+0x1F4` — which `calc_unit_mat` stores
+ *      from `0x07800F0F` straight after placing slot 0, so it is the waist —
+ *      `ang_y` by his facing, then `set_pos 0.14, 0.18, -0.17`. The disc turns
+ *      with him but not with the body's lean: the flying spins.
+ *   2  `tails_screw_disp` (`0x1AD84`): on the pelvis's own matrix, `set_pos
+ *      0.15, -0.2, -0.15`, `ang_z 0xF000`, `ang_x 0x8000`.
+ *
+ * Either then turns by `frame_counter * 0xD80` about Y — 19° a frame — and
+ * draws the pair beside the cycle table by the counter's parity.
+ */
+export const PROPELLER_HELI = 1, PROPELLER_SCREW = 2;
+const HELI_OFFSET = [0.14, 0.18, -0.17];   /* 0x3E0F5C29 0x3E3851EC 0xBE2E147B */
+const SCREW_OFFSET = [0.15, -0.2, -0.15];  /* 0x3E19999A 0xBE4CCCCD 0xBE19999A */
+const SCREW_ROLL = 0xf000, SCREW_PITCH = 0x8000;
+const PROPELLER_SPIN = 0xd80;
+
+const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+function offsetBy(r, t, o) {
+    return [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
+}
+
+/**
+ * Place the propeller on a solved pose, or null when the script has it off.
+ * @param {number} mode the byte op 0x27 left at `0x7F4` (0 when off)
+ * @param {number} frame the display counter
+ * @param {number} facing the fighter's yaw in binary radians
+ */
+export function propellerPart(pose, tails, mode, frame = 0, facing = 0) {
+    if (!tails || !mode) return null;
+    const spin = Math.imul(frame >>> 0, PROPELLER_SPIN) & 0xffff;
+    let r, t;
+    if (((mode - 1) & 1) === 0) {
+        const waist = pose[0];
+        if (!waist) return null;
+        r = turnedBy(IDENTITY, 0, facing & 0xffff, 0);
+        t = offsetBy(r, waist.t, HELI_OFFSET);
+    } else {
+        const b = pose[PELVIS_SLOT];
+        if (!b) return null;
+        t = offsetBy(b.r, b.t, SCREW_OFFSET);
+        r = turnedBy(b.r, 0, 0, SCREW_ROLL);
+        r = turnedBy(r, SCREW_PITCH, 0, 0);
+    }
+    r = turnedBy(r, 0, spin, 0);
+    const phase = frame & 1;
+    return { model: tails.blur[phase], phase, r, t };
 }
