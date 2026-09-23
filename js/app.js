@@ -3329,6 +3329,19 @@ function wireOptions() {
         v.material.uniforms.uTransfer.value = state.transfer;
         applyBackdropTransfer();
     });
+    /* The cabinet changes colorxlat, and everything built from it goes with it:
+     * the scene's tables, the per-set materials that carry their own, and the
+     * sky, whose palette went through the old one. Then the view is rebuilt
+     * where it stands. A pinned dump is a real machine's table, so it stays. */
+    $('#cabinet-mode').addEventListener('change', (e) => {
+        state.rom.cabinet = +e.target.value;
+        state.lutKey = null;
+        v.clearSetMaterials();
+        for (const t of state.skyTextures.values()) t?.dispose?.();
+        state.skyTextures.clear();
+        if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera: true });
+        else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera: true });
+    });
     $('#opt-wire').addEventListener('change', (e) => {
         state.wireframe = e.target.checked;
         applyWireVisibility();
@@ -3471,6 +3484,21 @@ function applyGameFeatures() {
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
+
+    /* The cabinet, for a game whose colour table depends on it: this build's
+     * own test-menu list, opening on the profile's choice. */
+    const colors = state.rom.game.colors;
+    const cabinets = colors?.cabinets;
+    $('#cabinet-field').hidden = !cabinets;
+    const cab = $('#cabinet-mode');
+    cab.innerHTML = '';
+    for (const [i, c] of (cabinets ?? []).entries()) {
+        const o = el('option');
+        o.value = String(i);
+        o.textContent = c.same ? `${c.name} (same colours as ${c.same})` : c.name;
+        cab.appendChild(o);
+    }
+    if (cabinets) cab.value = String(state.rom.cabinet ?? colors.cabinet);
     return on;
 }
 

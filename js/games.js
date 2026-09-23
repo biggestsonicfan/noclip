@@ -1427,20 +1427,31 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  * a monitor calibration, and it moves every colour on screen, the sky's among
  * them, since the tile chip's palette goes through this table too.
  *
- * `DAYTONA_CABINET` picks which the explorer shows. It is the twin set because
- * MAME's backup RAM holds TWIN, and a MAME capture is what the explorer is
- * graded against: dumped from the attract race with the Rev A ROMs, the whole
- * of colorxlat, all 0xC000 bytes, is the twin set's arithmetic exactly.
+ * Each build's list is its own test menu's, in its order, so the index is the
+ * value the setting holds: Rev A and its clones offer DELUXE, TWIN and UPLIGHT,
+ * the Special Edition DELUXE and TWIN, the 1993 build DELUXE and UPLIGHT. The
+ * panel's Cabinet switch picks among them (`rom.cabinet`).
+ *
+ * `DAYTONA_CABINET` is the one it opens on: the first that is not DELUXE,
+ * because MAME's backup RAM holds TWIN and a MAME capture is what the explorer
+ * is graded against. Dumped from the attract race with the Rev A ROMs, the
+ * whole of colorxlat, all 0xC000 bytes, is the twin set's arithmetic exactly.
  */
-const DAYTONA_RAMP = {
-    deluxe: { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b },
-    twin: { step: 10, span: 0x280, bias: 0x1920, flat: 0xc9 },
-};
-const DAYTONA_RAMP_93 = {
-    deluxe: DAYTONA_RAMP.deluxe,
-    twin: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8 },
-};
-const DAYTONA_CABINET = 'twin';
+const RAMP_DELUXE = { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b };
+const RAMP_TWIN = { step: 10, span: 0x280, bias: 0x1920, flat: 0xc9 };
+const RAMP_UPLIGHT_93 = { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8 };
+const DAYTONA_CABINETS = [
+    { name: 'DELUXE', ramp: RAMP_DELUXE },
+    { name: 'TWIN', ramp: RAMP_TWIN },
+    /* The same table as TWIN: the routine only asks whether the setting is 0. */
+    { name: 'UPLIGHT', ramp: RAMP_TWIN, same: 'TWIN' },
+];
+const DAYTONA_CABINETS_SE = DAYTONA_CABINETS.slice(0, 2);
+const DAYTONA_CABINETS_93 = [
+    { name: 'DELUXE', ramp: RAMP_DELUXE },
+    { name: 'UPLIGHT', ramp: RAMP_UPLIGHT_93 },
+];
+const DAYTONA_CABINET = 1;
 
 function daytonaBuild(spec) {
     return {
@@ -1519,7 +1530,7 @@ function daytonaBuild(spec) {
          * Luma is a straight copy out of the program ROM: a band count and that
          * many 128-byte bands. colorxlat is not copied from anywhere — the
          * routine computes all 32 rows from four constants, which of two sets
-         * depending on the cabinet (DAYTONA_RAMP):
+         * depending on the cabinet (DAYTONA_CABINETS):
          *
          *   v = row * i * step ; if (v) v += bias ; v >>= 6 ; if (v >= 0x100) v = -1
          *   tail = (step * row) ? (flat + step * row) >> 1 : 0
@@ -1535,7 +1546,9 @@ function daytonaBuild(spec) {
          */
         colors: {
             luma: { ...spec.luma },
-            ramp: spec.ramp[DAYTONA_CABINET],
+            ramp: spec.cabinets[DAYTONA_CABINET].ramp,
+            cabinets: spec.cabinets,
+            cabinet: DAYTONA_CABINET,
             solid: true,
         },
         /*
@@ -1734,7 +1747,7 @@ const daytona93 = daytonaBuild({
     paletteOffset: 0x8955a0, paletteCount: 1007,
     bankTable: 0x14bc, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'maincpu', count: 0x2fd34, data: 0x2fd38 },
-    ramp: DAYTONA_RAMP_93,
+    cabinets: DAYTONA_CABINETS_93,
     materials: { source: 'maincpu', at: 0x5050, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
@@ -1751,7 +1764,7 @@ const daytona = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1768,7 +1781,7 @@ const daytonase = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS_SE,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1785,7 +1798,7 @@ const daytonas = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1802,7 +1815,7 @@ const daytonat = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1819,7 +1832,7 @@ const daytonata = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1836,7 +1849,7 @@ const daytonam = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
@@ -1853,7 +1866,7 @@ const daytonagtx = daytonaBuild({
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    ramp: DAYTONA_RAMP,
+    cabinets: DAYTONA_CABINETS,
     materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },

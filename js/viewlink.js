@@ -39,6 +39,8 @@ const CONTROLS = {
     all: [
         { key: 'shade', sel: '#shade-mode', def: '0' },
         { key: 'transfer', sel: '#transfer-mode', def: '0' },
+        /* Every build that has the switch opens on its second entry. */
+        { key: 'cabinet', sel: '#cabinet-mode', def: '1' },
         { key: 'animate', sel: '#opt-anim' },
         { key: 'wire', sel: '#opt-wire' },
         { key: 'grid', sel: '#opt-grid' },
