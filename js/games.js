@@ -140,8 +140,24 @@ const sfight = {
      * under the depth buffer's resolution at the stage's own framing, and the
      * cabinet's orange showed through them. js/layers.js ranks both the way
      * the board's sort does. Faces it ranks do not recede; everything else
-     * still does. */
-    depth: { recede: 12, nearMin: 0.02, layers: true },
+     * still does.
+     *
+     * With two of the ranking's rules turned off (`layerRules`), because
+     * m2-hle2 graded the plain ranking against MAME's pictures and on Casino
+     * Night it moved nearly every pixel it changed further from the board
+     * (its issue #75, tools/grade-zsort.mjs). A face sorted by its farthest
+     * corner keeps the recede and takes no layer or plane (`keepFar`), which
+     * is what stands the floor emblem, model 194, out of the way of the green
+     * beside it; and a pair held apart by more than the tie and asking for
+     * the same corner is left to the depth buffer (`leaveApart`), which keeps
+     * a glove's faces, 1813 and 1818, where they are modelled. Neither touches
+     * 580 or 188, whose decals are near-corner faces on far-corner ones. The
+     * House of the Dead and Daytona keep both rules: their rooms and courses
+     * are far-corner faces laid on far-corner faces. */
+    depth: {
+        recede: 12, nearMin: 0.02, layers: true,
+        layerRules: { keepFar: true, leaveApart: true },
+    },
     scenes: null,
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only

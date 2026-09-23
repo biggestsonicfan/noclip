@@ -1756,7 +1756,7 @@ function transformedBounds(d, matrix) {
  */
 function applyFaceLayers(draws) {
     if (!state.rom.game.depth?.layers || !draws.length) return;
-    const layers = coplanarLayers(draws);
+    const layers = coplanarLayers(draws, state.rom.game.depth.layerRules);
     draws.forEach(({ mesh, entry, decoded }, i) => {
         const { layer, plane } = layers[i];
         const set = (geometry, d) => {
