@@ -577,6 +577,60 @@ export function gridBlock(x, z) {
 }
 
 /*
+ * The blocks of a course the board can ever draw.
+ *
+ * It never draws a course whole. set_area_block takes the camera's block and
+ * marks the 5x5 round it, and where that runs off the grid it masks the
+ * columns and rows that would — the grid does not wrap; extra_clip then takes
+ * off more by where on the road the car is. So a block is drawn only if a car
+ * can stand within two blocks of it, and the road is in the ROM: the row
+ * change_course_bank reads per course (the sky's `table`) names, at +0x10, the
+ * car lines — eight lanes, each a pointer and a count of 28-byte points with x
+ * at +0 and z at +8, which set_course_parms hands to the cars at 0x50144c.
+ *
+ * Every block within two of a point on any lane. What this leaves out, in
+ * every build, is four blocks in Seaside Street Galaxy's far corner: a copse of
+ * trees with no ground under it, eight blocks from the nearest road.
+ *
+ * The fourth course, the striped test square, has no road — its row names no
+ * lanes — so where the lanes do not read as points on the grid, all of it is
+ * drawn (null).
+ */
+export function courseReach(rom, course) {
+    const table = rom.game.sky?.table;
+    if (table == null) return null;
+    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const row = u32(rom, table + course * 4);
+    if (!inData(row, 20)) return null;
+    const lines = u32(rom, row + 16);
+    if (!inData(lines, CAR_LANES * 8)) return null;
+    const on = new Set();
+    for (let l = 0; l < CAR_LANES; l++) {
+        const p = u32(rom, lines + l * 8), n = u32(rom, lines + l * 8 + 4);
+        if (!n || !inData(p, n * 28)) return null;
+        for (let i = 0; i < n; i++) {
+            const x = f32(rom, p + i * 28), z = f32(rom, p + i * 28 + 8);
+            if (!(Math.abs(x) < 1024 && Math.abs(z) < 1024)) return null;
+            on.add(boardBlock(x, z));
+        }
+    }
+    const reach = new Set();
+    for (const b of on) {
+        for (let dz = -AREA_REACH; dz <= AREA_REACH; dz++) {
+            for (let dx = -AREA_REACH; dx <= AREA_REACH; dx++) {
+                const x = (b & 15) + dx, z = (b >> 4) + dz;
+                if (x >= 0 && x < 16 && z >= 0 && z < 16) reach.add((z << 4) | x);
+            }
+        }
+    }
+    return reach;
+}
+const CAR_LANES = 8;
+const AREA_REACH = 2;
+/* get_m_block as the board computes it, cvtri truncating toward zero. */
+const boardBlock = (x, z) => ((((Math.trunc(z) + 1024) >> 7) & 15) << 4) | (((Math.trunc(x) + 1024) >> 7) & 15);
+
+/*
  * The road under a point, for the pylons: the course's own geometry standing
  * in for the collision polygons the board asks the TGP about.
  *
