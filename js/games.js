@@ -1419,7 +1419,7 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  * colorxlat's four constants, which are two sets rather than one.
  *
  * The routine that computes the table (0xA74 in every build) tests the test
- * menu's CABINET setting — backup RAM 0x1D0001A, 0 DELUXE, 1 TWIN, 2 UPLIGHT,
+ * menu's CABINET setting — backup RAM 0x1D0001A, 0 DELUXE, 1 TWIN, 2 UPRIGHT,
  * copied to work RAM 0x5FE5E2 — and takes the first set for DELUXE and the
  * second for the other two. The Special Edition tests bit 0 of its own copy
  * at 0x5FE602 instead; the 1993 build tests 0x53E5D0 and has a second set of
@@ -1428,8 +1428,9 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  * them, since the tile chip's palette goes through this table too.
  *
  * Each build's list is its own test menu's, in its order, so the index is the
- * value the setting holds: Rev A and its clones offer DELUXE, TWIN and UPLIGHT,
- * the Special Edition DELUXE and TWIN, the 1993 build DELUXE and UPLIGHT. The
+ * value the setting holds: Rev A and its clones offer DELUXE, TWIN and UPRIGHT,
+ * the Special Edition DELUXE and TWIN, the 1993 build DELUXE and UPRIGHT
+ * (spelled UPLIGHT in the ROM's own menu text, corrected here). The
  * panel's Cabinet switch picks among them (`rom.cabinet`).
  *
  * `DAYTONA_CABINET` is the one it opens on: the first that is not DELUXE,
@@ -1439,17 +1440,17 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  */
 const RAMP_DELUXE = { step: 12, span: 0x300, bias: 0x1160, flat: 0x8b };
 const RAMP_TWIN = { step: 10, span: 0x280, bias: 0x1920, flat: 0xc9 };
-const RAMP_UPLIGHT_93 = { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8 };
+const RAMP_UPRIGHT_93 = { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8 };
 const DAYTONA_CABINETS = [
     { name: 'DELUXE', ramp: RAMP_DELUXE },
     { name: 'TWIN', ramp: RAMP_TWIN },
     /* The same table as TWIN: the routine only asks whether the setting is 0. */
-    { name: 'UPLIGHT', ramp: RAMP_TWIN, same: 'TWIN' },
+    { name: 'UPRIGHT', ramp: RAMP_TWIN, same: 'TWIN' },
 ];
 const DAYTONA_CABINETS_SE = DAYTONA_CABINETS.slice(0, 2);
 const DAYTONA_CABINETS_93 = [
     { name: 'DELUXE', ramp: RAMP_DELUXE },
-    { name: 'UPLIGHT', ramp: RAMP_UPLIGHT_93 },
+    { name: 'UPRIGHT', ramp: RAMP_UPRIGHT_93 },
 ];
 const DAYTONA_CABINET = 1;
 
