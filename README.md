@@ -452,6 +452,31 @@ binaries from your own ROM set when they are wanted, and writes them outside the
 checkout. The reasoning, and the trap of letting a port grade itself, are in
 [TECHNICAL.md](TECHNICAL.md#checking-against-the-board-without-carrying-its-data).
 
+### The loading screen's clips
+
+The reel on the loading screen plays clips the explorer itself drew:
+`tools/record-previews.mjs` loads a set into this page in headless Chrome,
+takes the camera off the mouse, flies it along a scripted path one fixed step
+at a time and hands the frames to ffmpeg. Each shot is a few lines in that
+script's `SHOTS` table, and it writes `media/previews/<game>-<shot>.mp4` with a
+poster beside it. A clip appears on the page once its card in `index.html` lists
+it; a game with no clips takes its turn on the reel as a card saying so.
+
+```
+npm install                      # puppeteer-core, for this script only
+node tools/record-previews.mjs --game stf --list sfight.zip   # what the shots index
+node tools/record-previews.mjs --game stf sfight.zip          # record them all
+node tools/record-previews.mjs --game stf --only carpet sfight.zip
+```
+
+It wants Chrome or Edge (`$CHROME` names one) and ffmpeg with libx264. The ROM
+set goes to the page through its file input and nowhere else; the script's own
+server refuses a `.zip` like stf-tools' does. The clips are pictures of what
+the explorer draws, not the ROM's bytes: nothing in them loads back into it.
+Sonic The Fighters and the House of the Dead prototype have clips so far;
+Daytona USA, the finished House of the Dead and Fighting Vipers have shot tables
+still to be written on a machine with those sets.
+
 ## Reporting something wrong
 
 Three buttons sit in the top right of the window, over everything: **Copy
