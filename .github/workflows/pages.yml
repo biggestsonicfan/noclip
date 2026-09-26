@@ -63,12 +63,16 @@ jobs:
           mkdir _site
           cp index.html style.css CNAME _site/
           cp -r js _site/js
+          cp -r media _site/media
           sed -i "s|<meta name=\"build\" content=\"dev\">|<meta name=\"build\" content=\"$v\">|" _site/index.html
           sed -i -e "s|href=\"\./style\.css\"|href=\"./style.css?v=$v\"|" \
-                 -e "s|src=\"\./js/app\.js\"|src=\"./js/app.js?v=$v\"|" _site/index.html
+                 -e "s|src=\"\./js/app\.js\"|src=\"./js/app.js?v=$v\"|" \
+                 -e "s|src=\"\./js/splash\.js\"|src=\"./js/splash.js?v=$v\"|" _site/index.html
           sed -i -E "s#(from '\./[A-Za-z0-9_]+\.js)'#\1?v=$v'#" _site/js/*.js
           grep -o '<meta name="build"[^>]*>' _site/index.html
-          grep -o "style\.css?v=$v\|app\.js?v=$v" _site/index.html
+          grep -o "style\.css?v=$v\|app\.js?v=$v\|splash\.js?v=$v" _site/index.html
+          # The splash clips are published with the page.
+          test -f _site/media/previews/stf-canyon.mp4
           # Every relative import was stamped: none is left bare.
           ! grep -n "from '\./[A-Za-z0-9_]*\.js'" _site/js/*.js
 
