@@ -90,83 +90,155 @@
 </head>
 <body>
 
+<!-- The loading screen is also the site's front page, so it shows what a set
+     turns into before one is dropped: a reel of clips the explorer itself
+     recorded (tools/record-previews.mjs), and a card per game that takes the
+     reel over while it is hovered or tapped. The clips are in each card's
+     <ol>, so a game gains one by adding a line here; js/splash.js reads them. -->
 <div id="loader">
-  <div class="loader-box">
-    <h1>Sega Model 2</h1>
-    <p class="sub">Interactive 3D explorer</p>
+  <div class="splash">
+    <header class="splash-head">
+      <h1>Sega Model 2 <span>3D Explorer</span></h1>
+      <p class="sub">Fly through the arenas, courses, fighters and monsters of five Model&nbsp;2
+         arcade games, built in this tab from your own ROM set.</p>
+    </header>
 
-    <div class="romnote">
-      <p>Drop a ROM set and the viewer works out which game it is from the program
-         ROM inside it. Five are supported:</p>
-      <ul>
-        <li><b>Sonic The Fighters</b> &mdash; the one it goes deepest on. Every arena,
-            running at the board's 60&nbsp;Hz with the objects its own record asks for, and
-            the Flying Carpet and Canyon Cruise's boat flying their courses; all 5103 models;
-            and the whole cast of 34 on their own rigs, playing the game's 518 motions with
-            sway chains, Tails' tails and afterimage trails. Built from that game's own
-            program EPROMs, <code>epr-19001</code>&ndash;<code>epr-19004</code>,
-            and the mask ROMs <code>mpr-19005</code>&ndash;<code>mpr-19020</code>, which MAME shares with
-            the parent set <b>Sonic Championship</b> (<code>schamp</code>). Drop
-            <code>sfight.zip</code> on its own, or <code>schamp.zip</code> on its own, or both
-            together if your set is split across the two.</li>
-        <li><b>The House of the Dead</b> (<code>hotdo.zip</code>) &mdash; the finished game:
-            its four chapters as eighteen stages, 7477 models under their development names,
-            and 94 enemy bodies playing the 674 motions baked for their joint counts.
-            Revision A (<code>hotd.zip</code>) is recognised as well, and so is a merged
-            archive carrying both &mdash; a set is told apart by the chips inside it, not by
-            the name of the zip.</li>
-        <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
-            prototype the finished game grew out of, read the same way: its two playable
-            stages, its own models and 68 bodies with 507 motions.</li>
-        <li><b>Daytona USA</b> (<code>daytona.zip</code>) &mdash; the only one here on the
-            original Model 2 board rather than the 2A/2B the rest run on, and the only one
-            that shipped in eight builds. All eight are recognised, and a merged archive
-            is read as all of them at once: the panel grows a <b>Build</b> picker and
-            swapping is instant. Two of them are distinct &mdash; the 1993 Deluxe version
-            has 2822 table entries and every build after it 3190, byte for byte the same
-            table in all seven. Out comes the grid of stock cars in their liveries, the
-            courses' track sections and the scenery along them, textured from the course's
-            own bank and shaded through the colour tables the game computes at boot.
-            Its courses come out too: each is a 16x16 grid of 128-unit blocks and one
-            model a block, drawn where it lies, so the Stages tab has the Three-Seven
-            Speedway oval, Dinosaur Canyon, Seaside Street Galaxy and the striped test
-            square the fourth table holds, under the tile chip's panorama of sky. What stands
-            along them moves the way the board moves it &mdash; the slot machine's reels, the
-            dice, the wind farm, the boat, the gulls and the horses, which bolt if you fly at
-            them &mdash; and a picker draws a course as a race, in time attack or in the ending.
-            A <b>Cabinet</b> switch picks the colour tables the test menu's setting would.
-            The cars carry no rig and do not move, so there is no Animation tab.</li>
-        <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
-            arenas and 5413 table entries come out of it, because this game and Sonic The
-            Fighters are built on the same Sega library and the stage records, the model
-            table and the texture and colour pipelines all carried across. What is its own
-            has not been found: an arena stands still, since the object list its record
-            points at is unread; the arenas have no names, so each is shown by the number in
-            its own record; and there are no character rigs or motions, so no Animation tab.</li>
+    <section class="showcase" aria-label="What the explorer draws">
+      <div class="reel" id="reel">
+        <video id="reel-video" muted playsinline preload="none" disablepictureinpicture></video>
+        <!-- A game with no clips yet still gets its turn on the reel. -->
+        <div class="reel-empty" id="reel-empty" hidden>
+          <b id="reel-empty-name"></b>
+          <span>No clip of this one yet &mdash; drop <code id="reel-empty-zip"></code> to see it for yourself.</span>
+        </div>
+        <div class="reel-cap">
+          <span class="reel-game" id="reel-game"></span>
+          <span class="reel-text" id="reel-text"></span>
+        </div>
+        <div class="reel-dots" id="reel-dots"></div>
+        <button type="button" class="reel-play" id="reel-play" aria-label="Play the clips" hidden>&#9654;</button>
+      </div>
+
+      <ul class="games" id="games">
+        <li class="game" data-game="stf" data-zip="sfight.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name">Sonic The Fighters</div>
+          <div class="g-meta">Every arena, all 34 fighters and their 518 motions &middot; <code>sfight</code> / <code>schamp</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="stf-carpet">The Flying Carpet in <b>ride</b> view: the arena held still while the desert wheels past</li>
+            <li data-clip="stf-canyon">Canyon Cruise, riding the boat down its canyon</li>
+            <li data-clip="stf-noclip"><b>Noclip</b> over Casino Night's wall and down into the ring</li>
+            <li data-clip="stf-giantwing">Out among Giant Wing's clouds</li>
+            <li data-clip="stf-fighter">Sonic mid-move on his own rig, afterimages and all</li>
+          </ol>
+        </li>
+        <li class="game" data-game="hotd" data-zip="hotdo.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name">The House of the Dead</div>
+          <div class="g-meta">Eighteen stages and 94 enemy bodies &middot; <code>hotdo</code> / <code>hotd</code></div>
+          <ol class="clips" hidden></ol>
+        </li>
+        <li class="game" data-game="hotdp" data-zip="hotdp.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name">The House of the Dead <i>prototype</i></div>
+          <div class="g-meta">The Model 2C build the game grew out of &middot; <code>hotdp</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="hotdp-room">Standing in the lit room of Stage&nbsp;1</li>
+            <li data-clip="hotdp-set3">Over Stage&nbsp;1's third set</li>
+            <li data-clip="hotdp-body">A zombie's body playing a motion baked for its joints</li>
+          </ol>
+        </li>
+        <li class="game" data-game="daytona" data-zip="daytona.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name">Daytona USA</div>
+          <div class="g-meta">Its courses, cars and trackside, in eight builds &middot; <code>daytona</code></div>
+          <ol class="clips" hidden></ol>
+        </li>
+        <li class="game" data-game="fvipers" data-zip="fvipers.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name">Fighting Vipers <i>experimental</i></div>
+          <div class="g-meta">Sixteen arenas, still being read &middot; <code>fvipers</code></div>
+          <ol class="clips" hidden></ol>
+        </li>
       </ul>
-    </div>
+    </section>
 
-    <!-- Filled in when the page was opened from a report's link: which build it
-         wants, since the link cannot carry the ROM set. See js/viewlink.js. -->
-    <p id="loader-link" class="linknote" hidden></p>
+    <section class="load">
+      <h2>Bring your own ROM set</h2>
+      <p class="load-sub">The viewer works out which game a set is from the program ROM inside
+         it, so the zip can be called anything.</p>
+      <!-- Filled in when the page was opened from a report's link: which build it
+           wants, since the link cannot carry the ROM set. See js/viewlink.js. -->
+      <p id="loader-link" class="linknote" hidden></p>
 
-    <label class="ack"><input type="checkbox" id="loader-ack">
-      <span>I understand that assistive AI was used in the generation of this project.</span></label>
+      <label class="ack"><input type="checkbox" id="loader-ack">
+        <span>I understand that assistive AI was used in the generation of this project.</span></label>
 
-    <label id="loader-drop" class="disabled" for="loader-file">
-      <div class="drop-icon" aria-hidden="true">&#8681;</div>
-      <div class="drop-title"><span class="desktop-only">Drop your ROM set here</span><span class="mobile-only">Choose your ROM set</span></div>
-      <p class="drop-sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
-      <span class="drop-btn">Choose files&hellip;</span>
-      <span class="lock-note">Tick the acknowledgement above to enable</span>
-      <input type="file" id="loader-file" accept=".zip,application/zip" multiple hidden disabled>
-    </label>
+      <label id="loader-drop" class="disabled" for="loader-file">
+        <div class="drop-icon" aria-hidden="true">&#8681;</div>
+        <div class="drop-title"><span class="desktop-only">Drop your ROM set here</span><span class="mobile-only">Choose your ROM set</span></div>
+        <p class="drop-sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
+        <span class="drop-btn">Choose files&hellip;</span>
+        <span class="lock-note">Tick the acknowledgement above to enable</span>
+        <input type="file" id="loader-file" accept=".zip,application/zip" multiple hidden disabled>
+      </label>
 
-    <div id="loader-progress" hidden>
-      <div id="loader-status"></div>
-      <div class="bar"><div id="loader-bar"></div></div>
-    </div>
-    <p id="loader-error" class="err" hidden></p>
+      <div id="loader-progress" hidden>
+        <div id="loader-status"></div>
+        <div class="bar"><div id="loader-bar"></div></div>
+      </div>
+      <p id="loader-error" class="err" hidden></p>
+
+      <details class="romnote">
+        <summary>What each set gives you</summary>
+        <ul>
+          <li><b>Sonic The Fighters</b> &mdash; the one it goes deepest on. Every arena,
+              running at the board's 60&nbsp;Hz with the objects its own record asks for, and
+              the Flying Carpet and Canyon Cruise's boat flying their courses; all 5103 models;
+              and the whole cast of 34 on their own rigs, playing the game's 518 motions with
+              sway chains, Tails' tails and afterimage trails. Built from that game's own
+              program EPROMs, <code>epr-19001</code>&ndash;<code>epr-19004</code>,
+              and the mask ROMs <code>mpr-19005</code>&ndash;<code>mpr-19020</code>, which MAME shares with
+              the parent set <b>Sonic Championship</b> (<code>schamp</code>). Drop
+              <code>sfight.zip</code> on its own, or <code>schamp.zip</code> on its own, or both
+              together if your set is split across the two.</li>
+          <li><b>The House of the Dead</b> (<code>hotdo.zip</code>) &mdash; the finished game:
+              its four chapters as eighteen stages, 7477 models under their development names,
+              and 94 enemy bodies playing the 674 motions baked for their joint counts.
+              Revision A (<code>hotd.zip</code>) is recognised as well, and so is a merged
+              archive carrying both &mdash; a set is told apart by the chips inside it, not by
+              the name of the zip.</li>
+          <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
+              prototype the finished game grew out of, read the same way: its two playable
+              stages, its own models and 68 bodies with 507 motions.</li>
+          <li><b>Daytona USA</b> (<code>daytona.zip</code>) &mdash; the only one here on the
+              original Model 2 board rather than the 2A/2B the rest run on, and the only one
+              that shipped in eight builds. All eight are recognised, and a merged archive
+              is read as all of them at once: the panel grows a <b>Build</b> picker and
+              swapping is instant. Two of them are distinct &mdash; the 1993 Deluxe version
+              has 2822 table entries and every build after it 3190, byte for byte the same
+              table in all seven. Out comes the grid of stock cars in their liveries, the
+              courses' track sections and the scenery along them, textured from the course's
+              own bank and shaded through the colour tables the game computes at boot.
+              Its courses come out too: each is a 16x16 grid of 128-unit blocks and one
+              model a block, drawn where it lies, so the Stages tab has the Three-Seven
+              Speedway oval, Dinosaur Canyon, Seaside Street Galaxy and the striped test
+              square the fourth table holds, under the tile chip's panorama of sky. What stands
+              along them moves the way the board moves it &mdash; the slot machine's reels, the
+              dice, the wind farm, the boat, the gulls and the horses, which bolt if you fly at
+              them &mdash; and a picker draws a course as a race, in time attack or in the ending.
+              A <b>Cabinet</b> switch picks the colour tables the test menu's setting would.
+              The cars carry no rig and do not move, so there is no Animation tab.</li>
+          <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
+              arenas and 5413 table entries come out of it, because this game and Sonic The
+              Fighters are built on the same Sega library and the stage records, the model
+              table and the texture and colour pipelines all carried across. What is its own
+              has not been found: an arena stands still, since the object list its record
+              points at is unread; the arenas have no names, so each is shown by the number in
+              its own record; and there are no character rigs or motions, so no Animation tab.</li>
+        </ul>
+      </details>
+    </section>
   </div>
 </div>
 
@@ -396,5 +468,6 @@
 <div id="link-note" hidden></div>
 
 <script type="module" src="./js/app.js"></script>
+<script type="module" src="./js/splash.js"></script>
 </body>
 </html>
