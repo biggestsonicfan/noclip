@@ -106,6 +106,8 @@ export function viewLink(state) {
          * of the table directly, and for a body, which has no slots. */
         if (m.slot >= 0) p.set('slot', m.slot);
         else p.set('motion', m.id);
+        /* A string of moves, as the entries of the fighter's input tables. */
+        if (m.chain) p.set('chain', m.chain.code);
         /* The display counter rather than the frame: the frame is the counter
          * folded into the motion's length, and Tails' tails run off the
          * counter unfolded. */
@@ -155,6 +157,7 @@ export function readViewLink(hash = location.hash) {
         char: int(p.get('char')),
         slot: int(p.get('slot')),
         motion: int(p.get('motion')),
+        chain: p.get('chain'),
         tick: int(p.get('tick')),
         paused: p.get('paused') === '1',
         off: (p.get('off') ?? '').split(',').filter(Boolean),

@@ -325,6 +325,18 @@
         <label class="axis grow"><input type="range" id="motion-frame" min="1" max="1" step="1">
           <span id="motion-frame-val" class="axis-val">—</span></label>
       </div>
+      <div class="field" id="string-field" hidden>
+        <label>String &mdash; moves one after another</label>
+        <div id="string-chain" class="chain"></div>
+        <div id="string-next-label" class="dim">then, at the cancel frame:</div>
+        <div id="string-next" class="chain-next"></div>
+        <div class="row">
+          <select id="string-add" class="grow"></select>
+          <button id="string-clear" class="btn" type="button">Clear</button>
+        </div>
+        <label class="check"><input type="checkbox" id="string-ease" checked> ease into each move, as the board does</label>
+        <div id="string-readout" class="mono dim"></div>
+      </div>
       <div class="field" id="tails-field" hidden>
         <label>Tails' tails</label>
         <div id="tails-readout" class="mono dim"></div>

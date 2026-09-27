@@ -377,6 +377,20 @@ html.mobile #tools a span { display: none; }
 }
 .btn:hover { border-color: var(--accent-dim); color: var(--accent); }
 
+/* The string in the Animation tab: one chip per move, the one on screen lit. */
+.chain, .chain-next { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.chain-next .btn { flex: 0 1 auto; }
+.chip {
+    padding: 3px 7px; font: inherit; font-size: 12px; cursor: pointer;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+}
+.chip:hover { border-color: #ff7ac8; }
+.chip.active { border-color: var(--accent); color: var(--accent); }
+#string-field .row { display: flex; gap: 6px; margin: 4px 0; }
+#string-field .row select { flex: 1; min-width: 0; }
+#string-field .row .btn { flex: 0 0 auto; }
+
 .jointlist {
     display: flex; flex-direction: column;
     border: 1px solid var(--line); border-radius: 5px;

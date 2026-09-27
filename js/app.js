@@ -35,7 +35,9 @@ import {
     readExhaust, exhaustPart, chestModel, exhaustDrawn,
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
-import { decodeMotion, sampleMotion, listMotions, readMotionScript, scriptStateAt } from './motion.js';
+import { decodeMotion, sampleMotion, listMotions, readMotionScript, scriptStateAt, readMotionTiming } from './motion.js';
+import { readMoves, spellMove, spellEntry, spellGuards, followUps, buildChain, chainAt, chainSample,
+    retypeChain, chainCode, parseChainCode, easeLength } from './moves.js';
 import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trailDraws, liveCopies } from './zanzou.js';
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, rankMotions, partDraws, readSkin, skinMesh,
@@ -106,7 +108,14 @@ const state = {
     motion: {
         id: 0, slot: 0, decoded: null, frame: 1, tick: 0, playing: true, start: 0,
         parts: [], skeleton: null, list: null,
+        /* The fighter's moves as the input matcher has them (js/moves.js), and
+         * the chain of them playing, if one is: `link` is which of its links
+         * is on screen, and `tick` then counts through the whole chain. */
+        moves: null, chain: null, link: 0,
     },
+    /* Whether a chain eases into each motion the way `smooth_int` does, or
+     * cuts. */
+    easeChain: true,
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
@@ -1823,8 +1832,14 @@ function loadCharacter(charIndex, { keepCamera = false, keepMotion = false } = {
     const m = state.motion;
     const slot = keepMotion && m.slot >= 0 ? m.slot : 0;
     if (!m.list) m.list = listMotions(state.rom);
-    if (keepMotion && m.slot < 0) setMotion(m.id, -1, { rebuild: false });
-    else setMotion(c.motions[slot], slot, { rebuild: false });
+    /* A chain is held by its input: the same presses typed on this fighter. */
+    const oldChain = keepMotion && m.chain ? m.chain.links : null;
+    m.moves = readMoves(state.rom, charIndex);
+    const retyped = oldChain && m.moves
+        ? retypeChain(m.moves, oldChain.map((l) => l.entry), oldChain.map((l) => l.follows)) : [];
+    if (retyped.length) setChain(retyped, { rebuild: false });
+    else if (keepMotion && m.slot < 0 && !oldChain) setMotion(m.id, -1, { rebuild: false });
+    else setMotion(c.motions[oldChain ? 0 : slot], oldChain ? 0 : slot, { rebuild: false });
 
     rebuildRig({ keepCamera });
     renderAnimPanel();
@@ -1834,6 +1849,7 @@ function loadCharacter(charIndex, { keepCamera = false, keepMotion = false } = {
 /** Point the rig at a motion id, from an action slot or from the table itself. */
 function setMotion(id, slot, { rebuild = true } = {}) {
     const m = state.motion;
+    m.chain = null;
     m.id = id;
     m.slot = slot;
     m.decoded = state.bodies ? m.list[id] ?? null : decodeMotion(state.rom, id);
@@ -1841,6 +1857,41 @@ function setMotion(id, slot, { rebuild = true } = {}) {
     m.tick = 0;
     m.start = performance.now();
     if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
+}
+
+/**
+ * Play moves one after another, handed over where the game would hand over.
+ * @param {object[]} entries matcher entries, in order (see js/moves.js)
+ */
+function setChain(entries, { rebuild = true } = {}) {
+    const m = state.motion;
+    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries) : null;
+    if (!chain) return;
+    chain.code = chainCode(m.moves, chain.links.map((l) => l.entry));
+    m.chain = chain;
+    m.slot = -1;
+    m.tick = 0;
+    m.start = performance.now();
+    enterLink(m);
+    if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
+}
+
+/* Put the motion the chain is on at `m.tick` where the rest of the rig reads
+ * it: the id, the block and the frame, as if it had been picked by hand. */
+function enterLink(m) {
+    const { index, frame } = chainAt(m.chain, m.tick);
+    const link = m.chain.links[index];
+    m.link = index;
+    m.id = link.motion;
+    m.decoded = link.decoded;
+    m.frame = frame;
+}
+
+/* The channels at frame `f` of whatever is on screen — eased out of the link
+ * before when a chain is playing. */
+function motionSample(m, f) {
+    return m.chain ? chainSample(state.rom, m.chain, m.link, f, state.easeChain)
+        : sampleMotion(state.rom, m.decoded, f);
 }
 
 /*
@@ -2228,7 +2279,10 @@ function placeTrails(m, c, pose, poseAt) {
     }
 
     const len = m.decoded.frames;
-    const frameOf = (tick) => 1 + (((tick % len) + len) % len);
+    /* In a chain the tick counts through every link, and the frame is the
+     * link's own. */
+    const frameOf = m.chain ? (tick) => chainAt(m.chain, tick).frame
+        : (tick) => 1 + (((tick % len) + len) % len);
     const sim = m.trailSim;
     const step = sim ? m.tick - sim.tick : 0;
     if (sim && step >= 1 && step <= TRAIL_CATCH_UP) {
@@ -2297,7 +2351,7 @@ function poseRig() {
      * for whoever owns the table. */
     const opts = { headAim: c.ownAnimTable };
     const pose = m.decoded
-        ? buildPose(skeleton, sampleMotion(state.rom, m.decoded, m.frame), opts)
+        ? buildPose(skeleton, motionSample(m, m.frame), opts)
         /* A slot with no motion still has to draw something, so solve the pose
          * every channel reads as zero — which is the game's own rest. */
         : buildPose(skeleton, {
@@ -2365,7 +2419,7 @@ function poseRig() {
     }
     /* The afterimages: the coprocessor's ring, run on the pose frame by frame. */
     placeTrails(m, c, pose,
-        (f) => buildPose(skeleton, sampleMotion(state.rom, m.decoded, f), opts));
+        (f) => buildPose(skeleton, motionSample(m, f), opts));
 
     /* The boss's arms ride the chest exactly as `rob_disp` leaves it — the
      * routine adds no transform of its own, only a model. */
@@ -2449,6 +2503,9 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.charIndex = body.index;
     state.character = body;
     const m = state.motion;
+    /* A body has no input tables, so no moves and no strings. */
+    m.moves = null;
+    $('#string-field').hidden = true;
     /* Start on a motion likely written for the body: a body can play any
      * motion of its joint count, but one keyed on another skeleton bends its
      * parts in ways they were not modelled for. A motion carried over from the
@@ -2615,8 +2672,11 @@ function stepMotion(now) {
     const tick = Math.floor(((now - m.start) / 1000) * GAME_HZ);
     if (tick === m.tick) return;
     m.tick = tick;
-    m.frame = 1 + (tick % len);
+    const link = m.link;
+    if (m.chain) enterLink(m);
+    else m.frame = 1 + (tick % len);
     poseRig();
+    if (m.chain && m.link !== link) showLink();
     updateMotionFrameReadout();
 }
 
@@ -3027,7 +3087,8 @@ function renderBodyMotionPanel() {
     updateMotionFrameReadout();
 }
 
-/* The 52 action slots, then the whole motion table for browsing. */
+/* The fighter's moves, then the 52 action slots, then the whole motion table
+ * for browsing. */
 function renderMotionPanel() {
     if (state.bodies) return renderBodyMotionPanel();
     const c = state.character;
@@ -3037,6 +3098,34 @@ function renderMotionPanel() {
     const sel = $('#motion-select');
     sel.innerHTML = '';
     const trailed = trailedMotions();
+    const moveLabel = (mv) => `${mv.name ?? `motion ${mv.motion}`} · ${spellMove(mv)}`
+        + (mv.reachable ? '' : ` · ${spellGuards(mv.entry) || 'other situations'}`)
+        + (trailed.has(mv.motion) ? ' · trail' : '');
+    const moves = m.moves?.moves ?? [];
+    /* The option a chain is picked by, when it is one of the list's moves. */
+    let chosen = null;
+    for (const [label, want] of [['Moves — standing, by the buttons', true],
+        ['Moves in other situations', false]]) {
+        const group = el('optgroup');
+        group.label = label;
+        moves.forEach((mv, i) => {
+            if (mv.reachable !== want) return;
+            const o = el('option');
+            o.value = `move:${i}`;
+            o.textContent = moveLabel(mv);
+            group.appendChild(o);
+            if (m.chain && sameEntries(mv.steps, m.chain.links.map((l) => l.entry))) chosen = o.value;
+        });
+        if (group.children.length) sel.appendChild(group);
+    }
+    if (m.chain && !chosen) {
+        const o = el('option');
+        o.value = 'chain';
+        o.textContent = `A string of ${m.chain.links.length} — built below`;
+        sel.insertBefore(o, sel.firstChild);
+        chosen = 'chain';
+    }
+
     const actions = el('optgroup');
     actions.label = 'This fighter\'s action slots';
     for (let i = 0; i < ACTION_SLOT_COUNT; i++) {
@@ -3059,26 +3148,131 @@ function renderMotionPanel() {
         all.appendChild(o);
     }
     sel.appendChild(all);
-    sel.value = m.slot >= 0 ? `slot:${m.slot}` : `id:${m.id}`;
+    sel.value = chosen ?? (m.slot >= 0 ? `slot:${m.slot}` : `id:${m.id}`);
 
     const d = m.decoded;
-    $('#motion-meta').innerHTML = d ? `
-        <span>motion</span><b>${d.id}</b>
-        <span>block</span><b>0x${d.address.toString(16)}</b>
-        <span>frames</span><b>${d.frames}</b>
-        <span>keyed channels</span><b>${d.channels.filter((x) => x.type >= 5).length} of 60</b>
-        <span>keys</span><b>${d.channels.reduce((a, x) => a + x.count, 0)}</b>
-    ` : '<span>motion</span><b>empty slot</b>';
-
     const scrub = $('#motion-frame');
-    scrub.max = String(d ? d.frames : 1);
-    scrub.value = String(m.frame);
+    scrub.max = String(m.chain ? m.chain.total : d ? d.frames : 1);
+    scrub.value = String(scrubValue(m));
     scrub.disabled = !d;
     $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
     $('#motion-play').disabled = !d;
+    renderMotionMeta();
+    renderStringPanel();
     renderTrailPanel();
     renderExhaustPanel();
     updateMotionFrameReadout();
+}
+
+/* A chain moved on to another link: the panel follows without being rebuilt,
+ * so a list someone has open stays open. */
+function showLink() {
+    const m = state.motion;
+    renderMotionMeta();
+    [...$('#string-chain').children].forEach((c, i) => c.classList.toggle('active', i === m.link));
+    updateHud();
+}
+
+const sameEntries = (a, b) => a.length === b.length && a.every((e, i) => e === b[i]);
+
+/* The frame slider: the motion's frame, or in a chain the tick through it. */
+function scrubValue(m) {
+    return m.chain ? (m.tick % m.chain.total + m.chain.total) % m.chain.total + 1 : m.frame;
+}
+
+/* What is playing: the motion's block, and for a move its input and timing. */
+function renderMotionMeta() {
+    const m = state.motion;
+    const d = m.decoded;
+    const link = m.chain?.links[m.link];
+    const t = d ? readMotionTiming(state.rom, d.id) : null;
+    const name = link?.entry.name ?? m.moves?.moves.find((x) => x.motion === m.id)?.name;
+    $('#motion-meta').innerHTML = (link ? `
+        <span>move</span><b>${name ?? '—'}</b>
+        <span>input</span><b>${spellEntry(link.entry)}${link.follows ? ' (a string follow-up)' : ''}</b>
+    ` : '') + (d ? `
+        <span>motion</span><b>${d.id}</b>
+        <span>block</span><b>0x${d.address.toString(16)}</b>
+        <span>frames</span><b>${d.frames}</b>
+        ${t ? `<span>hits from · cancel · free</span><b>${t.hit} · ${t.cancel} · ${t.end}</b>` : ''}
+        <span>keyed channels</span><b>${d.channels.filter((x) => x.type >= 5).length} of 60</b>
+        <span>keys</span><b>${d.channels.reduce((a, x) => a + x.count, 0)}</b>
+    ` : '<span>motion</span><b>empty slot</b>');
+}
+
+/*
+ * The string being played, and what may come next. The follow-ups are the
+ * table the last move parks, which is every way the game lets a string go on;
+ * any other move can be put after it too, and starts once the fighter is free.
+ */
+function renderStringPanel() {
+    const m = state.motion;
+    const field = $('#string-field');
+    field.hidden = !m.moves;
+    if (!m.moves) return;
+    $('#string-ease').checked = state.easeChain;
+
+    const list = $('#string-chain');
+    list.innerHTML = '';
+    const links = m.chain?.links ?? [];
+    links.forEach((l, i) => {
+        const chip = el('button', 'chip' + (i === m.link ? ' active' : ''));
+        chip.type = 'button';
+        chip.title = `motion ${l.motion}, ${l.decoded.frames} frames, hands over after ${l.length}`
+            + ' — click to end the string before this';
+        chip.textContent = `${i && l.follows ? '› ' : i ? '· ' : ''}${l.entry.name ?? `motion ${l.motion}`}`
+            + ` (${spellEntry(l.entry)})`;
+        chip.addEventListener('click', () => {
+            const rest = links.slice(0, i).map((x) => x.entry);
+            if (rest.length) setChain(rest);
+            else setMotion(state.character.motions[0], 0);
+        });
+        list.appendChild(chip);
+    });
+    if (!links.length) list.innerHTML = '<span class="dim">Pick a move above, then add to it.</span>';
+
+    const next = $('#string-next');
+    next.innerHTML = '';
+    const last = links[links.length - 1]?.entry;
+    const ups = followUps(m.moves, last).filter((e) => e.reachable);
+    for (const e of ups) {
+        const b = el('button', 'btn');
+        b.type = 'button';
+        b.textContent = `+ ${spellEntry(e)}` + (e.name ? ` → ${e.name}` : ` → motion ${e.motion}`);
+        b.addEventListener('click', () => setChain([...links.map((x) => x.entry), e]));
+        next.appendChild(b);
+    }
+    $('#string-next-label').hidden = !ups.length;
+
+    const add = $('#string-add');
+    add.innerHTML = '';
+    const head = el('option');
+    head.value = '';
+    head.textContent = links.length ? 'then, once free, any move…' : 'start with any move…';
+    add.appendChild(head);
+    m.moves.moves.forEach((mv, i) => {
+        if (!mv.reachable) return;
+        const o = el('option');
+        o.value = String(i);
+        o.textContent = `${mv.name ?? `motion ${mv.motion}`} · ${spellMove(mv)}`;
+        add.appendChild(o);
+    });
+    add.value = '';
+    $('#string-clear').disabled = !links.length;
+    updateStringReadout();
+}
+
+function updateStringReadout() {
+    const m = state.motion;
+    const out = $('#string-readout');
+    if (!out) return;
+    if (!m.chain) { out.textContent = ''; return; }
+    const l = m.chain.links[m.link];
+    const n = easeLength(l.decoded.frames);
+    const easing = state.easeChain && m.link > 0 && m.frame < n;
+    out.textContent = `link ${m.link + 1} of ${m.chain.links.length}: frame ${m.frame} of ${l.decoded.frames}`
+        + (m.link + 1 < m.chain.links.length ? `, hands over after ${l.length}` : '')
+        + (easing ? ` · easing in, ${n - m.frame} of ${n} left` : '');
 }
 
 /* The motions whose scripts lay a trail. Almost none of them are in a fighter's
@@ -3122,7 +3316,9 @@ function renderTrailPanel() {
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
-    $('#motion-frame-val').textContent = m.decoded ? `${m.frame} / ${n}` : '—';
+    $('#motion-frame-val').textContent = !m.decoded ? '—'
+        : m.chain ? `${scrubValue(m)} / ${m.chain.total}` : `${m.frame} / ${n}`;
+    updateStringReadout();
     const jet = $('#exhaust-now');
     if (jet && m.exhaust) {
         jet.textContent = `frame ${m.frame}: chest ${m.chestNow}`
@@ -3142,7 +3338,7 @@ function updateMotionFrameReadout() {
         live.textContent = `${on ? 'laying' : 'off'} — ${liveCopies(m.trailSim)} of 128 copies alive`;
     }
     const scrub = $('#motion-frame');
-    if (scrub && document.activeElement !== scrub) scrub.value = String(m.frame);
+    if (scrub && document.activeElement !== scrub) scrub.value = String(scrubValue(m));
 }
 
 /* ---- HUD / options ------------------------------------------------------- */
@@ -3157,8 +3353,11 @@ function updateHud() {
         label = `<b>model ${state.modelIndex}</b>`;
     } else {
         const m = state.motion;
+        const link = m.chain?.links[m.link];
         label = `<b>${state.character?.name ?? ''}</b> · `
-            + (m.decoded ? m.decoded.name || `motion ${m.decoded.id}` : 'no motion');
+            + (link ? `${link.entry.name ?? `motion ${link.motion}`}`
+                + (m.chain.links.length > 1 ? ` (${m.link + 1} of ${m.chain.links.length})` : '')
+                : m.decoded ? m.decoded.name || `motion ${m.decoded.id}` : 'no motion');
     }
     $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? 'noclip' : 'orbit'} camera`
         + (v.mode === 'orbit' ? ` · ${isMobile() ? 'tap' : 'click'} a part to identify it` : '');
@@ -3290,7 +3489,23 @@ function wireOptions() {
     $('#motion-select').addEventListener('change', (e) => {
         const [kind, n] = e.target.value.split(':');
         if (kind === 'slot') setMotion(state.character.motions[+n], +n);
-        else setMotion(+n, -1);
+        else if (kind === 'move') setChain(state.motion.moves.moves[+n].steps);
+        else if (kind === 'id') setMotion(+n, -1);
+    });
+    $('#string-add').addEventListener('change', (e) => {
+        const mv = state.motion.moves?.moves[+e.target.value];
+        if (!e.target.value || !mv) return;
+        const had = state.motion.chain?.links.map((l) => l.entry) ?? [];
+        setChain([...had, ...mv.steps]);
+    });
+    $('#string-clear').addEventListener('click', () => {
+        const first = state.motion.chain?.links[0];
+        if (first) setChain([first.entry]);
+    });
+    $('#string-ease').addEventListener('change', (e) => {
+        state.easeChain = e.target.checked;
+        poseRig();
+        updateMotionFrameReadout();
     });
     $('#motion-play').addEventListener('click', () => {
         const m = state.motion;
@@ -3307,9 +3522,12 @@ function wireOptions() {
         $('#motion-play').textContent = 'Play';
         /* A scrub is a step of the whole clock, not just of the motion: moving
          * one frame on moves Tails' tails one entry on with it. */
-        m.tick += +e.target.value - m.frame;
-        m.frame = +e.target.value;
+        const link = m.link;
+        m.tick += +e.target.value - scrubValue(m);
+        if (m.chain) enterLink(m);
+        else m.frame = +e.target.value;
         poseRig();
+        if (m.chain && m.link !== link) showLink();
         updateMotionFrameReadout();
     });
 
@@ -3605,9 +3823,12 @@ function restoreLinkedView() {
         const known = slot >= 0 || (id !== null
             && (state.bodies ? Boolean(m.list[id]) : m.list.some((e) => e.id === id)));
         if (known) setMotion(id, slot);
+        const entries = !state.bodies && link.chain && m.moves ? parseChainCode(m.moves, link.chain) : null;
+        if (entries) setChain(entries);
         if (m.decoded && link.tick !== null && link.tick >= 0) {
             m.tick = link.tick;
-            m.frame = 1 + (link.tick % m.decoded.frames);
+            if (m.chain) enterLink(m);
+            else m.frame = 1 + (link.tick % m.decoded.frames);
             m.start = performance.now() - (m.tick / GAME_HZ) * 1000;
             m.playing = !link.paused;
             poseRig();

@@ -2926,14 +2926,106 @@ When the game starts a new motion it does not cut to it: `play_motion` calls
 in over the first eight frames. The capture shows it plainly — the gap between
 board and viewer is widest on the frame after a motion starts and falls away to
 nothing by the eighth, after which the two agree to float precision for the rest
-of the motion. The viewer cuts to a motion instead, so those eight frames are
-reported by `test-motion-mame.mjs` rather than asserted on.
+of the motion. A motion picked on its own is cut to, since there is no pose
+before it to ease out of, so those eight frames are reported by
+`test-motion-mame.mjs` rather than asserted on. A string of moves does ease —
+see [Moves and strings](#moves-and-strings-jsmovesjs).
 
-Two more things the board does with a motion and the viewer does not: the frame
-remap table at `0x854(g7)`, a per-move timing curve `get_frame_dat` interpolates
-the frame through, and the replay path's half-frame sampling, which is how slow
-motion works. Both change *which* frame is asked for, not what a frame decodes
-to.
+One more thing the board does with a motion and the viewer does not: the replay
+path's half-frame sampling, which is how slow motion works. It changes *which*
+frame is asked for, not what a frame decodes to. The frame remap table at
+`0x854(g7)`, a per-move timing curve `get_frame_dat` would interpolate the frame
+through, turns out to change nothing: only setup op `0x10` sets it (`0x1BB1C`,
+pairs of bytes, the motion's length taken from the last), `set_mot_dat` clears
+it at every motion start, and none of the 519 motions carries that op.
+
+### Moves and strings (`js/moves.js`)
+
+The 52 action slots are how a fighter stands, walks, is hit and gets up. The
+attacks are not in them: the game reaches those through the input matcher, and
+the Animation tab now lists a fighter's moves the way the matcher has them —
+under the buttons that do them — and plays a string the way the game strings
+it. The two tables and their readings come from the stf-fly project
+(`flystf/matcher.py`, `combos.py`, `moves.py`), which typed the decoded inputs on
+a running board and read back the motion each one started.
+
+**The matcher.** `MOVESET_ARRAY` (`0x1EFAC`) holds a pointer per character id
+(the `CHAR_PARTS` index; the mirror half takes 26 off) into a byte-code program
+that `_uk_execute_move` (`0x1E458`) runs over the fighter's input ring every
+frame. A table is a run of 7-byte headers, opcode `0x0E`: a u16 key — the
+buttons in the low byte (P 1, K 2, G 4) and a context in the high byte, 0 on
+the ground — and the address of the script that key runs. The handlers are at
+`COMMANDS_BEGIN` (`0x1F00C`), 64 of them, and each steps the program counter by
+its own `addo N, g4, g4`, which is where the operand lengths come from. A
+script is a run of blocks, each opened by a fallback (`0x0F`, `0x27`: where to
+go if anything in the block fails) and closed by a commit (`0x05`, `0x06`) that
+writes a word to `p1_command`; its low sixteen bits are the motion that plays.
+Inside a block the tests are direction states walked backwards through the
+input ring (`0x00`–`0x03`, `0x1E`), a three-way branch on whether the stick is
+forward, back or neither (`0x28`, `0x1EB5C`), bits of the fighter's state
+(`0x08`: `P1+0x000`), of `p1_en_flag` (`0x07`: `+0x5B8`), of the motion kind
+(`0x09`: `+0x1A4`) and of the opponent's (`0x2A`), and the distance between the
+two (`0x1A`, `0x1B`).
+
+So the first block whose tests pass is the move, and walking the script depth
+first with a stack of fallbacks visits the commits in exactly the engine's
+order: the main path, then the innermost fallback, then the one outside it. That
+order matters, because one button has many entries. Sonic's P is one move with
+state bit 29 up, half a dozen with bit 30 up, one each with motion-kind bit 27
+and with `en_flag` bit 0 — and, with none of those, the neutral branch's plain
+jab, motion 249. The viewer shows moves in one
+situation: standing, facing a standing opponent at an ordinary distance, out of
+hyper, every flag clear. An entry is *reachable* when typing its own input into
+its table lands on it rather than on something ahead of it; the list gives each
+motion under the plainest reachable input, and the motions only another
+situation reaches go in a second group with the bits they need. What most of
+those bits mean is not read yet, so they are named by number.
+
+**Strings.** Just before a commit, `0x0D` parks the address of another table of
+the same shape in `p1_pc_command` (`P1+0x1218`): the moves that may follow this
+one. A string is that, repeated — Sonic's jab parks `0x8233C`, whose P is the
+second punch, whose table's P is the third. The follow-up's commit waits
+(`0x12`, `0x1E7D4`) until `p1_motion_coma + 1 >= p1_follow1 + n`, and
+`p1_follow1` is the motion's **cancel frame**: setup op 2 (`0x1B628`) copies
+three u16s into `p1_info`, `p1_follow1` and `p1_follow2` — the frame the attack
+can first connect, the cancel frame, and the frame the fighter comes free. So
+the old motion's last frame on screen is the one before cancel plus `n`, and
+the animators knew it: the joint angles Sonic's second punch opens on are the
+ones his jab holds at frame 15, one short of its cancel frame of 16, to the
+last binary radian — and the third punch picks up the second's frame 11 the
+same way. A move that is not a
+follow-up waits for the fighter to be free, at `p1_follow2`. 333 of the 519
+motions carry op 2; the rest keep their length in all three.
+
+**Names.** `debug_cpu_movesets` (`0xDE278`) is the table the CPU opponent is
+driven from: 0x2C-byte records, a pointer to the move's name (`SNC_hataki`),
+which hit of a string it is, the damage, and the input the CPU types — a stick
+and button byte per step, `0x7F` ending it, and a frame count per step
+(`stick_control_normal`, `0x3E588`). Each record's input is cut at its presses
+and typed into the tree, a string's later presses into the tables the earlier
+ones park, and the entry it lands on takes the name with the character's prefix
+off. The table covers characters 0–10; 11–15 point at a copy of Sonic's, so the
+Final Eggman Boss, the robots, Honey and Super Sonic have their moves listed by
+motion number rather than borrowing names that are not theirs. A record that
+jumps before its first press is an air attack and is left out.
+
+**The ease.** `smooth_int` keeps the pose the fighter was in as a new motion
+starts, and `calc_rob_angle_cont` adds back a share of the difference for the
+first frames (`0x305B0`): the difference over N a frame, times N minus the
+motion frame. N follows the new motion's length — none for two frames or fewer,
+then 1 up to 4 frames, 2 up to 8, 4 up to 16, and 8 for anything longer — and
+the angle share is an arithmetic shift of the difference, the float share a
+multiply by 1/N. The board takes the angle difference as a rotation, composing
+the old joint rotation with the inverse of the new on the coprocessor
+(`0x2A005454`) and reading three angles back; the viewer takes it channel by
+channel, which agrees for the small turns an ease usually spans and not
+exactly for large ones. There is a checkbox to cut instead.
+
+The string panel under the frame slider shows the chain as chips, the follow-ups
+the last move's table offers as buttons, and a list to put any move after it
+once the fighter is free. Changing fighter retypes the string: each press goes
+through the new fighter's tree, so Sonic's P, K and half-circle P become
+Knuckles' own. A view link carries the string as its entries' table addresses.
 
 ## Textures
 
