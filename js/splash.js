@@ -2,7 +2,7 @@
  * splash.js — the reel on the loading screen.
  *
  * The clips are the explorer's own pictures, recorded from real sets by
- * tools/record-previews.mjs into media/previews, and listed in index.html under
+ * stf-tools' record-previews.mjs into media/previews, and listed in index.html under
  * the card of the game they are from. Left alone the reel plays through every
  * game's clips in turn. Hovering a card, focusing it or tapping it hands the
  * reel to that game until the pointer leaves the row of cards; on a phone,
