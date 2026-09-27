@@ -116,6 +116,7 @@ export function collectDiagnostics(state) {
         d.view.cabinet = rom.game.colors.cabinets[rom.cabinet ?? rom.game.colors.cabinet]?.name;
     }
     d.view.wireframe = !!state?.wireframe;
+    d.view.smoothHoles = !!document.getElementById('opt-smooth-holes')?.checked;
     d.view.animate = !!state?.animate;
     d.view.texramPinned = !!state?.texramPinned;
     d.view.lutsPinned = !!state?.lutsPinned;

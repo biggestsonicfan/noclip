@@ -46,6 +46,7 @@ const CONTROLS = {
         { key: 'grid', sel: '#opt-grid' },
         { key: 'axes', sel: '#opt-axes' },
         { key: 'cull', sel: '#opt-cull' },
+        { key: 'smooth', sel: '#opt-smooth-holes' },
         { key: 'luma', sel: '#tex-luma' },
     ],
     stage: [
