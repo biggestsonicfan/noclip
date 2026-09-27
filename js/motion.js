@@ -145,6 +145,41 @@ export function readMotionScript(rom, id) {
     return out;
 }
 
+/*
+ * The frames the game times a move by. Setup op 2 is three u16s, and its
+ * handler at `0x1B628` copies them byte for byte into `p1_info` (`P1+0x808`),
+ * `p1_follow1` (`+0x80A`) and `p1_follow2` (`+0x80C`), overwriting the motion's
+ * length that `set_mot_dat` put in all three: the frame the attack can first
+ * connect (`coli_attack_chk` refuses contact before it), the cancel frame a
+ * follow-up's commit waits on, and the frame the fighter comes free. 333 of
+ * the 519 motions carry one; the rest keep their length in all three.
+ */
+const SETUP_TIMING = 0x02;
+
+/**
+ * A motion's hit, cancel and end frames.
+ * @returns {null | {hit:number, cancel:number, end:number}} null when the
+ *   motion's setup does not set them, which leaves all three at its length.
+ */
+export function readMotionTiming(rom, id) {
+    const m = rom.maincpu, dv = rom.mainCpuView;
+    if (id < 0 || id >= MOTION_COUNT) return null;
+    const rec = dv.getUint32(MOT_LIST_ADDR + id * 4, true);
+    if (!rec || rec + MOT_RECORD_HEAD >= m.length) return null;
+    for (let p = rec + MOT_RECORD_HEAD; p + 7 <= m.length;) {
+        const op = m[p];
+        if (op === SETUP_END || op === SETUP_PLAY) return null;
+        if (op === SETUP_TIMING) {
+            return { hit: dv.getUint16(p + 1, true), cancel: dv.getUint16(p + 3, true),
+                end: dv.getUint16(p + 5, true) };
+        }
+        if (op === SETUP_LIST) { p += 2 + m[p + 1] * 2; continue; }
+        if (!SETUP_LENGTH[op]) return null;
+        p += SETUP_LENGTH[op];
+    }
+    return null;
+}
+
 /**
  * The commands of a script that have run by `frame`, in order. The walk stops
  * at the first command whose frame has not come, as `play_motion` does, so a

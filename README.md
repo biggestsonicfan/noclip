@@ -45,7 +45,14 @@ Three views:
   gives it, read off its own stance, rather than the one its record points at,
   which for several of them is somebody else's — and posed by the game's own
   motion data: pick any of its 52 action slots or browse all 518 motions in the
-  table, and play it at the board's 60 Hz or scrub a frame at a time. The rig is
+  table, and play it at the board's 60 Hz or scrub a frame at a time. The
+  attacks are listed too, the way the game's input matcher has them: each under
+  the buttons that do it (*punch · P*, *hataki · back . back+down . down .
+  fwd+down . fwd+P*) and named from the table the CPU opponent is driven from.
+  A string plays as the game strings it — punch, punch, punch, each follow-up
+  taking over at its motion's cancel frame and eased in the way the board eases
+  into a new motion — and can be built up by hand from the follow-ups each move
+  allows, or any move once the fighter is free. The rig is
   the game's, not a guess at it — a body matrix, a chest and head that aim at a
   target, four two-bone IK chains that reach for one, and each fighter's own eye
   models on the head. The four entries that carry no head data of their own
@@ -70,7 +77,8 @@ Three views:
   [Tails' tails](TECHNICAL.md#tails-tails), [Metal Sonic's jet
   exhaust](TECHNICAL.md#metal-sonics-jet-exhaust), [The Egg robots' timed
   animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs) and
-  [Afterimages](TECHNICAL.md#afterimages-jszanzoujs).
+  [Afterimages](TECHNICAL.md#afterimages-jszanzoujs) and [Moves and
+  strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
 
 ## Fighting Vipers
 
