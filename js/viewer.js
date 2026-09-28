@@ -292,6 +292,8 @@ const FRAG_SHADER = /* glsl */`
     uniform vec2 uMaterial[32];  // per slot: (diffuse, ambient), 0..255
     uniform int uTransfer;      // 0 = none, 1 = linear->gamma, 2 = gamma->linear
     uniform float uFogDensity;
+    // Not the board: smooth a transparent face's holes into a translucent smear.
+    uniform float uSmoothHoles;
     uniform vec3 uFogColor;
 
     flat in vec3 vColor;
@@ -546,6 +548,7 @@ const FRAG_SHADER = /* glsl */`
 
         vec3 base = vColor * uTint * uBright;
         vec3 rgb;
+        float coverage = 1.0;
 
         if (uShadeMode == 3) {
             rgb = (vTile.z > 0.0 ? tileHue(vTile) : vec3(0.15)) * shade;
@@ -566,7 +569,18 @@ const FRAG_SHADER = /* glsl */`
                               0.0, lmax);
             int L0 = int(floor(lod));
             vec2 texel = mix(sampleLevel(L0), sampleLevel(L0 + 1), fract(lod));
-            if (flags(1) && texel.y < 0.5) discard;
+            if (flags(1) && uSmoothHoles > 0.5) {
+                // A stippled face -- Daytona's tire marks are a third holes,
+                // scattered texel by texel -- crawls as the holes land on new
+                // pixels with every step of the camera. The board draws it that
+                // way. This switch takes the coverage from two levels further
+                // down instead, a box four texels wide, and hands it to the
+                // multisample coverage mask: the holes become an even
+                // translucency, with no draw order to get wrong.
+                int C = min(L0 + 2, int(lmax));
+                coverage = mix(sampleLevel(C).y, sampleLevel(min(C + 1, int(lmax))).y, fract(lod));
+                if (coverage < 0.0625) discard;
+            } else if (flags(1) && texel.y < 0.5) discard;
             float al = texel.x;
 
             if (uUseRamp > 0.5 && vLumaBase >= 0.0) {
@@ -635,7 +649,7 @@ const FRAG_SHADER = /* glsl */`
         float d = length(vViewPos) * uFogDensity;
         rgb = mix(rgb, transfer(uFogColor), clamp(1.0 - exp(-d * d), 0.0, 1.0));
 
-        fragColor = vec4(rgb, 1.0);
+        fragColor = vec4(rgb, coverage);
     }
 `;
 
@@ -699,7 +713,11 @@ export function createModelMaterial() {
             /* The Sonic The Fighters bound; a game profile may replace it. */
             uZsortRecede: { value: 12.0 },
             uBoardCull: { value: 1 },
+            uSmoothHoles: { value: 0 },
         },
+        /* Only the smooth-holes switch writes an alpha below 1; everything
+         * else writes 1, which covers every sample, as without it. */
+        alphaToCoverage: true,
     });
 }
 
@@ -1191,6 +1209,12 @@ export class Viewer {
      *  Every model material shares the one uniform, so this reaches them all. */
     backfaceCull(on) {
         this.material.uniforms.uBoardCull.value = on ? 1 : 0;
+    }
+
+    /** Draw a transparent face's holes as the board does, or smoothed into a
+     *  translucent smear (not the board; see uSmoothHoles). */
+    smoothHoles(on) {
+        this.material.uniforms.uSmoothHoles.value = on ? 1 : 0;
     }
 
     /*

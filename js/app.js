@@ -3580,6 +3580,7 @@ function wireOptions() {
     $('#opt-grid').addEventListener('change', (e) => { v.grid.visible = e.target.checked; });
     $('#opt-axes').addEventListener('change', (e) => { v.axes.visible = e.target.checked; });
     $('#opt-cull').addEventListener('change', (e) => v.backfaceCull(e.target.checked));
+    $('#opt-smooth-holes').addEventListener('change', (e) => v.smoothHoles(e.target.checked));
     $('#opt-ride').addEventListener('change', (e) => setRideStage(e.target.checked));
 
     $('#tex-file').addEventListener('change', (e) => {
@@ -3873,6 +3874,7 @@ function start() {
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
     $('#tool-shot').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
+    state.viewer.smoothHoles($('#opt-smooth-holes').checked);
     loadGameContent();
     wireOptions();
     state.viewer.resize();
