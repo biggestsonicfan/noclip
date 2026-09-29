@@ -80,6 +80,13 @@ Three views:
   [Afterimages](TECHNICAL.md#afterimages-jszanzoujs) and [Moves and
   strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
 
+And the stages have their music: tick **music** on the Stages tab and each
+arena plays the song the game plays on it, on the game's own sound board — its
+68000 sound driver and the SCSP it drives, emulated in the page by m2-hle2's
+board compiled to WebAssembly, and sent the same command the game sends when a
+round starts. It reads the sound ROMs only when switched on and runs at a few
+per cent of one core. See [Music](TECHNICAL.md#music-jssound).
+
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the

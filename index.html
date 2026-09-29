@@ -266,6 +266,14 @@
         <select id="stage-select"></select>
       </div>
       <div id="stage-meta" class="meta"></div>
+      <!-- Shown for a game whose sound board the viewer can run: js/sound/. -->
+      <div class="field row" id="music-field" hidden>
+        <label class="check" title="Play the stage's own music on the game's own sound board: its 68000 sound driver and the SCSP it plays through, emulated in the page and sent the command the game sends when the round starts. The first time, it reads the 8.5 MB of sound ROMs out of the zips"><input type="checkbox" id="opt-music"> music</label>
+        <label class="axis grow" title="Volume, against the board's own level">
+          <input type="range" id="music-volume" min="0" max="4" step="0.25" value="2" aria-label="Music volume">
+        </label>
+        <span id="music-status" class="dim"></span>
+      </div>
       <div class="field" id="mode-field" hidden>
         <label for="mode-select">Game state</label>
         <select id="mode-select"></select>

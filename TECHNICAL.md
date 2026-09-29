@@ -30,6 +30,13 @@ js/
                  arms and the minion's head
   viewer.js      three.js scene, shader, orbit + noclip cameras
   app.js         UI wiring
+  sound/
+    sound.js     the music switch: reads the sound ROMs, boots the board
+    worklet.js   runs the board on the audio thread
+    board.wasm   m2-hle2's sound board, built by tools/sound/build.sh
+tools/sound/
+  board.c        the wasm's surface over m2-hle2's src/board/sound.h
+  build.sh       emcc build of board.wasm
 ```
 
 The tools this document keeps citing are not in the tree. They live in
@@ -41,7 +48,9 @@ decodes the ROM through the `js/` modules above, so a check there measures this
 code rather than a copy of it. A `stf-tools/x` path below is a file at the root
 of that repository.
 
-Nothing is vendored and there is no build step. `index.html`'s import map pins
+Nothing is vendored and there is no build step for the page, with one
+exception: `js/sound/board.wasm`, which is compiled C and is committed as built
+— see [Music](#music-jssound). `index.html`'s import map pins
 three.js to cdnjs and its one addon, OrbitControls, to jsDelivr, and gives a
 SHA-512 for each of the three files in an `integrity` map — so the page gets
 those exact builds or none. That is not decorative: corrupting one hash and
@@ -3512,3 +3521,53 @@ skipped that transform, and `THREE.Color` reads its arguments as working-space
 
 The **luma** slider remains only as a debug multiplier on the luma the geometry
 engine's arithmetic produces. At 1.0 nothing is being stood in for.
+
+## Music (`js/sound/`)
+
+The **music** switch on the Stages tab plays the stage's own song, and nothing
+about it is a recording. The Model 2 sound board is a 68000 running the game's
+sound driver out of `epr-19021`, playing the four sample ROMs (`mpr-19022`–
+`mpr-19025`, 8 MB) through a Yamaha SCSP, and the i960 only ever tells it what
+to play: three-byte MIDI-framed commands down a UART. m2-hle2 emulates that
+board — the 68000, the SCSP and its DSP, the UART's timing — and grades it
+against MAME's, song by song and key-on by key-on (its `tools/README.md`, "The
+sound board"). `board.wasm` is that emulation, built from m2-hle2's
+`src/board/sound.h` with a thin surface over it (`tools/sound/board.c`):
+load the ROMs, send a byte, render samples.
+
+**What it sends.** The song is the one `stage_bgm_select` picks:
+`ld 0xDBFDC[r3*4], g0` at `0x3F6A8`, `r3` the `stage_num` byte masked to four
+bits, and the long it loads (`STAGE_MUSIC_IN_ORDER`) goes to the board as it
+is — `0xAE1004` is status `0xAE`, data `0x10 0x04`, South Island's. Slots 0–10
+have a song and the rest hold 0, which the panel reports as no music of its
+own. The routine's special cases ahead of the table — North Wind whenever Sonic
+fights Knuckles, South Island on Canyon Cruise and Casino Night in a
+two-player game — depend on who is fighting, so a stage on its own takes the
+table. Before any song the board gets what the game sends first (`A0 00 01`,
+`A0 00 03`, `A0 03 60`), and each stage change sends `A0 00 01`, all sound
+off, then the new song, as `ROUND_INT` does. The driver takes about two
+seconds from reset to its first note, as on the board.
+
+**Where it runs.** On the audio thread, in an `AudioWorkletProcessor`, one
+render quantum at a time: the board is asked for exactly the samples the
+speakers are about to take, so there is no buffer between them to fill or to
+starve, and its clock is the audio clock. The context is asked for at 44.1 kHz,
+the board's rate; a browser that gives another rate gets the board's output
+stepped across by a linear blend. The page hands the worklet the wasm's bytes
+rather than a compiled module — Chrome drops a `WebAssembly.Module` posted to a
+worklet without an error on either side.
+
+**What it costs.** Nothing until the switch is ticked: the sound ROMs are not
+read with the set (`rom.readChip` fetches a member on demand). Ticking it reads
+8.5 MB out of the zips once — about three seconds to the first note, most of it
+the driver's own boot — and the board then makes a second of sound in about
+30 ms of one core (34× real time under Node; bit-identical to a native build of
+the same source). Unticked, the audio context is suspended, which stops the
+board.
+
+**Rebuilding.** `tools/sound/build.sh` with Emscripten on the path (or `EMCC`
+pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
+pointing at it). The wasm is committed because the site has no build step; a
+change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
+it, and the commit should name the m2-hle2 commit it was built from. The first
+build is from `c4ed74f`.

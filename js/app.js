@@ -47,6 +47,7 @@ import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet, bankTextureSet } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
+import { SoundBoard, soundSupported, stageMusic } from './sound/sound.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, html) => {
@@ -70,6 +71,9 @@ const state = {
     touchFly: null,
     tab: 'stage',
     stageIndex: 0,
+    /* The sound board, once the music has been switched on, and the song it
+     * was last told to play — see playStageMusic. */
+    music: { on: false, board: null, playing: null },
     modelIndex: 517,
     charIndex: 0,
     character: null,
@@ -1226,6 +1230,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
     if (!stage) return;
     state.stageIndex = slot;
     resetStageAnimation();
+    playStageMusic();
     v.clear();
 
     /* Same two sets change_scene hands to send_tex_stage, unpacked from ROM,
@@ -3449,6 +3454,8 @@ function wireOptions() {
     });
 
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
+    $('#opt-music').addEventListener('change', (e) => setMusic(e.target.checked));
+    $('#music-volume').addEventListener('input', (e) => state.music.board?.setVolume(+e.target.value));
     /* Which of the game's states a Daytona course is drawn in — see MODES in
      * js/daytona.js. */
     const modeSelect = $('#mode-select');
@@ -3692,6 +3699,70 @@ function renderTextureSetPicker() {
     $('#model-colour-field').hidden = false;
 }
 
+/*
+ * The stage's music, off until asked for — see js/sound/sound.js.
+ *
+ * It follows the stage picked in the Stages tab and keeps playing over the
+ * other two, the way the stage behind a model's shading does. Switched off,
+ * the board is suspended rather than torn down, so switching it back on does
+ * not read the zips again; a new build is a new board.
+ */
+function resetMusic() {
+    state.music.board?.close();
+    state.music.board = null;
+    state.music.on = false;
+    state.music.playing = null;
+    $('#opt-music').checked = false;
+    $('#music-status').textContent = '';
+    $('#music-field').hidden = !soundSupported(state.rom.game);
+}
+
+function playStageMusic() {
+    if (!state.music.on || !state.music.board?.node) return;
+    const stage = state.stages[state.stageIndex];
+    const code = stage ? stageMusic(state.rom, stage.slot) : 0;
+    /* A stage built again in place — a texture dump dropped on it, say — is
+     * not a new round, and the song carries on. */
+    if (code === state.music.playing) return;
+    state.music.playing = code;
+    state.music.board.play(code);
+    const hex = (n) => n.toString(16).toUpperCase().padStart(2, '0');
+    $('#music-status').textContent = code
+        ? `song ${hex(code >>> 16)} ${hex((code >>> 8) & 0x7F)} ${hex(code & 0x7F)}`
+        : 'no music of its own';
+}
+
+async function setMusic(on) {
+    state.music.on = on;
+    state.music.playing = null;
+    const status = $('#music-status');
+    if (!on) {
+        state.music.board?.play(0);
+        state.music.board?.suspend();
+        status.textContent = '';
+        return;
+    }
+    if (!state.music.board) {
+        state.music.board = new SoundBoard();
+        state.music.board.setVolume(+$('#music-volume').value);
+    }
+    const board = state.music.board;
+    try {
+        await board.start(state.rom, (msg) => { status.textContent = msg; });
+    } catch (err) {
+        console.error('sound board:', err);
+        status.textContent = `could not start: ${err.message}`;
+        if (state.music.board === board) state.music.board = null;
+        state.music.on = false;
+        $('#opt-music').checked = false;
+        return;
+    }
+    /* Switched off again, or another build loaded, while the ROMs were read. */
+    if (!state.music.on || state.music.board !== board) return;
+    await board.resume();
+    playStageMusic();
+}
+
 function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
@@ -3738,6 +3809,7 @@ function loadGameContent() {
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     const on = applyGameFeatures();
+    resetMusic();
     if (on.stage) {
         /* Three shapes of stage data: a record per arena, a placement
          * table per chapter, and Daytona USA's grid of blocks. */
