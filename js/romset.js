@@ -119,13 +119,26 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         throw missing(name);
     }
 
+    /* A chip read when it is asked for rather than with the set: the sound
+     * ROMs, eight and a half megabytes the views have no use for until the
+     * music is switched on. Not cached — the caller keeps what it reads, and
+     * `cache` would otherwise keep every chip of the set alive with it. */
+    async function readChip(name, expectCrc) {
+        const real = resolve(name, expectCrc);
+        if (real === null) throw missing(name);
+        const s = sources.find((src) => src.dir.has(real));
+        const data = await extractZipEntry(s.buf, s.dir, real);
+        if (crc32(data) !== expectCrc) console.warn(`${name}: CRC does not match the one asked for`);
+        return data;
+    }
+
     const regions = Object.entries(game.regions);
     const totalParts = regions.reduce((a, [, r]) => a + r.parts.length * 2, 0);
     let done = 0;
 
     /* Every build this archive could be loaded as, so the panel can offer them
      * without reading the zip a second time. */
-    const out = { game, variants: variants.map((g) => ({ id: g.id, name: g.name })) };
+    const out = { game, variants: variants.map((g) => ({ id: g.id, name: g.name })), readChip };
     for (const [key, spec] of regions) {
         /* A region the viewer can do without is left null rather than failing
          * the whole set when a zip does not carry its chips. */

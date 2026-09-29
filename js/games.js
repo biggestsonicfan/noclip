@@ -159,6 +159,27 @@ const sfight = {
         layerRules: { keepFar: true, leaveApart: true },
     },
     scenes: null,
+    /* The sound board's ROMs, read only once the music is switched on
+     * (js/sound/sound.js): the 68000's program, loaded word-swapped as MAME
+     * does, and the four sample ROMs end to end — the same layout m2-hle2's
+     * profiles/sfight.h builds.
+     *
+     * `stageMusic` is STAGE_MUSIC_IN_ORDER, the table stage_bgm_select reads
+     * the stage's song from: `ld 0xDBFDC[r3*4], g0` at 0x3F6A8, with r3 the
+     * stage_num byte masked to its low four bits, and the long it loads sent
+     * to the board as it is — 0xAE1004, South Island's, is status 0xAE and
+     * the data bytes 0x10 0x04. Slots 0-10 have one; the rest are 0. What the
+     * routine does ahead of the table — North Wind for Sonic against Knuckles,
+     * South Island on Canyon Cruise and Casino Night in a two-player game — is
+     * about who is fighting, which a stage on its own does not have. */
+    sound: {
+        program: ['epr-19021.31', 0x0b9f7583],
+        samples: [
+            ['mpr-19022.32', 0x4381869b], ['mpr-19023.33', 0x07c67f88],
+            ['mpr-19024.34', 0x15ff76d3], ['mpr-19025.35', 0x6ad8fb70],
+        ],
+        stageMusic: 0x000dbfdc,
+    },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
