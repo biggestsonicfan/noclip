@@ -289,6 +289,9 @@ const FRAG_SHADER = /* glsl */`
     // the solid branch at the end of main().
     uniform float uSolidRamp;
     uniform vec3 uLight;         // the stage's light vector, world space
+    // Set for a game whose geometry engine lights by the polygon's plane rather
+    // than the ROM normal (GEO mode 2) — see polyLuma.
+    uniform float uPlaneNormals;
     uniform vec2 uMaterial[32];  // per slot: (diffuse, ambient), 0..255
     uniform int uTransfer;      // 0 = none, 1 = linear->gamma, 2 = gamma->linear
     uniform float uFogDensity;
@@ -390,8 +393,17 @@ const FRAG_SHADER = /* glsl */`
     // face when the ROM normal is not the triangle's plane, which splits the
     // face into lit and unlit parts. It also means a face the test keeps always
     // has N.P >= 0 here, unless it is drawn from both sides.
+    //
+    // N is the ROM normal put through the draw's matrix and left at whatever
+    // length that gives it: geo_parse_np_ns transforms it and never normalises,
+    // so a model drawn at a scale is lit by that scale too. Canyon Cruise's
+    // deck is drawn 1.6 high, which takes its luminance from 0.71 to 1.13 and
+    // its purple and white to the top of the ramp, as MAME has them; with a
+    // unit normal the luma stopped at 193 of 255. The plane a mode-2 game
+    // lights by is the other case: geo_parse_nn_ns builds it from the
+    // transformed points and does normalise it, so it stays unit length here.
     float polyLuma() {
-        vec3 n = normalize(vNormal);
+        vec3 n = uPlaneNormals > 0.5 ? normalize(vNormal) : vNormal;
         float dotl = dot(n, uLight);
         float dotp = dot(normalize(vViewNormal), vFacePt);
         float luminance = (dotl * dotp < 0.0) ? 0.0 : abs(dotl);
@@ -706,6 +718,7 @@ export function createModelMaterial() {
             uFlatTexel: { value: 0 },
             uSolidRamp: { value: 0 },
             uLight: { value: new THREE.Vector3(0, 1, 0) },
+            uPlaneNormals: { value: 0 },
             uMaterial: { value: Array.from({ length: 32 }, () => new THREE.Vector2(0, 255)) },
             uTransfer: { value: 0 },
             uFogDensity: { value: 0.0 },

@@ -460,17 +460,18 @@ function sphynxOps(at) {
  * canyon_init does the same thing one frame late. It reads 0x50A022 at the top
  * of the continuation, before object_move has moved the boat and before it has
  * written this frame's heading, so the sun is held still against where the boat
- * was pointing last frame; and it adds its base to the stored heading rather
- * than subtracting, because what the canyon stores there is already negated.
+ * was pointing last frame. It adds 0x20 to the stored heading and takes the sum
+ * from 0x12000 (`subi r3, r14, r3` at 0x7626C is r14 - r3), which is the
+ * carpet's arithmetic again with a base of its own.
  */
 const CARPET_LIGHT_BASE = 0x271c;
-const CANYON_LIGHT_BASE = 0x20 - 0x12000;
+const CANYON_LIGHT_BASE = 0x12000 - 0x20;
 
 export function stageLightYaw(stage, frame, frames = null) {
     if (stage.placements) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return CARPET_LIGHT_BASE - carpetAt(frame).yaw;
     if (stage.slot === CANYON_CRUISE_SLOT && frames?.canyon) {
-        return CANYON_LIGHT_BASE + canyonAt(frames.canyon, frame - 1).yaw;
+        return CANYON_LIGHT_BASE - canyonAt(frames.canyon, frame - 1).yaw;
     }
     return null;
 }
@@ -1278,12 +1279,21 @@ function canyonDisp({ pushAnim, sx, cageY }) {
  * to draw it — Canyon Cruise's record carries no ground chunks and no floor at
  * all, the whole canyon is here — so it comes out on the ground and water
  * layers rather than in with the objects, and the camera frames on it.
+ *
+ * The river concedes a pixel at a time, not a vertex at a time as the open sea
+ * does. The board's camera rides the boat, so it always hangs over one of these
+ * plates, and a plate the eye is over has corners behind the lens, which keep
+ * the depth the projection gave them. The river's surface is 0.03 over the top
+ * of the deck, so wherever those corners carried the water's depth in, it came
+ * up through the deck — most of it, from the board's camera, further down the
+ * run. The board sorts the plates by a corner hundreds of units out and never
+ * shows any of it. See concedeMaterial in js/viewer.js.
  */
 function canyonEnvDisp({ pushWorld, frames }) {
     const canyon = frames?.canyon;
     if (!canyon) return;
     for (const o of canyon.scenery) pushWorld(o.model, 'ground', canyonPlace(o.at));
-    for (const o of CANYON_WATER) pushWorld(o.model, 'water', canyonPlace(o.at), SEA_BAND);
+    for (const o of CANYON_WATER) pushWorld(o.model, 'water', canyonPlace(o.at), SEA_BAND, true);
 }
 
 /* ---- boss_disp: the Death Egg's hangar ----
@@ -1886,11 +1896,13 @@ export function buildStageDisplayList(stage, frames = null) {
             },
             /* A draw the routine makes in the world's frame rather than the
              * arena's, on a layer of its own choosing — and optionally through
-             * a texture header rebuilt every frame, as the river is. */
-            pushWorld: (model, layer, ops, band = null) => {
+             * a texture header rebuilt every frame, as the river is, and
+             * conceding a pixel at a time, as the river must. */
+            pushWorld: (model, layer, ops, band = null, concede = false) => {
                 if (!model) return;
                 const entry = { model, layer, ops: inWorld(ops) };
                 if (band) entry.band = band;
+                if (concede) entry.concede = true;
                 out.push(entry);
             },
         });
