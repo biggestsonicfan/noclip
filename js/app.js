@@ -796,7 +796,8 @@ function addModelToScene(decoded, {
      * standing in it to concede to.
      * The open water takes the one that stands the whole bound back, because
      * the board sorts it by a corner hundreds of units out and nothing in the
-     * arena is modelled under it — see waterMaterial.
+     * arena is modelled under it — see waterMaterial — and water the camera
+     * rides over, Canyon Cruise's river, takes it a pixel at a time.
      * A draw that asks to concede takes the same bound a pixel at a time: the
      * plate under the Flying Carpet's rug, which the board sorts behind every
      * strip of it and the camera stands over — see concedeMaterial.
@@ -807,7 +808,7 @@ function addModelToScene(decoded, {
     const mesh = new THREE.Mesh(geom ? geom.mesh : buildGeometry(decoded),
         material ?? (backdrop ? v.backdropMaterial
             : groundPlate ? v.floorMaterial
-                : layer === 'water' ? v.waterMaterial
+                : layer === 'water' ? (concede ? v.concedeMaterial : v.waterMaterial)
                     : concede ? v.concedeMaterial
                         : standing ? v.standingMaterial
                             : planeBias ? v.planeMaterials[planeBias]
@@ -3737,6 +3738,7 @@ function applyGameFeatures() {
 function loadGameContent() {
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
+    state.viewer.material.uniforms.uPlaneNormals.value = state.rom.game.lighting?.planeNormals ? 1 : 0;
     const on = applyGameFeatures();
     if (on.stage) {
         /* Three shapes of stage data: a record per arena, a placement

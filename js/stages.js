@@ -165,14 +165,29 @@ const SFIGHT_STAGE_NAMES = {
  * So the whole thing reduces to the stage record. Z is negated to match the
  * decoder's vertex and normal convention, which leaves N·L exactly as the board
  * computes it.
+ *
+ * Both rotations turn the way the board's do, which is read off the board
+ * rather than argued: MAME's geometrizer logs the light the display list hands
+ * it (geo_light_source), and taking this vector through the board camera at
+ * 0x519E98 lands on that light to four places on every one of 31 frames of
+ * Canyon Cruise and 31 of the Flying Carpet, whose VECTER_Y both move with the
+ * heading, and 11 of South Island, where it stands still. The other way round,
+ * the X rotation misses by more than the length of the vector at any Y angle. VECTER_X is -45 degrees on nearly every
+ * stage, so the light comes from above and a floor, whose normals point down in
+ * ROM, is lit: Canyon Cruise's deck is white on the board, and it was grey here.
  */
 export function stageLight(bright, vecterX, vecterY) {
     const ax = (vecterX * 2 * Math.PI) / 65536;
     const ay = (vecterY * 2 * Math.PI) / 65536;
     /* Rx applied to (0, 0, bright), then Ry. */
-    const y = -Math.sin(ax) * bright;
+    const y = Math.sin(ax) * bright;
     const z = Math.cos(ax) * bright;
-    return [Math.sin(ay) * z, y, -Math.cos(ay) * z];
+    return [-Math.sin(ay) * z, y, -Math.cos(ay) * z];
+}
+
+/* stageLight as it stood before it was measured — see gameLighting. */
+function unverifiedLight([x, y, z]) {
+    return [-x, -y, z];
 }
 
 /*
@@ -207,8 +222,13 @@ export function gameLighting(rom) {
         materials.push({ diffuse: w & 0xff, ambient: (w >> 8) & 0xff });
     }
     /* A game whose light is a vector in its own ROM rather than the two angles
-     * a stage record carries gives it outright. */
-    const light = L.light ?? stageLight(1, L.vecter[0], L.vecter[1]);
+     * a stage record carries gives it outright.
+     *
+     * The House of the Dead's angles were carried across from Sonic The
+     * Fighters along with the signs stageLight used to give them, and unlike
+     * Sonic The Fighters' they have not been held to the board's own light yet
+     * — so they keep those signs until they are. */
+    const light = L.light ?? unverifiedLight(stageLight(1, L.vecter[0], L.vecter[1]));
     return { light, materials };
 }
 
