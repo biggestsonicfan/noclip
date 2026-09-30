@@ -165,10 +165,12 @@ function laterShare(f, g) {
  *   no layer and no plane, `leaveApart` leaves a pair held apart by more than
  *   the tie and asking for the same corner to the depth buffer, and `copies`
  *   puts a triangle's near copy over it however far the two tilt apart
- * @returns {{layer: Float32Array, plane: Float32Array}[]} per draw, one layer
- *   per vertex (0 almost everywhere) and four numbers per vertex: the plane its
- *   face takes its depth from, n.p = d in the draw's own space, or zeros for a
- *   face that keeps its own depth
+ * @returns {{layer: Float32Array, plane: Float32Array, snap: number[]}[]} per
+ *   draw, one layer per vertex (0 almost everywhere) and four numbers per
+ *   vertex: the plane its face takes its depth from, n.p = d in the draw's own
+ *   space, or zeros for a face that keeps its own depth; and, under `copies`,
+ *   pairs of vertex indices (copy, original) for the copy to be drawn on the
+ *   corners of the triangle it copies
  */
 export function coplanarLayers(draws, {
     gap = 0.5, tie = 0.02, cosine = 0.999, keepFar = false, leaveApart = false, copies = false, stats = null,
@@ -176,7 +178,7 @@ export function coplanarLayers(draws, {
     const faces = [];
     const out = draws.map(({ decoded }) => {
         const count = decoded ? decoded.positions.length / 3 : 0;
-        return { layer: new Float32Array(count), plane: new Float32Array(count * 4) };
+        return { layer: new Float32Array(count), plane: new Float32Array(count * 4), snap: [] };
     });
 
     draws.forEach(({ decoded, matrix: M }, di) => {
@@ -274,22 +276,33 @@ export function coplanarLayers(draws, {
      * polygon, so it is taken as the tie the first frame is, which the later
      * polygon wins. The quarter is of the triangle's own size, so the small
      * parallel faces of a fighter's glove, a tenth apart and a few tenths
-     * across, are not taken for copies. */
+     * across, are not taken for copies.
+     *
+     * Ordered, the copy still does not cover its original where a corner of it
+     * has moved inward: a sliver of cloth is left out, and it lies under the
+     * next copy along, which is another pair and is not ordered against it.
+     * At a fold that sliver comes out in front — a white streak down the flag.
+     * So the copy is also drawn on its original's corners (`snap`), which
+     * moves its picture by no more than the corner moved, a third of a unit.
+     *
+     * Returns, for each corner of g, the corner of f it pairs with, or null. */
     const twins = (f, g) => {
-        if (f.pts.length !== 3 || g.pts.length !== 3) return false;
+        if (f.pts.length !== 3 || g.pts.length !== 3) return null;
         const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
         const near = 0.25 * Math.min(dist(f.pts[0], f.pts[1]), dist(f.pts[1], f.pts[2]), dist(f.pts[2], f.pts[0]));
         const free = [0, 1, 2];
+        const pair = [];
         let close = 0;
         for (const p of g.pts) {
             let best = -1;
             for (const k of free) if (best < 0 || dist(p, f.pts[k]) < dist(p, f.pts[best])) best = k;
             const d = dist(p, f.pts[best]);
-            if (d > gap) return false;
+            if (d > gap) return null;
             if (d <= near) close++;
+            pair.push(best);
             free.splice(free.indexOf(best), 1);
         }
-        return close >= 2;
+        return close >= 2 ? pair : null;
     };
 
     const above = faces.map(() => []);
@@ -305,7 +318,7 @@ export function coplanarLayers(draws, {
                 seen.add(key);
                 const f = faces[i], g = faces[j];
                 const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
-                const copy = copies && cos > 0 && twins(f, g);
+                const copy = copies && cos > 0 ? twins(f, g) : null;
                 if (cos < cosine && !copy) continue;
                 if (f.lo[0] > g.hi[0] + gap || g.lo[0] > f.hi[0] + gap
                     || f.lo[1] > g.hi[1] + gap || g.lo[1] > f.hi[1] + gap
@@ -352,6 +365,9 @@ export function coplanarLayers(draws, {
                 else if (Math.abs(f.area - g.area) > 1e-3 * Math.max(f.area, g.area)) top = f.area < g.area ? i : j;
                 else top = j;
                 const bottom = top === i ? j : i;
+                if (copy && f.draw === g.draw) {
+                    for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
+                }
                 above[bottom].push(top);
                 below[top]++;
                 ordered[i] = ordered[j] = 1;
