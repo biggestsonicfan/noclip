@@ -158,19 +158,20 @@ function laterShare(f, g) {
  * @param {{decoded: object, matrix: ArrayLike<number>}[]} draws in the order the
  *   game submits them; `matrix` is the draw's column-major 4x4
  * @param {{gap?: number, tie?: number, cosine?: number, keepFar?: boolean,
- *   leaveApart?: boolean}} [opts] how far apart two faces may stand and still be
- *   ordered, how far apart counts as one plane, and the least cosine between
- *   their normals; and the two departures a game can ask for (see below):
- *   `keepFar` leaves a face sorted by its farthest corner with no layer and no
- *   plane, and `leaveApart` leaves a pair held apart by more than the tie and
- *   asking for the same corner to the depth buffer
+ *   leaveApart?: boolean, copies?: boolean}} [opts] how far apart two faces may
+ *   stand and still be ordered, how far apart counts as one plane, and the
+ *   least cosine between their normals; and the three departures a game can ask
+ *   for (see below): `keepFar` leaves a face sorted by its farthest corner with
+ *   no layer and no plane, `leaveApart` leaves a pair held apart by more than
+ *   the tie and asking for the same corner to the depth buffer, and `copies`
+ *   puts a triangle's near copy over it however far the two tilt apart
  * @returns {{layer: Float32Array, plane: Float32Array}[]} per draw, one layer
  *   per vertex (0 almost everywhere) and four numbers per vertex: the plane its
  *   face takes its depth from, n.p = d in the draw's own space, or zeros for a
  *   face that keeps its own depth
  */
 export function coplanarLayers(draws, {
-    gap = 0.5, tie = 0.02, cosine = 0.999, keepFar = false, leaveApart = false, stats = null,
+    gap = 0.5, tie = 0.02, cosine = 0.999, keepFar = false, leaveApart = false, copies = false, stats = null,
 } = {}) {
     const faces = [];
     const out = draws.map(({ decoded }) => {
@@ -259,6 +260,38 @@ export function coplanarLayers(draws, {
         return out;
     };
 
+    /* `copies`: one triangle drawn twice, the second a copy laid on the first —
+     * corners that pair up, each within the gap, all but one of them within a
+     * quarter of the first's shortest side. Daytona's flags draw their emblem
+     * that way, a cut-out triangle over each triangle of the cloth, and every
+     * frame of the wave but the first moves a corner of some copies a little
+     * differently from the cloth's: up to a third of a unit, tilting a pair as
+     * much as 24 degrees apart. Left to the tests above, such a pair is not
+     * ordered, crosses, and the depth buffer shows each over part of the other
+     * — the emblem smeared across the cloth on six frames of the 32, which is
+     * the flicker (issue 38) — or else it goes to the sort by its odd corner,
+     * which hides a triangle of the emblem at a time. A copy is the same
+     * polygon, so it is taken as the tie the first frame is, which the later
+     * polygon wins. The quarter is of the triangle's own size, so the small
+     * parallel faces of a fighter's glove, a tenth apart and a few tenths
+     * across, are not taken for copies. */
+    const twins = (f, g) => {
+        if (f.pts.length !== 3 || g.pts.length !== 3) return false;
+        const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+        const near = 0.25 * Math.min(dist(f.pts[0], f.pts[1]), dist(f.pts[1], f.pts[2]), dist(f.pts[2], f.pts[0]));
+        const free = [0, 1, 2];
+        let close = 0;
+        for (const p of g.pts) {
+            let best = -1;
+            for (const k of free) if (best < 0 || dist(p, f.pts[k]) < dist(p, f.pts[best])) best = k;
+            const d = dist(p, f.pts[best]);
+            if (d > gap) return false;
+            if (d <= near) close++;
+            free.splice(free.indexOf(best), 1);
+        }
+        return close >= 2;
+    };
+
     const above = faces.map(() => []);
     const below = new Int32Array(faces.length);
     const ordered = new Uint8Array(faces.length);
@@ -271,7 +304,9 @@ export function coplanarLayers(draws, {
                 if (seen.has(key)) continue;
                 seen.add(key);
                 const f = faces[i], g = faces[j];
-                if (f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2] < cosine) continue;
+                const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
+                const copy = copies && cos > 0 && twins(f, g);
+                if (cos < cosine && !copy) continue;
                 if (f.lo[0] > g.hi[0] + gap || g.lo[0] > f.hi[0] + gap
                     || f.lo[1] > g.hi[1] + gap || g.lo[1] > f.hi[1] + gap
                     || f.lo[2] > g.hi[2] + gap || g.lo[2] > f.hi[2] + gap) continue;
@@ -307,10 +342,10 @@ export function coplanarLayers(draws, {
                  * 0.07 to 0.15 apart, and one plane for all of them lays the
                  * faces on each other. m2-hle2's grade against MAME
                  * (tools/grade-zsort.mjs, issue #75) is where that showed. */
-                if (leaveApart && !bySort) continue;
-                const share = bySort ? laterShare(f, g) : 0.5;
+                if (leaveApart && !bySort && !copy) continue;
+                const share = bySort && !copy ? laterShare(f, g) : 0.5;
                 let top;
-                if (window || share >= 0.75) top = j;
+                if (window || copy || share >= 0.75) top = j;
                 else if (share <= 0.25) top = i;
                 else if (behind > tie) top = i;
                 else if (behind < -tie) top = j;
