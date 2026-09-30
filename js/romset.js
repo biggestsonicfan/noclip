@@ -25,6 +25,33 @@ function interleave32(dest, lo, hi, baseOffset) {
     }
 }
 
+/*
+ * A profile's ROM fixes (DAYTONA_PATCHES in games.js), written into the
+ * assembled regions. An edit is only made where the ROM still holds the value
+ * it expects, so a fix meant for other bytes cannot scribble on these; a patch
+ * counts as applied only if all its edits were. Returns the names applied.
+ */
+function applyPatches(out, patches, warnings) {
+    const applied = [];
+    for (const p of patches) {
+        const region = out[p.region];
+        if (!region) continue;
+        const view = new DataView(region.buffer);
+        const get = (o) => (p.size === 2 ? view.getUint16(o, true) : view.getUint32(o, true));
+        const bad = p.edits.filter(([o, was]) => o + p.size > region.length || get(o) !== was);
+        if (bad.length) {
+            warnings.push(`${p.name} fix: ${bad.length} of ${p.edits.length} edits do not find the bytes they expect, not applied`);
+            continue;
+        }
+        for (const [o, , now] of p.edits) {
+            if (p.size === 2) view.setUint16(o, now, true);
+            else view.setUint32(o, now, true);
+        }
+        applied.push(p.name);
+    }
+    return applied;
+}
+
 /**
  * Build a ROM set from one or more zip buffers.
  *
@@ -39,7 +66,9 @@ function interleave32(dest, lo, hi, baseOffset) {
  *
  * @param {ArrayBuffer[]} zipBuffers
  * @param {(msg:string, frac:number)=>void} [onProgress]
- * @param {{game?: string}} [opts]  `game` names which profile to load as
+ * @param {{game?: string, patches?: boolean}} [opts]  `game` names which
+ *     profile to load as; `patches` applies the profile's ROM fixes, which the
+ *     explorer wants and the tools that read the ROM as shipped do not
  */
 export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
     const sources = zipBuffers.map((buf) => ({ buf, dir: readZipDirectory(buf) }));
@@ -161,6 +190,7 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         }
         out[key] = dest;
     }
+    out.patched = opts.patches ? applyPatches(out, game.patches ?? [], warnings) : [];
     onProgress(`${game.name} ROM set ready`, 1);
 
     out.warnings = warnings;

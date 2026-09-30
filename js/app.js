@@ -223,7 +223,7 @@ async function bootWithBuffers(buffers) {
         /* A linked build is asked for by name, since a merged archive is more
          * than one build and the one it defaults to need not be the reporter's. */
         state.rom = await loadRomSet(buffers, (msg, frac) => setStatus(msg, frac),
-            state.link ? { game: state.link.game } : {});
+            { patches: true, ...(state.link ? { game: state.link.game } : {}) });
         useCoproTrig(state.rom);
     } catch (err) {
         return failToLoad(err, romHint(err));
@@ -281,7 +281,7 @@ async function switchBuild(id) {
     $('#loader').hidden = false;
     $('#loader-error').hidden = true;
     try {
-        state.rom = await loadRomSet(state.romBuffers, (m, f) => setStatus(m, f), { game: id });
+        state.rom = await loadRomSet(state.romBuffers, (m, f) => setStatus(m, f), { game: id, patches: true });
         useCoproTrig(state.rom);
     } catch (err) {
         return failToLoad(err, romHint(err));
