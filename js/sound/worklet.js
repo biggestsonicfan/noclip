@@ -1,18 +1,20 @@
 /*
  * worklet.js — the sound board on the audio thread.
  *
- * board.wasm is m2-hle2's Model 2 sound board (tools/sound/board.c): the
- * game's own 68000 driver and the SCSP it plays through. This runs it one
+ * The wasm is one of the two sound boards sound.js names — the Model 2 board
+ * (tools/sound/board.c) or the Model 1 board (tools/sound/model1.c) — running
+ * the game's own 68000 driver. This runs it one
  * render quantum at a time, so the board only ever runs as fast as the
  * speakers take its samples and there is no buffer between the two to fill or
  * starve. The page hands over the wasm's bytes with the ROMs — not a compiled
  * module, which Chrome drops on the way to a worklet without a word — and
  * after that the only traffic is command bytes, the ones the i960 would send.
  *
- * The board makes 44.1 kHz. The page asks for a context at that rate, and
- * every current browser gives it one; where it gets another, this steps the
- * board's output across to it with a linear blend, which is enough for a
- * preview and keeps the pitch right.
+ * The Model 2 board makes 44.1 kHz; the page asks for a context at that rate,
+ * and every current browser gives it one. The Model 1 board makes MultiPCM's
+ * 44642.857 Hz, which it reports as snd_rate(). Where the two differ, this
+ * steps the board's output across to the context's rate with a linear blend,
+ * which is enough for a preview and keeps the pitch right.
  */
 
 const BOARD_RATE = 44100;
@@ -57,6 +59,7 @@ class Model2Sound extends AudioWorkletProcessor {
         new Uint8Array(e.memory.buffer, pp, prog.length).set(prog);
         new Uint8Array(e.memory.buffer, sp, smp.length).set(smp);
         if (!e.snd_init(pp, prog.length, sp, smp.length)) throw new Error('the sound program did not load');
+        this.step = (e.snd_rate ? e.snd_rate() : BOARD_RATE) / sampleRate;
         this.board = e;
     }
 
