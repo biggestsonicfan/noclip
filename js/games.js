@@ -1434,9 +1434,8 @@ const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe5
  * little-endian). Every build shares the chip pair they land in, DAYTONA_TEX0.
  *
  * Each edit is [offset, was, now]: the loader only writes where it finds
- * `was`, so a set whose bytes differ is left alone and says so. They are opt-in
- * (loadRomSet's `patches`), since the tools that grade against the board want
- * the ROM as it is.
+ * `was`, so a set whose bytes differ is left alone. A set loads without them;
+ * the explorer's "fix errors" switch puts them in (setRomPatches in romset.js).
  */
 const DAYTONA_PATCHES = [
     {
