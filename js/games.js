@@ -1428,6 +1428,48 @@ const DAYTONA_TEX0 = [0x000000, 'mpr-16522.25', 0x55d39a57, 'mpr-16521.24', 0xaf
 const DAYTONA_TEX8 = [0x800000, 'mpr-16770.27', 0xf9fa7bfb, 'mpr-16769.26', 0xe57429e9];
 
 /*
+ * Fixes to the texture ROM's UV and material streams, carried over from the
+ * Lua cheats m2emulator ships for Daytona (`Romset_PatchWord/DWord(4, ...)`:
+ * its area 4 is this `textures` region, word-interleaved the same way and read
+ * little-endian). Every build shares the chip pair they land in, DAYTONA_TEX0.
+ *
+ * Each edit is [offset, was, now]: the loader only writes where it finds
+ * `was`, so a set whose bytes differ is left alone. A set loads without them;
+ * the explorer's "fix errors" switch puts them in (setRomPatches in romset.js).
+ */
+const DAYTONA_PATCHES = [
+    {
+        /* 64 frames of the flag animation, 0x640 bytes apart: two words in
+         * each, whose high half goes from 0x100 to 0x200. */
+        name: 'flag animation',
+        region: 'textures',
+        size: 4,
+        edits: Array.from({ length: 64 }, (_, n) => [
+            [0x2e49c8 + n * 0x640, 0x01000100, 0x02000100],
+            [0x2e49cc + n * 0x640, 0x01000080, 0x02000080],
+        ]).flat(),
+    },
+    {
+        name: 'tree',
+        region: 'textures',
+        size: 2,
+        edits: [[0x0bad96, 0x0350, 0x0000]],
+    },
+    {
+        /* The four UV pairs of the banner pole's face. */
+        name: 'banner pole',
+        region: 'textures',
+        size: 4,
+        edits: [
+            [0x0d77c8, 0x01ed0055, 0x0800003f],
+            [0x0d77cc, 0x01ed00d5, 0x080000bf],
+            [0x0d77d0, 0x0f1500d5, 0x0fe700bf],
+            [0x0d77d4, 0x0f150055, 0x0f37003f],
+        ],
+    },
+];
+
+/*
  * One build.
  *
  * `program` and `data8` are the pair that is this build's own; everything else
@@ -1589,6 +1631,8 @@ function daytonaBuild(spec) {
          * calls set geometry mode 3 and then 1, and 1 is geo_parse_np_s.
          */
         lighting: { light: spec.light, materials: spec.materials },
+        /* ROM fixes the explorer applies — see DAYTONA_PATCHES. */
+        patches: DAYTONA_PATCHES,
         /*
          * The courses, which are a grid rather than a placement list: the world
          * is cut into a 16x16 grid of 128-unit blocks and each block is one

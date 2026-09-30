@@ -161,6 +161,7 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         }
         out[key] = dest;
     }
+    out.patched = [];
     onProgress(`${game.name} ROM set ready`, 1);
 
     out.warnings = warnings;
@@ -170,6 +171,35 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
     for (const [key] of regions) out[`${key}View`] = out[key] ? new DataView(out[key].buffer) : null;
     out.mainCpuView = out.maincpuView;
     return out;
+}
+
+/*
+ * Write a profile's ROM fixes (DAYTONA_PATCHES in games.js) into a loaded set,
+ * or take them out again. A set loads as the ROM shipped, which is what the
+ * tools that read it want; the explorer's "fix errors" switch calls this.
+ *
+ * An edit is only made where the ROM holds the value it is replacing, so a fix
+ * meant for other bytes cannot scribble on these, and a fix is made whole or
+ * not at all. `rom.patched` names the fixes now in; returns the ones that could
+ * not be made.
+ */
+export function setRomPatches(rom, on) {
+    const failed = [];
+    for (const p of rom.game.patches ?? []) {
+        const region = rom[p.region];
+        if (!region || rom.patched.includes(p.name) === on) continue;
+        const view = new DataView(region.buffer);
+        const get = (o) => (p.size === 2 ? view.getUint16(o, true) : view.getUint32(o, true));
+        const put = (o, v) => (p.size === 2 ? view.setUint16(o, v, true) : view.setUint32(o, v, true));
+        const from = on ? 1 : 2, to = on ? 2 : 1;
+        if (p.edits.some((e) => e[0] + p.size > region.length || get(e[0]) !== e[from])) {
+            failed.push(p.name);
+            continue;
+        }
+        for (const e of p.edits) put(e[0], e[to]);
+        rom.patched = on ? [...rom.patched, p.name] : rom.patched.filter((n) => n !== p.name);
+    }
+    return failed;
 }
 
 /* ---- Model table --------------------------------------------------------- */

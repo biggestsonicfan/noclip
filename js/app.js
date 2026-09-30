@@ -2,7 +2,7 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, readModelEntry, readModelName } from './romset.js';
+import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './romset.js';
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
@@ -3590,6 +3590,14 @@ function wireOptions() {
     $('#opt-cull').addEventListener('change', (e) => v.backfaceCull(e.target.checked));
     $('#opt-smooth-holes').addEventListener('change', (e) => v.smoothHoles(e.target.checked));
     $('#opt-ride').addEventListener('change', (e) => setRideStage(e.target.checked));
+    /* The ROM's own mistakes, mended in place, and the view rebuilt where it
+     * stands: the models decoded from the old bytes go with the cache. */
+    $('#opt-fix-errors').addEventListener('change', (e) => {
+        useRomFixes(e.target.checked);
+        state.modelCache.clear();
+        if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera: true });
+        else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera: true });
+    });
 
     $('#tex-file').addEventListener('change', (e) => {
         const files = [...e.target.files];
@@ -3806,7 +3814,15 @@ function applyGameFeatures() {
  * not the renderer, the canvas or the wiring. So the two are separated: start()
  * runs once and this runs again on every swap.
  */
+/* A new set loads as it shipped, so the switch is carried over to it here. */
+function useRomFixes(on) {
+    const failed = setRomPatches(state.rom, on);
+    if (failed.length) console.warn(`fix errors: ${failed.join(', ')} not where expected, left alone`);
+}
+
 function loadGameContent() {
+    $('#fix-field').hidden = !state.rom.game.patches?.length;
+    useRomFixes($('#opt-fix-errors').checked);
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     state.viewer.material.uniforms.uPlaneNormals.value = state.rom.game.lighting?.planeNormals ? 1 : 0;

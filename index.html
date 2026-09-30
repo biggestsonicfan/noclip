@@ -429,6 +429,9 @@
         <label class="check"><input type="checkbox" id="opt-axes"> axes</label>
         <label class="check" title="Not the board. A transparent texture's holes are cut texel by texel, so a stippled one &mdash; Daytona's tire marks are a third holes &mdash; crawls as the camera moves, on the board as much as here. This averages the holes into an even translucency instead"><input type="checkbox" id="opt-smooth-holes"> smooth holes</label>
       </div>
+      <div class="field row" id="fix-field" hidden>
+        <label class="check" title="Not the ROM as shipped. Apply m2emulator's fixes to Daytona's texture ROM: the flag animation, a tree and the banner pole. Off shows the bytes the game really has"><input type="checkbox" id="opt-fix-errors"> fix errors</label>
+      </div>
       <div class="field row" id="ride-field" hidden>
         <label class="check" title="Show the stage in the board's own frame instead of the world's: the arena stands still and the world wheels past it, which is how the machine draws these two &mdash; its camera rides the carpet. The same stage either way, one rigid transform apart, so nothing moves relative to anything else. Switching it on frames the camera on the arena that has just come to rest, from the angle you were already looking; switching it off puts you back where you were standing. Use it to hold a moving arena still and read it &mdash; the carpet's ripple, say, which a fixed camera cannot chase round a 2048-frame lap"><input type="checkbox" id="opt-ride"> <span id="ride-label">ride the arena</span></label>
       </div>
