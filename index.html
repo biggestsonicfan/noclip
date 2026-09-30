@@ -105,7 +105,10 @@
 
     <section class="showcase" aria-label="What the explorer draws">
       <div class="reel" id="reel">
-        <video id="reel-video" muted playsinline preload="none" disablepictureinpicture></video>
+        <!-- Two layers: the clip on screen, and the next one loading under it so the
+             change is a cross-fade rather than a cut to black. -->
+        <video class="reel-v" muted playsinline preload="none" disablepictureinpicture></video>
+        <video class="reel-v" muted playsinline preload="none" disablepictureinpicture></video>
         <!-- A game with no clips yet still gets its turn on the reel. -->
         <div class="reel-empty" id="reel-empty" hidden>
           <b id="reel-empty-name"></b>
