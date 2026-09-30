@@ -141,6 +141,14 @@ geometry. They differ in their program ROM and half a megabyte of data, not in
 what they draw. What comes out either way is the grid of stock cars in their
 liveries, the three courses' track sections, and the scenery along them.
 
+The courses have their music too: tick **music** on the Stages tab and each
+course plays the song its race starts with, on Daytona's own sound board — the
+68000 driver, two MultiPCMs and a YM3438, emulated in the page. The game lets
+the player pick the song by holding a VR button as the race starts, and a
+fourth song is only reachable that way; the **Song** list under the switch is
+the same choice. Every build but the 1993 one has it. See [Daytona USA's
+music](TECHNICAL.md#daytona-usas-music-the-model-1-sound-board).
+
 It is the only set here that is not on a 2A or 2B board. This is the original
 Model 2: a Fujitsu TGP beside the i960 where the later titles have a SHARC,
 texture RAM at `0x12000000` rather than `0x11000000`, and AM2's library two
@@ -596,6 +604,10 @@ the two of them are checked against — the fill path in `model2rd.ipp` and the
 geometry lighting in `geo_parse_np_ns` are what the shader here reproduces, and
 [stf-tools](https://github.com/biggestsonicfan/stf-tools) drives MAME to capture
 texture RAM and to diff against a real machine.
+Daytona's sound board plays through two of MAME's sound cores, compiled into
+`js/sound/model1.wasm`: its MultiPCM (`gew.cpp`, `multipcm.cpp`, Miguel Angel
+Horna) and [ymfm](https://github.com/aaronsgiles/ymfm) (Aaron Giles), both
+BSD-3-Clause.
 Rendering is [three.js](https://threejs.org), loaded at a pinned version with
 its hashes in the import map rather than kept in the tree — the library from
 cdnjs, OrbitControls from jsDelivr.
