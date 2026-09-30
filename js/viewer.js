@@ -297,6 +297,8 @@ const FRAG_SHADER = /* glsl */`
     uniform float uFogDensity;
     // Not the board: smooth a transparent face's holes into a translucent smear.
     uniform float uSmoothHoles;
+    // The viewport being drawn, in the framebuffer's pixels: x, y, width, height.
+    uniform vec4 uViewport;
     uniform vec3 uFogColor;
 
     flat in vec3 vColor;
@@ -519,11 +521,24 @@ const FRAG_SHADER = /* glsl */`
         // same inputs for every face of the group, the same answer -- and the
         // layer need only beat the rounding of that one division. A face with
         // no plane falls back on its own depth and the slope of this pixel.
+        //
+        // The ray is the pixel's, out of gl_FragCoord, rather than the face's
+        // own interpolated position: two faces that are not the same triangle
+        // interpolate a point on the ray a hair apart in its last bits, and at
+        // a distance that hair is a step of the buffer -- Daytona's flag
+        // emblem, a copy of the cloth with a corner moved, lost triangles of
+        // itself under the cloth that way (issue 38).
         float layerDepth = gl_FragCoord.z;
         float layerSlope = fwidth(gl_FragCoord.z);
-        float planeDen = dot(vPlane.xyz, vViewPos);
+        vec3 ray = vViewPos;
+        if (projectionMatrix[2][3] != 0.0 && uViewport.z > 0.0) {
+            vec2 ndc = (gl_FragCoord.xy - uViewport.xy) / uViewport.zw * 2.0 - 1.0;
+            ray = vec3((ndc.x + projectionMatrix[2][0]) / projectionMatrix[0][0],
+                       (ndc.y + projectionMatrix[2][1]) / projectionMatrix[1][1], -1.0);
+        }
+        float planeDen = dot(vPlane.xyz, ray);
         if (planeDen != 0.0) {
-            float planeZ = vViewPos.z * vPlane.w / planeDen;
+            float planeZ = ray.z * vPlane.w / planeDen;
             if (planeZ < 0.0) {
                 layerDepth = 0.5 * (projectionMatrix[2][2] * planeZ + projectionMatrix[3][2])
                     / (projectionMatrix[2][3] * planeZ + projectionMatrix[3][3]) + 0.5;
@@ -727,6 +742,8 @@ export function createModelMaterial() {
             uZsortRecede: { value: 12.0 },
             uBoardCull: { value: 1 },
             uSmoothHoles: { value: 0 },
+            /* Set as each render starts; see the scene's onBeforeRender. */
+            uViewport: { value: new THREE.Vector4(0, 0, 0, 0) },
         },
         /* Only the smooth-holes switch writes an alpha below 1; everything
          * else writes 1, which covers every sample, as without it. */
@@ -973,6 +990,12 @@ export class Viewer {
         this.scene.add(this.root);
 
         this.material = createModelMaterial();
+        /* Whatever draws the scene -- this viewer, or a tool rendering it into
+         * a target of its own size -- the fragment shader needs the viewport
+         * to turn a pixel back into its ray (FACE_LAYERS). */
+        this.scene.onBeforeRender = (renderer) => {
+            renderer.getCurrentViewport(this.material.uniforms.uViewport.value);
+        };
         /*
          * The same material for a draw that belongs *behind* the horizon.
          *

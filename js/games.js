@@ -1674,8 +1674,14 @@ function daytonaBuild(spec) {
          * by how they were cut and the parting moves with the camera. Nothing
          * here is modelled behind a surface it shows through, which is what a
          * recede is for.
+         *
+         * `copies`: the flags draw their emblem as a second copy of each
+         * cloth triangle, and a wave frame tilts the copy off the cloth — see
+         * js/layers.js. Only this game asks, because a triangle with a near
+         * copy is common in Sonic The Fighters, whose ranking is graded
+         * against MAME without the rule.
          */
-        depth: { recede: 0, nearMin: 0.02, layers: true },
+        depth: { recede: 0, nearMin: 0.02, layers: true, layerRules: { copies: true } },
         /* Stages, but no rig: this game has no motion tables of any kind. */
         features: { stages: true, characters: false, motions: false, bodies: false },
     };

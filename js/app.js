@@ -1778,27 +1778,56 @@ function transformedBounds(d, matrix) {
 /*
  * Put each face lying on another in its plane over it, for a game whose art
  * depends on that (see js/layers.js). The layers are for the draws as they
- * stand when the scene is built; a draw that swaps models through a cycle takes
- * the first frame's, which every frame of such a cycle shares the shape of --
- * the depth planes only where a frame's points are the first frame's, since a
- * face that has moved off its plane would be drawn at a depth it is not at.
+ * stand when the scene is built. A draw that swaps models through a cycle
+ * shares them with every frame whose points are the first frame's; a frame
+ * whose points have moved has planes of its own, so it is layered again, with
+ * the draws its box meets. Daytona's flags are that: each of the 32 frames of
+ * the wave lays the cut-out emblem on the cloth in that frame's plane, and
+ * without a plane of its own the emblem fought the cloth (issue 38).
  */
 function applyFaceLayers(draws) {
     if (!state.rom.game.depth?.layers || !draws.length) return;
-    const layers = coplanarLayers(draws, state.rom.game.depth.layerRules);
-    draws.forEach(({ mesh, entry, decoded }, i) => {
-        const { layer, plane } = layers[i];
-        const set = (geometry, d) => {
+    const rules = state.rom.game.depth.layerRules;
+    const layers = coplanarLayers(draws, rules);
+    const gap = rules?.gap ?? 0.5;
+    const boxOf = (d, matrix) => transformedBounds(d, new THREE.Matrix4().fromArray(matrix)).bounds;
+    const boxes = draws.map(({ decoded, matrix }) => (decoded ? boxOf(decoded, matrix) : null));
+    const meets = (a, b) => [0, 1, 2].every((k) => a.min[k] <= b.max[k] + gap && b.min[k] <= a.max[k] + gap);
+    draws.forEach(({ mesh, entry, decoded, matrix }, i) => {
+        const set = (geometry, d, { layer, plane }) => {
             if (d.positions.length / 3 !== layer.length) return;
             geometry.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
-            const still = d === decoded || d.positions.every((v, k) => Math.abs(v - decoded.positions[k]) < 1e-3);
-            if (still) geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
-            else geometry.deleteAttribute('aPlane');
+            geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
         };
-        set(mesh.geometry, decoded);
+        set(mesh.geometry, decoded, layers[i]);
+        /* Whether the first frame's layers come from its own faces alone: then
+         * so do the others', and the course blocks around it can be left out,
+         * which is most of the time this takes. */
+        let alone = null;
+        const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
         for (const frame of entry?.anim?.frames ?? []) {
             const d = getModel(frame);
-            if (d) set(frameGeometry(frame).mesh, d);
+            if (!d) continue;
+            const still = d === decoded || (d.positions.length === decoded.positions.length
+                && d.positions.every((v, k) => Math.abs(v - decoded.positions[k]) < 1e-3));
+            if (still) {
+                set(frameGeometry(frame).mesh, d, layers[i]);
+                continue;
+            }
+            if (alone === null) {
+                const solo = coplanarLayers([{ decoded, matrix }], rules)[0];
+                alone = same(solo.layer, layers[i].layer) && same(solo.plane, layers[i].plane);
+            }
+            /* In the order the game submits them, which the sort's ties go by. */
+            const box = boxOf(d, matrix);
+            const near = [];
+            let at = 0;
+            draws.forEach((o, k) => {
+                if (k === i) at = near.push({ decoded: d, matrix }) - 1;
+                else if (!alone && boxes[k] && meets(box, boxes[k])) near.push(o);
+            });
+            const own = coplanarLayers(near, rules)[at];
+            set(frameGeometry(frame).mesh, d, own);
         }
     });
 }
