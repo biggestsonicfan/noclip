@@ -1794,10 +1794,18 @@ function applyFaceLayers(draws) {
     const boxes = draws.map(({ decoded, matrix }) => (decoded ? boxOf(decoded, matrix) : null));
     const meets = (a, b) => [0, 1, 2].every((k) => a.min[k] <= b.max[k] + gap && b.min[k] <= a.max[k] + gap);
     draws.forEach(({ mesh, entry, decoded, matrix }, i) => {
-        const set = (geometry, d, { layer, plane }) => {
+        const set = (geometry, d, { layer, plane, snap }) => {
             if (d.positions.length / 3 !== layer.length) return;
             geometry.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
             geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
+            /* A copy drawn on the corners of the triangle it copies (see
+             * `copies` in js/layers.js), in a copy of the positions: the
+             * decode is cached and shared. */
+            if (snap?.length) {
+                const pos = Float32Array.from(d.positions);
+                for (let k = 0; k < snap.length; k += 2) pos.copyWithin(snap[k] * 3, snap[k + 1] * 3, snap[k + 1] * 3 + 3);
+                geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            }
         };
         set(mesh.geometry, decoded, layers[i]);
         /* Whether the first frame's layers come from its own faces alone: then
