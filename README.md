@@ -492,6 +492,7 @@ export STF_SITE=../noclip
 node record-previews.mjs --game stf --list sfight.zip   # what the shots index
 node record-previews.mjs --game stf sfight.zip          # record them all
 node record-previews.mjs --game stf --only carpet sfight.zip
+node record-previews.mjs --game hotdp --build hotdp hotd.zip   # a merged set
 ```
 
 It wants Chrome or Edge (`$CHROME` names one) and ffmpeg with libx264. The ROM
