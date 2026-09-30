@@ -1475,6 +1475,48 @@ const DAYTONA_CABINETS_93 = [
 ];
 const DAYTONA_CABINET = 1;
 
+/*
+ * The sound board, the one the original Model 2 kept from Model 1: a 68000
+ * (the program pair, word-swapped as MAME loads it), two MultiPCMs with a
+ * pair of sample ROMs each, and a YM3438 — js/sound/sound.js, board 'model1'.
+ * Every build but the 1993 one carries these same chips.
+ *
+ * `music` is how start_setting (0x3BF0 in the Saturn-ads build) picks the
+ * race's song: `ld 0x28050F0[r3*4], g0` and on to the UART, with r3 the
+ * course — unless a VR button is held as the race starts, which picks
+ * the song itself: VR1 the first, VR3 the second, VR2 the third, VR4 the
+ * fourth, which no course has of its own. The table is at data 0x8050F0 in
+ * every build here but the 1993 one, and says 0xAE1007, 0xAE1009, 0xAE1004,
+ * 0xAE100E in all of them.
+ *
+ * What goes with it, as the game sends it: `boot` is sound_refresh's
+ * 0xF8F8FF, which silences the board, and the settings the boot path sends
+ * after it (the run at 0x19958); a new course stops the song the same way.
+ * After the third song start_setting sends 0xB70700 as well, and the race's
+ * scene set-up (0x23E74) follows every song with 0xBE1700 and 0xBE1900.
+ */
+const DAYTONA_SOUND_SETUP = [
+    0xF8, 0xF8, 0xFF,
+    0xBE, 0x14, 0x1F, 0xBE, 0x16, 0x02, 0xBE, 0x1B, 0x06, 0xBE, 0x1C, 0x03,
+    0xBE, 0x1D, 0x01, 0xBE, 0x1E, 0x02, 0xBE, 0x1F, 0x05, 0xBE, 0x36, 0x09,
+    0xBE, 0x17, 0x00, 0xBE, 0x18, 0x04, 0xBE, 0x35, 0x00, 0xBE, 0x34, 0x00,
+];
+const DAYTONA_SOUND = {
+    board: 'model1',
+    program: [['epr-16720.7', 0x8e73cffd], ['epr-16721.8', 0x1bb3b7b7]],
+    samples: [
+        ['mpr-16491.32', 0x89920903], ['mpr-16492.33', 0x459e701b],
+        ['mpr-16493.4', 0x9990db15], ['mpr-16494.5', 0x600e1d6c],
+    ],
+    boot: DAYTONA_SOUND_SETUP,
+    stop: DAYTONA_SOUND_SETUP,
+    after: { song: { 2: [0xB7, 0x07, 0x00] }, every: [0xBE, 0x17, 0x00, 0xBE, 0x19, 0x00] },
+    music: {
+        region: 'mainData', table: 0x8050f0, slotMask: 3,
+        buttons: ['VR1 (red)', 'VR3 (yellow)', 'VR2 (blue)', 'VR4 (green)'],
+    },
+};
+
 function daytonaBuild(spec) {
     return {
         id: spec.id,
@@ -1632,6 +1674,8 @@ function daytonaBuild(spec) {
          * recede is for.
          */
         depth: { recede: 0, nearMin: 0.02, layers: true },
+        /* The music, off until switched on — see DAYTONA_SOUND. */
+        sound: spec.sound === undefined ? DAYTONA_SOUND : spec.sound,
         /* Stages, but no rig: this game has no motion tables of any kind. */
         features: { stages: true, characters: false, motions: false, bodies: false },
     };
@@ -1775,6 +1819,10 @@ const daytona93 = daytonaBuild({
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
     objects: DAYTONA_OBJECTS_93,
+    /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
+     * was worked out on do not carry; its song table is in the program ROM,
+     * at 0x231E70. */
+    sound: null,
 });
 
 const daytona = daytonaBuild({

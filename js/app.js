@@ -47,7 +47,7 @@ import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet, bankTextureSet } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
-import { SoundBoard, soundSupported, stageMusic } from './sound/sound.js';
+import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, html) => {
@@ -3457,6 +3457,7 @@ function wireOptions() {
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
     $('#opt-music').addEventListener('change', (e) => setMusic(e.target.checked));
     $('#music-volume').addEventListener('input', (e) => state.music.board?.setVolume(+e.target.value));
+    $('#music-song').addEventListener('change', () => playStageMusic());
     /* Which of the game's states a Daytona course is drawn in — see MODES in
      * js/daytona.js. */
     const modeSelect = $('#mode-select');
@@ -3716,21 +3717,34 @@ function resetMusic() {
     $('#opt-music').checked = false;
     $('#music-status').textContent = '';
     $('#music-field').hidden = !soundSupported(state.rom.game);
+    /* Where the game lets the player pick the song, the same choice here: the
+     * stage's own, or what each button picks. */
+    const choices = musicChoices(state.rom);
+    const pick = $('#music-song');
+    pick.replaceChildren();
+    pick.append(new Option("the course's own", '-1'));
+    (choices ?? []).forEach((c, i) => pick.append(new Option(`${c.label}: ${songName(c.code)}`, String(i))));
+    pick.value = '-1';
+    $('#music-song-field').hidden = !choices || $('#music-field').hidden;
+}
+
+const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
+function songName(code) {
+    return `song ${hex2(code >>> 16)} ${hex2((code >>> 8) & 0x7F)} ${hex2(code & 0x7F)}`;
 }
 
 function playStageMusic() {
     if (!state.music.on || !state.music.board?.node) return;
     const stage = state.stages[state.stageIndex];
-    const code = stage ? stageMusic(state.rom, stage.slot) : 0;
+    const { code, index } = stage
+        ? stageMusic(state.rom, stage.slot, +$('#music-song').value)
+        : { code: 0, index: -1 };
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
     if (code === state.music.playing) return;
     state.music.playing = code;
-    state.music.board.play(code);
-    const hex = (n) => n.toString(16).toUpperCase().padStart(2, '0');
-    $('#music-status').textContent = code
-        ? `song ${hex(code >>> 16)} ${hex((code >>> 8) & 0x7F)} ${hex(code & 0x7F)}`
-        : 'no music of its own';
+    state.music.board.play(code, index);
+    $('#music-status').textContent = code ? songName(code) : 'no music of its own';
 }
 
 async function setMusic(on) {

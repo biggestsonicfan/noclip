@@ -33,10 +33,13 @@ js/
   sound/
     sound.js     the music switch: reads the sound ROMs, boots the board
     worklet.js   runs the board on the audio thread
-    board.wasm   m2-hle2's sound board, built by tools/sound/build.sh
+    board.wasm   m2-hle2's Model 2 sound board, built by tools/sound/build.sh
+    model1.wasm  the Model 1 sound board (Daytona), built by the same
 tools/sound/
   board.c        the wasm's surface over m2-hle2's src/board/sound.h
-  build.sh       emcc build of board.wasm
+  model1.c       the Model 1 board: m2-hle2's 68000, the memory map, the UART
+  model1_chips.cpp  MAME's MultiPCM and ymfm's YM3438 for it
+  build.sh       emcc build of both
 ```
 
 The tools this document keeps citing are not in the tree. They live in
@@ -49,7 +52,7 @@ code rather than a copy of it. A `stf-tools/x` path below is a file at the root
 of that repository.
 
 Nothing is vendored and there is no build step for the page, with one
-exception: `js/sound/board.wasm`, which is compiled C and is committed as built
+exception: the two `js/sound/*.wasm`, which are compiled C and committed as built
 — see [Music](#music-jssound). `index.html`'s import map pins
 three.js to cdnjs and its one addon, OrbitControls, to jsDelivr, and gives a
 SHA-512 for each of the three files in an `integrity` map — so the page gets
@@ -3571,3 +3574,63 @@ pointing at it). The wasm is committed because the site has no build step; a
 change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
 build is from `c4ed74f`.
+
+### Daytona USA's music: the Model 1 sound board
+
+Daytona runs on the original Model 2, which kept Model 1's sound board rather
+than the SCSP one: a 68000 at 10 MHz running the driver out of `epr-16720` and
+`epr-16721`, two MultiPCM sample chips (315-5560) with 4 MB of samples each
+(`mpr-16491`/`16492` and `mpr-16493`/`16494`, the upper megabyte of each
+banked by the 68000), and a YM3438. The i960 talks to it the same way, bytes
+down an 8251 at 31250 baud. m2-hle2 has no emulation of this board, so
+`model1.wasm` is put together here (`tools/sound/model1.c`): m2-hle2's 68000,
+MAME's memory map for the board (`segam1audio.cpp`), and the two chips as MAME
+runs them — its MultiPCM (`gew.cpp`, `multipcm.cpp`), carried over line for
+line, and ymfm, MAME's YM3438 core, used as it is. The mix is MAME's: the
+YM3438 at 0.30, each MultiPCM at 0.5. The driver keeps its tempo by polling the
+YM3438's timers; its only interrupt is the UART's, on level 2.
+
+It makes MultiPCM's own rate, 10 MHz / 224 = 44642.857 Hz, and says so through
+`snd_rate()`, which the worklet uses to step it across to the context's rate.
+
+**Graded against MAME.** MAME (`daytona`, 0.289) was run through 70 s of
+attract with every byte the i960 wrote to the UART logged and the sound written
+to a WAV; the same bytes at the same times through `model1` natively gave a
+loudness envelope that follows MAME's at a correlation of 0.997 (quarter-second
+windows) at the same level to within a few per cent, the same spectrum to
+within 0.5 dB up to 10 kHz, and a waveform that lines up to 0.6–0.9 correlation
+in 0.3 s windows, with a steady 17 ms offset and a drift of 56 ppm, which is
+MAME's sample rates being whole numbers. The wasm's output is bit-identical to
+the native build's, and it makes 20 s of sound in about 0.6 s.
+
+**Which song.** `start_setting` (0x3BF0 in the Saturn-ads build, labelled) is
+what sends the race's song:
+
+    ldob    sel_course, r3
+    cmpibe  0, r9, loc_3C8C      ; r9: the held buttons, & 0x100E0
+    bbs     5, r9, ... mov 0     ; VR1
+    bbs     6, r9, ... mov 2     ; VR2
+    bbs     7, r9, ... mov 1     ; VR3
+    mov     3, r3                ; VR4
+    st      r3, dword_501A98
+    ld      0x28050F0[r3*4], g0
+    call    sub_1A554            ; three bytes down the UART
+
+So a race plays its course's song, unless a VR button is held as it starts,
+which picks the song instead — and VR4 picks a fourth that no course has. The
+table is at data `0x8050F0` in every build but the 1993 one (program ROM
+`0x231E70` there) and reads `0xAE1007`, `0xAE1009`, `0xAE1004`, `0xAE100E`
+in all of them. The **Song** list under the music switch is that choice: the
+course's own, or what each button picks. The fourth course, the test square,
+has sel_course 3 and so gets the fourth song, as the routine would.
+
+What goes with a song is what the game sends with it: `0xB70700` after the
+third (the routine's `cmpi r3, 2`), and `0xBE1700`, `0xBE1900` after every one
+(the race's scene set-up, 0x23E74). To stop a song the page sends what
+`sound_refresh` does, `0xF8F8FF`, and then the settings the boot path sends
+after it (the run at 0x19958); the same bytes open the board. Two more
+four-song tables follow the same pick later in a race (data `0x280EEB8` and
+`0x2810D58` in Revision A); they are not offered here.
+
+The 1993 build has its own sound program (`epr-16489`/`16490`), which the
+dumps this was worked out on do not carry, so it has no music switch.
