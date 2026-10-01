@@ -9,7 +9,7 @@ import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
-import { MODES as OBJECT_MODES } from './daytona.js';
+import { MODES as OBJECT_MODES, gridBlock, inWindow } from './daytona.js';
 import { coplanarLayers, rankLayers, surfaceCorners } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
@@ -99,6 +99,9 @@ const state = {
     /* Which of the game's states Daytona's courses are drawn in — race,
      * time attack or the ending. See MODES in js/daytona.js. */
     objectMode: 'race',
+    /* The view picked per stage slot, where a stage has several — see
+     * stageView. */
+    stageViews: {},
     /* The fighter's motion. `frame` is the game's own: an integer that starts
      * at 1 and is stepped once a vsync until it passes the motion's length, so
      * it is derived from elapsed time the way the stage clock is. `slot` is
@@ -675,14 +678,23 @@ async function loadTexramFiles(files) {
 }
 
 /*
+ * Which of a stage's views is picked — a House of the Dead zone, or whether a
+ * Daytona course is drawn round the camera — or the stage's own first choice.
+ * See `views` in js/placements.js and js/stages.js.
+ */
+function stageView(stage) {
+    return state.stageViews[stage.slot] ?? stage.view;
+}
+
+/*
  * The draw list for the loaded stage.
  *
  * A game whose geometry is already in world space takes the flat builder; the
  * long one is about the transforms the other game's draw functions apply, and
  * there are none to apply here.
  */
-function stageDisplayList(stage) {
-    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode);
+function stageDisplayList(stage, view = stageView(stage)) {
+    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode, view);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
@@ -995,12 +1007,10 @@ function modelScenes() {
         /* A view that mixes texture sets under one says nothing about which
          * set draws a model. */
         if (stage.mixedSets) return;
-        for (const m of modelsInDisplayList(stageDisplayList(stage))) {
+        /* Every zone, not just the one picked: a piece the stage's other
+         * zones draw is still its model. */
+        for (const m of modelsInDisplayList(stageDisplayList(stage, stage.union))) {
             add(m, slot);
-        }
-        /* The versions of a piece a stage leaves out are still its models. */
-        for (const d of stage.alternates ?? []) {
-            for (const m of d.cycle ?? [d.model]) if (m && !owner.get(m)?.includes(slot)) add(m, slot);
         }
     });
     /* Disjoint from the stages in this ROM set, so the order of the two passes
@@ -1262,6 +1272,9 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * under its own — sheets, colour tables and face palette (materialForSet).
      * A pinned dump is one machine's texture RAM and stands for all of them. */
     const perPart = stage.mixedSets && !state.texramPinned;
+    /* A course drawn as the board draws it, round the camera's block: every
+     * block is built, and stepBlockWindow shows the ones in the window. */
+    const windowed = stageView(stage) === 'camera';
     const sceneSet = state.rom.paletteSet;
     const partSets = new Set();
     for (const entry of list) {
@@ -1318,12 +1331,15 @@ function loadStage(slot, { keepCamera = false } = {}) {
         if (ARENA_LAYERS.has(entry.layer)) arena.push(box);
         /* The decoded UVs stay the offset's origin: the copy above is written
          * from them every frame rather than walked on from where it stands. */
+        let item = null;
         if (moves) {
-            state.anim.entries.push({
+            item = {
                 entry, mesh, lines, model: entry.model,
                 uvs: entry.scroll ? d.uvs : null,
-            });
+            };
+            state.anim.entries.push(item);
         }
+        if (windowed && entry.block != null) state.anim.blocks.push({ entry, mesh, lines, item });
         if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
             state.anim.billboards.push({ entry, mesh, lines });
         }
@@ -1532,6 +1548,7 @@ function resetStageAnimation() {
     a.geom.clear();
     a.entries = [];
     a.billboards = [];
+    a.blocks = [];
     a.phases = [];
     a.start = performance.now();
     a.frame = -1;
@@ -1627,6 +1644,35 @@ function liveCamera(frame) {
     return a.liveCam;
 }
 
+/*
+ * The blocks set_area_block marks, round the camera's: on a course drawn the
+ * board's way, show the draws whose block is in the window and hide the rest,
+ * once a rendered frame, since the camera moves whether the stage runs or not.
+ * A draw that hides itself (a dark frame, a horse gone) stays as its own step
+ * left it.
+ */
+function stepBlockWindow() {
+    const blocks = state.anim.blocks;
+    if (!blocks?.length) return;
+    /* Read afresh rather than through liveCamera, which keeps one reading
+     * per stage frame and so would stand still while the stage is held. */
+    const { camera, root } = state.viewer;
+    camera.updateMatrixWorld();
+    root.updateMatrixWorld();
+    LIVE_INV.copy(root.matrixWorld).invert();
+    LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
+    const at = gridBlock(LIVE_POS.x, -LIVE_POS.z);
+    for (const { entry, mesh, lines, item } of blocks) {
+        const shown = inWindow(entry.block, at) && (item?.shown ?? true)
+            && state.layerOn[entry.layer] !== false;
+        mesh.visible = shown;
+        if (lines) {
+            lines.userData.hidden = !shown;
+            lines.visible = state.wireframe && shown;
+        }
+    }
+}
+
 /** Advance every animated draw on this stage to whatever frame we are on. */
 function stepStageAnimation(now) {
     const a = state.anim;
@@ -1648,7 +1694,8 @@ function stepStageAnimation(now) {
              * zero halves of its longs — and that draws nothing. Set every
              * frame, not just on a change, so a layer toggled back on cannot
              * leave a dark frame showing. */
-            it.mesh.visible = model !== 0 && state.layerOn[entry.layer] !== false;
+            it.shown = model !== 0;
+            it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
         }
         if (entry.band) {
             /* set_obj_thd's override covers every face of the model — the quad
@@ -1686,7 +1733,8 @@ function stepStageAnimation(now) {
                 it.mesh.geometry = g.mesh;
                 if (it.lines) it.lines.geometry = g.edges;
             }
-            it.mesh.visible = !r.hidden && state.layerOn[entry.layer] !== false;
+            it.shown = !r.hidden;
+            it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
             composeOps(ANIM_SCRATCH, r.ops);
             it.mesh.matrix.copy(ANIM_SCRATCH);
             if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
@@ -2819,6 +2867,16 @@ function renderStagePanel(stage, counts, totals, list) {
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
     $('#mode-field').hidden = !stage.objectDraws;
+    /* A stage's views: House of the Dead's zones, Daytona's camera window. */
+    const views = stage.views?.length > 1 ? stage.views : null;
+    $('#view-field').hidden = !views;
+    if (views) {
+        const viewSelect = $('#view-select');
+        viewSelect.innerHTML = '';
+        for (const [value, label] of views) viewSelect.add(new Option(label, value));
+        viewSelect.value = stageView(stage);
+        $('#view-label').textContent = stage.zones ? 'Zone' : 'Blocks drawn';
+    }
     if (rides) {
         $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
@@ -3551,6 +3609,11 @@ function wireOptions() {
         state.objectMode = e.target.value;
         loadStage(state.stageIndex, { keepCamera: true });
     });
+    /* Which zone or which blocks the stage is drawn with — see stageView. */
+    $('#view-select').addEventListener('change', (e) => {
+        state.stageViews[state.stageIndex] = e.target.value;
+        loadStage(state.stageIndex, { keepCamera: true });
+    });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
 
@@ -4080,7 +4143,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); }
         state.viewer.render();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;

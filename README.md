@@ -322,6 +322,14 @@ horse is kept between 1 and 6 units a frame — the explorer's numbers, not the
 board's — and "out of view" is the 5×5 blocks round the camera that
 `set_area_block` marks, less the heading clip it takes off them.
 
+**Blocks drawn.** The board never draws a whole course. `set_area_block`
+marks the 5×5 blocks round the camera's block, and only those are drawn. The
+**Blocks drawn** picker on the Stages panel draws a course either way: every
+block a car can come within two blocks of, which is the whole course as far as
+anyone racing it sees, or the board's own window round the explorer's camera,
+which follows it as it flies. Drawn the second way, a horse whose block is out
+of the window also stops on its ellipse, as it does on the board.
+
 **Game state.** The routines test two things besides the course: the mode
 (`M_mode` is `1 << B_mode`, so `0x10000000` is `STAFF_DSP`, the ending) and a
 flag `gear_select` sets when a button is held at the transmission select,
@@ -428,6 +436,14 @@ thirteen texture sets against the prototype's eleven, and its four chapters come
 out as eighteen stages — every zone a chapter's scripts reach while one texture
 set is loaded, plus the whole of each chapter's table, with its 94 enemy bodies
 playing the 674 motions baked for their joint counts.
+
+A stage opens in the first zone its scripts make current, and the **Zone**
+picker steps through the rest in the order the scripts reach them. That is what
+the board draws: one zone at a time, the one the section script last made
+current. The tables hold several versions of one piece at one spot (the
+mansion's front with its doors shut, nearer, and open), and each zone lists
+one of them. "Every zone at once" draws all the zones together, versions and
+all, so they overlap where they share a spot.
 
 A merged archive carrying the parent and its clones together works too, and
 loads as the parent: the chips at the top level are the parent's, and the ones

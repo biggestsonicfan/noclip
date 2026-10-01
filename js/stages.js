@@ -455,6 +455,11 @@ const COURSE_NAMES = ['Three-Seven Speedway', 'Seaside Street Galaxy', 'Dinosaur
  * builds have four distinct ones, and the fourth is a flat square the game's
  * own course select does not reach.
  */
+const COURSE_VIEWS = [
+    ['reach', 'Every block a car reaches'],
+    ['camera', 'The 5×5 blocks round the camera'],
+];
+
 export function readCourseStages(rom) {
     const C = rom.game.stageTable.courses;
     const av = C.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
@@ -476,17 +481,19 @@ export function readCourseStages(rom) {
         const blockAt = [];
         /* The blocks the board can draw — courseReach in js/daytona.js. The
          * rest are never in view of a car, and one is a copse of trees in the
-         * sea off Seaside Street Galaxy. */
+         * sea off Seaside Street Galaxy. They are kept, marked, for the view
+         * that leaves it to the camera's own window. */
         const reach = courseReach(rom, c);
         let unreached = 0;
         for (let b = 0; b < C.blocks; b++) {
-            if (reach && !reach.has(b)) { unreached++; continue; }
             const idx = (dv.getUint32(off + b * 4, true) - base) / t.stride;
             if (!Number.isInteger(idx) || idx < 0 || idx >= t.count) continue;
+            const reached = !reach || reach.has(b);
+            if (!reached) unreached++;
             blockAt.push(b);
             /* Every block is drawn where it is, so the placement is the origin
              * and the display list's translate comes out as the identity. */
-            draws.push({ model: idx, pos: [0, 0, 0], set: c });
+            draws.push({ model: idx, pos: [0, 0, 0], set: c, block: b, reach: reached });
         }
         stages.push({
             slot: stages.length,
@@ -502,7 +509,13 @@ export function readCourseStages(rom) {
              * this board but the tile layer's panorama — `panorama` below. */
             sky: null,
             panorama: rom.game.sky ? (cxlat) => buildCourseSky(rom, c, cxlat) : null,
-            alternates: [],
+            /* Which blocks are drawn. The board draws the 5x5 round the camera's
+             * block (set_area_block), so that is a view, following the
+             * explorer's camera; the other is every block a car can be in
+             * reach of, the whole course at once. */
+            views: COURSE_VIEWS,
+            view: 'reach',
+            union: 'reach',
             texSets: [c],
             texSet: [c, c],
             tint: [1, 1, 1],
@@ -515,7 +528,7 @@ export function readCourseStages(rom) {
             /* Behind the panorama's top row is the backdrop, which the app
              * takes from that row itself when there is a panorama. */
             bgColor555: 0,
-            meta: [['course', c], ['blocks', draws.length],
+            meta: [['course', c], ['blocks', draws.length - unreached],
                 ...(unreached ? [['never in view', unreached]] : []),
                 ...(rom.game.objects ? [['objects', readObjectRecords(rom, c).length]] : [])],
             /* What stands along it — js/daytona.js. Built when the course is
@@ -523,10 +536,10 @@ export function readCourseStages(rom) {
              * finding it decodes the blocks under them; `getModel` is the
              * caller's cache, so a block is not decoded twice. */
             objectDraws: rom.game.objects
-                ? (getModel, mode) => {
+                ? (getModel, mode, view) => {
                     const blockOf = new Map(draws.map((d, i) => [blockAt[i], d.model]));
                     const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null), carLanes(rom, c));
-                    return courseObjectDraws(rom, c, ground, mode);
+                    return courseObjectDraws(rom, c, ground, mode, view);
                 }
                 : null,
         });
