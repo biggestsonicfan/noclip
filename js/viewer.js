@@ -559,6 +559,11 @@ const FRAG_SHADER = /* glsl */`
             }
         }
         gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
+        // A far-corner face in its group's plane keeps its own depth, receded
+        // or not, but takes the plane's as a floor (layer -1, see keepFar in
+        // js/layers.js): rounding never stands it in front of the decals that
+        // plane carries.
+        if (vLayer < 0.0) gl_FragDepth = clamp(max(gl_FragCoord.z, layerDepth), 0.0, 1.0);
 #endif
 #ifdef ZSORT_CONCEDE_PIXEL
         // The whole bound behind this pixel's own point, in place of any depth
@@ -571,7 +576,7 @@ const FRAG_SHADER = /* glsl */`
         // and no layer between them lost half of itself to it.
         float concedeDepth = viewDepth(layerZ - uZsortRecede);
         float concedeSlope = fwidth(concedeDepth) * step(1e-30, layerSlope);
-        gl_FragDepth = clamp(concedeDepth - vLayer * (concedeSlope + 2.0 / 16777216.0), 0.0, 1.0);
+        gl_FragDepth = clamp(concedeDepth - max(vLayer, 0.0) * (concedeSlope + 2.0 / 16777216.0), 0.0, 1.0);
 #else
         gl_FragDepth = clamp(viewDepth(vViewPos.z - uZsortRecede), 0.0, 1.0);
 #endif
