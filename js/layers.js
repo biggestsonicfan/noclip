@@ -307,6 +307,7 @@ export function coplanarLayers(draws, {
     };
 
     const above = faces.map(() => []);
+    const apart = [];
     const below = new Int32Array(faces.length);
     const ordered = new Uint8Array(faces.length);
     const seen = new Set();
@@ -356,7 +357,10 @@ export function coplanarLayers(draws, {
                  * 0.07 to 0.15 apart, and one plane for all of them lays the
                  * faces on each other. m2-hle2's grade against MAME
                  * (tools/grade-zsort.mjs, issue #75) is where that showed. */
-                if (leaveApart && !bySort && !copy) continue;
+                if (leaveApart && !bySort && !copy) {
+                    apart.push(behind > 0 ? [j, i] : [i, j]);
+                    continue;
+                }
                 const share = bySort && !copy ? laterShare(f, g) : 0.5;
                 let top;
                 if (window || copy || share >= 0.75) top = j;
@@ -376,6 +380,31 @@ export function coplanarLayers(draws, {
         }
     }
 
+    /* The groups: faces joined by any ordering, each taking the plane of its
+     * largest face. */
+    const root = faces.map((_, i) => i);
+    const find = (i) => {
+        while (root[i] !== i) i = root[i] = root[root[i]];
+        return i;
+    };
+    above.forEach((list, i) => {
+        for (const k of list) root[find(i)] = find(k);
+    });
+    /* A pair `leaveApart` left to the depth buffer is still ordered if other
+     * faces have put both in one group, because the group's plane is what the
+     * depth buffer gets and the gap between them is gone: the nearer goes over
+     * the other. Each of Tails' lab's posters is a far-corner plate 0.04 in
+     * front of the back wall with a cut-out picture 0.01 in front of the plate
+     * (issue 58). The picture joins both to one group; unordered, plate and
+     * wall came out of it in the same layer, and the wall won the picture's
+     * holes, where the board, sorting the plate by a corner nearer than any of
+     * the wall's, shows the plate's green or blue. */
+    for (const [bottom, top] of apart) {
+        if (find(bottom) !== find(top)) continue;
+        above[bottom].push(top);
+        below[top]++;
+    }
+
     /* Longest path from the faces nothing lies under. A cycle — three faces
      * each partly over the next — is broken where it is met: whatever is still
      * waiting when the queue runs dry keeps the layer it has reached. */
@@ -390,16 +419,6 @@ export function coplanarLayers(draws, {
         }
     }
 
-    /* The groups: faces joined by any ordering, each taking the plane of its
-     * largest face. */
-    const root = faces.map((_, i) => i);
-    const find = (i) => {
-        while (root[i] !== i) i = root[i] = root[root[i]];
-        return i;
-    };
-    above.forEach((list, i) => {
-        for (const k of list) root[find(i)] = find(k);
-    });
     const largest = new Map();
     faces.forEach((f, i) => {
         const r = find(i), best = largest.get(r);
@@ -435,14 +454,28 @@ export function coplanarLayers(draws, {
          * its own, receded or not, but never nearer than the plane's. That
          * moves it by rounding and no more, and it cannot stop it stepping
          * back. A far-corner face off the plane, the emblem standing over its
-         * green, is left alone as before. */
+         * green, is left alone as before.
+         *
+         * And a far-corner face off the plane that is laid on one face of its
+         * group and has another laid on it — a plate between a wall and a
+         * decal — takes its layer outright. Stepping back is no use to it: it
+         * cannot leave the one without passing the other. Each of the lab's posters is such a
+         * plate, coloured, 0.04 in front of the wall, with a cut-out picture
+         * 0.01 in front of it. Receded to its far corner the plate is flat in
+         * depth at the depth of its edge away from the camera, so it sank
+         * behind the wall at the near edge and stood in front of the picture
+         * at the far one: a strip of green or blue down that side of every
+         * poster (issue 58 again), and the wall in the picture's holes. */
         const ref = ordered[i] ? faces[largest.get(find(i))] : null;
         const n = ref?.n;
         const d = ref ? n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2] : 0;
         const off = (p) => Math.abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d);
         if (keepFar && f.zmode >= 2) {
-            if (!ref || f.pts.some((p) => off(p) > 1e-3)) return;
-            o.layer.fill(-1, f.t0 * 3, (f.t1 + 1) * 3);
+            if (!ref || f.pts.some((p) => off(p) > gap)) return;
+            const inPlane = f.pts.every((p) => off(p) <= 1e-3);
+            const plate = !inPlane && layer[i] > 0 && above[i].length > 0;
+            if (!inPlane && !plate) return;
+            o.layer.fill(plate ? layer[i] : -1, f.t0 * 3, (f.t1 + 1) * 3);
         } else {
             if (layer[i]) o.layer.fill(layer[i], f.t0 * 3, (f.t1 + 1) * 3);
             if (!ref || f.pts.some((p) => off(p) > gap)) return;
