@@ -88,6 +88,9 @@ const sfight = {
          * character-select screens leave it resident, and the stage sets do not
          * overwrite its deepest mip levels. */
         residentSet: 16,
+        /* send_tex_default ends `send_tex_rob(1, 0, 0)` (0x4A994), and every
+         * stage uploads beside it. See resolveTexSets in js/stages.js. */
+        bootSet: 1,
     },
     /* Where each colour upload reads from. `at` is a main_data offset, and
      * `indirect` says it holds a pointer to the table rather than being it —
@@ -295,9 +298,13 @@ const fvipers = {
         header: 0x300000, pageTable: 0x4b9c0, sets: 100,
         /* 100 because unp_send_tex_req rejects anything above it:
          * `lda unk_63, r3 / cmpoble g0, r3` — texture numbers run 0..0x63.
-         * Which set is resident behind the others is not known for this game,
+         * No capture says what the attract screens leave behind the others,
          * so nothing is forced in ahead of the chosen one. */
         residentSet: null,
+        /* send_tex_default ends `addo 0x1F, 5, g0` and asks unp_send_tex_req
+         * for it (0x4ACBC); every stage uploads beside it. See resolveTexSets
+         * in js/stages.js. */
+        bootSet: 36,
     },
     /*
      * The colour tables, which turned out to be the same machinery again.
@@ -345,7 +352,7 @@ const fvipers = {
      * list. change_scene indexes them with `shlo 8, r12, r4` off stage_num, so
      * the stride is 0x100 like the other game's, and the fields below are the
      * ones it and stage_disp read out: the brightness and the two rotations
-     * that build the light vector, the pair of texture numbers it hands
+     * that build the light vector, the texture set and colour block it hands
      * send_tex_stage, and the three bytes stage_disp copies to 0x5000E0 as the
      * per-channel trim. The material table is a second array indexed the same
      * way — sub_24878 walks 32 slots out of `off_6CE33A4[stage_num*4]`.
@@ -361,7 +368,7 @@ const fvipers = {
      * bank, and change_scene indexes it with `shlo 8, r12, r4` off stage_num.
      * Every field the other game's reader knows is at the same offset: the
      * flags word at 0, the brightness at 4, the two rotations at 8 and 0x0A,
-     * the texture pair at 0x0C, the trim at 0x10, the four single models from
+     * the texture set and colour block at 0x0C, the trim at 0x10, the four single models from
      * 0x18, the sixteen parts at 0x64, the cage at 0x84 and the object list
      * pointer at 0xB4. They were checked one at a time against the routine that
      * reads each — change_scene, stage_disp, pole_disp, cage_clip_m,
@@ -375,8 +382,6 @@ const fvipers = {
         source: 'xtra', at: 0x06ce1048, stride: 256, count: 16,
         lists: { upper: [0x24, 32], ground: [0x64, 16], cage: [0x84, 24] },
         materials: { source: 'xtra', ptrs: 0x06ce33a4 },
-        /* change_scene hands both numbers to send_tex_stage. */
-        texPair: 'literal',
         /*
          * The backdrop colour, which is not the sky.
          *

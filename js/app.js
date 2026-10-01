@@ -126,7 +126,7 @@ const state = {
     /* The scroll layer's sky, decoded once per stage and kept. */
     sky: null,
     skyTextures: new Map(),
-    skyPanoAspect: new Map(),
+    skyPanoScale: new Map(),
     skyHorizon: new Map(),
     skyTopColor: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
@@ -303,7 +303,7 @@ function resetRomState() {
     state.modelCache.clear();
     state.texSetCache.clear();
     state.skyTextures.clear();
-    state.skyPanoAspect.clear();
+    state.skyPanoScale.clear();
     state.skyHorizon.clear();
     state.skyTopColor.clear();
     state.modelScenes = null;
@@ -713,9 +713,14 @@ function modelsPickTextures() {
  * The answer is cached per model because the search walks every set's page
  * list, which is cheap but not free, and clicking down the list would repeat it
  * on every row.
+ *
+ * It comes back with how it was reached, so the panel can say when the set is a
+ * guess: `how` is 'chosen' (the picker), 'bank' (bankTextureSet), 'coverage'
+ * (bestTextureSet, with `covered` of `tiles`) or 'default' (the profile's
+ * opening set, for a game neither can answer).
  */
-function modelTextureSet(idx) {
-    if (state.texSetChoice !== null) return state.texSetChoice;
+function modelTextureGuess(idx) {
+    if (state.texSetChoice !== null) return { set: state.texSetChoice, how: 'chosen' };
     if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
     /* A game that says which set each bank of its model table is drawn under
      * is taken at its word; see bankTextureSet for why tile coverage cannot
@@ -723,14 +728,28 @@ function modelTextureSet(idx) {
     const banked = bankTextureSet(state.rom, idx);
     const found = banked === null
         ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
-        : { set: banked };
+        : null;
     /* Neither can answer for a game whose sheets are raw banks and which has no
      * table saying which bank goes with which set — Daytona USA, whose course
      * data is unread. It opens on the set its profile names and the picker
      * moves it. */
-    const set = found ? found.set : (state.rom.game.texture.defaultSet ?? null);
-    state.texSetCache.set(idx, set);
-    return set;
+    const guess = banked !== null ? { set: banked, how: 'bank' }
+        : found ? { set: found.set, how: 'coverage', covered: found.covered, tiles: found.tiles }
+            : { set: state.rom.game.texture.defaultSet ?? null, how: 'default' };
+    state.texSetCache.set(idx, guess);
+    return guess;
+}
+
+/* How the panel words a guess, or '' when the set was not guessed. No stage
+ * record names a set for these models, so whatever the viewer picks for them
+ * is its own inference, not the game's. */
+function describeTextureGuess(g) {
+    if (g.how === 'coverage') {
+        return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
+    }
+    if (g.how === 'bank') return `set ${g.set} is a guess: the set this bank of the model table is drawn under`;
+    if (g.how === 'default' && g.set != null) return `set ${g.set} is a guess: the game's opening set`;
+    return '';
 }
 
 /* ---- Model cache --------------------------------------------------------- */
@@ -1084,8 +1103,16 @@ function useModelScene(idx) {
          */
         let set = null;
         if (modelsPickTextures()) {
-            set = modelTextureSet(idx);
+            const guess = modelTextureGuess(idx);
+            set = guess.set;
             if (set != null) useRomTexram([set]);
+            /* Said on the status line, since the picture alone cannot tell a
+             * set the game names from one the viewer picked. */
+            const status = $('#tex-status');
+            const why = describeTextureGuess(guess);
+            if (status && set != null) {
+                status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
+            }
         }
         /* A fighter takes whichever scene is loaded, since every scene holds
          * its sheets. A model no scene claims takes it too, and for the same
@@ -1129,19 +1156,23 @@ function useModelScene(idx) {
  * The scroll layer's sky, on a cylinder round the arena.
  *
  * A game that keeps its sky as a tilemap rather than as models gets it here —
- * see js/scroll.js for the decode. The panorama is 576 tiles round where the
- * hardware shows 64 of them, so the strip is a full turn and goes on a cylinder
- * at that scale: turning the camera walks it exactly as the scroll registers
- * walk the tilemap.
+ * see js/scroll.js for the decode. The strip is one full turn of the scroll
+ * registers, so it goes round a cylinder at that scale: turning the camera
+ * walks it exactly as the board's heading walks the tilemap.
  *
- * Vertically it is an estimate and not the board's arithmetic. The board draws
- * the layer in screen space at one tile to eight pixels, so how much sky is in
- * frame depends on the projection rather than on anything in the data. The
- * height below puts the panorama's foot on the horizon and scales the rest by
- * the same pixels-per-degree the horizontal mapping implies, which lands the
- * cloud band where the captures put it. A panorama that carries what lies
- * below the horizon as well — Daytona USA's — says which row is the horizon,
- * and that row goes on the eye line instead.
+ * Vertically the board scrolls the layer by its focal length times the tangent
+ * of the pitch, which is what a flat picture `focal` pixels away does: a row
+ * `n` pixels above the eye line stands n / focal of the radius above it. A
+ * panorama that read the routine says its focal and its eye-line row
+ * (Fighting Vipers'; js/scroll.js has the arithmetic). Daytona USA's Y scroll
+ * goes through TGP functions that are not ported, so it gets the eye-line row
+ * measured in MAME and, still an estimate, the same pixels per radian up as
+ * across.
+ *
+ * The radius itself changes nothing on screen. The cylinder rides on the
+ * camera (stepSky) and is drawn without the depth test, and its height scales
+ * with the radius, so every row subtends the same angle at any radius; it has
+ * only to sit inside the camera's clip range (0.05 to at least 2000).
  */
 const SKY_RADIUS = 600;
 
@@ -1177,7 +1208,10 @@ function addSkyPanorama(slot) {
             tex.minFilter = THREE.LinearFilter;
             tex.wrapS = THREE.RepeatWrapping;
             tex.needsUpdate = true;
-            state.skyPanoAspect.set(slot, pano.height / pano.width);
+            /* The strip's height as a fraction of the radius. */
+            state.skyPanoScale.set(slot, pano.focal
+                ? pano.height / pano.focal
+                : 2 * Math.PI * pano.height / pano.width);
             /* The row that sits on the eye line, as a fraction down the
              * strip: its foot unless the panorama says otherwise. */
             state.skyHorizon.set(slot, (pano.horizon ?? pano.height) / pano.height);
@@ -1187,9 +1221,8 @@ function addSkyPanorama(slot) {
     }
     if (!tex) return;
 
-    /* One turn across, and the same pixels-per-radian up. */
-    const aspect = state.skyPanoAspect.get(slot);
-    const height = 2 * Math.PI * SKY_RADIUS * aspect;
+    /* One turn across; up, the board's focal where the panorama gives one. */
+    const height = SKY_RADIUS * state.skyPanoScale.get(slot);
     const geom = new THREE.CylinderGeometry(
         SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
     const mat = new THREE.MeshBasicMaterial({
@@ -2766,7 +2799,8 @@ function renderStagePanel(stage, counts, totals, list) {
         <span>stage_NUM</span><b>${stage.num}</b>
         <span>flags</span><b>0x${stage.flags.toString(16).toUpperCase()}</b>
         <span>floor size</span><b>${stage.floorSize.toFixed(3)}</b>
-        <span>texture set</span><b>${stage.texSet[0]}, ${stage.texSet[1]}</b>
+        <span>texture set</span><b>${stage.texSet[0]}</b>
+        <span>colour block</span><b>${stage.texSet[1]}</b>
         <span>brightness</span><b>${stage.bright.toFixed(2)}</b>
         <span>draws</span><b>${list.length}</b>
         <span>triangles</span><b>${totalTris.toLocaleString()}</b>
@@ -2908,8 +2942,9 @@ function describeModelScene(idx) {
              * for the whole game, so there is no scene to name — only which
              * sheets the model is standing on. */
             if (state.rom.game.colors) {
-                const set = modelTextureSet(idx);
-                return `drawn by no stage — the game's own colour tables, sheets of set ${set ?? 0}`;
+                const guess = modelTextureGuess(idx);
+                const why = describeTextureGuess(guess);
+                return `drawn by no stage — the game's own colour tables, sheets of set ${guess.set ?? 0}${why ? ` (${why})` : ''}`;
             }
             return 'shaded flat, on the face palette in the ROM';
         }

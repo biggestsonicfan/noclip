@@ -34,8 +34,8 @@ const F = {
     bright: 0x04,
     vecterX: 0x08,
     vecterY: 0x0a,
-    texA: 0x0c,          /* send_tex_stage g0 — see resolveTexSets */
-    texB: 0x0e,          /* send_tex_stage g1 */
+    texA: 0x0c,          /* send_tex_stage g0, the texture set — see resolveTexSets */
+    texB: 0x0e,          /* send_tex_stage g1, send_tex_col_stage's colour block */
     red: 0x10,
     green: 0x11,
     blue: 0x12,
@@ -238,37 +238,39 @@ export function gameLighting(rom) {
 /*
  * The texture sets a stage actually uploads.
  *
- * The record's g0/g1 pair is not two set numbers to load. Two captures of real
- * texture RAM settle what is:
+ * The record's g0/g1 pair is not two set numbers to load. change_scene hands
+ * both to send_tex_stage, which only queues them as the command at 0x5502E0;
+ * unp_send_tex_para picks the command up and calls send_tex_stage_delay, and
+ * that splits the pair. g0 goes to unp_send_tex_req with the stage's request
+ * slot, 0x550288: it is the texture set. g1 goes to send_tex_stage_col_req at
+ * 0x5502B8, which send_tex_col hands to send_tex_col_stage: it is the block of
+ * sixteen scene colours (see useRomColorLuts), never a texture set. Both games
+ * run the same instructions: 0x4A9FC here, 0x4AD24 in Fighting Vipers.
  *
- *   South Island, record (2, 0) -> sets 1 and 2
- *   Flying Carpet, record (4, 0x4/2) -> sets 1 and 4
+ * The other set on screen is the one send_tex_default loads once at boot and
+ * nothing replaces. In this game it ends in `send_tex_rob(1, 0, 0)` (0x4A994),
+ * a fighter's slot at 0x550188, and send_tex_rob has no other caller; in
+ * Fighting Vipers it ends in `unp_send_tex_req(31 + 5, 0, 0x550168)`
+ * (0x4ACBC), and only send_tex_debug asks that slot again. So the
+ * upload is the game's boot set (`texture.bootSet`) plus g0.
  *
- * — that is, set 1 and g0. Set 1 is on screen whichever stage is loaded, which
- * is what you would expect of the fighters' own sheets; g0 is the stage's. g1 is
- * g0 - 2 on every stage in the table, so it carries nothing of its own, and
- * reading the pair literally uploads it in place of set 1: 911818 of South
- * Island's 2097152 bytes differ that way, and 1783033 of the Flying Carpet's.
+ * The stage models agree. Over all sixteen records, the boot set adds the
+ * tiles g0 leaves uncovered (one on the Flying Carpet here, two on Fighting
+ * Vipers' record 6) and g1 read as a set adds none. Two captures of real
+ * texture RAM said the same before the routine was read: South Island, record
+ * (2, 0), holds sets 1 and 2, and the Flying Carpet, record (4, 2), sets 1
+ * and 4.
  *
  * A set with no pages behind it is skipped by buildTexram, so the degenerate
  * g0 = 0 on the unused slot 11 costs nothing.
  *
  * The South Island MAME capture also holds set 16, left resident by the
- * attract and character-select screens it was taken after; the Flying Carpet one
- * was taken in attract and holds no such residue. That is capture history, not
- * something a stage asks for, which is why it is not modelled here.
+ * attract and character-select screens it was taken after; that is
+ * `texture.residentSet`, not something a stage asks for.
  */
-const SHARED_TEX_SET = 1;
-
-function resolveTexSets(rom, texA, texB) {
-    /* The pair is only a puzzle in the game the note above is about, where g1
-     * carries nothing of its own. Fighting Vipers hands change_scene's two
-     * numbers straight to send_tex_stage and they are two different sets — 20
-     * and 1 on its first stage — so there both are uploaded as they stand. */
-    if (rom.game.stageTable.texPair === 'literal') {
-        return [...new Set([texB, texA])].filter((n) => n > 0);
-    }
-    return texA === SHARED_TEX_SET ? [texA] : [SHARED_TEX_SET, texA];
+function resolveTexSets(rom, texA) {
+    const boot = rom.game.texture.bootSet;
+    return boot == null || texA === boot ? [texA] : [boot, texA];
 }
 
 /*
@@ -356,8 +358,7 @@ export function readStageTable(rom) {
             /* The record's own pair, kept for the panel; texSets is what to
              * upload. See resolveTexSets. */
             texSet: [dv.getUint16(b + F.texA, true), dv.getUint16(b + F.texB, true)],
-            texSets: resolveTexSets(rom, dv.getUint16(b + F.texA, true),
-                dv.getUint16(b + F.texB, true)),
+            texSets: resolveTexSets(rom, dv.getUint16(b + F.texA, true)),
             colorCycles: readColorCycles(rom, b),
             /* The routines object_control runs for this stage; display.js
              * dispatches on the disp address. */
