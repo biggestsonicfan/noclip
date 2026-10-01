@@ -142,21 +142,12 @@ const sfight = {
      * the board's sort does. Faces it ranks do not recede; everything else
      * still does.
      *
-     * With two of the ranking's rules turned off (`layerRules`), because
-     * m2-hle2 graded the plain ranking against MAME's pictures and on Casino
-     * Night it moved nearly every pixel it changed further from the board
-     * (its issue #75, tools/grade-zsort.mjs). A face sorted by its farthest
-     * corner keeps the recede and takes no layer or plane (`keepFar`), which
-     * is what stands the floor emblem, model 194, out of the way of the green
-     * beside it; and a pair held apart by more than the tie and asking for
-     * the same corner is left to the depth buffer (`leaveApart`), which keeps
-     * a glove's faces, 1813 and 1818, where they are modelled. Neither touches
-     * 580 or 188, whose decals are near-corner faces on far-corner ones. The
-     * House of the Dead and Daytona keep both rules: their rooms and courses
-     * are far-corner faces laid on far-corner faces. */
+     * The order is the board's sort from the camera, worked out every frame.
+     * Graded against MAME's pictures on Casino Night, it moved four pixels in
+     * five that it changed nearer the board than the old three-in-four vote
+     * did: the blue disc it laid over the floor is gone, as on the board. */
     depth: {
         recede: 12, nearMin: 0.02, layers: true,
-        layerRules: { keepFar: true, leaveApart: true },
     },
     scenes: null,
     /* The sound board's ROMs, read only once the music is switched on
@@ -2142,15 +2133,8 @@ function daytonaBuild(spec) {
          * steps each face back by its own depth, so plates in one plane part
          * by how they were cut and the parting moves with the camera. Nothing
          * here is modelled behind a surface it shows through, which is what a
-         * recede is for.
-         *
-         * `copies`: the flags draw their emblem as a second copy of each
-         * cloth triangle, and a wave frame tilts the copy off the cloth — see
-         * js/layers.js. Only this game asks, because a triangle with a near
-         * copy is common in Sonic The Fighters, whose ranking is graded
-         * against MAME without the rule.
-         */
-        depth: { recede: 0, nearMin: 0.02, layers: true, layerRules: { copies: true } },
+         * recede is for. */
+        depth: { recede: 0, nearMin: 0.02, layers: true },
         /* The music, off until switched on — see DAYTONA_SOUND. */
         sound: spec.sound === undefined ? DAYTONA_SOUND : spec.sound,
         /* Stages, but no rig: this game has no motion tables of any kind. */
