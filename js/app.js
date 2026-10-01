@@ -40,7 +40,7 @@ import { readMoves, spellMove, spellEntry, spellGuards, followUps, buildChain, c
     retypeChain, chainCode, parseChainCode, easeLength } from './moves.js';
 import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trailDraws, liveCopies } from './zanzou.js';
 import {
-    readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, rankMotions, partDraws, readSkin, skinMesh,
+    readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -2537,12 +2537,12 @@ function faceCamera() {
 
 /* ---- Jointed bodies ------------------------------------------------------ */
 
-/* The motions a body can play: those written for its joint count. A motion
- * names no body — the game picks one per enemy — so any body with the same
- * count plays it, every angle landing on the joint it was written for. */
+/* The motions a body can play: those written for its joint count, the ones
+ * its routines play leading. A motion names no body, so any body with the
+ * same count plays it, every angle landing on the joint it was written for. */
 function bodyMotions(body) {
     state.motionRanks ??= new Map();
-    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, rankMotions(body, state.motion.list, state.bodies));
+    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, bodyMotionList(state.rom, body, state.motion.list));
     return state.motionRanks.get(body.index);
 }
 
@@ -2554,10 +2554,11 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     /* A body has no input tables, so no moves and no strings. */
     m.moves = null;
     $('#string-field').hidden = true;
-    /* Start on a motion likely written for the body: a body can play any
-     * motion of its joint count, but one keyed on another skeleton bends its
-     * parts in ways they were not modelled for. A motion carried over from the
-     * last body stays if it is among them. */
+    /* Start on the motion the game starts the body on, or another its
+     * routines play: a body can play any motion of its joint count, but one
+     * keyed on another skeleton bends its parts in ways they were not
+     * modelled for. A motion carried over from the last body stays if it is
+     * among them. */
     const { fits, lead } = bodyMotions(body);
     const held = keepMotion && m.decoded?.joints === body.joints ? m.decoded : null;
     const pick = held && lead.includes(held) ? held : lead[0] ?? fits[0];
