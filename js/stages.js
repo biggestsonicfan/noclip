@@ -144,8 +144,12 @@ const SFIGHT_STAGE_NAMES = {
     10: 'Final Eggman Boss',
     13: 'South Island (alt)',
     14: 'South Island (ADV_MOVIE)',
-    15: 'ADV_MOV2',
+    15: "Tails' Lab (ADV_MOV2)",
 };
+
+/* The attract movie's stage, and the light direction its Tails' lab scene sets. */
+const TAILS_LAB_SLOT = 15;
+const TAILS_LAB_VECTER_Y = 0xA400 - 0x10000;
 
 /*
  * The light the geometry engine dots every polygon normal against.
@@ -319,6 +323,11 @@ export function readStageTable(rom) {
         /* Kept raw as well as built, because one stage rewrites VECTER_Y every
          * frame and the light has to be rebuilt from the record around it. */
         const vecter = [dv.getInt16(b + F.vecterX, true), dv.getInt16(b + F.vecterY, true)];
+        /* change_scene copies the record into VECTER_X/Y and camera_init builds
+         * the light out of those globals each frame, so a scene that writes them
+         * itself wins. Tails' lab does: adv_movie_snc_init stores 0xF000 and
+         * 0xA400 over the record's 0xF000 and 0xF400 (BRIGHT is 1.0 in both). */
+        if (T.source === 'maincpu' && s === TAILS_LAB_SLOT) vecter[1] = TAILS_LAB_VECTER_Y;
         const materials = readMaterials(rom, s);
 
         stages.push({

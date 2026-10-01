@@ -54,6 +54,8 @@ const MUSHROOM_HILL_SLOT = 3;
 const CANYON_CRUISE_SLOT = 4;
 const GIANT_WING_SLOT = 7;
 const FINAL_EGGMAN_SLOT = 10;
+/* ADV_MOV2, the stage the attract movie runs on — see LAB_OUTSIDE. */
+const TAILS_LAB_SLOT = 15;
 
 /*
  * The frame tables, at their addresses in the program ROM.
@@ -75,6 +77,7 @@ const FRAME_TABLES = {
     fence: [0x00090dec, 64, 2],         /* electric_fence_anim */
     hangarIris: [0x00090ccc, 128, 2],   /* circular_door_open_close_anim */
     canyonRing: [0x00024aac, 4, 4],     /* canyon_cruise_ring_objects */
+    labScreens: [0x0009762c, 4, 4],     /* tails_display_screen, less the black 1201 */
     /* ... and the tables the stage objects walk. */
     cards: [0x0007451c, 32, 4],         /* floating_cards_objects */
     conveyor: [0x00076184, 32, 2],      /* dynamite_bg_bombs_conveyor_belt */
@@ -97,6 +100,7 @@ export function readFrameTables(rom) {
             : dv.getUint16(addr + i * 2, true)));
     }
     out.blade = PROPELLER_BLADE.slice();
+    out.labScreen = labScreenTable(out.labScreens);
     /* Not a run of model ids but the records the ice pillars are built from —
      * read here so a stage is still built out of one pass over the ROM. */
     out.pillars = readIcePillars(rom);
@@ -256,6 +260,71 @@ const EGGMAN_POLE = 2428;
  * player 1 arrangement, which is the branch `gameprogram` falls through to.
  */
 const EGGMAN_DOORS = [2446, 2447, 2448];
+
+/*
+ * Tails' lab, out of the attract movie — slot 15, ADV_MOV2.
+ *
+ * ADV_SEGA_PIC_INT sets stage_num to 15 before the movie starts, and the record
+ * it loads is all but empty: flag bit 2 turns off camera_init's floor, bit 13
+ * turns off area_clip, stage_dsp's branch for the slot (adv_mov2_stage_dsp_sub)
+ * is a bare `ret`, and no cage, post or ramp flag is set. What is left is the
+ * backdrop ring, 225 and 226. Everything else on screen is drawn by the movie,
+ * one scene at a time through adv_movie_disp_ex, and the lab is the scene
+ * adv_movie_snc_init installs: adv_movie_snc_disp outside, then — once the
+ * first cut is over — adv_movie_snc_disp2 in its place for the inside.
+ *
+ * Neither routine pushes the 1.6 the arena is drawn at. Each opens a matrix on
+ * the camera's own and draws straight into it, so the models are at their own
+ * size and the only transforms are the handful of translates and turns below.
+ * The two never share a frame on the board; here both are drawn, each on a
+ * layer of its own, and the inside sits inside the hangar walls the outside
+ * draws. The inside is drawn 2 lower and names the same two hangar doors
+ * again, so with both layers on the doors are there twice.
+ */
+const LAB_SEA = 74;                 /* set_obj_thd, through send_st15_sea_thd's header */
+const LAB_OUTSIDE = [
+    224,                            /* "Water and ground around Tails lab" */
+    78,                             /* "Area immediately under Tails lab" */
+    3798,
+    3489,                           /* "Tails lab hangar walls" */
+    3490, 3491,                     /* "Tails lab hangar door" */
+];
+/* The Tornado, parked a quarter turn round beside the hangar. */
+const LAB_PLANE = 2945;
+const LAB_PLANE_AT = [['t', [-60, 1, 37]], ['r', 0x4000 * 360 / 65536]];
+/* The dish on the roof turns by am_cntr << 8, and am_cntr steps once a frame. */
+const LAB_DISH = 80;
+const LAB_DISH_AT = [-14, 71.8, 17.18];
+const LAB_DISH_STEP = 256 * 360 / 65536;
+const LAB_INSIDE_DROP = -2.0;       /* 0xC0000000 */
+const LAB_INSIDE = [
+    3473, 3490, 3491, 227,
+    2817,                           /* "ON AIR sign" */
+    3482,                           /* "Tails Lab control panel with monitor" */
+    3481,                           /* "Chaos Emerald Machine" */
+];
+/* The lunar rocket, and its dome one more translate on — no push between, so
+ * the dome's offset is from the rocket's, not from the room's. */
+const LAB_ROCKET = 230;
+const LAB_ROCKET_AT = [23.0, 23.6, 0];
+const LAB_ROCKET_DOME = 231;
+const LAB_ROCKET_DOME_AT = [0, 8.967, -2.88];
+/*
+ * The monitor over the control panel. adv_movie_snc writes movie_flags once a
+ * frame as min(((am_cntr - 64) & 0xFF) / 30, 3) and adv_movie_snc_disp2 draws
+ * tails_display_screen[movie_flags]: four pictures half a second each, the
+ * last held to the end of a 256-frame lap. One frame in eight, by `rand`, it
+ * writes 4 instead — 1201, the screen gone black. That flicker is not a
+ * function of the frame and is left out.
+ */
+const LAB_SCREEN_START = 64;        /* adv_anm_timers_tails_lab[0] */
+const LAB_SCREEN_STEP = 30;
+
+/** The monitor's 256-frame lap as a frame table, out of tails_display_screen. */
+function labScreenTable(screens) {
+    return Array.from({ length: 256 }, (_, f) =>
+        screens[Math.min(Math.floor(((f - LAB_SCREEN_START) & 0xff) / LAB_SCREEN_STEP), 3)]);
+}
 
 /*
  * The sea, which is neither a model swap nor a palette rotation.
@@ -1908,6 +1977,30 @@ export function buildStageDisplayList(stage, frames = null) {
         });
     }
 
+    /* ---- adv_movie_disp: the attract movie's own scene ---- */
+    if (slot === TAILS_LAB_SLOT) {
+        /* adv_movie_snc_disp. The sea goes through set_obj_thd with the header
+         * send_st15_sea_thd rebuilt this frame — nine quads for the model's nine
+         * faces, each its own header but for the lumabase, walked 7..70 at half
+         * the frame rate exactly as South Island's is. */
+        out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, ops: [] });
+        for (const m of LAB_OUTSIDE) push(m, 'outside', []);
+        push(LAB_PLANE, 'outside', LAB_PLANE_AT);
+        push(LAB_DISH, 'outside', (f) => [['t', LAB_DISH_AT], ['r', f * LAB_DISH_STEP]]);
+
+        /* adv_movie_snc_disp2: one translate for the room, and the rocket's two
+         * on top of it. */
+        const room = [['t', [0, LAB_INSIDE_DROP, 0]]];
+        for (const m of LAB_INSIDE) push(m, 'inside', room);
+        if (frames) {
+            const anim = { frames: frames.labScreen, shift: 0, phase: 0 };
+            out.push({ model: frameModel(anim, 0), anim, layer: 'inside', ops: room });
+        }
+        const rocket = [...room, ['t', LAB_ROCKET_AT]];
+        push(LAB_ROCKET, 'inside', rocket);
+        push(LAB_ROCKET_DOME, 'inside', [...rocket, ['t', LAB_ROCKET_DOME_AT]]);
+    }
+
     return out;
 }
 
@@ -1927,7 +2020,8 @@ export function describeOps(ops) {
 /* `scenery` is a placement stage's one layer: its draws are all the same kind
  * of thing, a model where the table puts it. */
 export const DISPLAY_LAYER_ORDER =
-    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery'];
+    ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery',
+        'outside', 'inside'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further
