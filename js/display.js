@@ -289,6 +289,19 @@ const LAB_OUTSIDE = [
     3489,                           /* "Tails lab hangar walls" */
     3490, 3491,                     /* "Tails lab hangar door" */
 ];
+/*
+ * The ground the hangar stands on, which concedes the whole bound a pixel at a
+ * time (see concedeMaterial in js/viewer.js). The launch rail in front of the
+ * hangar is part of the hangar's model 3489: two blue decks in the ground's
+ * plane, the rocket's track 0.5 below it between them, and the turning pad at
+ * the far end. The board sorts all of it by far corner, and the ground's faces
+ * are a hundred units across, so the rail is drawn over them from anywhere.
+ * Here the decks tied with the sand at the same depth and fought it, the track
+ * and the pad were buried under it, and where the sand rises 0.29 over the
+ * deck it took that too (issue 44). Nothing is modelled under the ground
+ * within the bound but the rail and the room, which is inside the walls.
+ */
+const LAB_GROUND = 78;
 /* The Tornado, parked a quarter turn round beside the hangar. */
 const LAB_PLANE = 2945;
 const LAB_PLANE_AT = [['t', [-60, 1, 37]], ['r', 0x4000 * 360 / 65536]];
@@ -1982,9 +1995,16 @@ export function buildStageDisplayList(stage, frames = null) {
         /* adv_movie_snc_disp. The sea goes through set_obj_thd with the header
          * send_st15_sea_thd rebuilt this frame — nine quads for the model's nine
          * faces, each its own header but for the lumabase, walked 7..70 at half
-         * the frame rate exactly as South Island's is. */
-        out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, ops: [] });
-        for (const m of LAB_OUTSIDE) push(m, 'outside', []);
+         * the frame rate exactly as South Island's is.
+         * It is drawn first and under everything: the board sorts the plate by
+         * a corner hundreds of units out, so the ground's shallows always come
+         * over it. Since the ground concedes the bound too (see LAB_GROUND),
+         * the water's per-vertex concession took the shallows instead. */
+        out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, backdrop: true, ops: [] });
+        for (const m of LAB_OUTSIDE) {
+            if (m === LAB_GROUND) out.push({ model: m, layer: 'outside', ops: [], concede: true });
+            else push(m, 'outside', []);
+        }
         push(LAB_PLANE, 'outside', LAB_PLANE_AT);
         push(LAB_DISH, 'outside', (f) => [['t', LAB_DISH_AT], ['r', f * LAB_DISH_STEP]]);
 

@@ -466,7 +466,18 @@ const FRAG_SHADER = /* glsl */`
     const float KEY = 15.0 / 15.0;
     vec2 sampleLevel(int L) {
         ivec4 tile = levelTile(L);
-        vec2 t = vTexel / exp2(float(L)) - 0.5;   // the board's half-texel offset
+        // The coordinate on the board's grid first: it carries 8 fractional
+        // bits (draw_scanline_tex). Rounded to it rather than cut, because a
+        // coordinate that is the same at every corner of a face does not come
+        // back the same out of the interpolator: (a/w)/(1/w) is a hair either
+        // side of it from one pixel to the next. Tails' lab has a face built
+        // on that -- the green rails under its roof are capped top and bottom
+        // by faces whose u is 64 at all four corners, the right edge of a tile
+        // 64 wide -- and 63.99999 against 64.00001 is texel 63 against texel 0,
+        // a column of the rail's dark border against one of its green, chosen
+        // afresh at every pixel (issue 44). On the grid it is 64, every time.
+        vec2 grid = floor(vTexel * 256.0 + 0.5) / 256.0;
+        vec2 t = grid / exp2(float(L)) - 0.5;   // the board's half-texel offset
         ivec2 i0 = ivec2(floor(t));
         vec2 f = fract(t);
 
@@ -530,6 +541,7 @@ const FRAG_SHADER = /* glsl */`
         // itself under the cloth that way (issue 38).
         float layerDepth = gl_FragCoord.z;
         float layerSlope = fwidth(gl_FragCoord.z);
+        float layerZ = vViewPos.z;
         vec3 ray = vViewPos;
         if (projectionMatrix[2][3] != 0.0 && uViewport.z > 0.0) {
             vec2 ndc = (gl_FragCoord.xy - uViewport.xy) / uViewport.zw * 2.0 - 1.0;
@@ -543,6 +555,7 @@ const FRAG_SHADER = /* glsl */`
                 layerDepth = 0.5 * (projectionMatrix[2][2] * planeZ + projectionMatrix[3][2])
                     / (projectionMatrix[2][3] * planeZ + projectionMatrix[3][3]) + 0.5;
                 layerSlope = 0.0;
+                layerZ = planeZ;
             }
         }
         gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
@@ -550,7 +563,18 @@ const FRAG_SHADER = /* glsl */`
 #ifdef ZSORT_CONCEDE_PIXEL
         // The whole bound behind this pixel's own point, in place of any depth
         // the face would otherwise have had -- see concedeMaterial.
+#ifdef FACE_LAYERS
+        // But not in place of its layer. A plate that concedes still carries
+        // the faces laid on it, and they concede with it: Tails' lab's ground
+        // 78 has the hangar's shadow 0.01 over the sand, a near-corner face the
+        // board draws over it, which stepped back by the same bound as the sand
+        // and no layer between them lost half of itself to it.
+        float concedeDepth = viewDepth(layerZ - uZsortRecede);
+        float concedeSlope = fwidth(concedeDepth) * step(1e-30, layerSlope);
+        gl_FragDepth = clamp(concedeDepth - vLayer * (concedeSlope + 2.0 / 16777216.0), 0.0, 1.0);
+#else
         gl_FragDepth = clamp(viewDepth(vViewPos.z - uZsortRecede), 0.0, 1.0);
+#endif
 #endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
