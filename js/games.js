@@ -1597,6 +1597,16 @@ function daytonaBuild(spec) {
                 size: 0x1000000,
                 parts: [DAYTONA_TEX0, spec.tex8 ?? DAYTONA_TEX8],
             },
+            /* The TGP's data ROM, one float a word, the same chips in every
+             * build: the collision polygons get_y_position asks it about, for
+             * the road under the pylons and horses (courseGround in
+             * js/daytona.js). Optional: without it they keep their records'
+             * heights. */
+            copro: {
+                size: 0x400000,
+                optional: true,
+                parts: [[0x000000, 'mpr-16537.ic28', 0x36b7c35a, 'mpr-16536.ic29', 0x6d6afed9]],
+            },
         },
         /* An entry is the four words the draw routine reads — oba, tpa, tha and
          * a polygon count — and then the zero that ends the list, which is what

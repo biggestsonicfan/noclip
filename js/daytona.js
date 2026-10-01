@@ -52,16 +52,18 @@ const ANGLE_DEG = 360 / 65536;
  * The TGP's frame against the viewer's.
  *
  * The decoder negates Z, so a position (x, y, z) is (x, y, -z) here. Mirroring
- * Z reverses every rotation, and the TGP's turns are the other hand from the
- * viewer's to begin with, so the two cancel and a board turn of +a about any
- * axis is a turn of +a here — the same as The House of the Dead's placements
- * come out. The slot machine settles it: its reels are turned 0x382D, and with
- * the sign the other way they face into the rock behind the housing.
+ * Z reverses the turns about X and Y but not about Z, and the TGP's turns are
+ * the other hand from the viewer's to begin with, so a board turn of +a about
+ * X or Y is a turn of +a here — the same as The House of the Dead's placements
+ * come out — and about Z it is -a. The slot machine settles Y: its reels are
+ * turned 0x382D, and with the sign the other way they face into the rock
+ * behind the housing. Ops 0x14, 0x15 and 0x16 build their matrices with the
+ * same hand, so Z follows from the mirror alone.
  */
 const T = (x, y, z) => ['t', [x, y, -z]];
 const RX = (a) => ['rx', a * ANGLE_DEG];
 const RY = (a) => ['r', a * ANGLE_DEG];
-const RZ = (a) => ['rz', a * ANGLE_DEG];
+const RZ = (a) => ['rz', -a * ANGLE_DEG];
 const S = (x, y = x, z = x) => ['s', [x, y, z]];
 
 /* globl_timer, which every one of these indexes its tables off, is the frame. */
@@ -81,6 +83,7 @@ function view(rom, addr) {
 const u32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint32(v.off, true); };
 const f32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getFloat32(v.off, true); };
 const s16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getInt16(v.off, true); };
+const u16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint16(v.off, true); };
 
 /* A model record's address as a model-table index, or -1. */
 function modelOf(rom, ptr) {
@@ -256,16 +259,15 @@ const KINDS = {
 
     /*
      * The pylons: four kinds, the same routine, differing in how high the
-     * model's origin stands off the road. The record's y is not used — the
-     * board puts it on the road under x, z with get_y_position and tips it to
-     * that road's slope, turning X and then Z before the record's own Y. That
-     * height is TGP function 0x36 over collision polygons in the coprocessor's
-     * own ROM, which is not read here, so the road the course draws stands in.
+     * model's origin stands off the road. The board puts each on the road
+     * under x, z with get_y_position, the record's y the height it looks for
+     * the road nearest to, and tips it to that polygon's slope, turning X and
+     * then Z before the record's own Y — see courseGround.
      */
     pylon: (r, ctx) => {
         const { rom } = ctx;
         const lift = f32(rom, ctx.O.pylons[r.init] + 4);
-        const g = ctx.ground?.(r.pos[0], r.pos[2]);
+        const g = ctx.ground?.(r.pos[0], r.pos[2], r.pos[1]);
         const y = (g ? g.y : r.pos[1]) + lift;
         return [{ model: modelOf(rom, r.arg), ops: [T(r.pos[0], y, r.pos[2]), ...(g ? g.tilt : []), RY(r.angle)] }];
     },
@@ -460,8 +462,8 @@ function horseOffset(a) {
  * On its ellipse a horse checks, each frame, how far the car is from where it
  * stood the frame before; inside 8 it bolts. Bolting, it takes the car's
  * heading and half again its speed and runs straight along that heading on
- * the ground (get_y_position under it, which here is the drawn road's
- * height), and whenever the car comes within 8 again it takes them afresh.
+ * the ground (get_y_position under it, looking for the road nearest the
+ * height it runs at), and whenever the car comes within 8 again it takes them afresh.
  * TGP function 0x47 steps it: by speed along the heading, which is the
  * direction the model faces when turned by it. It runs until its block is out
  * of view — the 5x5 blocks round the car that set_area_block marks, less the
@@ -500,7 +502,7 @@ function horseRun(r, gallop, { ground }) {
         if (s.mode === 'bolt') {
             if (near(cam, s.pos[0], s.pos[2])) take(cam);
             if (!inView(cam, s.pos[0], s.pos[2])) { s.n++; s.mode = 'away'; s.away = 0; return; }
-            const g = ground?.(s.pos[0], s.pos[2]);
+            const g = ground?.(s.pos[0], s.pos[2], s.pos[1]);
             if (g) s.pos[1] = g.y;
             const h = (s.heading & 0xffff) * (2 * Math.PI / 65536);
             s.pos[0] -= Math.sin(h) * s.speed;
@@ -543,8 +545,9 @@ export const MODES = [
 /**
  * The draws for one course's objects, in the explorer's shape.
  *
- * `ground(x, z)` answers where the road is under a point — a height and
- * the turns that tip a model to its slope — or null; the cones stand on it and
+ * `ground(x, z, ref)` answers where the road is under a point — a height and
+ * the turns that tip a model to its slope — see courseGround; the cones stand
+ * on it and
  * a bolting horse runs on it. `mode` is which of the game's states to draw the
  * course in — see MODES.
  */
@@ -647,79 +650,133 @@ export function carLanes(rom, course) {
 }
 
 /*
- * The road under a point, for the pylons: the course's own geometry standing
- * in for the collision polygons the board asks the TGP about.
+ * The road under a point: get_y_position (Rev A 0x11C28) and the TGP function
+ * it asks, 0x36, over the collision polygons in the coprocessor's data ROM.
  *
- * Only the block the point is in and the eight round it are looked at, which
- * is a few thousand triangles rather than the course's fifty thousand, and
- * each is decoded once. More than one face that faces up can be under a point:
- * a pylon set against a wall has the wall's flat top over the road, and Seaside
- * Street Galaxy's barriers stood on it, 9 up (#13). What is taken is the face
- * nearest the height of the closest car-lane point, since the lanes run on the
- * road — under every pylon of every course the road is within a tenth of that
- * height and the wall top 9 above it. With no lanes, the highest face.
- * Its normal gives the tip — the board turns X and then Z to stand the model
- * on the slope, and the two angles that carry +Y onto the normal in that order
- * are these.
+ * The data. TGP function 0x0D, which set_course_parms sends with the course,
+ * reads two words of that ROM at 0x10 + course and 0x20 + course: where the
+ * course's polygon lists start and where its polygons do. A polygon is 16
+ * words, four corners (x, y, z) and four the routine does not read. The row
+ * change_course_bank reads per course (the sky's `table`) names, at +8, a
+ * pointer to a 128x128 grid of u16 cells, 16 units across, over the same
+ * ground as the 16x16 block grid; a cell is a list offset, and the list is a
+ * count and that many polygon numbers.
+ *
+ * The query. get_y_position takes x, z and a reference height, picks the cell
+ * as get_m_block does (cvtri, add 1024) but four bits finer, and hands the
+ * TGP the cell's list. For each polygon the TGP tests the point against the
+ * four edges in x, z — a cross product per edge, inside where none is
+ * negative — and for each it is inside, takes the height there: the quad is
+ * cut along v0-v2, the half the point is in found by its barycentric weights
+ * in v0 v1 v2, and the height read off that triangle's plane. Of all the
+ * polygons under the point it keeps the one whose |height| is nearest the
+ * reference, a later one winning a tie. Nothing under the point, or a height
+ * of exactly +0, and get_y_position answers -0.1 with no polygon.
+ *
+ * All of it is single-precision in the TGP's own order, so near an edge the
+ * same polygon is in or out as it is on the board: against an emulation of
+ * the TGP running the game's own microcode, on 4000 points over the four
+ * courses, this picks the same polygon every time, and the height is within
+ * a few units in the last place (the TGP divides through a reciprocal table).
+ *
+ * The tilt is the pylon routine's (0x21C88): it fetches the polygon's corners
+ * with TGP function 0x18, crosses v0-v2 with v1-v2 — the first half, whichever
+ * the point is in — and turns X by -atan2(nz, ny) and then Z by
+ * atan2(nx, ny), TGP function 0x0A being atan2 in the board's 16-bit angle.
+ *
+ * `ground(x, z, ref)` gives { y, tilt } — or null for a set without the
+ * coprocessor ROM, which leaves the callers on the record's own height.
  */
-export function courseGround(blockModel, lanes = null) {
-    const cache = new Map();
-    const tris = (b) => {
-        if (!cache.has(b)) cache.set(b, blockModel(b)?.positions ?? null);
-        return cache.get(b);
+const fr = Math.fround;
+const NO_GROUND = fr(-0.1);       /* 0xBDCCCCCD */
+const GROUND_CELLS = 0x7f;
+export function courseGround(rom, course) {
+    const cv = rom.coproView;
+    const table = rom.game.sky?.table;
+    if (!cv || table == null) return null;
+    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const row = u32(rom, table + course * 4);
+    if (!inData(row, 12) || !inData(u32(rom, row + 8), 4)) return null;
+    const cells = u32(rom, u32(rom, row + 8));
+    if (!inData(cells, 128 * 128 * 2)) return null;
+    const words = cv.byteLength >> 2;
+    const word = (i) => (i < words ? cv.getUint32(i * 4, true) : 0);
+    const float = (i) => (i < words ? cv.getFloat32(i * 4, true) : 0);
+    const lists = word(0x10 + course), polys = word(0x20 + course);
+    const corners = (p) => {
+        const out = new Array(12);
+        for (let i = 0; i < 12; i++) out[i] = float(polys + p * 16 + i);
+        return out;
     };
-    return (x, z) => {
-        /* The decoder has negated Z, so the point is (x, -z) in its frame. */
-        const px = x, pz = -z;
-        const bx = blockOf(x), bz = blockOf(z);
-        let road = null;
-        if (lanes?.length) {
-            let near = Infinity;
-            for (const [lx, ly, lz] of lanes) {
-                const d = (lx - x) ** 2 + (lz - z) ** 2;
-                if (d < near) { near = d; road = ly; }
-            }
-        }
-        const better = (hit, best) => (road == null
-            ? hit.y > best.y
-            : Math.abs(hit.y - road) < Math.abs(best.y - road));
+    return (x, z, ref) => {
+        x = fr(x); z = fr(z); ref = fr(ref);
+        const cell = ((((cvtri(z) + 1024) >> 4) & GROUND_CELLS) << 7) | (((cvtri(x) + 1024) >> 4) & GROUND_CELLS);
+        const list = lists + u16(rom, cells + cell * 2);
         let best = null;
-        for (let dz = -1; dz <= 1; dz++) {
-            for (let dx = -1; dx <= 1; dx++) {
-                const cx = bx + dx, cz = bz + dz;
-                if (cx < 0 || cx > 15 || cz < 0 || cz > 15) continue;
-                const p = tris((cz << 4) | cx);
-                if (!p) continue;
-                for (let i = 0; i + 9 <= p.length; i += 9) {
-                    const hit = underPoint(p, i, px, pz);
-                    if (hit && (!best || better(hit, best))) best = hit;
-                }
-            }
+        for (let k = 0, n = word(list); k < n; k++) {
+            const p = word(list + 1 + k);
+            const v = corners(p);
+            if (!insideQuad(v, x, z)) continue;
+            const y = quadHeight(v, x, z);
+            const m = fr(Math.abs(fr(ref - Math.abs(y))));
+            if (!best || m <= best.m) best = { m, y, p };
         }
-        if (!best) return null;
-        const [nx, ny, nz] = best.n;
-        const ax = Math.atan2(nz, ny), az = -Math.asin(Math.max(-1, Math.min(1, nx)));
-        return { y: best.y, tilt: [['rx', (ax * 180) / Math.PI], ['rz', (az * 180) / Math.PI]] };
+        if (!best || Object.is(best.y, 0)) return { y: NO_GROUND, tilt: [] };
+        return { y: best.y, tilt: quadTilt(corners(best.p)) };
     };
 }
 
-/* Where a triangle is under (x, z) in the decoder's frame, if it is and it
- * faces up: the height there and its unit normal, turned up. */
-function underPoint(p, i, x, z) {
-    const ax = p[i], ay = p[i + 1], az = p[i + 2];
-    const bx = p[i + 3], by = p[i + 4], bz = p[i + 5];
-    const cx = p[i + 6], cy = p[i + 7], cz = p[i + 8];
-    const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-    if (Math.abs(d) < 1e-9) return null;
-    const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d;
-    const v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d;
-    if (u < 0 || v < 0 || u + v > 1) return null;
-    let nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
-    let ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
-    let nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-    const len = Math.hypot(nx, ny, nz);
-    if (!len) return null;
-    if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-    if (ny / len < 0.7) return null;
-    return { y: u * ay + v * by + (1 - u - v) * cy, n: [nx / len, ny / len, nz / len] };
+/* The TGP's edge test: for each edge i -> i+1 of the quad, the cross product
+ * of the edge with the point, in its order of operations. -0 is inside. */
+function insideQuad(v, x, z) {
+    for (let i = 0; i < 4; i++) {
+        const xi = v[i * 3], zi = v[i * 3 + 2];
+        const j = ((i + 1) & 3) * 3, xn = v[j], zn = v[j + 2];
+        let d = fr(fr(z * xi) - fr(x * zi));
+        d = fr(d - fr(z * xn));
+        d = fr(d + fr(x * zn));
+        d = fr(d - fr(zn * xi));
+        d = fr(d + fr(xn * zi));
+        if (d < 0) return false;
+    }
+    return true;
+}
+
+/* The TGP's height routine (0x684): which half of the quad, then the plane. */
+function quadHeight(v, x, z) {
+    const [x0, y0, z0] = v;
+    const x12 = fr(v[3] - v[6]), z12 = fr(v[5] - v[8]);
+    const x02 = fr(x0 - v[6]), z02 = fr(z0 - v[8]);
+    const xp = fr(x - v[6]), zp = fr(z - v[8]);
+    /* The weights of v1 and v0; only their signs are used. */
+    const w1 = z02 !== 0
+        ? fr(fr(fr(z02 * xp) - fr(zp * x02)) * fr(1 / fr(fr(z02 * x12) - fr(z12 * x02))))
+        : fr(zp * fr(1 / z12));
+    const w0 = x02 !== 0
+        ? fr(fr(xp - fr(x12 * w1)) * fr(1 / x02))
+        : fr(fr(fr(zp * x12) - fr(xp * z12)) * fr(1 / fr(z02 * x12)));
+    const neg = (w) => w < 0 || Object.is(w, -0);
+    const b = neg(w1) || neg(w0) ? 6 : 3, c = b + 3;
+    const [x1, y1, z1] = [v[b], v[b + 1], v[b + 2]];
+    const [x2, y2, z2] = [v[c], v[c + 1], v[c + 2]];
+    const nx = fr(fr(fr(y1 - y0) * fr(z2 - z0)) - fr(fr(z1 - z0) * fr(y2 - y0)));
+    const ny = fr(fr(fr(z1 - z0) * fr(x2 - x0)) - fr(fr(x1 - x0) * fr(z2 - z0)));
+    const nz = fr(fr(fr(x1 - x0) * fr(y2 - y0)) - fr(fr(y1 - y0) * fr(x2 - x0)));
+    if (ny === 0) return NO_GROUND;
+    let t = fr(fr(nx * x) + fr(nz * z));
+    t = fr(t - fr(nx * x0));
+    t = fr(t - fr(ny * y0));
+    t = fr(t - fr(nz * z0));
+    return -fr(t * fr(1 / ny));
+}
+
+/* The pylon routine's tip (0x21C88), as the X and then Z turn it draws with. */
+function quadTilt(v) {
+    const e0 = [v[0] - v[6], v[1] - v[7], v[2] - v[8]];
+    const e1 = [v[3] - v[6], v[4] - v[7], v[5] - v[8]];
+    const nx = e0[1] * e1[2] - e0[2] * e1[1];
+    const ny = e0[2] * e1[0] - e0[0] * e1[2];
+    const nz = e0[0] * e1[1] - e0[1] * e1[0];
+    const angle = (a) => Math.round((a * 0x8000) / Math.PI);
+    return [RX(-angle(Math.atan2(nz, ny))), RZ(angle(Math.atan2(nx, ny)))];
 }
