@@ -310,8 +310,22 @@ const LAB_DISH = 80;
 const LAB_DISH_AT = [-14, 71.8, 17.18];
 const LAB_DISH_STEP = 256 * 360 / 65536;
 const LAB_INSIDE_DROP = -2.0;       /* 0xC0000000 */
+/*
+ * The room, sorted by the surfaces its faces make up (see surfaceCorners in
+ * js/layers.js). Its wall round the doorway is five pieces in the plane
+ * x = -40: two panels, two slivers that take the wall up to the roof beside
+ * the opening, and the striped strip over it, 2.5 tall. The doors stand behind
+ * that wall at x = -41.5, one of the copies drawn with the room, and they are
+ * deep enough to keep their own depth. The strip and the slivers were shallow,
+ * stepped back to their far corners and lost to the door wherever that put
+ * them more than 1.5 back: the stripes cut off on a slant and the door's grey
+ * where the slivers should be (issue 46). The board sorts the strip by a
+ * corner far in front of the door's. As pieces of the wall they keep the
+ * depth the wall keeps.
+ */
+const LAB_ROOM = 3473;
 const LAB_INSIDE = [
-    3473, 3490, 3491, 227,
+    LAB_ROOM, 3490, 3491, 227,
     2817,                           /* "ON AIR sign" */
     3482,                           /* "Tails Lab control panel with monitor" */
     3481,                           /* "Chaos Emerald Machine" */
@@ -2011,7 +2025,10 @@ export function buildStageDisplayList(stage, frames = null) {
         /* adv_movie_snc_disp2: one translate for the room, and the rocket's two
          * on top of it. */
         const room = [['t', [0, LAB_INSIDE_DROP, 0]]];
-        for (const m of LAB_INSIDE) push(m, 'inside', room);
+        for (const m of LAB_INSIDE) {
+            if (m === LAB_ROOM) out.push({ model: m, layer: 'inside', ops: room, surfaces: true });
+            else push(m, 'inside', room);
+        }
         if (frames) {
             const anim = { frames: frames.labScreen, shift: 0, phase: 0 };
             out.push({ model: frameModel(anim, 0), anim, layer: 'inside', ops: room });

@@ -10,7 +10,7 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
-import { coplanarLayers } from './layers.js';
+import { coplanarLayers, surfaceCorners } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
@@ -1294,6 +1294,13 @@ function loadStage(slot, { keepCamera = false } = {}) {
         if (entry.band) {
             mesh.geometry.setAttribute('aLumaBase',
                 new THREE.BufferAttribute(Float32Array.from(d.lumaBases), 1));
+        }
+        /* And for a draw sorted by the surfaces its faces make up. */
+        if (entry.surfaces) {
+            const zc = surfaceCorners(d);
+            for (let c = 0; zc && c < 4; c++) {
+                mesh.geometry.setAttribute(`aZc${c}`, new THREE.BufferAttribute(zc[c], 3));
+            }
         }
         /* And the same for a texture-point override, which rewrites the UVs. */
         if (entry.scroll) {
