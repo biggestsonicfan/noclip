@@ -32,7 +32,20 @@ That leaves Aurora as the one exception, and it is a rule too: the only things m
 
 **Risk, to be measured, not assumed:** Aurora is where an unbounded recede went black before (m2-hle2 `17e9b72`), and the cut-off was first added there. The 216-camera South Island count and the 16-stage × 6-camera pixel count quoted in `viewer.js:1128-1135` are the harness that made these patches; the same harness, plus m2-hle2's `grade-zsort.mjs` at the board's cameras (memory: explorer vs MAME pictures), should show the one rule matches them before any of them are deleted.
 
-`planeBias` is a smaller case of §2: it hands out a depth-unit step by which stage-record list a model came from, which is a guess at submission order. The board's order is the draw order `display.js` already builds, so a submission index per draw would replace the three hand-picked biases.
+**Measured (Pinboard #250): no single per-face rule holds.** With every floor/water/concede/standing route removed, four candidate rules were rendered over 16 stages × 8 cameras plus the issue 44/46 links and set views (Flying Carpet, Canyon, South Island, Aurora, Tails' lab), against master:
+
+| Rule | 16-stage px | Breaks |
+|---|---|---|
+| 1. every deep mode-2 face concedes 12 per vertex | 69k | issue 44 (things outside the lab roof show through it), issue 46 (roof-edge strip), Death Egg bar loses to its column |
+| 2. deep, mode 2 and upward-facing | 67k | Tails' lab upper walkways |
+| 3. every upward-facing mode-2 face, per pixel, to max(z−12, far corner) | 21k | lab walkways (9.5k px), the Sphynx plinth top stipples, Aurora's reflection shows through the ice |
+| 4. every deep mode-2 face, as rule 3 | 31k | issue 46 (54k px), issue 44 |
+
+The reason is the same each time. A walkway attached to the lab wall is within 12 units of the wall, so it concedes to it, but on the board the wall's key is its far corner, far behind the walkway's, and the walkway is drawn over it. A bounded recede only gives the board's answer when both faces recede towards their keys, and letting the deep wall recede too (rule 4) is what the cut-off was added to stop. A depth test can't say "lose to faces with a nearer key"; it can only say "lose to what is within 12 units". Doing better needs the key in the test: for example a stencil pass that tests a plate at its own depth and writes it receded, drawn after the static faces whose keys are farther away. That needs the plates split out of their meshes. Until then the per-model flags stay, because they are the cases where "within 12" and "nearer key" agree.
+
+The floor/sea tie (517 vs 555) is the one thing the rules did fix cleanly, once both concede: a fragment bias of one slope step on the floor plate. The existing polygon offset does that job today, and it still applies, because `gl_FragCoord.z` carries the offset into `gl_FragDepth` on the path without a plane.
+
+`planeBias` turned out not to be a guess: `display.js:1555-1598` takes its three steps from the order the cited draw functions run in (sub_238E4's sixteen, then the floor, then ground_upper_disp and sub_235BC). A submission index would give the same three steps, so this one stays.
 
 ## 2. Face layers: a static majority vote standing in for a live sort
 
@@ -68,8 +81,8 @@ A "current zone / camera block" state (a slider or the board camera's position) 
 
 These skips each hide one known decode bug. Fixing the bug removes the skip, and probably fixes other places that use the same data:
 
-- **Fighting Vipers' sky skips colorxlat** (`app.js:1158-1164`) because the luma 0x40 column `colors.js` builds runs 28..224 where MAME's runs 68..202 (memory: Daytona cabinet colorxlat, "FV luma-0x40 column wrong"). The real fix is that column; the skip goes with it.
-- **HOTD's light uses `unverifiedLight`** (`stages.js:193-195, 235`), a sign flip "as it stood before it was measured". It should be measured the way STF's was (stf-board-lighting), then the flip either becomes the rule for every game or goes.
+- **Fighting Vipers' sky skipped colorxlat.** *Fixed (#250).* The column was wrong because FV was given STF's test-menu defaults (add 22, multiply 54). A MAME boot on empty NVRAM leaves 0x40/0x25 at 0x500234..0x500239. With those, the ROM-built colorxlat equals MAME's dump byte for byte, and the night-city sky is (0,0,46) as MAME draws it. The skip is gone. STF's table was checked the same way and already matched.
+- **HOTD's light used `unverifiedLight`.** *Fixed (#250).* MAME's display lists (`m2 geodasm`), taken back through an unrotated stage piece's matrix, give (0.707, -0.707, 0) for both the prototype and revision A. That is `stageLight` unflipped, so the flip is gone.
 - **`HEAD_FACE = 0xc000`** (`pose.js:146`, applied for fighters that borrow Bean's animation table, `characters.js:275-292`). It is a constant quarter turn because the head "reads as facing right". The borrowed table's own rest angle is probably the missing data.
 - **`motionKin` / `rankMotions`** (`bodies.js:220-322`) guess which motions a lone enemy body uses, from name prefixes and a fitted median test, with a second pass to drop the wrong families. Reading each enemy routine's motion numbers would replace about 100 lines.
 
@@ -90,8 +103,8 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 
 ## Suggested order
 
-1. **"Deep far-corner faces concede" as one rule (§1).** This is the clearest case of a few lines replacing a pile: three materials and seven model flags, and the next STF stage would need none. Measure it on all 16 stages with the existing pixel harness and at the board's cameras with `grade-zsort` before deleting anything. Then the mirrored-draw rule for Aurora removes `standingMaterial`.
-2. **Submission index instead of `planeBias` (§1).** This is small and follows from 1.
-3. **The FV luma column and the HOTD light (§5).** Each is one table fix that deletes a skip, and both can be checked against MAME.
+1. ~~**"Deep far-corner faces concede" as one rule (§1).**~~ Measured and rejected; see "no single per-face rule holds" in §1. The next try is a key-aware pass, not a rule on depth alone.
+2. ~~**Submission index instead of `planeBias` (§1).**~~ Already the cited draw order; stays.
+3. ~~**The FV luma column and the HOTD light (§5).**~~ Done (#250), both checked against MAME.
 4. **Live key ranking in face layers (§2).** This has the biggest payoff in the layer code, but it is the least certain. Try it on HOTD and Daytona's flags first.
 5. **A current-zone/block state (§3) and the TGP ground query (§4).** These are larger features. They are worth doing when the Daytona/HOTD work comes back round.
