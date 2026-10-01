@@ -297,6 +297,15 @@
         <label for="mode-select">Game state</label>
         <select id="mode-select"></select>
       </div>
+      <!-- Sonic the Fighters only: the view as the game's own camera record, js/skyeye.js. -->
+      <div class="field" id="skyeye-field" hidden>
+        <label title="This camera as the game's own camera record, fa_camera: the numbers the debug menu's SKY EYE page flies the board's camera by. m2-hle2's SKY EYE mode takes them from this page's link (the link button, or Copy) and puts the board's camera here, on this stage">Game camera <span class="dim">(SKY EYE)</span></label>
+        <pre id="skyeye-readout" class="meta"></pre>
+        <div class="row">
+          <button type="button" id="skyeye-copy" title="Copy the stage and the game camera as text, for a bug report or m2-hle2's SKY EYE field">Copy</button>
+          <label class="check" title="See it through the board's lens: camera_init gives the GEO a focal length of 280 on a 384-line picture, a vertical field of view of 68.9 degrees. Use it before laying this view over a picture of the board"><input type="checkbox" id="opt-board-lens"> board lens</label>
+        </div>
+      </div>
       <div class="field">
         <label>Layers</label>
         <div id="stage-layers" class="layers"></div>
