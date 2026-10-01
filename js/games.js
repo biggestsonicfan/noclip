@@ -304,10 +304,12 @@ const fvipers = {
      * send_tex_col_go here is instruction for instruction the other game's
      * send_tex_col_loop, the ramp in chg_pol_color_req uses the same 0x1C/0x12,
      * and sub_74C builds the intensity curve on the same pivot and divisor
-     * (`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37). check_sram_all ships
-     * add 22, multiply 54 and brightness 31, which are the other game's numbers
-     * too, though this one keeps a pair per channel at 0x500234..0x500239
-     * rather than one for all three.
+     * (`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37). The settings are not
+     * the other game's, though: this one keeps a pair per channel at
+     * 0x500234..0x500239, and a boot on empty NVRAM in MAME leaves 0x40, 0x25
+     * in each pair and 31 at 0x50023A. With those, colorxlat comes out as
+     * MAME's dump byte for byte; with the other game's 22 and 54, the flat
+     * band ran 28..224 where MAME's runs 68..202.
      *
      * What differs is naming and rows. There is no pointer block: each upload
      * names its table outright — `lda unk_2109700` for the scene's,
@@ -320,8 +322,8 @@ const fvipers = {
         /* essential_color_handling reads these through the XTRA_DATA mirror as
          * unk_64266DC and unk_64266E0, which fold to these data offsets. */
         luma: { count: 0x10266dc, data: 0x10266e0 },
-        add: [22, 22, 22],
-        mul: [54, 54, 54],
+        add: [64, 64, 64],
+        mul: [37, 37, 37],
         bright: 31,
         /* Nine scene blocks carry colours and the rest are empty, which is
          * the arena count; thirteen character blocks do, which is the roster.

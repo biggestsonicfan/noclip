@@ -1156,15 +1156,13 @@ function addSkyPanorama(slot) {
     let tex = state.skyTextures.get(slot);
     if (tex === undefined) {
         /* On the board the palette goes through the scene's colour tables,
-         * which useRomColorLuts has just put in place for this stage. Daytona
-         * USA's are the board's byte for byte, so its sky takes them.
-         * Fighting Vipers' stays raw for now: the column its palette reads,
-         * luma 0x40, runs 28..224 as js/colors.js builds it where a MAME dump
-         * runs 68..202, and going through a wrong table is no better than
-         * going through none. */
+         * which useRomColorLuts has just put in place for this stage. Both
+         * games with a sky here build those tables byte for byte as a MAME
+         * dump holds them (Fighting Vipers' since its test-menu defaults were
+         * read off the board, js/games.js), so both skies take them. */
         const pano = stage?.panorama
             ? stage.panorama(state.cxlat)
-            : buildSkyPanorama(state.rom, slot);
+            : buildSkyPanorama(state.rom, slot, state.cxlat);
         /* Not makeDataTexture: that one is for the single-channel lookup
          * tables the fill shader reads, and this is an image. */
         tex = pano
