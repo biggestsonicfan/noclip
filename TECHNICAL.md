@@ -1230,17 +1230,35 @@ Lab (ADV_MOVIE)", a copy of slot 15's record with `scene: 'eggLab'`, and
 `movie_flags`, `dword_5004D8` and `dword_5004DC` start at 16, 40 and 64 and count
 down once a frame through the second cut (`am_num` 1, `am_cntr` 128..320). Each
 one's window opens as it runs down (`amed_open_window`), and the panel under it
-is drawn once it reaches zero. From the third cut on all three panels are up,
-and that is the room the viewer draws.
+is drawn once it reaches zero. The viewer loops the second cut: its clock is
+`t = frame % 384` and `am_cntr = 128 + t`, so the screens switch on during the
+first 64 frames, the footage plays to t = 192 (the cut's own length), and the
+footage keeps playing for the rest of the loop.
 
 The windows (`word_978FC`, `word_97914`, `word_9792C`, as y1, x0, y0, x1) are
 what the monitors show during the second cut. Each loads the identity (op 3)
 and draws in view space at BRIGHT 1.0: two Egg Robos (2681) flying across, four
 dark ones (3851..3853) standing about, and an upper body (223) whose head
-rises through `egg_robo_head_rising_anim` (2981..2991). They are pictures on the
-screen, not things in the room, and are left out. So are Eggman (`fa_rob0`, at
-the origin) and the Egg Robo beside him (`fa_rob1`, at (6.5, 0, -2.5), turned
-0x2000).
+rises through `egg_robo_head_rising_anim` (2981..2991). Each window's
+projection centres on the rectangle's own centre at focal 280, and from the
+cut-1 camera each rectangle lies exactly over its panel (win1 over 3770, win2
+over the viewscreens, win3 over 3771).
+
+- While a counter `n = S - t - 1` is between 0 and 16, `amed_open_window` draws
+  the giant square (3769) at view (0, 0.22·n, 2.5): a white card that slides
+  down the window, the screen "switching on".
+- Once it reaches zero the footage plays, until the cut ends.
+
+The viewer draws each window into its own render target, through an off-axis
+lens built from the rectangle, cleared transparent, and lays the target on a
+quad 0.02 in front of its panel (`buildEggLabFootage` in `js/app.js`;
+`eggLabFootage` in `js/display.js` gives the draws for a frame). The footage
+shares the room's material, so it flickers with the room's light, as the
+board's does: BRIGHT 1.0 is written after the light is built. From any
+camera the footage stays on the panels, like a picture on a monitor. Checked
+against MAME snapshots at t = 8, 30, 58, 100, 150 and 172. Eggman (`fa_rob0`,
+at the origin) and the Egg Robo beside him (`fa_rob1`, at (6.5, 0, -2.5),
+turned 0x2000) are left out.
 
 The scene's camera and light:
 

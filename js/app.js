@@ -6,7 +6,7 @@ import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './roms
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
-import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV } from './skyeye.js';
+import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, BOARD_H, BOARD_FOCAL } from './skyeye.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -16,7 +16,7 @@ import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
-    stageLightYaw, stageBright, stageMaterials, stageWorldFrame,
+    stageLightYaw, stageBright, stageMaterials, stageWorldFrame, eggLabFootage,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
@@ -161,6 +161,8 @@ const state = {
          * because what moves them is the camera rather than the frame counter,
          * so they have to be stepped whether the stage is animating or not. */
         billboards: [],
+        /* Eggman's lab's monitor windows — see buildEggLabFootage. */
+        footage: null,
     },
     cxlat: null,        /* colorxlat bytes, whether built or dumped */
     /* A dropped texture-RAM dump pins the sheets: it is a capture of one
@@ -1337,6 +1339,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
     }
     applyFaceLayers(layered);
     applyWireVisibility();
+    buildEggLabFootage(stage);
 
     const u = v.material.uniforms;
     /* The light, the material slots and the two output scales, which between
@@ -1527,6 +1530,7 @@ function setRideStage(on) {
  * torn down — the other two views clear the same root. */
 function resetStageAnimation() {
     const a = state.anim;
+    disposeEggLabFootage();
     for (const g of a.geom.values()) { g.mesh.dispose(); g.edges.dispose(); }
     a.geom.clear();
     a.entries = [];
@@ -1696,10 +1700,152 @@ function stepStageAnimation(now) {
         }
     }
 
+    stepEggLabFootage(frame);
     setWorldFrame(frame);
     stepStageColors(frame);
     stepStageLight(frame);
     stepStageMaterials(frame);
+}
+
+/*
+ * Eggman's lab: the footage on the monitor wall.
+ *
+ * adv_movie_egg_disp draws what each monitor shows into a set_window rectangle
+ * of the board's picture, in view space, under a projection centred on the
+ * window — and each rectangle lies exactly over one of the wall's three panels
+ * from the cut's camera. Drawn that way here, it would only line up from that
+ * one spot. So each window is rendered into a texture of its own, through a
+ * lens that is the board's cut down to the window, and the texture is laid
+ * over its panel on the rectangle the window covers there: the picture the
+ * board shows from its camera, and still a screen on the wall from anywhere
+ * else. A window does not clear, so the texture starts transparent and the
+ * panel shows through wherever the footage does not cover it.
+ *
+ * The draws share the stage's material, uniforms and all, so the footage takes
+ * the room's flickering light as the board's does (see stageBright).
+ */
+const FOOTAGE_SCALE = 4;    /* texture pixels to a board pixel */
+const FOOTAGE_POOL = 5;     /* the most draws one window makes in a frame */
+const FOOTAGE_LIFT = 0.02;  /* off the face of the panel it lies on */
+const FOOTAGE_NEAR = 0.05;
+const FOOTAGE_FAR = 1000;
+
+const FOOTAGE_VERT = /* glsl */`
+    out vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+/* Passed through as it stands: the fill shader's output is already the
+ * display-referred colour, in the texture as on the screen. */
+const FOOTAGE_FRAG = /* glsl */`
+    uniform sampler2D uMap;
+    in vec2 vUv;
+    out vec4 fragColor;
+    void main() {
+        vec4 c = texture(uMap, vUv);
+        if (c.a < 0.5) discard;
+        fragColor = vec4(c.rgb, 1.0);
+    }
+`;
+
+function buildEggLabFootage(stage) {
+    const footage = eggLabFootage(stage, state.frames);
+    if (!footage) return;
+    const v = state.viewer;
+    const [ex, ey, ez] = footage.eye;
+    const windows = footage.windows.map((w) => {
+        const rt = new THREE.WebGLRenderTarget(
+            (w.x1 - w.x0) * FOOTAGE_SCALE, (w.y1 - w.y0) * FOOTAGE_SCALE, { samples: 4 });
+        const scene = new THREE.Scene();
+        scene.onBeforeRender = (renderer) => {
+            renderer.getCurrentViewport(v.material.uniforms.uViewport.value);
+        };
+        /* The board's focal length about the window's own centre, which is
+         * where set_window puts the projection's. */
+        const camera = new THREE.PerspectiveCamera();
+        const k = FOOTAGE_NEAR / BOARD_FOCAL;
+        camera.projectionMatrix.makePerspective(
+            (w.x0 - w.cx) * k, (w.x1 - w.cx) * k, (w.cy - w.y0) * k, (w.cy - w.y1) * k,
+            FOOTAGE_NEAR, FOOTAGE_FAR);
+        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        const pool = Array.from({ length: FOOTAGE_POOL }, () => {
+            const mesh = new THREE.Mesh(new THREE.BufferGeometry(), v.material);
+            mesh.matrixAutoUpdate = false;
+            mesh.visible = false;
+            scene.add(mesh);
+            return mesh;
+        });
+
+        /* The window's rectangle, seen from the cut's camera, on the face of
+         * the panel under it. The decoder's Z runs toward that camera. */
+        const g = frameGeometry(w.panel).mesh;
+        g.computeBoundingBox();
+        const z = g.boundingBox.max.z + FOOTAGE_LIFT;
+        const d = ez - z;
+        const sx = (px) => ex + ((px - BOARD_W / 2) / BOARD_FOCAL) * d;
+        const sy = (py) => ey + ((BOARD_H / 2 - py) / BOARD_FOCAL) * d;
+        const quad = new THREE.Mesh(
+            new THREE.PlaneGeometry(sx(w.x1) - sx(w.x0), sy(w.y0) - sy(w.y1)),
+            new THREE.ShaderMaterial({
+                glslVersion: THREE.GLSL3,
+                vertexShader: FOOTAGE_VERT,
+                fragmentShader: FOOTAGE_FRAG,
+                uniforms: { uMap: { value: rt.texture } },
+            }));
+        quad.position.set((sx(w.x0) + sx(w.x1)) / 2, (sy(w.y0) + sy(w.y1)) / 2, z);
+        quad.userData.layer = 'inside';
+        quad.visible = state.layerOn.inside !== false;
+        v.root.add(quad);
+        return { rt, scene, camera, pool, quad };
+    });
+    state.anim.footage = { draws: footage.draws, windows };
+}
+
+/** Put what each window shows at this frame into its pool of draws. */
+function stepEggLabFootage(frame) {
+    const footage = state.anim.footage;
+    if (!footage) return;
+    const lists = footage.draws(frame);
+    footage.windows.forEach((w, i) => {
+        w.pool.forEach((mesh, k) => {
+            const draw = lists[i][k];
+            mesh.visible = Boolean(draw);
+            if (!draw) return;
+            mesh.geometry = frameGeometry(draw.model).mesh;
+            composeOps(mesh.matrix, draw.ops);
+        });
+    });
+}
+
+/** Render the windows into their textures, ahead of the picture they are in. */
+const FOOTAGE_CLEAR = new THREE.Color();
+function renderEggLabFootage() {
+    const footage = state.anim.footage;
+    if (!footage || !footage.windows[0].quad.visible) return;
+    const r = state.viewer.renderer;
+    const target = r.getRenderTarget();
+    r.getClearColor(FOOTAGE_CLEAR);
+    const alpha = r.getClearAlpha();
+    r.setClearColor(0x000000, 0);
+    for (const w of footage.windows) {
+        r.setRenderTarget(w.rt);
+        r.clear();
+        r.render(w.scene, w.camera);
+    }
+    r.setRenderTarget(target);
+    r.setClearColor(FOOTAGE_CLEAR, alpha);
+}
+
+function disposeEggLabFootage() {
+    const footage = state.anim.footage;
+    if (!footage) return;
+    for (const w of footage.windows) {
+        w.rt.dispose();
+        w.quad.material.dispose();
+    }
+    state.anim.footage = null;
 }
 
 /*
@@ -4082,7 +4228,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); renderEggLabFootage(); }
         state.viewer.render();
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
