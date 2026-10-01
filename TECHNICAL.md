@@ -1175,6 +1175,45 @@ raises 2445 for player 1 and 2447 for player 2, and the block that draws the
 standing doors names the other three to match; the viewer has no player, so it
 takes the player 1 arrangement.
 
+#### Tails' lab is the attract movie's, not the record's
+
+Slot 15, `ADV_MOV2`, is the stage the attract movie runs on: `ADV_SEGA_PIC_INT`
+sets `stage_num` to 15 before `ADV_MOVIE_INT`. Its record draws next to nothing.
+Flag bit 2 turns off `camera_init`'s floor (the record's 224 is never drawn
+from there), bit 13 turns off `area_clip`, stage_dsp's branch for the slot
+(`adv_mov2_stage_dsp_sub`) is a bare `ret`, and no cage, post or ramp bit is
+set. All that is left is `doom_cnt`'s backdrop ring, 225 and 226.
+
+The lab comes from the movie. `adv_movie_cont` runs one scene at a time through
+`adv_movie_cont_ex`/`adv_movie_disp_ex`: Death Egg, Eggman's lab, then
+`adv_movie_snc_init`, which installs `adv_movie_snc_disp` for the outside and,
+once the first cut has run, `adv_movie_snc_disp2` for the inside. Neither
+routine pushes the arena's 1.6; each opens a matrix on the camera and draws at
+the models' own size:
+
+| part | model | drawn |
+|------|-------|-------|
+| sea | 74 | `set_obj_thd` through `send_st15_sea_thd`'s header: nine quads, lumabase walked 7..70 at half rate, as South Island's |
+| ground, area under the lab, hangar walls, doors | 224, 78, 3798, 3489, 3490, 3491 | at the identity |
+| the Tornado | 2945 | translate (-60, 1, -37), ang_y 0x4000 |
+| roof dish | 80 | translate (-14, 71.8, -17.18), ang_y `am_cntr << 8` (turns once a frame) |
+| the room, its doors, its floor piece | 3473, 3490, 3491, 227 | translate (0, -2, 0) |
+| monitor | `tails_display_screen[movie_flags]` | 81..84, 30 frames each from `am_cntr` 64, the last held to the end of a 256-frame lap; one frame in eight by `rand` it is 1201, black |
+| ON AIR sign, control panel, Chaos Emerald machine | 2817, 3482, 3481 | in the room's frame |
+| Lunar Fox rocket, and its dome | 230, 231 | (23, 23.6, 0) on the room, then (0, 8.967, 2.88) on the rocket, no push between |
+
+`js/display.js` draws both routines, the outside on the `outside` layer and the
+inside on `inside`. The board never shows them in the same frame. The room sits
+inside the hangar walls, so turn `outside` off to look in. The two layers name
+the same doors 2 units apart, so with both on the doors are there twice. The
+monitor's black flicker is random and left out.
+
+`adv_movie_snc_init` also stores `VECTER_Y` = 0xA400 over the record's 0xF400.
+`camera_init` builds the light out of the global each frame, so the viewer
+lights the slot with the movie's value. Sonic and Tails stand at the control
+panel during the scene (`fa_rob0` at (-12, 0, -25), `fa_rob1` at (-9.2, 0, -28));
+they are not drawn here.
+
 Stages are named from the decompilation's own branch comments, which key off the
 stage SLOT (the `stage_num` byte the draw functions compare against), not off
 `stage_NUM`. Slots the listing does not name show their slot number — add a line
@@ -1462,7 +1501,7 @@ whole floor is `aurora_disp`'s business rather than the generic draw functions'.
 
 `camera_init` reads `stage_floor` only when flag bit 2 is clear, and Aurora is
 the only arena that sets it — the other of the two records that do is slot 15,
-the attract-mode `ADV_MOV2` — so its 558, a 660-unit octagon with a square hole
+the attract movie's `ADV_MOV2` (Tails' lab) — so its 558, a 660-unit octagon with a square hole
 in the middle of it, is never drawn. And `stage_dsp` compares the
 slot against 2 on its second instruction and returns, before the per-stage
 branches and before it has done anything with the `stage_platform` it has just
