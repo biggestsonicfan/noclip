@@ -28,28 +28,15 @@
  * lying inside another sorts nearer by its far corner and wins, whether it
  * stands a few hundredths in front of the other or behind it, and a face that
  * asks for its near corner (mode 1) beats any far-corner face it overlaps. So
- * each pair is sorted as the board would sort it from a spread of directions
- * over the side they are drawn from, and where three in four of them agree
- * that is the order.
- *
- * Where they do not, the faces lie partly over each other and trade places as
- * the camera moves, and taking the majority there chains into circles — a
- * grille of equal cut-out tiles each a little over the next. Those are put in
- * an order that cannot circle: the one nearer the side they are drawn from
- * over the other, then the smaller over the larger, then the later over the
- * earlier, as a bucket's newest polygon goes.
- *
- * One pair is kept the other way, because the art makes no sense as the sort
- * has it: a solid face with a larger cut-out submitted after it, in one plane.
- * That is a window, a pane of lamplight and over it the frame with holes cut
- * for the glass, which buried under its own light would never be seen.
+ * the pairs are found once, here, and ordered for every camera by rankLayers,
+ * with the keys the board would give them from it.
  *
  * Faces tilted further than that against each other cross, and where they
  * cross the depth buffer is right.
  *
  * What comes out is a layer per face — 0 for a face nothing lies under, one
  * more than the highest face under it otherwise — and a plane for the faces
- * that were ordered at all. An order is only as good as the depth buffer's
+ * that lie on any other. An order is only as good as the depth buffer's
  * ability to keep it, and it cannot keep one by depth alone: a window pane a
  * few thousandths behind its wall is behind it to the buffer when seen close
  * and square on, and a few hundred units out the rounding of each vertex's
@@ -115,80 +102,49 @@ function intersect(subject, clipper) {
 /* The two axes left when `ax` is dropped. */
 const OTHER = [[1, 2], [0, 2], [0, 1]];
 
-/* Directions to look from, as (u, v, w) with w the side a face is drawn from:
- * a golden-angle spiral over the cap within 80 degrees of it. Only direction
- * matters — the board sorts on view z, and where the camera stands shifts that
- * by the same amount for every corner. */
-const VIEWS = Array.from({ length: 64 }, (_, k) => {
-    const w = 1 - ((k + 0.5) / 64) * (1 - Math.cos((80 * Math.PI) / 180));
-    const r = Math.sqrt(1 - w * w), a = k * 2.399963;
-    return [r * Math.cos(a), r * Math.sin(a), w];
-});
-
-/* The share of VIEWS from which the board draws g over f: each is keyed by its
- * near or far corner along the view, the nearer key fills first, and a key
- * shared to within a bucket goes to g, the later polygon. */
-function laterShare(f, g) {
-    const w = f.n.map((x) => -x);
-    const t = Math.abs(w[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
-    const u = [w[1] * t[2] - w[2] * t[1], w[2] * t[0] - w[0] * t[2], w[0] * t[1] - w[1] * t[0]];
-    const ul = Math.hypot(u[0], u[1], u[2]);
-    u[0] /= ul; u[1] /= ul; u[2] /= ul;
-    const v = [w[1] * u[2] - w[2] * u[1], w[2] * u[0] - w[0] * u[2], w[0] * u[1] - w[1] * u[0]];
-    const key = (h, d) => {
-        let near = Infinity, far = -Infinity;
-        for (const p of h.pts) {
-            const z = -(p[0] * d[0] + p[1] * d[1] + p[2] * d[2]);
-            if (z < near) near = z;
-            if (z > far) far = z;
-        }
-        return h.zmode === 1 ? near : far;
-    };
-    let wins = 0;
-    for (const [a, b, c] of VIEWS) {
-        const d = [a * u[0] + b * v[0] + c * w[0], a * u[1] + b * v[1] + c * w[1], a * u[2] + b * v[2] + c * w[2]];
-        if (key(g, d) <= key(f, d) + 1e-3) wins++;
-    }
-    return wins / VIEWS.length;
+/* The board's sort bucket for a view depth: the float with its mantissa rounded
+ * to 12 bits (MAME's float_to_zval), which orders as the depth does. A depth
+ * behind the eye is bucket 0, as the board clamps it. */
+const zbits = new Float32Array(1);
+const zword = new Int32Array(zbits.buffer);
+function bucket(z) {
+    if (!(z > 0)) return 0;
+    zbits[0] = z;
+    return (zword[0] + 0x400) >> 11;
 }
 
 /**
- * A layer and a depth plane for every vertex of every draw.
+ * The faces lying on each other, and a depth plane for every vertex of every
+ * draw; the layers themselves come from `rankLayers` for each camera.
  *
- * @param {{decoded: object, matrix: ArrayLike<number>}[]} draws in the order the
- *   game submits them; `matrix` is the draw's column-major 4x4
- * @param {{gap?: number, tie?: number, cosine?: number, keepFar?: boolean,
- *   leaveApart?: boolean, copies?: boolean}} [opts] how far apart two faces may
- *   stand and still be ordered, how far apart counts as one plane, and the
- *   least cosine between their normals; and the three departures a game can ask
- *   for (see below): `keepFar` leaves a face sorted by its farthest corner with
- *   no layer and no plane, `leaveApart` leaves a pair held apart by more than
- *   the tie and asking for the same corner to the depth buffer, and `copies`
- *   puts a triangle's near copy over it however far the two tilt apart
+ * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[]}[]}
+ *   draws in the order the game submits them; `matrix` is the draw's
+ *   column-major 4x4, and `zCorners` stands in for the decode's own
+ * @param {{gap?: number, cosine?: number}} [opts] how far apart two faces may
+ *   stand and still be ordered, and the least cosine between their normals
  * @returns {{layer: Float32Array, plane: Float32Array, snap: number[]}[]} per
- *   draw, one layer per vertex (0 almost everywhere) and four numbers per
- *   vertex: the plane its face takes its depth from, n.p = d in the draw's own
- *   space, or zeros for a face that keeps its own depth; and, under `copies`,
- *   pairs of vertex indices (copy, original) for the copy to be drawn on the
- *   corners of the triangle it copies
+ *   draw, one layer per vertex (0 until ranked) and four numbers per vertex:
+ *   the plane its face takes its depth from, n.p = d in the draw's own space,
+ *   or zeros for a face that keeps its own depth; and pairs of vertex indices
+ *   (copy, original) for a copy to be drawn on the corners of the triangle it
+ *   copies. The array carries `ranking`, what rankLayers needs, or null when
+ *   no two faces lie on each other.
  */
-export function coplanarLayers(draws, {
-    gap = 0.5, tie = 0.02, cosine = 0.999, keepFar = false, leaveApart = false, copies = false, stats = null,
-} = {}) {
+export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null } = {}) {
     const faces = [];
     const out = draws.map(({ decoded }) => {
         const count = decoded ? decoded.positions.length / 3 : 0;
         return { layer: new Float32Array(count), plane: new Float32Array(count * 4), snap: [] };
     });
 
-    draws.forEach(({ decoded, matrix: M }, di) => {
+    draws.forEach(({ decoded, matrix: M, zCorners = decoded?.zCorners }, di) => {
         if (!decoded?.faces) return;
         const P = decoded.positions;
         const tris = P.length / 9;
-        const world = (i) => [
-            M[0] * P[i] + M[4] * P[i + 1] + M[8] * P[i + 2] + M[12],
-            M[1] * P[i] + M[5] * P[i + 1] + M[9] * P[i + 2] + M[13],
-            M[2] * P[i] + M[6] * P[i + 1] + M[10] * P[i + 2] + M[14],
+        const world = (A, i) => [
+            M[0] * A[i] + M[4] * A[i + 1] + M[8] * A[i + 2] + M[12],
+            M[1] * A[i] + M[5] * A[i + 1] + M[9] * A[i + 2] + M[13],
+            M[2] * A[i] + M[6] * A[i + 1] + M[10] * A[i + 2] + M[14],
         ];
         for (let t = 0; t < tris;) {
             let u = t;
@@ -196,7 +152,7 @@ export function coplanarLayers(draws, {
             const pts = [];
             let best = 0, n = null, area = 0;
             for (let k = t; k <= u; k++) {
-                const a = world(k * 9), b = world(k * 9 + 3), c = world(k * 9 + 6);
+                const a = world(P, k * 9), b = world(P, k * 9 + 3), c = world(P, k * 9 + 6);
                 pts.push(a, b, c);
                 const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
                 const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
@@ -220,9 +176,10 @@ export function coplanarLayers(draws, {
                 if (wn[0] * n[0] + wn[1] * n[1] + wn[2] * n[2] < 0) n = n.map((v) => -v);
                 const lo = [0, 1, 2].map((a) => Math.min(...pts.map((p) => p[a])));
                 const hi = [0, 1, 2].map((a) => Math.max(...pts.map((p) => p[a])));
-                const cut = (decoded.flags[r / 3] & 1) !== 0;
                 const zmode = (decoded.flags[r / 3] >> 5) & 3;
-                faces.push({ draw: di, t0: t, t1: u, pts, n, area, cut, zmode, order: faces.length, lo, hi, hulls: [] });
+                /* The four corners the board sorts the face by. */
+                const zc = zCorners ? zCorners.map((a) => world(a, r)) : [...pts.slice(0, 3), pts[2]];
+                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, zc, lo, hi, hulls: [] });
             }
             t = u + 1;
         }
@@ -262,21 +219,19 @@ export function coplanarLayers(draws, {
         return out;
     };
 
-    /* `copies`: one triangle drawn twice, the second a copy laid on the first —
-     * corners that pair up, each within the gap, all but one of them within a
-     * quarter of the first's shortest side. Daytona's flags draw their emblem
-     * that way, a cut-out triangle over each triangle of the cloth, and every
-     * frame of the wave but the first moves a corner of some copies a little
-     * differently from the cloth's: up to a third of a unit, tilting a pair as
-     * much as 24 degrees apart. Left to the tests above, such a pair is not
-     * ordered, crosses, and the depth buffer shows each over part of the other
-     * — the emblem smeared across the cloth on six frames of the 32, which is
-     * the flicker (issue 38) — or else it goes to the sort by its odd corner,
-     * which hides a triangle of the emblem at a time. A copy is the same
-     * polygon, so it is taken as the tie the first frame is, which the later
-     * polygon wins. The quarter is of the triangle's own size, so the small
-     * parallel faces of a fighter's glove, a tenth apart and a few tenths
-     * across, are not taken for copies.
+    /* One triangle drawn twice, the second a copy laid on the first — corners
+     * that pair up, each within the gap, all but one of them within a quarter
+     * of the first's shortest side. Daytona's flags draw their emblem that way,
+     * a cut-out triangle over each triangle of the cloth, and every frame of
+     * the wave but the first moves a corner of some copies a little differently
+     * from the cloth's: up to a third of a unit, tilting a pair as much as 24
+     * degrees apart. Left to the tests below, such a pair is not ordered,
+     * crosses, and the depth buffer shows each over part of the other — the
+     * emblem smeared across the cloth on six frames of the 32, which is the
+     * flicker (issue 38). A copy is the same polygon, so it is taken as the tie
+     * the first frame is, which the later polygon wins. The quarter is of the
+     * triangle's own size, so the small parallel faces of a fighter's glove, a
+     * tenth apart and a few tenths across, are not taken for copies.
      *
      * Ordered, the copy still does not cover its original where a corner of it
      * has moved inward: a sliver of cloth is left out, and it lies under the
@@ -305,9 +260,9 @@ export function coplanarLayers(draws, {
         return close >= 2 ? pair : null;
     };
 
-    const above = faces.map(() => []);
-    const below = new Int32Array(faces.length);
-    const ordered = new Uint8Array(faces.length);
+    /* The pairs, i before j in the game's order; a copy's is marked, since
+     * its copy is put over it whatever the corners say. */
+    const pairs = [];
     const seen = new Set();
     for (const list of cells.values()) {
         for (let a = 0; a < list.length; a++) {
@@ -318,7 +273,7 @@ export function coplanarLayers(draws, {
                 seen.add(key);
                 const f = faces[i], g = faces[j];
                 const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
-                const copy = copies && cos > 0 ? twins(f, g) : null;
+                const copy = cos > 0 ? twins(f, g) : null;
                 if (cos < cosine && !copy) continue;
                 if (f.lo[0] > g.hi[0] + gap || g.lo[0] > f.hi[0] + gap
                     || f.lo[1] > g.hi[1] + gap || g.lo[1] > f.hi[1] + gap
@@ -328,100 +283,44 @@ export function coplanarLayers(draws, {
                 const common = intersect(flatHull(f, ax), flatHull(g, ax));
                 if (!common.length || polygonArea(common) <= Math.max(1e-3, 0.01 * Math.min(f.area, g.area))) continue;
 
-                /* How far g stands behind f across the overlap. */
-                let most = 0, sum = 0;
+                /* How far g stands from f across the overlap. */
+                let most = 0;
                 for (const uv of common) {
                     const pf = lift(f, ax, uv), pg = lift(g, ax, uv);
                     const s = f.n[0] * (pg[0] - pf[0]) + f.n[1] * (pg[1] - pf[1]) + f.n[2] * (pg[2] - pf[2]);
                     most = Math.max(most, Math.abs(s));
-                    sum += s;
                 }
                 if (most > gap) continue;
-
-                /* g is the later of the two, so the window is g over a smaller f. */
-                const behind = sum / common.length;
-                const window = Math.abs(behind) <= tie
-                    && !f.cut && g.cut && f.area < g.area * (1 - 1e-3);
-                /* The sort only has the last word where the two are in one plane
-                 * to within the tie, or where one of them asks for a different
-                 * corner. Held apart by more than that and facing the same way
-                 * about it, they are what they look like, and the nearer one is
-                 * in front for the depth buffer as it is for the board. */
-                const bySort = Math.abs(behind) <= tie || f.zmode !== g.zmode;
-                /* `leaveApart` takes that at its word and does not order such a
-                 * pair at all, so neither joins a group and neither is moved onto
-                 * the other's plane. Sonic The Fighters needs it: a fighter's
-                 * glove (1813, 1818) is a few tenths across with parallel faces
-                 * 0.07 to 0.15 apart, and one plane for all of them lays the
-                 * faces on each other. m2-hle2's grade against MAME
-                 * (tools/grade-zsort.mjs, issue #75) is where that showed. */
-                if (leaveApart && !bySort && !copy) continue;
-                const share = bySort && !copy ? laterShare(f, g) : 0.5;
-                let top;
-                if (window || copy || share >= 0.75) top = j;
-                else if (share <= 0.25) top = i;
-                else if (behind > tie) top = i;
-                else if (behind < -tie) top = j;
-                else if (Math.abs(f.area - g.area) > 1e-3 * Math.max(f.area, g.area)) top = f.area < g.area ? i : j;
-                else top = j;
-                const bottom = top === i ? j : i;
                 if (copy && f.draw === g.draw) {
                     for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
                 }
-                above[bottom].push(top);
-                below[top]++;
-                ordered[i] = ordered[j] = 1;
+                pairs.push(i, j, copy ? 1 : 0);
             }
         }
     }
 
-    /* Longest path from the faces nothing lies under. A cycle — three faces
-     * each partly over the next — is broken where it is met: whatever is still
-     * waiting when the queue runs dry keeps the layer it has reached. */
-    const layer = new Int32Array(faces.length);
-    const queue = [];
-    for (let i = 0; i < faces.length; i++) if (!below[i]) queue.push(i);
-    for (let h = 0; h < queue.length; h++) {
-        const u = queue[h];
-        for (const v of above[u]) {
-            if (layer[u] + 1 > layer[v]) layer[v] = layer[u] + 1;
-            if (--below[v] === 0) queue.push(v);
-        }
-    }
-
-    /* The groups: faces joined by any ordering, each taking the plane of its
+    /* The groups: faces joined by any pair, each taking the plane of its
      * largest face. */
     const root = faces.map((_, i) => i);
     const find = (i) => {
         while (root[i] !== i) i = root[i] = root[root[i]];
         return i;
     };
-    above.forEach((list, i) => {
-        for (const k of list) root[find(i)] = find(k);
-    });
+    const paired = new Uint8Array(faces.length);
+    for (let k = 0; k < pairs.length; k += 3) {
+        paired[pairs[k]] = paired[pairs[k + 1]] = 1;
+        root[find(pairs[k])] = find(pairs[k + 1]);
+    }
     const largest = new Map();
     faces.forEach((f, i) => {
+        if (!paired[i]) return;
         const r = find(i), best = largest.get(r);
         if (best === undefined || f.area > faces[best].area) largest.set(r, i);
     });
 
     let planes = 0;
     faces.forEach((f, i) => {
-        const o = out[f.draw];
-        /* `keepFar`: a face sorted by its farthest corner (or the board's "very
-         * far") keeps the recede and nothing else. Its orderings still count, so
-         * a face laid on it is still raised over it; it just takes neither a
-         * layer nor its group's plane, either of which would stop it stepping
-         * back. In Sonic The Fighters that step back is what stands a backing
-         * plane out of the way of other models: Casino Night's floor emblem,
-         * model 194, is mode 2 over faces held a little below it, and layered it
-         * covered the green MAME shows beside it (m2-hle2 issue #75). The
-         * decals this is all for are mode 1 over mode-2 surfaces — Flying
-         * Carpet's shadows on the sand, the slot machine's JACKPOT art — so they
-         * keep their layers. */
-        if (keepFar && f.zmode >= 2) return;
-        if (layer[i]) o.layer.fill(layer[i], f.t0 * 3, (f.t1 + 1) * 3);
-        if (!ordered[i]) return;
+        if (!paired[i]) return;
         const ref = faces[largest.get(find(i))];
         const n = ref.n;
         const d = n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2];
@@ -434,16 +333,121 @@ export function coplanarLayers(draws, {
             M[8] * n[0] + M[9] * n[1] + M[10] * n[2],
             d - (n[0] * M[12] + n[1] * M[13] + n[2] * M[14]),
         ];
+        const o = out[f.draw];
         for (let k = f.t0 * 3; k < (f.t1 + 1) * 3; k++) o.plane.set(plane, k * 4);
         planes++;
     });
+
+    /* What rankLayers needs: the paired faces alone, renumbered, with their
+     * sort corners flattened. */
+    const index = new Int32Array(faces.length).fill(-1);
+    const kept = [];
+    faces.forEach((f, i) => { if (paired[i]) index[i] = kept.push(f) - 1; });
+    const corners = new Float32Array(kept.length * 12);
+    kept.forEach((f, k) => f.zc.forEach((c, m) => corners.set(c, k * 12 + m * 3)));
+    const edges = new Int32Array(pairs.length);
+    for (let k = 0; k < pairs.length; k += 3) {
+        edges[k] = index[pairs[k]];
+        edges[k + 1] = index[pairs[k + 1]];
+        edges[k + 2] = pairs[k + 2];
+    }
+    out.ranking = kept.length ? {
+        out, edges, corners,
+        zmode: Uint8Array.from(kept, (f) => f.zmode),
+        draw: Int32Array.from(kept, (f) => f.draw),
+        t0: Int32Array.from(kept, (f) => f.t0),
+        t1: Int32Array.from(kept, (f) => f.t1),
+        key: new Int32Array(kept.length),
+        layer: new Int32Array(kept.length),
+        below: new Int32Array(kept.length),
+    } : null;
     if (stats) {
         stats.faces = faces.length;
-        stats.edges = above.reduce((n, list) => n + list.length, 0);
-        stats.stuck = faces.length - queue.length;
+        stats.paired = kept.length;
+        stats.edges = pairs.length / 3;
         stats.planes = planes;
     }
     return out;
+}
+
+/**
+ * Rank the faces of each group as the board's sort does from one camera: each
+ * face is keyed by its nearest corner or its farthest (or "very far") along
+ * the view, as its attribute asks; the nearer bucket fills first, and of two
+ * in one bucket the later polygon, which the board puts at the head of the
+ * bucket's list. Of each pair, then, one is on top, and a face's layer is one
+ * more than the highest face under it. A copy (see `twins`) is put over its
+ * original as the tie it is.
+ *
+ * The keys are whole-polygon and change with the camera, which is why the
+ * layers are worked out here per view and not once: a decal lying inside a
+ * wall sorts nearer by its far corner from an angle, and seen square on the
+ * two share a bucket and the later wins.
+ *
+ * The keys are not handed to the shader as depth: a 24-bit buffer's step is
+ * about 3e-6 z² view units with the near plane at 0.02, a quarter of a unit
+ * 300 out, so no offset small enough to hide in the depth would survive
+ * there. A layer is an order, and an order is all the shader needs.
+ *
+ * @param {object} r a `ranking` from coplanarLayers
+ * @param {ArrayLike<number>} view the camera, as four numbers: the depth along
+ *   the view of a point p in the draws' space is view[0..2] . p + view[3]
+ * @returns {Set<number>} the draws whose layers changed
+ */
+export function rankLayers(r, view) {
+    const { corners, zmode, key, layer, below, edges } = r;
+    const n = zmode.length;
+    for (let k = 0; k < n; k++) {
+        let near = Infinity, far = -Infinity;
+        for (let c = 0; c < 4; c++) {
+            const o = k * 12 + c * 3;
+            const z = corners[o] * view[0] + corners[o + 1] * view[1] + corners[o + 2] * view[2] + view[3];
+            if (z < near) near = z;
+            if (z > far) far = z;
+        }
+        key[k] = zmode[k] === 3 ? 0x7fffffff : bucket(zmode[k] === 2 ? far : near);
+    }
+    /* Each pair is i before j; j is on top unless i sorts into a nearer bucket. */
+    const top = (e) => (edges[e + 2] || key[edges[e + 1]] <= key[edges[e]] ? edges[e + 1] : edges[e]);
+    below.fill(0);
+    for (let e = 0; e < edges.length; e += 3) below[top(e)]++;
+    /* Longest path up from the faces nothing lies under. Only a copy laid
+     * against the key can close a circle; what is left in one keeps the layer
+     * it has reached. */
+    const next = new Int32Array(n);
+    const queue = [];
+    for (let k = 0; k < n; k++) {
+        next[k] = 0;
+        if (!below[k]) queue.push(k);
+    }
+    const ups = r.ups ??= (() => {
+        /* Each face's pairs, as edge offsets. */
+        const start = new Int32Array(n + 1);
+        for (let e = 0; e < edges.length; e += 3) { start[edges[e] + 1]++; start[edges[e + 1] + 1]++; }
+        for (let k = 0; k < n; k++) start[k + 1] += start[k];
+        const list = new Int32Array(start[n]);
+        const fill = start.slice(0, n);
+        for (let e = 0; e < edges.length; e += 3) { list[fill[edges[e]]++] = e; list[fill[edges[e + 1]]++] = e; }
+        return { start, list };
+    })();
+    for (let h = 0; h < queue.length; h++) {
+        const u = queue[h];
+        for (let p = ups.start[u]; p < ups.start[u + 1]; p++) {
+            const e = ups.list[p];
+            const v = top(e);
+            if (v === u) continue;
+            if (next[u] + 1 > next[v]) next[v] = next[u] + 1;
+            if (--below[v] === 0) queue.push(v);
+        }
+    }
+    const changed = new Set();
+    for (let k = 0; k < n; k++) {
+        if (next[k] === layer[k]) continue;
+        layer[k] = next[k];
+        r.out[r.draw[k]].layer.fill(next[k], r.t0[k] * 3, (r.t1[k] + 1) * 3);
+        changed.add(r.draw[k]);
+    }
+    return changed;
 }
 
 /*

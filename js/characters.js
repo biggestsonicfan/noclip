@@ -262,35 +262,6 @@ function characterSkeletonType(rom, animPtr) {
     return type === SKELETON_SQUISHED ? SKELETON_NORMAL : type;
 }
 
-/*
- * Whether a fighter's animation table is its own.
- *
- * There are thirteen tables, 106 bytes each from `0xD9908`, for seventeen
- * fighters: 0-10 take their own, Super Sonic and Honey the last two, and the
- * Final Eggman Boss, the Egg UFO, the Egg Minion and Rocket Metal are all left
- * pointing at Bean's. Nothing else in the roster shares one, and the mirror
- * half repeats the base roster from index 26, so this reads off the ROM rather
- * than naming the four indices.
- *
- * What it settles is the head. Every motion carries head data, but a borrowed
- * table's was authored for whoever owns it, so `js/pose.js` leaves these four
- * pointing the way their chest does instead of aiming them at a face target
- * that was never theirs.
- */
-const MIRROR_BASE = 26;
-function borrowsAnimTable(rom, charIndex) {
-    const dv = rom.mainCpuView;
-    const base = charIndex >= MIRROR_BASE ? charIndex - MIRROR_BASE : charIndex;
-    const animOf = (i) => {
-        const rec = dv.getUint32(CHAR_PARTS_ADDR + i * 4, true);
-        return rec && rec + 0x10 <= rom.maincpu.length ? dv.getUint32(rec + 0x0c, true) : 0;
-    };
-    const mine = animOf(base);
-    if (!mine) return false;
-    for (let i = 0; i < base; i++) if (animOf(i) === mine) return true;
-    return false;
-}
-
 /**
  * Read one fighter's parts, skeleton and motion list out of the program ROM.
  * @param {object} rom
@@ -332,7 +303,6 @@ export function readCharacter(rom, charIndex) {
     }));
 
     const face = readFace(rom, charIndex);
-    const ownAnimTable = !borrowsAnimTable(rom, charIndex);
 
     const motions = [];
     for (let i = 0; i < ACTION_SLOT_COUNT; i++) motions.push(dv.getUint16(animPtr + i * 2, true));
@@ -341,7 +311,7 @@ export function readCharacter(rom, charIndex) {
         charIndex,
         name: CHARACTERS.find((c) => c.index === charIndex)?.name ?? `char ${charIndex}`,
         record, partsPtr, bonesPtr, animPtr, normalPtr, squishedPtr, skeletonType,
-        height, skeleton, skeletonSquished, slots, face, ownAnimTable,
+        height, skeleton, skeletonSquished, slots, face,
         partsNormal, partsSquished, motions,
     };
 }
