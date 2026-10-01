@@ -1214,6 +1214,49 @@ lights the slot with the movie's value. Sonic and Tails stand at the control
 panel during the scene (`fa_rob0` at (-12, 0, -25), `fa_rob1` at (-9.2, 0, -28));
 they are not drawn here.
 
+#### Eggman's lab, the movie's second scene
+
+The movie runs every scene on slot 15, so Eggman's lab (`adv_movie_egg_init`,
+`adv_movie_egg`, `adv_movie_egg_disp`) draws its room at the origin of the same
+world as Tails' lab. `js/stages.js` lists it as a seventeenth stage, "Eggman's
+Lab (ADV_MOVIE)", a copy of slot 15's record with `scene: 'eggLab'`, and
+`js/display.js` draws it in place of the Tails' lab routines.
+
+| part | model | drawn |
+|------|-------|-------|
+| the room | 3333 | at the identity, on the camera's matrix, at its own size |
+| the three monitor panels | 3770, `eggman_lab_viewscreens[am_cntr & 3]` (85..88, a new one each frame), 3771 | each once its inset window has opened |
+
+`movie_flags`, `dword_5004D8` and `dword_5004DC` start at 16, 40 and 64 and count
+down once a frame through the second cut (`am_num` 1, `am_cntr` 128..320). Each
+one's window opens as it runs down (`amed_open_window`), and the panel under it
+is drawn once it reaches zero. From the third cut on all three panels are up,
+and that is the room the viewer draws.
+
+The windows (`word_978FC`, `word_97914`, `word_9792C`, as y1, x0, y0, x1) are
+what the monitors show during the second cut. Each loads the identity (op 3)
+and draws in view space at BRIGHT 1.0: two Egg Robos (2681) flying across, four
+dark ones (3851..3853) standing about, and an upper body (223) whose head
+rises through `egg_robo_head_rising_anim` (2981..2991). They are pictures on the
+screen, not things in the room, and are left out. So are Eggman (`fa_rob0`, at
+the origin) and the Egg Robo beside him (`fa_rob1`, at (6.5, 0, -2.5), turned
+0x2000).
+
+The scene's camera and light:
+
+- `adv_movie_egg_init` sets `fa_camera` bit 17, and `camera_init` then skips
+  `doom_cnt`, so the record's backdrop is not drawn. The screen clears to colour
+  0 (`change_bg_color` with g0 = 0).
+- It stores `VECTER_X` 0xF000, `VECTER_Y` 0x8000 and BRIGHT 2.0.
+- `adv_movie_egg` rewrites BRIGHT every frame as
+  `2 + sin(am_cntr * 0x1300) + cos(am_cntr * 0x500)`. It runs before
+  `camera_init` builds the light, so the room's light flickers from 0 to 4.
+  `adv_movie_egg_disp`'s 1.0 for the windows comes after the light is built.
+  The viewer takes `am_cntr` from the stage clock (`stageBright`).
+- The cuts' cameras: cut 0 flies the spline at `0x97398`; cut 1 stands at
+  (0, 4.5, -6) facing +Z, square on to the monitors; cut 2 stands at
+  (-1.2, 1.7, 1.8) and looks at (0, 2, 0), that is, at Eggman.
+
 Stages are named from the decompilation's own branch comments, which key off the
 stage SLOT (the `stage_num` byte the draw functions compare against), not off
 `stage_NUM`. Slots the listing does not name show their slot number — add a line

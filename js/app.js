@@ -16,7 +16,7 @@ import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
-    stageLightYaw, stageMaterials, stageWorldFrame,
+    stageLightYaw, stageBright, stageMaterials, stageWorldFrame,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
@@ -1721,18 +1721,21 @@ function stepStageMaterials(frame) {
 /*
  * The stage light, at this frame.
  *
- * Only the Flying Carpet moves it, and it moves it to stand still: the angle it
- * rewrites is the one the light is built in the stage's own frame from, so
+ * Eggman's lab dims and brightens it. The Flying Carpet turns it, and turns it
+ * to stand still: the angle it rewrites is the one the light is built in the
+ * stage's own frame from, so
  * taking the carpet's heading back out again is what leaves the sun where it is
  * in the world. Rebuilt from the record each time rather than rotated in place,
  * because that is the arithmetic camera_init does.
  */
 function stepStageLight(frame) {
     const stage = state.stages[state.stageIndex];
-    const yaw = stage ? stageLightYaw(stage, frame, state.frames) : null;
-    if (yaw === null) return;
+    if (!stage) return;
+    const yaw = stageLightYaw(stage, frame, state.frames);
+    const bright = stageBright(stage, frame);
+    if (yaw === null && bright === null) return;
     state.viewer.material.uniforms.uLight.value.set(
-        ...stageLight(stage.bright, stage.vecter[0], yaw));
+        ...stageLight(bright ?? stage.bright, stage.vecter[0], yaw ?? stage.vecter[1]));
 }
 
 /*

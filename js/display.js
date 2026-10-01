@@ -78,6 +78,7 @@ const FRAME_TABLES = {
     hangarIris: [0x00090ccc, 128, 2],   /* circular_door_open_close_anim */
     canyonRing: [0x00024aac, 4, 4],     /* canyon_cruise_ring_objects */
     labScreens: [0x0009762c, 4, 4],     /* tails_display_screen, less the black 1201 */
+    eggScreens: [0x000975f0, 4, 4],     /* eggman_lab_viewscreens */
     /* ... and the tables the stage objects walk. */
     cards: [0x0007451c, 32, 4],         /* floating_cards_objects */
     conveyor: [0x00076184, 32, 2],      /* dynamite_bg_bombs_conveyor_belt */
@@ -346,6 +347,50 @@ const LAB_ROCKET_DOME_AT = [0, 8.967, -2.88];
  */
 const LAB_SCREEN_START = 64;        /* adv_anm_timers_tails_lab[0] */
 const LAB_SCREEN_STEP = 30;
+
+/*
+ * Eggman's lab, the movie's second scene — adv_movie_egg_disp.
+ *
+ * It runs on slot 15 like Tails' lab, so js/stages.js lists it as a stage of
+ * its own (EGG_LAB_SCENE) to keep the two rooms apart. The routine opens a
+ * matrix on the camera and draws the room at the identity, at its own size:
+ * 3333, then three screen pieces, each held back until the inset window over
+ * it has opened. movie_flags, dword_5004D8 and dword_5004DC start at 16, 40
+ * and 64 and count down once a frame through the second cut (am_num 1); at
+ * zero their window is open and the piece under it is drawn, 3770, the four
+ * viewscreens and 3771. From the third cut on all three are up, which is the
+ * room drawn here.
+ *
+ * The middle piece is eggman_lab_viewscreens[am_cntr & 3], 85..88, a new one
+ * every frame.
+ *
+ * The windows themselves (word_978FC, word_97914, word_9792C) are what the
+ * monitors show while they open: Egg Robos flying, standing in a hangar and
+ * one rising, each drawn after op 3 in view space under its own window, at
+ * BRIGHT 1.0. They are pictures on the screen rather than things in the room
+ * and are left out, as are Eggman and the Egg Robo standing beside him
+ * (fa_rob0 at the origin, fa_rob1 at (6.5, 0, -2.5)).
+ */
+const EGG_LAB_SCENE = 'eggLab';    /* the `scene` js/stages.js gives it */
+const EGG_LAB_ROOM = [
+    3333,                           /* "Inside of Eggmans Lab" */
+    3770,                           /* "Viewscreen" */
+    3771,
+];
+
+/*
+ * adv_movie_egg sets BRIGHT every frame, before camera_init builds the light
+ * from it: 2 + sin(am_cntr · 0x1300) + cos(am_cntr · 0x500), in the board's
+ * 16-bit angles. The room's light flickers between nothing and twice the
+ * scene's 2.0 on two beats, the faster about once every 13 frames.
+ * adv_movie_egg_disp's 1.0 for the windows is written after the light is
+ * built, and the next frame's write replaces it before the next one is.
+ */
+export function stageBright(stage, frame) {
+    if (stage.scene !== EGG_LAB_SCENE) return null;
+    const ang = (step) => (((frame * step) & 0xffff) * 2 * Math.PI) / 65536;
+    return 2 + Math.sin(ang(0x1300)) + Math.cos(ang(0x500));
+}
 
 /** The monitor's 256-frame lap as a frame table, out of tails_display_screen. */
 function labScreenTable(screens) {
@@ -2005,7 +2050,10 @@ export function buildStageDisplayList(stage, frames = null) {
     }
 
     /* ---- adv_movie_disp: the attract movie's own scene ---- */
-    if (slot === TAILS_LAB_SLOT) {
+    if (stage.scene === EGG_LAB_SCENE) {
+        for (const m of EGG_LAB_ROOM) push(m, 'inside', []);
+        pushAnim('eggScreens', 0, 0, 'inside', []);
+    } else if (slot === TAILS_LAB_SLOT) {
         /* adv_movie_snc_disp. The sea goes through set_obj_thd with the header
          * send_st15_sea_thd rebuilt this frame — nine quads for the model's nine
          * faces, each its own header but for the lumabase, walked 7..70 at half
