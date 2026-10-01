@@ -48,8 +48,9 @@
  * cross the depth buffer is right.
  *
  * What comes out is a layer per face — 0 for a face nothing lies under, one
- * more than the highest face under it otherwise — and a plane for the faces
- * that were ordered at all. An order is only as good as the depth buffer's
+ * more than the highest face under it otherwise, -1 for a far-corner face
+ * kept out of the layers that only takes its group's plane as a floor (see
+ * `keepFar`) — and a plane for the faces that were ordered at all. An order is only as good as the depth buffer's
  * ability to keep it, and it cannot keep one by depth alone: a window pane a
  * few thousandths behind its wall is behind it to the buffer when seen close
  * and square on, and a few hundred units out the rounding of each vertex's
@@ -418,14 +419,34 @@ export function coplanarLayers(draws, {
          * covered the green MAME shows beside it (m2-hle2 issue #75). The
          * decals this is all for are mode 1 over mode-2 surfaces — Flying
          * Carpet's shadows on the sand, the slot machine's JACKPOT art — so they
-         * keep their layers. */
-        if (keepFar && f.zmode >= 2) return;
-        if (layer[i]) o.layer.fill(layer[i], f.t0 * 3, (f.t1 + 1) * 3);
-        if (!ordered[i]) return;
-        const ref = faces[largest.get(find(i))];
-        const n = ref.n;
-        const d = n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2];
-        if (f.pts.some((p) => Math.abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d) > gap)) return;
+         * keep their layers.
+         *
+         * Except that the plane is only half of what parts a decal from the
+         * face under it: the other half is the face taking its depth from the
+         * same plane. A far-corner face that does not recede — deep along the
+         * view — has the depth the rasteriser interpolates, and its decals have
+         * the plane's exact depth less a layer, two steps of the buffer. Which
+         * of those is nearer is rounding, and it went the wall's way on one
+         * card and not on another: Tails' lab's posters are near-corner faces
+         * 0.05 in front of the room's back wall, a single far-corner face 80
+         * wide, and on a GTX 980 the wall came through them in stripes (issue
+         * 58). So a far-corner face that lies in its group's plane, to within
+         * a thousandth, takes the plane as a floor (layer -1): its depth is
+         * its own, receded or not, but never nearer than the plane's. That
+         * moves it by rounding and no more, and it cannot stop it stepping
+         * back. A far-corner face off the plane, the emblem standing over its
+         * green, is left alone as before. */
+        const ref = ordered[i] ? faces[largest.get(find(i))] : null;
+        const n = ref?.n;
+        const d = ref ? n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2] : 0;
+        const off = (p) => Math.abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d);
+        if (keepFar && f.zmode >= 2) {
+            if (!ref || f.pts.some((p) => off(p) > 1e-3)) return;
+            o.layer.fill(-1, f.t0 * 3, (f.t1 + 1) * 3);
+        } else {
+            if (layer[i]) o.layer.fill(layer[i], f.t0 * 3, (f.t1 + 1) * 3);
+            if (!ref || f.pts.some((p) => off(p) > gap)) return;
+        }
         /* Into the draw's own space: for x = A p + t, n.x = d is (A^T n).p = d - n.t. */
         const M = draws[f.draw].matrix;
         const plane = [
