@@ -2220,7 +2220,6 @@ function rigForMotion(c) {
  * chain segments exist before the first frame is solved. */
 function restPoseFor(c) {
     return buildPose(rigForMotion(c), {
-        headAim: c.ownAnimTable,
         angles: new Uint16Array(36),
         targets: new Float32Array(24),
         targetUsed: new Uint8Array(8),
@@ -2394,19 +2393,15 @@ function poseRig() {
      * meshes on the normal skeleton would leave them strung out along limbs
      * twice the length they are modelled for. */
     const skeleton = rigForMotion(c);
-    /* A fighter with a borrowed animation table has no head data of its own,
-     * so its head takes the chest's direction rather than a face target meant
-     * for whoever owns the table. */
-    const opts = { headAim: c.ownAnimTable };
     const pose = m.decoded
-        ? buildPose(skeleton, motionSample(m, m.frame), opts)
+        ? buildPose(skeleton, motionSample(m, m.frame))
         /* A slot with no motion still has to draw something, so solve the pose
          * every channel reads as zero — which is the game's own rest. */
         : buildPose(skeleton, {
             angles: new Uint16Array(36),
             targets: new Float32Array(24),
             targetUsed: new Uint8Array(8),
-        }, opts);
+        });
 
     const mats = poseMatrices(pose);
     for (const p of m.parts) {
@@ -2467,7 +2462,7 @@ function poseRig() {
     }
     /* The afterimages: the coprocessor's ring, run on the pose frame by frame. */
     placeTrails(m, c, pose,
-        (f) => buildPose(skeleton, motionSample(m, f), opts));
+        (f) => buildPose(skeleton, motionSample(m, f)));
 
     /* The boss's arms ride the chest exactly as `rob_disp` leaves it — the
      * routine adds no transform of its own, only a model. */

@@ -2399,44 +2399,70 @@ chains, so most of the skeleton is placed by solving towards a point:
 - **slot 2** the head — a step along the chest's `+X` by the skeleton's spine
   offset, turned by object 6, then aimed at the face target, object 14.
 
-#### The head, where the motion is not the fighter's own
+#### The head's aim
 
-Aiming the head only makes sense while the face target belongs to the fighter
-wearing it. All 518 motions key object 14 with real curve data, so there is no
-motion *without* head data — but there are four roster entries with no head data
-**of their own**: the Final Eggman Boss, the Egg UFO, the Egg Minion and Rocket
-Metal all point at Bean's animation table, because there are thirteen tables of
-106 bytes from `0xD9908` for seventeen fighters and those four were left sharing
-one. `js/characters.js` derives that from the ROM rather than naming the four,
-and the mirror half repeats it from index 26.
+The head block is `0x30FE8` with `g1 == 2`. It emits the spine translate, op
+`0x3F` carrying object 6 sent back to front (motion 278's `(-180, -90, 0)`
+arrives as `(0, -90, -180)`), and the euler at `+0xC0C`, which is zero. Then it
+aims: op `0x6A` takes the target at `+0xB0C` into the head's frame, op `0x27`
+and op `0x2D` turn that into an `ang_z` and an `ang_y`, and the two go out as
+ops `0x0A` and `0x09`. The chest takes the same path (`g1 == 1`, target
+`+0xB00`) without the head's limits:
 
-For those eight entries the viewer drops the aim, lets object 6 place the head,
-and then squares it up with a quarter turn back about the head's own `Z`.
-Object 6 on its own stands the head off the spine but leaves the face looking
-along the chest's lateral, which reads as facing right; the quarter turn brings
-it round to forward. That is the same axis `rd_kao_rob_gururi` spins the Egg
-Minion's head about, which the ROM writes with op `0x0A`. What comes out is the
-face pointing the way the chest does — down `-X`, which is the way a fighter
-faces.
+- **pitch** — `ang_y` is clamped to ±`0x2000` (`0x312A8`), so a head never
+  looks more than 45 degrees up or down off the frame object 6 leaves it in;
+- **the -Y side** — a target with a negative local y is taken as having none
+  (`0x311A4`), so the turn stops at 0 or `0x8000`, and with the target within
+  0.5 of the head the last frame's turn is held;
+- **steps** — each angle moves only so far a frame from the last one
+  (`0x31220`, `0x3128C`): `0x800` and `0x400` while the head is tracking the
+  opponent, `0x2000` otherwise.
 
-In play a fighter is looking at its opponent, and the aim is how the authored
-motion says
-where that is; a fighter given someone else's motions is being told to look at a
-point measured for a body that is not its shape. Their heads sit far enough up
-the spine — 1.466 for the boss and 1.316 for the minion, against Sonic's 0.361 —
-that a target authored for a shorter fighter lands *below* the head, and the aim
-turns it face-down. Sharing the chest's angle is the honest fallback: it is
-where the fighter is facing, which is where it would be looking.
+`js/pose.js` (`aimHead`) has the first two. A pose solved on its own has no
+last frame, so it takes the angles the steps settle on.
 
-What the board does here is not settled. Its head block — `0x30FE8` emits the
-spine translate, then op `0x3F` carrying object 6 sent back to front, so motion
-278's `(-180, -90, 0)` arrives as `(0, -90, -180)` — is followed by three angles
-that are zero on every head block of every capture taken so far. That is where
-an aim would land and it never does. But every one of those captures is a stance
-(278, 128, 68) held for the whole run, and a stance is exactly where the head
-data is baked, so none of them could show a fighter turning to track an
-opponent. Settling it needs a capture of a real exchange, with the fighters
-apart and off their idle motions.
+**What the target is.** `0x307F8` copies the motion's float objects into
+`+0xAF4`, so `+0xB0C` starts as the motion's face target, object 14. Then,
+unless the fighter is in one of a long list of states (`0x30820`-`0x308C4`:
+attacks, throws, falls), it sets `+0x7D3` and overwrites `+0xB0C` with the
+opponent's head (`+0x20C` of the other fighter), taken into the fighter's own
+frame by op `0x63`. So in a fight a head mostly looks at the other fighter, and
+the motion's face target only counts in those states. The explorer has no other
+fighter and always aims at object 14.
+
+**The four on Bean's table.** The Final Eggman Boss, the Egg UFO, the Egg
+Minion and Rocket Metal have no action table of their own: there are thirteen
+tables of 106 bytes from `0xD9908` for seventeen fighters, and those four point
+at Bean's. The head block has no case for them. They are aimed at Bean's face
+target like anyone else, and since their heads sit far higher up the spine (1.466
+for the boss and 1.316 for the minion, against Sonic's 0.361), that target lands
+below the head and the pitch clamp holds them at `0x2000`. The explorer used to
+drop the aim for them and turn the head a constant quarter turn about its own Z
+instead (`HEAD_FACE`).
+
+Checked against MAME (pinboard #262): the attract replay (Sonic against Bean),
+taken over at its jump by `m2-hle2/tools/mame/match-replay.lua`, with fighter 0
+pinned to the boss (13 for the minion) and its skeleton type held at 1, the
+per-character rig a fight uses. On every frame where the board aimed at the
+motion's own target (`+0x7D3` clear), outside a motion's first eight frames and
+not mirrored, the head's stored angles (`+0x14E` ang_y, `+0x150` ang_z) were
+compared with the angles the explorer turns the head by:
+
+| run | frames | explorer before | explorer now |
+|---|---|---|---|
+| boss | 468 | pitch off by `0x2000` on all; yaw by up to `0x3126` | pitch exact; yaw within 2 |
+| minion | 59 | pitch off by `0x2000` on all; yaw by up to `0x2FD3` | pitch exact; yaw within 2 |
+| Sonic | 283 | pitch over `0x100` out on 52 (the clamp), yaw on 1 | pitch on none, yaw on the same 1 |
+| Bean | 383 | pitch over `0x100` out on 63, yaw on 11 | pitch on 6, yaw on the same 11 |
+
+`0x14E`/`0x150` hold the board's own `ang_z` convention, which is the negative
+of the angle `js/pose.js` hands `rotZ`. What is left is not the clamp. Five of
+Bean's six pitch frames are motion frame 11, the first one past the held-back
+blend, where the board is still short of the clamp. The yaw frames (at most
+`0x286` out, and `0xC01` on Sonic's one) were out before this change too, and
+their cause is not pinned down: the per-frame step and the held turn are the
+candidates.
+
 - **slot 9** the pelvis — the body turned by object 9, then rolled a quarter
   turn.
 - **the four limbs** — op `0x6B`, each hanging off its pivot, taking a base
@@ -2836,8 +2862,8 @@ mulo r6, r5, r6                    ; step x that, so sixteen steps close
 A full turn either way over the quarter's sixteen frames, and the direction
 alternates every 256 frames because bit 8 is the next one up from the window.
 The op it writes the angle with is `0x5000A0A` — opcode `0x0A`, `ang_z` — so the
-turn is about the **head's own Z** — the same axis the four entries on a
-borrowed motion take their quarter turn back about. `js/eggrobo.js` reads
+turn is about the **head's own Z**, the axis the head's aim turns it by first.
+`js/eggrobo.js` reads
 `egg_robo_anims` rather than assuming the order, so a table edited in the ROM is
 followed rather than the four routines being hardcoded in sequence.
 
