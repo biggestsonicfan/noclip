@@ -468,25 +468,26 @@ function horseOffset(a) {
  * heading clip extra_clip takes off, which is not ported — and is then gone
  * for 2560 frames before uma_int puts it back on its ellipse.
  *
- * The board also stops a horse's ellipse while its block is out of view. The
- * explorer draws the whole course at once, so here the ellipse always runs.
+ * The board also stops a horse's ellipse while its block is out of view. So
+ * does the explorer when the course is drawn as the board draws it, round the
+ * camera's block; drawn whole, the ellipse always runs.
  *
  * Stateful, unlike everything else here, so it is a `live` hook the app steps
  * with the camera: `live(frame, cam)` returns the ops, the model and whether
  * the draw is hidden.
  */
-function horseRun(r, gallop, { ground }) {
+function horseRun(r, gallop, { ground, view }) {
     const s = { last: -1, mode: 'ring', n: 0, prev: [0, 0, 0], pos: null, heading: 0, speed: 0, away: 0 };
     const reset = () => Object.assign(s, { mode: 'ring', n: 0, prev: horseOffset(r.angle), pos: null, away: 0 });
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const inView = (cam, x, z) => !cam
-        || (Math.abs(blockOf(x) - blockOf(cam.x)) <= 2 && Math.abs(blockOf(z) - blockOf(cam.z)) <= 2);
+    const inView = (cam, x, z) => !cam || inWindow(gridBlock(x, z), gridBlock(cam.x, cam.z));
     const take = (cam) => {
         s.heading = cam.heading;
         s.speed = HORSE_PACE * Math.min(Math.max(cam.speed, HORSE_MIN_SPEED), HORSE_MAX_SPEED);
     };
     const step = (cam) => {
         if (s.mode === 'ring') {
+            if (view === 'camera' && cam && !inWindow(r.block, gridBlock(cam.x, cam.z))) return;
             const bolt = near(cam, r.pos[0] + s.prev[0], r.pos[2] + s.prev[2]);
             s.n++;
             s.prev = horseOffset(r.angle + (s.n << 6));
@@ -543,15 +544,19 @@ export const MODES = [
 /**
  * The draws for one course's objects, in the explorer's shape.
  *
+ * `view` is which blocks are drawn: 'camera' when only the window round the
+ * camera's block is, as the board draws (see inWindow), and the horses then
+ * keep to that too.
+ *
  * `ground(x, z)` answers where the road is under a point — a height and
  * the turns that tip a model to its slope — or null; the cones stand on it and
  * a bolting horse runs on it. `mode` is which of the game's states to draw the
  * course in — see MODES.
  */
-export function courseObjectDraws(rom, course, ground, mode = 'race') {
+export function courseObjectDraws(rom, course, ground, mode = 'race', view = 'reach') {
     const O = rom.game.objects;
     if (!O) return [];
-    const ctx = { rom, O, course, ground, mode };
+    const ctx = { rom, O, course, ground, mode, view };
     const out = [];
     for (const r of readObjectRecords(rom, course)) {
         /* sub_216e4 calls whatever routine its argument names, once a frame,
@@ -621,6 +626,16 @@ export function courseReach(rom, course) {
 }
 const CAR_LANES = 8;
 const AREA_REACH = 2;
+
+/*
+ * Whether set_area_block marks a block from the camera's: the 5x5 round it,
+ * clipped at the grid's edge rather than wrapped, which two block numbers
+ * already are. extra_clip's further cut by heading is not ported.
+ */
+export function inWindow(block, camera) {
+    return Math.abs((block & 15) - (camera & 15)) <= AREA_REACH
+        && Math.abs((block >> 4) - (camera >> 4)) <= AREA_REACH;
+}
 
 /* Every point on a course's eight car lanes as [x, y, z] — the height is at +4,
  * between the two the grid reads — or null where the row names no lanes. */

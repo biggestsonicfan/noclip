@@ -71,6 +71,12 @@ The board draws one zone, one camera block, one phase at a time. The explorer dr
 
 A "current zone / camera block" state (a slider or the board camera's position) would let each of these read the board's choice instead of guessing it. The union view can stay as an option. The point is that it should not need its own heuristics to look right.
 
+**Done (#260):**
+
+- HOTD: `resolveAlternates` is gone. Each stage carries its zones in script order (`zoneViews`, `placements.js`), and a **Zone** picker draws exactly the placements the picked zone lists, under the set it is drawn with. A stage opens in its first zone. "Every zone at once" is the plain union, with no filtering, so versions at one spot overlap there. The Models tab still credits a stage with every zone's models. Props are not split by zone: a spawned prop stays until something removes it, and which handler removes it has not been read.
+- Daytona: a **Blocks drawn** picker. "The 5×5 blocks round the camera" builds every block and shows, each frame, those that `inWindow` (the `set_area_block` window) puts round the camera's block. Objects follow their record's block, and a horse's ellipse stops while its block is out of the window, as on the board. "Every block a car reaches" is the old union. `extra_clip`'s heading cut is still not ported.
+- Still open: the horse speed clamps. The window now follows one point, the camera, but the camera is still not a car. It has no speed of its own, so the clamps stay until a car runs a lane. The lane points' 28-byte records carry more than x, y and z (+0x0C a float near 1.3 on the oval, +0x18 a point index in the high half and a per-point value in the low half, 0x1F6 on lane 0). One of these may be the CPU cars' target speed, but no routine that reads them has been traced yet.
+
 ## 4. Unported routines replaced by fitted numbers
 
 - **`courseGround`** (`daytona.js:659-719`) picks the face nearest the lane height and rejects slopes with `ny/len < 0.7`. It stands in for the TGP's ground query (op 0x36). A port would delete the heuristic and the 0.7.
