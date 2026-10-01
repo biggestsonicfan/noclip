@@ -1131,6 +1131,8 @@ export class Viewer {
         this.scene.add(this.axes);
 
         this._lastTime = performance.now();
+        /* Called with the camera just before each draw (see rankFaceLayers). */
+        this.beforeDraw = null;
         this._onResize = () => this.resize();
         window.addEventListener('resize', this._onResize);
         this.resize();
@@ -1468,6 +1470,11 @@ export class Viewer {
         this._lastTime = now;
         if (this.mode === 'orbit') this.orbit.update();
         else this.fly.update(dt);
+        if (this.beforeDraw) {
+            this.scene.updateMatrixWorld();
+            this.camera.updateMatrixWorld();
+            this.beforeDraw(this.camera);
+        }
         this.drawScene();
         const info = this.renderer.info.render;
         this.stats.drawCalls = info.calls;

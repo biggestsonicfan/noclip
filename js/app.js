@@ -9,8 +9,8 @@ import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
-import { MODES as OBJECT_MODES } from './daytona.js';
-import { coplanarLayers } from './layers.js';
+import { MODES as OBJECT_MODES, gridBlock, inWindow } from './daytona.js';
+import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
@@ -40,7 +40,7 @@ import { readMoves, spellMove, spellEntry, spellGuards, followUps, buildChain, c
     retypeChain, chainCode, parseChainCode, easeLength } from './moves.js';
 import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trailDraws, liveCopies } from './zanzou.js';
 import {
-    readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, rankMotions, partDraws, readSkin, skinMesh,
+    readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -66,6 +66,8 @@ const state = {
     romFiles: [],
     stages: [],
     viewer: null,
+    /* The face layers to rank for each camera — see applyFaceLayers. */
+    layerRankers: [],
     /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
     sheet: null,
     touchFly: null,
@@ -97,6 +99,9 @@ const state = {
     /* Which of the game's states Daytona's courses are drawn in — race,
      * time attack or the ending. See MODES in js/daytona.js. */
     objectMode: 'race',
+    /* The view picked per stage slot, where a stage has several — see
+     * stageView. */
+    stageViews: {},
     /* The fighter's motion. `frame` is the game's own: an integer that starts
      * at 1 and is stepped once a vsync until it passes the motion's length, so
      * it is derived from elapsed time the way the stage clock is. `slot` is
@@ -126,7 +131,7 @@ const state = {
     /* The scroll layer's sky, decoded once per stage and kept. */
     sky: null,
     skyTextures: new Map(),
-    skyPanoAspect: new Map(),
+    skyPanoScale: new Map(),
     skyHorizon: new Map(),
     skyTopColor: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
@@ -303,7 +308,7 @@ function resetRomState() {
     state.modelCache.clear();
     state.texSetCache.clear();
     state.skyTextures.clear();
-    state.skyPanoAspect.clear();
+    state.skyPanoScale.clear();
     state.skyHorizon.clear();
     state.skyTopColor.clear();
     state.modelScenes = null;
@@ -673,14 +678,23 @@ async function loadTexramFiles(files) {
 }
 
 /*
+ * Which of a stage's views is picked — a House of the Dead zone, or whether a
+ * Daytona course is drawn round the camera — or the stage's own first choice.
+ * See `views` in js/placements.js and js/stages.js.
+ */
+function stageView(stage) {
+    return state.stageViews[stage.slot] ?? stage.view;
+}
+
+/*
  * The draw list for the loaded stage.
  *
  * A game whose geometry is already in world space takes the flat builder; the
  * long one is about the transforms the other game's draw functions apply, and
  * there are none to apply here.
  */
-function stageDisplayList(stage) {
-    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode);
+function stageDisplayList(stage, view = stageView(stage)) {
+    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode, view);
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
@@ -713,9 +727,14 @@ function modelsPickTextures() {
  * The answer is cached per model because the search walks every set's page
  * list, which is cheap but not free, and clicking down the list would repeat it
  * on every row.
+ *
+ * It comes back with how it was reached, so the panel can say when the set is a
+ * guess: `how` is 'chosen' (the picker), 'bank' (bankTextureSet), 'coverage'
+ * (bestTextureSet, with `covered` of `tiles`) or 'default' (the profile's
+ * opening set, for a game neither can answer).
  */
-function modelTextureSet(idx) {
-    if (state.texSetChoice !== null) return state.texSetChoice;
+function modelTextureGuess(idx) {
+    if (state.texSetChoice !== null) return { set: state.texSetChoice, how: 'chosen' };
     if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
     /* A game that says which set each bank of its model table is drawn under
      * is taken at its word; see bankTextureSet for why tile coverage cannot
@@ -723,14 +742,28 @@ function modelTextureSet(idx) {
     const banked = bankTextureSet(state.rom, idx);
     const found = banked === null
         ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
-        : { set: banked };
+        : null;
     /* Neither can answer for a game whose sheets are raw banks and which has no
      * table saying which bank goes with which set — Daytona USA, whose course
      * data is unread. It opens on the set its profile names and the picker
      * moves it. */
-    const set = found ? found.set : (state.rom.game.texture.defaultSet ?? null);
-    state.texSetCache.set(idx, set);
-    return set;
+    const guess = banked !== null ? { set: banked, how: 'bank' }
+        : found ? { set: found.set, how: 'coverage', covered: found.covered, tiles: found.tiles }
+            : { set: state.rom.game.texture.defaultSet ?? null, how: 'default' };
+    state.texSetCache.set(idx, guess);
+    return guess;
+}
+
+/* How the panel words a guess, or '' when the set was not guessed. No stage
+ * record names a set for these models, so whatever the viewer picks for them
+ * is its own inference, not the game's. */
+function describeTextureGuess(g) {
+    if (g.how === 'coverage') {
+        return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
+    }
+    if (g.how === 'bank') return `set ${g.set} is a guess: the set this bank of the model table is drawn under`;
+    if (g.how === 'default' && g.set != null) return `set ${g.set} is a guess: the game's opening set`;
+    return '';
 }
 
 /* ---- Model cache --------------------------------------------------------- */
@@ -976,12 +1009,10 @@ function modelScenes() {
         /* A view that mixes texture sets under one says nothing about which
          * set draws a model. */
         if (stage.mixedSets) return;
-        for (const m of modelsInDisplayList(stageDisplayList(stage))) {
+        /* Every zone, not just the one picked: a piece the stage's other
+         * zones draw is still its model. */
+        for (const m of modelsInDisplayList(stageDisplayList(stage, stage.union))) {
             add(m, slot);
-        }
-        /* The versions of a piece a stage leaves out are still its models. */
-        for (const d of stage.alternates ?? []) {
-            for (const m of d.cycle ?? [d.model]) if (m && !owner.get(m)?.includes(slot)) add(m, slot);
         }
     });
     /* Disjoint from the stages in this ROM set, so the order of the two passes
@@ -1067,8 +1098,16 @@ function useModelScene(idx) {
          */
         let set = null;
         if (modelsPickTextures()) {
-            set = modelTextureSet(idx);
+            const guess = modelTextureGuess(idx);
+            set = guess.set;
             if (set != null) useRomTexram([set]);
+            /* Said on the status line, since the picture alone cannot tell a
+             * set the game names from one the viewer picked. */
+            const status = $('#tex-status');
+            const why = describeTextureGuess(guess);
+            if (status && set != null) {
+                status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
+            }
         }
         /* A fighter takes whichever scene is loaded, since every scene holds
          * its sheets. A model no scene claims takes it too, and for the same
@@ -1112,19 +1151,23 @@ function useModelScene(idx) {
  * The scroll layer's sky, on a cylinder round the arena.
  *
  * A game that keeps its sky as a tilemap rather than as models gets it here —
- * see js/scroll.js for the decode. The panorama is 576 tiles round where the
- * hardware shows 64 of them, so the strip is a full turn and goes on a cylinder
- * at that scale: turning the camera walks it exactly as the scroll registers
- * walk the tilemap.
+ * see js/scroll.js for the decode. The strip is one full turn of the scroll
+ * registers, so it goes round a cylinder at that scale: turning the camera
+ * walks it exactly as the board's heading walks the tilemap.
  *
- * Vertically it is an estimate and not the board's arithmetic. The board draws
- * the layer in screen space at one tile to eight pixels, so how much sky is in
- * frame depends on the projection rather than on anything in the data. The
- * height below puts the panorama's foot on the horizon and scales the rest by
- * the same pixels-per-degree the horizontal mapping implies, which lands the
- * cloud band where the captures put it. A panorama that carries what lies
- * below the horizon as well — Daytona USA's — says which row is the horizon,
- * and that row goes on the eye line instead.
+ * Vertically the board scrolls the layer by its focal length times the tangent
+ * of the pitch, which is what a flat picture `focal` pixels away does: a row
+ * `n` pixels above the eye line stands n / focal of the radius above it. A
+ * panorama that read the routine says its focal and its eye-line row
+ * (Fighting Vipers'; js/scroll.js has the arithmetic). Daytona USA's Y scroll
+ * goes through TGP functions that are not ported, so it gets the eye-line row
+ * measured in MAME and, still an estimate, the same pixels per radian up as
+ * across.
+ *
+ * The radius itself changes nothing on screen. The cylinder rides on the
+ * camera (stepSky) and is drawn without the depth test, and its height scales
+ * with the radius, so every row subtends the same angle at any radius; it has
+ * only to sit inside the camera's clip range (0.05 to at least 2000).
  */
 const SKY_RADIUS = 600;
 
@@ -1160,7 +1203,10 @@ function addSkyPanorama(slot) {
             tex.minFilter = THREE.LinearFilter;
             tex.wrapS = THREE.RepeatWrapping;
             tex.needsUpdate = true;
-            state.skyPanoAspect.set(slot, pano.height / pano.width);
+            /* The strip's height as a fraction of the radius. */
+            state.skyPanoScale.set(slot, pano.focal
+                ? pano.height / pano.focal
+                : 2 * Math.PI * pano.height / pano.width);
             /* The row that sits on the eye line, as a fraction down the
              * strip: its foot unless the panorama says otherwise. */
             state.skyHorizon.set(slot, (pano.horizon ?? pano.height) / pano.height);
@@ -1170,9 +1216,8 @@ function addSkyPanorama(slot) {
     }
     if (!tex) return;
 
-    /* One turn across, and the same pixels-per-radian up. */
-    const aspect = state.skyPanoAspect.get(slot);
-    const height = 2 * Math.PI * SKY_RADIUS * aspect;
+    /* One turn across; up, the board's focal where the panorama gives one. */
+    const height = SKY_RADIUS * state.skyPanoScale.get(slot);
     const geom = new THREE.CylinderGeometry(
         SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
     const mat = new THREE.MeshBasicMaterial({
@@ -1243,6 +1288,9 @@ function loadStage(slot, { keepCamera = false } = {}) {
      * under its own — sheets, colour tables and face palette (materialForSet).
      * A pinned dump is one machine's texture RAM and stands for all of them. */
     const perPart = stage.mixedSets && !state.texramPinned;
+    /* A course drawn as the board draws it, round the camera's block: every
+     * block is built, and stepBlockWindow shows the ones in the window. */
+    const windowed = stageView(stage) === 'camera';
     const sceneSet = state.rom.paletteSet;
     const partSets = new Set();
     for (const entry of list) {
@@ -1288,12 +1336,15 @@ function loadStage(slot, { keepCamera = false } = {}) {
         if (ARENA_LAYERS.has(entry.layer)) arena.push(box);
         /* The decoded UVs stay the offset's origin: the copy above is written
          * from them every frame rather than walked on from where it stands. */
+        let item = null;
         if (moves) {
-            state.anim.entries.push({
+            item = {
                 entry, mesh, lines, model: entry.model,
                 uvs: entry.scroll ? d.uvs : null,
-            });
+            };
+            state.anim.entries.push(item);
         }
+        if (windowed && entry.block != null) state.anim.blocks.push({ entry, mesh, lines, item });
         if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
             state.anim.billboards.push({ entry, mesh, lines });
         }
@@ -1502,6 +1553,7 @@ function resetStageAnimation() {
     a.geom.clear();
     a.entries = [];
     a.billboards = [];
+    a.blocks = [];
     a.phases = [];
     a.start = performance.now();
     a.frame = -1;
@@ -1597,6 +1649,35 @@ function liveCamera(frame) {
     return a.liveCam;
 }
 
+/*
+ * The blocks set_area_block marks, round the camera's: on a course drawn the
+ * board's way, show the draws whose block is in the window and hide the rest,
+ * once a rendered frame, since the camera moves whether the stage runs or not.
+ * A draw that hides itself (a dark frame, a horse gone) stays as its own step
+ * left it.
+ */
+function stepBlockWindow() {
+    const blocks = state.anim.blocks;
+    if (!blocks?.length) return;
+    /* Read afresh rather than through liveCamera, which keeps one reading
+     * per stage frame and so would stand still while the stage is held. */
+    const { camera, root } = state.viewer;
+    camera.updateMatrixWorld();
+    root.updateMatrixWorld();
+    LIVE_INV.copy(root.matrixWorld).invert();
+    LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
+    const at = gridBlock(LIVE_POS.x, -LIVE_POS.z);
+    for (const { entry, mesh, lines, item } of blocks) {
+        const shown = inWindow(entry.block, at) && (item?.shown ?? true)
+            && state.layerOn[entry.layer] !== false;
+        mesh.visible = shown;
+        if (lines) {
+            lines.userData.hidden = !shown;
+            lines.visible = state.wireframe && shown;
+        }
+    }
+}
+
 /** Advance every animated draw on this stage to whatever frame we are on. */
 function stepStageAnimation(now) {
     const a = state.anim;
@@ -1618,7 +1699,8 @@ function stepStageAnimation(now) {
              * zero halves of its longs — and that draws nothing. Set every
              * frame, not just on a change, so a layer toggled back on cannot
              * leave a dark frame showing. */
-            it.mesh.visible = model !== 0 && state.layerOn[entry.layer] !== false;
+            it.shown = model !== 0;
+            it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
         }
         if (entry.band) {
             /* set_obj_thd's override covers every face of the model — the quad
@@ -1656,7 +1738,8 @@ function stepStageAnimation(now) {
                 it.mesh.geometry = g.mesh;
                 if (it.lines) it.lines.geometry = g.edges;
             }
-            it.mesh.visible = !r.hidden && state.layerOn[entry.layer] !== false;
+            it.shown = !r.hidden;
+            it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
             composeOps(ANIM_SCRATCH, r.ops);
             it.mesh.matrix.copy(ANIM_SCRATCH);
             if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
@@ -1756,38 +1839,52 @@ function transformedBounds(d, matrix) {
 
 /*
  * Put each face lying on another in its plane over it, for a game whose art
- * depends on that (see js/layers.js). The layers are for the draws as they
- * stand when the scene is built. A draw that swaps models through a cycle
- * shares them with every frame whose points are the first frame's; a frame
- * whose points have moved has planes of its own, so it is layered again, with
- * the draws its box meets. Daytona's flags are that: each of the 32 frames of
- * the wave lays the cut-out emblem on the cloth in that frame's plane, and
- * without a plane of its own the emblem fought the cloth (issue 38).
+ * depends on that (see js/layers.js). The pairs and planes are for the draws as
+ * they stand when the scene is built; which face of a pair is on top is the
+ * board's sort from the camera, worked out again every frame (rankFaceLayers).
+ * A draw that swaps models through a cycle shares them with every frame whose
+ * points are the first frame's; a frame whose points have moved has planes of
+ * its own, so it is paired again, with the draws its box meets. Daytona's
+ * flags are that: each of the 32 frames of the wave lays the cut-out emblem on
+ * the cloth in that frame's plane, and without a plane of its own the emblem
+ * fought the cloth (issue 38).
+ *
+ * `space` is what the draws' matrices are relative to: the scene root for a
+ * stage, the part itself for a body part posed by its own matrix.
  */
-function applyFaceLayers(draws) {
+function applyFaceLayers(draws, space = state.viewer.root) {
     if (!state.rom.game.depth?.layers || !draws.length) return;
-    const rules = state.rom.game.depth.layerRules;
-    const layers = coplanarLayers(draws, rules);
-    const gap = rules?.gap ?? 0.5;
+    const layers = coplanarLayers(draws);
+    const gap = 0.5;
     const boxOf = (d, matrix) => transformedBounds(d, new THREE.Matrix4().fromArray(matrix)).bounds;
     const boxes = draws.map(({ decoded, matrix }) => (decoded ? boxOf(decoded, matrix) : null));
     const meets = (a, b) => [0, 1, 2].every((k) => a.min[k] <= b.max[k] + gap && b.min[k] <= a.max[k] + gap);
+    /* The layer attributes each ranking writes, by draw. */
+    const ranker = (ranking) => {
+        const r = { ranking, space, mesh: draws[0].mesh, attrs: new Map() };
+        if (ranking) state.layerRankers.push(r);
+        return r;
+    };
+    const whole = ranker(layers.ranking);
     draws.forEach(({ mesh, entry, decoded, matrix }, i) => {
-        const set = (geometry, d, { layer, plane, snap }) => {
+        const set = (geometry, d, { layer, plane, snap }, r, at) => {
             if (d.positions.length / 3 !== layer.length) return;
-            geometry.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
+            const attr = new THREE.BufferAttribute(layer, 1);
+            geometry.setAttribute('aLayer', attr);
             geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
+            if (!r.attrs.has(at)) r.attrs.set(at, []);
+            r.attrs.get(at).push(attr);
             /* A copy drawn on the corners of the triangle it copies (see
-             * `copies` in js/layers.js), in a copy of the positions: the
-             * decode is cached and shared. */
+             * `twins` in js/layers.js), in a copy of the positions: the decode
+             * is cached and shared. */
             if (snap?.length) {
                 const pos = Float32Array.from(d.positions);
                 for (let k = 0; k < snap.length; k += 2) pos.copyWithin(snap[k] * 3, snap[k + 1] * 3, snap[k + 1] * 3 + 3);
                 geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             }
         };
-        set(mesh.geometry, decoded, layers[i]);
-        /* Whether the first frame's layers come from its own faces alone: then
+        set(mesh.geometry, decoded, layers[i], whole, i);
+        /* Whether the first frame's pairs come from its own faces alone: then
          * so do the others', and the course blocks around it can be left out,
          * which is most of the time this takes. */
         let alone = null;
@@ -1798,12 +1895,12 @@ function applyFaceLayers(draws) {
             const still = d === decoded || (d.positions.length === decoded.positions.length
                 && d.positions.every((v, k) => Math.abs(v - decoded.positions[k]) < 1e-3));
             if (still) {
-                set(frameGeometry(frame).mesh, d, layers[i]);
+                set(frameGeometry(frame).mesh, d, layers[i], whole, i);
                 continue;
             }
             if (alone === null) {
-                const solo = coplanarLayers([{ decoded, matrix }], rules)[0];
-                alone = same(solo.layer, layers[i].layer) && same(solo.plane, layers[i].plane);
+                const solo = coplanarLayers([{ decoded, matrix }])[0];
+                alone = same(solo.plane, layers[i].plane);
             }
             /* In the order the game submits them, which the sort's ties go by. */
             const box = boxOf(d, matrix);
@@ -1813,10 +1910,38 @@ function applyFaceLayers(draws) {
                 if (k === i) at = near.push({ decoded: d, matrix }) - 1;
                 else if (!alone && boxes[k] && meets(box, boxes[k])) near.push(o);
             });
-            const own = coplanarLayers(near, rules)[at];
-            set(frameGeometry(frame).mesh, d, own);
+            const own = coplanarLayers(near);
+            set(frameGeometry(frame).mesh, d, own[at], ranker(own.ranking), at);
         }
     });
+}
+
+/* Each ranking's layers for the camera about to draw (see rankLayers). */
+const rankView = { s: new THREE.Matrix4(), dir: new THREE.Vector3(), eye: new THREE.Vector3() };
+function rankFaceLayers(camera) {
+    /* A ranking goes with the scene it was made for. */
+    const shown = (o) => { while (o?.parent) o = o.parent; return o?.isScene === true; };
+    const list = state.layerRankers = state.layerRankers.filter((r) => shown(r.mesh));
+    if (!list.length) return;
+    const { s, dir, eye } = rankView;
+    camera.getWorldDirection(dir);
+    eye.setFromMatrixPosition(camera.matrixWorld);
+    for (const r of list) {
+        /* The view depth of p in the draws' space is dir . (S p - eye). */
+        s.copy(r.space.matrixWorld);
+        const e = s.elements;
+        const view = [
+            e[0] * dir.x + e[1] * dir.y + e[2] * dir.z,
+            e[4] * dir.x + e[5] * dir.y + e[6] * dir.z,
+            e[8] * dir.x + e[9] * dir.y + e[10] * dir.z,
+            (e[12] - eye.x) * dir.x + (e[13] - eye.y) * dir.y + (e[14] - eye.z) * dir.z,
+        ];
+        if (r.view && r.view.every((v, k) => v === view[k])) continue;
+        r.view = view;
+        for (const d of rankLayers(r.ranking, view)) {
+            for (const attr of r.attrs.get(d) ?? []) attr.needsUpdate = true;
+        }
+    }
 }
 
 /* ---- Model view ---------------------------------------------------------- */
@@ -2194,7 +2319,6 @@ function rigForMotion(c) {
  * chain segments exist before the first frame is solved. */
 function restPoseFor(c) {
     return buildPose(rigForMotion(c), {
-        headAim: c.ownAnimTable,
         angles: new Uint16Array(36),
         targets: new Float32Array(24),
         targetUsed: new Uint8Array(8),
@@ -2368,19 +2492,15 @@ function poseRig() {
      * meshes on the normal skeleton would leave them strung out along limbs
      * twice the length they are modelled for. */
     const skeleton = rigForMotion(c);
-    /* A fighter with a borrowed animation table has no head data of its own,
-     * so its head takes the chest's direction rather than a face target meant
-     * for whoever owns the table. */
-    const opts = { headAim: c.ownAnimTable };
     const pose = m.decoded
-        ? buildPose(skeleton, motionSample(m, m.frame), opts)
+        ? buildPose(skeleton, motionSample(m, m.frame))
         /* A slot with no motion still has to draw something, so solve the pose
          * every channel reads as zero — which is the game's own rest. */
         : buildPose(skeleton, {
             angles: new Uint16Array(36),
             targets: new Float32Array(24),
             targetUsed: new Uint8Array(8),
-        }, opts);
+        });
 
     const mats = poseMatrices(pose);
     for (const p of m.parts) {
@@ -2441,7 +2561,7 @@ function poseRig() {
     }
     /* The afterimages: the coprocessor's ring, run on the pose frame by frame. */
     placeTrails(m, c, pose,
-        (f) => buildPose(skeleton, motionSample(m, f), opts));
+        (f) => buildPose(skeleton, motionSample(m, f)));
 
     /* The boss's arms ride the chest exactly as `rob_disp` leaves it — the
      * routine adds no transform of its own, only a model. */
@@ -2511,12 +2631,12 @@ function faceCamera() {
 
 /* ---- Jointed bodies ------------------------------------------------------ */
 
-/* The motions a body can play: those written for its joint count. A motion
- * names no body — the game picks one per enemy — so any body with the same
- * count plays it, every angle landing on the joint it was written for. */
+/* The motions a body can play: those written for its joint count, the ones
+ * its routines play leading. A motion names no body, so any body with the
+ * same count plays it, every angle landing on the joint it was written for. */
 function bodyMotions(body) {
     state.motionRanks ??= new Map();
-    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, rankMotions(body, state.motion.list, state.bodies));
+    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, bodyMotionList(state.rom, body, state.motion.list));
     return state.motionRanks.get(body.index);
 }
 
@@ -2528,10 +2648,11 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     /* A body has no input tables, so no moves and no strings. */
     m.moves = null;
     $('#string-field').hidden = true;
-    /* Start on a motion likely written for the body: a body can play any
-     * motion of its joint count, but one keyed on another skeleton bends its
-     * parts in ways they were not modelled for. A motion carried over from the
-     * last body stays if it is among them. */
+    /* Start on the motion the game starts the body on, or another its
+     * routines play: a body can play any motion of its joint count, but one
+     * keyed on another skeleton bends its parts in ways they were not
+     * modelled for. A motion carried over from the last body stays if it is
+     * among them. */
     const { fits, lead } = bodyMotions(body);
     const held = keepMotion && m.decoded?.joints === body.joints ? m.decoded : null;
     const pick = held && lead.includes(held) ? held : lead[0] ?? fits[0];
@@ -2598,7 +2719,7 @@ const IDENTITY_MATRIX = new THREE.Matrix4().elements;
  */
 function rankBodyPart(slot) {
     if (!slot?.decoded || !slot.mesh) return;
-    applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }]);
+    applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }], slot.mesh);
 }
 
 function setBodySlot(slot, model) {
@@ -2740,7 +2861,8 @@ function renderStagePanel(stage, counts, totals, list) {
         <span>stage_NUM</span><b>${stage.num}</b>
         <span>flags</span><b>0x${stage.flags.toString(16).toUpperCase()}</b>
         <span>floor size</span><b>${stage.floorSize.toFixed(3)}</b>
-        <span>texture set</span><b>${stage.texSet[0]}, ${stage.texSet[1]}</b>
+        <span>texture set</span><b>${stage.texSet[0]}</b>
+        <span>colour block</span><b>${stage.texSet[1]}</b>
         <span>brightness</span><b>${stage.bright.toFixed(2)}</b>
         <span>draws</span><b>${list.length}</b>
         <span>triangles</span><b>${totalTris.toLocaleString()}</b>
@@ -2751,6 +2873,16 @@ function renderStagePanel(stage, counts, totals, list) {
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
     $('#mode-field').hidden = !stage.objectDraws;
+    /* A stage's views: House of the Dead's zones, Daytona's camera window. */
+    const views = stage.views?.length > 1 ? stage.views : null;
+    $('#view-field').hidden = !views;
+    if (views) {
+        const viewSelect = $('#view-select');
+        viewSelect.innerHTML = '';
+        for (const [value, label] of views) viewSelect.add(new Option(label, value));
+        viewSelect.value = stageView(stage);
+        $('#view-label').textContent = stage.zones ? 'Zone' : 'Blocks drawn';
+    }
     if (rides) {
         $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
@@ -2882,8 +3014,9 @@ function describeModelScene(idx) {
              * for the whole game, so there is no scene to name — only which
              * sheets the model is standing on. */
             if (state.rom.game.colors) {
-                const set = modelTextureSet(idx);
-                return `drawn by no stage — the game's own colour tables, sheets of set ${set ?? 0}`;
+                const guess = modelTextureGuess(idx);
+                const why = describeTextureGuess(guess);
+                return `drawn by no stage — the game's own colour tables, sheets of set ${guess.set ?? 0}${why ? ` (${why})` : ''}`;
             }
             return 'shaded flat, on the face palette in the ROM';
         }
@@ -3483,6 +3616,11 @@ function wireOptions() {
         state.objectMode = e.target.value;
         loadStage(state.stageIndex, { keepCamera: true });
     });
+    /* Which zone or which blocks the stage is drawn with — see stageView. */
+    $('#view-select').addEventListener('change', (e) => {
+        state.stageViews[state.stageIndex] = e.target.value;
+        loadStage(state.stageIndex, { keepCamera: true });
+    });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
 
@@ -3992,6 +4130,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    state.viewer.beforeDraw = rankFaceLayers;
     $('#tool-shot').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
     state.viewer.smoothHoles($('#opt-smooth-holes').checked);
@@ -4011,7 +4150,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); }
         state.viewer.render();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;
