@@ -6,6 +6,7 @@ import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './roms
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
+import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV } from './skyeye.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -2778,6 +2779,7 @@ function renderStagePanel(stage, counts, totals, list) {
      * other thirteen the checkbox would be a control over nothing. */
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
+    $('#skyeye-field').hidden = state.rom.game.id !== 'sfight';
     $('#mode-field').hidden = !stage.objectDraws;
     if (rides) {
         $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
@@ -3635,6 +3637,11 @@ function wireOptions() {
     $('#opt-cull').addEventListener('change', (e) => v.backfaceCull(e.target.checked));
     $('#opt-smooth-holes').addEventListener('change', (e) => v.smoothHoles(e.target.checked));
     $('#opt-ride').addEventListener('change', (e) => setRideStage(e.target.checked));
+    $('#skyeye-copy').addEventListener('click', () => {
+        const text = updateSkyEye();
+        if (text) navigator.clipboard?.writeText(text).catch(() => {});
+    });
+    $('#opt-board-lens').addEventListener('change', (e) => setBoardLens(e.target.checked));
     /* The ROM's own mistakes, mended in place, and the view rebuilt where it
      * stands: the models decoded from the old bytes go with the cache. */
     $('#opt-fix-errors').addEventListener('change', (e) => {
@@ -3938,6 +3945,31 @@ function loadGameContent() {
 }
 
 /*
+ * The view as the game's own camera record (js/skyeye.js), for the SKY EYE
+ * readout on the Stages tab. Returns the text, or null where there is no such
+ * record to show — another game, or another tab. Written only when it changes,
+ * so it can be selected and copied while the page runs.
+ */
+function updateSkyEye() {
+    const out = $('#skyeye-readout');
+    if (!out || state.tab !== 'stage' || state.rom?.game.id !== 'sfight') return null;
+    const v = state.viewer;
+    const text = describeBoardCamera(boardCamera(v.camera, v.root), state.stageIndex);
+    if (out.textContent !== text) out.textContent = text;
+    return text;
+}
+
+/* The board's lens, or back to the explorer's own. */
+let explorerFov = null;
+function setBoardLens(on) {
+    const cam = state.viewer.camera;
+    if (on && explorerFov === null) explorerFov = cam.fov;
+    cam.fov = on ? BOARD_FOV : explorerFov ?? cam.fov;
+    if (!on) explorerFov = null;
+    cam.updateProjectionMatrix();
+}
+
+/*
  * The rest of a report's link, once the panel is wired: loadGameContent has
  * already opened the tab and what it was showing, and this puts back the
  * clock, the switches, the motion and, last, the camera.
@@ -3990,7 +4022,15 @@ function restoreLinkedView() {
     if (link.cam !== v.mode) $(`#camera-mode [data-mode="${link.cam}"]`)?.click();
     if (link.pos) v.camera.position.set(...link.pos);
     if (link.target) v.orbit.target.set(...link.target);
-    if (v.mode === 'fly' && link.look) {
+    if (!link.pos && link.board && state.tab === 'stage') {
+        /* A link that carries only the game's camera record — the one m2-hle2
+         * writes from the board's camera. The orbit target goes a little way
+         * ahead, so a switch of rig keeps the direction. */
+        const { eye, at } = placeFromBoard(v.camera, v.root, link.board);
+        v.orbit.target.copy(at.sub(eye).multiplyScalar(5).add(eye));
+        v.fly.syncFromCamera();
+        v.orbit.update();
+    } else if (v.mode === 'fly' && link.look) {
         v.fly.face(link.look[0], link.look[1]);
     } else {
         v.camera.lookAt(v.orbit.target);
@@ -4041,6 +4081,7 @@ function start() {
          * camera moves whether the stage is running or held. */
         if (state.tab === 'stage') { stepBillboards(); stepSky(); }
         state.viewer.render();
+        if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;
             $('#stats').textContent = `${s.drawCalls} draws · ${s.triangles.toLocaleString()} tris`;
