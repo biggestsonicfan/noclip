@@ -59,6 +59,8 @@ The vote is a precomputed answer to a question the shader could answer per frame
 
 This one is less certain than §1. The depth range left under the plane depth is small (24 bits), so the key would have to be quantised coarsely, and the board's own 16-bit buckets are the natural size to try. HOTD's rooms and Daytona's flags are the test, since they lean on the layers hardest.
 
+*Done (Pinboard #259).* The vote, the window exception, the circle-breaker and the three switches are gone; the grouping stays. `rankLayers` keys each paired face as the board does (near or far corner, or "very far", by its z mode, rounded to the 12-bit-mantissa bucket of `float_to_zval`) from the camera about to draw, puts the later face on top in a tie, and gives each face its longest path up as its layer. That runs on the CPU every frame (well under 1 ms for HOTD's 2262 paired faces and Daytona's 16147), not in the depth bits: a 24-bit step is about 3e-6·z² view units, a quarter of a unit 300 out, which no key could hide under. A copy (`twins`) is now ranked in every game. Graded against MAME, on the pixels the change moved: Casino Night, 61 frames of the board camera, 1.58M pixels nearer MAME and 0.35M further (the blue disc the vote laid over the floor is gone); Flying Carpet changes only the desert, which does not register with MAME; Dinosaur Canyon (349 frames) changes at most 33 pixels a frame, the flags unchanged. HOTD could not be graded: attract keeps no view matrix in main RAM.
+
 ## 3. Drawing every state at once, then filtering
 
 The board draws one zone, one camera block, one phase at a time. The explorer draws the union of all of them so you can fly through the whole stage, which is fair, but the union then needs heuristics to undo the overlaps:
@@ -106,5 +108,5 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 1. ~~**"Deep far-corner faces concede" as one rule (§1).**~~ Measured and rejected; see "no single per-face rule holds" in §1. The next try is a key-aware pass, not a rule on depth alone.
 2. ~~**Submission index instead of `planeBias` (§1).**~~ Already the cited draw order; stays.
 3. ~~**The FV luma column and the HOTD light (§5).**~~ Done (#250), both checked against MAME.
-4. **Live key ranking in face layers (§2).** This has the biggest payoff in the layer code, but it is the least certain. Try it on HOTD and Daytona's flags first.
+4. ~~**Live key ranking in face layers (§2).**~~ Done (Pinboard #259), graded on STF and Daytona.
 5. **A current-zone/block state (§3) and the TGP ground query (§4).** These are larger features. They are worth doing when the Daytona/HOTD work comes back round.

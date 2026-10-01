@@ -10,7 +10,7 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
-import { coplanarLayers, surfaceCorners } from './layers.js';
+import { coplanarLayers, rankLayers, surfaceCorners } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
@@ -66,6 +66,8 @@ const state = {
     romFiles: [],
     stages: [],
     viewer: null,
+    /* The face layers to rank for each camera — see applyFaceLayers. */
+    layerRankers: [],
     /* The phone site's bottom sheet and noclip stick — see js/mobile.js. */
     sheet: null,
     touchFly: null,
@@ -1294,8 +1296,10 @@ function loadStage(slot, { keepCamera = false } = {}) {
                 new THREE.BufferAttribute(Float32Array.from(d.lumaBases), 1));
         }
         /* And for a draw sorted by the surfaces its faces make up. */
+        let zCorners;
         if (entry.surfaces) {
             const zc = surfaceCorners(d);
+            if (zc) zCorners = zc;
             for (let c = 0; zc && c < 4; c++) {
                 mesh.geometry.setAttribute(`aZc${c}`, new THREE.BufferAttribute(zc[c], 3));
             }
@@ -1306,7 +1310,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
                 new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
         }
         mesh.visible = state.layerOn[entry.layer] !== false;
-        layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry });
+        layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry, zCorners });
         counts[entry.layer]++;
         const box = transformedBounds(d, m);
         drawn.push(box);
@@ -1782,38 +1786,52 @@ function transformedBounds(d, matrix) {
 
 /*
  * Put each face lying on another in its plane over it, for a game whose art
- * depends on that (see js/layers.js). The layers are for the draws as they
- * stand when the scene is built. A draw that swaps models through a cycle
- * shares them with every frame whose points are the first frame's; a frame
- * whose points have moved has planes of its own, so it is layered again, with
- * the draws its box meets. Daytona's flags are that: each of the 32 frames of
- * the wave lays the cut-out emblem on the cloth in that frame's plane, and
- * without a plane of its own the emblem fought the cloth (issue 38).
+ * depends on that (see js/layers.js). The pairs and planes are for the draws as
+ * they stand when the scene is built; which face of a pair is on top is the
+ * board's sort from the camera, worked out again every frame (rankFaceLayers).
+ * A draw that swaps models through a cycle shares them with every frame whose
+ * points are the first frame's; a frame whose points have moved has planes of
+ * its own, so it is paired again, with the draws its box meets. Daytona's
+ * flags are that: each of the 32 frames of the wave lays the cut-out emblem on
+ * the cloth in that frame's plane, and without a plane of its own the emblem
+ * fought the cloth (issue 38).
+ *
+ * `space` is what the draws' matrices are relative to: the scene root for a
+ * stage, the part itself for a body part posed by its own matrix.
  */
-function applyFaceLayers(draws) {
+function applyFaceLayers(draws, space = state.viewer.root) {
     if (!state.rom.game.depth?.layers || !draws.length) return;
-    const rules = state.rom.game.depth.layerRules;
-    const layers = coplanarLayers(draws, rules);
-    const gap = rules?.gap ?? 0.5;
+    const layers = coplanarLayers(draws);
+    const gap = 0.5;
     const boxOf = (d, matrix) => transformedBounds(d, new THREE.Matrix4().fromArray(matrix)).bounds;
     const boxes = draws.map(({ decoded, matrix }) => (decoded ? boxOf(decoded, matrix) : null));
     const meets = (a, b) => [0, 1, 2].every((k) => a.min[k] <= b.max[k] + gap && b.min[k] <= a.max[k] + gap);
+    /* The layer attributes each ranking writes, by draw. */
+    const ranker = (ranking) => {
+        const r = { ranking, space, mesh: draws[0].mesh, attrs: new Map() };
+        if (ranking) state.layerRankers.push(r);
+        return r;
+    };
+    const whole = ranker(layers.ranking);
     draws.forEach(({ mesh, entry, decoded, matrix }, i) => {
-        const set = (geometry, d, { layer, plane, snap }) => {
+        const set = (geometry, d, { layer, plane, snap }, r, at) => {
             if (d.positions.length / 3 !== layer.length) return;
-            geometry.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
+            const attr = new THREE.BufferAttribute(layer, 1);
+            geometry.setAttribute('aLayer', attr);
             geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
+            if (!r.attrs.has(at)) r.attrs.set(at, []);
+            r.attrs.get(at).push(attr);
             /* A copy drawn on the corners of the triangle it copies (see
-             * `copies` in js/layers.js), in a copy of the positions: the
-             * decode is cached and shared. */
+             * `twins` in js/layers.js), in a copy of the positions: the decode
+             * is cached and shared. */
             if (snap?.length) {
                 const pos = Float32Array.from(d.positions);
                 for (let k = 0; k < snap.length; k += 2) pos.copyWithin(snap[k] * 3, snap[k + 1] * 3, snap[k + 1] * 3 + 3);
                 geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             }
         };
-        set(mesh.geometry, decoded, layers[i]);
-        /* Whether the first frame's layers come from its own faces alone: then
+        set(mesh.geometry, decoded, layers[i], whole, i);
+        /* Whether the first frame's pairs come from its own faces alone: then
          * so do the others', and the course blocks around it can be left out,
          * which is most of the time this takes. */
         let alone = null;
@@ -1824,12 +1842,12 @@ function applyFaceLayers(draws) {
             const still = d === decoded || (d.positions.length === decoded.positions.length
                 && d.positions.every((v, k) => Math.abs(v - decoded.positions[k]) < 1e-3));
             if (still) {
-                set(frameGeometry(frame).mesh, d, layers[i]);
+                set(frameGeometry(frame).mesh, d, layers[i], whole, i);
                 continue;
             }
             if (alone === null) {
-                const solo = coplanarLayers([{ decoded, matrix }], rules)[0];
-                alone = same(solo.layer, layers[i].layer) && same(solo.plane, layers[i].plane);
+                const solo = coplanarLayers([{ decoded, matrix }])[0];
+                alone = same(solo.plane, layers[i].plane);
             }
             /* In the order the game submits them, which the sort's ties go by. */
             const box = boxOf(d, matrix);
@@ -1839,10 +1857,38 @@ function applyFaceLayers(draws) {
                 if (k === i) at = near.push({ decoded: d, matrix }) - 1;
                 else if (!alone && boxes[k] && meets(box, boxes[k])) near.push(o);
             });
-            const own = coplanarLayers(near, rules)[at];
-            set(frameGeometry(frame).mesh, d, own);
+            const own = coplanarLayers(near);
+            set(frameGeometry(frame).mesh, d, own[at], ranker(own.ranking), at);
         }
     });
+}
+
+/* Each ranking's layers for the camera about to draw (see rankLayers). */
+const rankView = { s: new THREE.Matrix4(), dir: new THREE.Vector3(), eye: new THREE.Vector3() };
+function rankFaceLayers(camera) {
+    /* A ranking goes with the scene it was made for. */
+    const shown = (o) => { while (o?.parent) o = o.parent; return o?.isScene === true; };
+    const list = state.layerRankers = state.layerRankers.filter((r) => shown(r.mesh));
+    if (!list.length) return;
+    const { s, dir, eye } = rankView;
+    camera.getWorldDirection(dir);
+    eye.setFromMatrixPosition(camera.matrixWorld);
+    for (const r of list) {
+        /* The view depth of p in the draws' space is dir . (S p - eye). */
+        s.copy(r.space.matrixWorld);
+        const e = s.elements;
+        const view = [
+            e[0] * dir.x + e[1] * dir.y + e[2] * dir.z,
+            e[4] * dir.x + e[5] * dir.y + e[6] * dir.z,
+            e[8] * dir.x + e[9] * dir.y + e[10] * dir.z,
+            (e[12] - eye.x) * dir.x + (e[13] - eye.y) * dir.y + (e[14] - eye.z) * dir.z,
+        ];
+        if (r.view && r.view.every((v, k) => v === view[k])) continue;
+        r.view = view;
+        for (const d of rankLayers(r.ranking, view)) {
+            for (const attr of r.attrs.get(d) ?? []) attr.needsUpdate = true;
+        }
+    }
 }
 
 /* ---- Model view ---------------------------------------------------------- */
@@ -2624,7 +2670,7 @@ const IDENTITY_MATRIX = new THREE.Matrix4().elements;
  */
 function rankBodyPart(slot) {
     if (!slot?.decoded || !slot.mesh) return;
-    applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }]);
+    applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }], slot.mesh);
 }
 
 function setBodySlot(slot, model) {
@@ -4018,6 +4064,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
+    state.viewer.beforeDraw = rankFaceLayers;
     $('#tool-shot').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
     state.viewer.smoothHoles($('#opt-smooth-holes').checked);
