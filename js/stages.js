@@ -189,11 +189,6 @@ export function stageLight(bright, vecterX, vecterY) {
     return [-Math.sin(ay) * z, y, -Math.cos(ay) * z];
 }
 
-/* stageLight as it stood before it was measured — see gameLighting. */
-function unverifiedLight([x, y, z]) {
-    return [-x, -y, z];
-}
-
 /*
  * The light and material slots of a game that keeps one set for the whole game
  * rather than one per stage record: the fixed light a profile's `lighting` names,
@@ -228,11 +223,15 @@ export function gameLighting(rom) {
     /* A game whose light is a vector in its own ROM rather than the two angles
      * a stage record carries gives it outright.
      *
-     * The House of the Dead's angles were carried across from Sonic The
-     * Fighters along with the signs stageLight used to give them, and unlike
-     * Sonic The Fighters' they have not been held to the board's own light yet
-     * — so they keep those signs until they are. */
-    const light = L.light ?? unverifiedLight(stageLight(1, L.vecter[0], L.vecter[1]));
+     * The House of the Dead's angles take stageLight's signs too. MAME's
+     * display lists (debugger `m2 geodasm`, every 600th frame of the attract
+     * loop) hand the geometrizer the light in camera space, and taking it back
+     * through the rotation of an unrotated stage piece's matrix gives
+     * (0.707, -0.707, 0), the vector stageLight makes of 0xE000, 0xC000: on 13
+     * of 14 frames of the prototype and on all 4 of revision A's that draw
+     * stage pieces. The signs this game kept before were both the other way,
+     * so the light came from below. */
+    const light = L.light ?? stageLight(1, L.vecter[0], L.vecter[1]);
     return { light, materials };
 }
 
