@@ -55,9 +55,8 @@ Three views:
   allows, or any move once the fighter is free. The rig is
   the game's, not a guess at it — a body matrix, a chest and head that aim at a
   target, four two-bone IK chains that reach for one, and each fighter's own eye
-  models on the head. The four entries that carry no head data of their own
-  share the chest's angle instead of aiming at a target measured for a body that
-  is not their shape.
+  models on the head. The four entries that borrow Bean's motions aim at Bean's
+  face target too, as the board does, held at its 45-degree pitch limit.
 
   The parts that hang off the skeleton come with it: Honey's pigtails, Fang's
   tail and the other three fighters' sway chains, drawn where the ROM's own
