@@ -14,7 +14,7 @@
 
 export const STAGE_DATA_ADDR = 0x0008f3d0;
 import { xtraResolve } from './romset.js';
-import { readObjectRecords, courseObjectDraws, courseGround, courseReach, carLanes } from './daytona.js';
+import { readObjectRecords, courseObjectDraws, courseGround, courseReach } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 
 export const STAGE_STRIDE = 256;
@@ -478,8 +478,6 @@ export function readCourseStages(rom) {
         if (seen.has(ptr)) continue;
         seen.add(ptr);
         const draws = [];
-        /* Which grid block each draw is, for the ground under an object. */
-        const blockAt = [];
         /* The blocks the board can draw — courseReach in js/daytona.js. The
          * rest are never in view of a car, and one is a copse of trees in the
          * sea off Seaside Street Galaxy. They are kept, marked, for the view
@@ -491,7 +489,6 @@ export function readCourseStages(rom) {
             if (!Number.isInteger(idx) || idx < 0 || idx >= t.count) continue;
             const reached = !reach || reach.has(b);
             if (!reached) unreached++;
-            blockAt.push(b);
             /* Every block is drawn where it is, so the placement is the origin
              * and the display list's translate comes out as the identity. */
             draws.push({ model: idx, pos: [0, 0, 0], set: c, block: b, reach: reached });
@@ -532,16 +529,10 @@ export function readCourseStages(rom) {
             meta: [['course', c], ['blocks', draws.length - unreached],
                 ...(unreached ? [['never in view', unreached]] : []),
                 ...(rom.game.objects ? [['objects', readObjectRecords(rom, c).length]] : [])],
-            /* What stands along it — js/daytona.js. Built when the course is
-             * opened rather than now, since the pylons stand on the road and
-             * finding it decodes the blocks under them; `getModel` is the
-             * caller's cache, so a block is not decoded twice. */
+            /* What stands along it — js/daytona.js. The pylons and horses
+             * stand on the road, found as the board finds it: courseGround. */
             objectDraws: rom.game.objects
-                ? (getModel, mode, view) => {
-                    const blockOf = new Map(draws.map((d, i) => [blockAt[i], d.model]));
-                    const ground = courseGround((b) => (blockOf.has(b) ? getModel(blockOf.get(b)) : null), carLanes(rom, c));
-                    return courseObjectDraws(rom, c, ground, mode, view);
-                }
+                ? (getModel, mode, view) => courseObjectDraws(rom, c, courseGround(rom, c), mode, view)
                 : null,
         });
     }
