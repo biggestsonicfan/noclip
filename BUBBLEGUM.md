@@ -45,6 +45,19 @@ The reason is the same each time. A walkway attached to the lab wall is within 1
 
 The floor/sea tie (517 vs 555) is the one thing the rules did fix cleanly, once both concede: a fragment bias of one slope step on the floor plate. The existing polygon offset does that job today, and it still applies, because `gl_FragCoord.z` carries the offset into `gl_FragDepth` on the path without a plane.
 
+**Done (Pinboard #258): a key-aware pass and the board's windows.** Two things replace the flags. The first is the board's own layering, which the per-model flags were standing in for. The geometry processor files every draw in one of eight windows (`set_window` 0x5564, called once per pass), and the rasterizer fills them last to first, so a later window covers an earlier one whatever the keys. The floor is in window 1; the ground and sea 555 are in 2; Aurora's extras and the Sphynx rug are in 3; the platform and the Canyon deck are in 4; the cage and most objects are in 5. Routines reach the earlier windows through the slot records at 0x50183C. Every entry in the explorer's stage list now carries its window (`display.js`, `OBJECT_WINDOWS` and the routine defaults). All 340 explorer draws that appear in the board's lists from m2-hle2 match replays and the attract agree with the board's window.
+
+The second is `Viewer.drawScene`. One pass records the nearest surface at each pixel (leaving out window 1, the backdrop) with its key. The keyed faces are then drawn window by window, sorted by key inside each window, and a face only counts where it is within `uKeyReach` = 1 of that nearest surface. Mirrored draws never come through a surface that isn't mirrored, which is Aurora's ice without `standingMaterial`. Everything else falls back to true depth. This removes `floorMaterial`, `waterMaterial`, `concedeMaterial`, `standingMaterial`, `ZSORT_KEEP`/`ZSORT_CONCEDE`, `pushStanding`/`pushConceding`, the `groundPlate`/`concede`/`'water'` routing, `surfaceCorners`, the lab sea as backdrop, and the flags for 517, 555, 2559-2561, 3332, 78 and the Aurora pillars and walruses.
+
+Measured against #48 over 16 stages × 8 cameras plus the issue 44/46 views: 278k px changed, mostly from orbit cameras the board never uses. The two largest are Mushroom Hill seen from outside the canopy, where the arena now shows through as the board would draw it, and Giant Wing's cloud sheets. Issue 44 now has its girders whole and issue 46 is unchanged. At the board's own cameras (MAME match replays of stages 1, 2, 5, 7, 10 and 12, explorer rendered from the recorded camera):
+
+- Casino Night's table goes from blue to the board's dark green: of 726k changed px, 437k are nearer MAME and 127k further.
+- The Giant Wing clouds reach down to the deck as in MAME.
+- Mushroom Hill shows the stems' ground shadows that MAME shows.
+- Stages 1, 2 and 10 are within framing noise.
+
+A reach of 12 was worse everywhere (issue 46 alone 62k px).
+
 `planeBias` turned out not to be a guess: `display.js:1555-1598` takes its three steps from the order the cited draw functions run in (sub_238E4's sixteen, then the floor, then ground_upper_disp and sub_235BC). A submission index would give the same three steps, so this one stays.
 
 ## 2. Face layers: a static majority vote standing in for a live sort
@@ -103,7 +116,7 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 
 ## Suggested order
 
-1. ~~**"Deep far-corner faces concede" as one rule (§1).**~~ Measured and rejected; see "no single per-face rule holds" in §1. The next try is a key-aware pass, not a rule on depth alone.
+1. ~~**"Deep far-corner faces concede" as one rule (§1).**~~ Measured and rejected; see "no single per-face rule holds" in §1. The next try is a key-aware pass, not a rule on depth alone. Done in #258: the key pass plus the board's windows replace every flag.
 2. ~~**Submission index instead of `planeBias` (§1).**~~ Already the cited draw order; stays.
 3. ~~**The FV luma column and the HOTD light (§5).**~~ Done (#250), both checked against MAME.
 4. **Live key ranking in face layers (§2).** This has the biggest payoff in the layer code, but it is the least certain. Try it on HOTD and Daytona's flags first.
