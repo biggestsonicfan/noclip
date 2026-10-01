@@ -74,7 +74,7 @@ A "current zone / camera block" state (a slider or the board camera's position) 
 ## 4. Unported routines replaced by fitted numbers
 
 - **`courseGround`** (`daytona.js:659-719`) picks the face nearest the lane height and rejects slopes with `ny/len < 0.7`. It stands in for the TGP's ground query (op 0x36). A port would delete the heuristic and the 0.7.
-- **Block rounding disagrees with itself:** `gridBlock` and two other places use `Math.round` (`daytona.js:482, 575, 668`), while `boardBlock` uses `Math.trunc` (`daytona.js:641`). So near a block edge, a car's block depends on which function asks. Check the routine's conversion and use one helper.
+- **Block rounding disagrees with itself:** `gridBlock` and two other places use `Math.round` (`daytona.js:482, 575, 668`), while `boardBlock` uses `Math.trunc` (`daytona.js:641`). So near a block edge, a car's block depends on which function asks. Check the routine's conversion and use one helper. *Fixed (#256).* `get_m_block` (Rev A 0x172a0) converts with `cvtri`, which rounds by the AC register's mode, and the boot code's `modac` at 0xa6c clears that to round-to-nearest. So `Math.round` was right and `boardBlock`'s `Math.trunc` was wrong. All four places now use one helper, `gridBlock`/`blockOf`, rounding ties to even as the FPU does. In every build only `courseReach` changes: course 0 gains block 188, and that block is empty, so nothing drawn changes.
 - **`DAYTONA_HORIZON_ROW = 144`** (`scroll.js:174`) was measured in MAME because `camd_99` is not ported. It has a measured source, so this one is low priority.
 
 ## 5. A wrong table hidden by a skip
@@ -90,8 +90,8 @@ These skips each hide one known decode bug. Fixing the bug removes the skip, and
 
 | What | Where | Note |
 |---|---|---|
-| `platformScale = slot === 7 ? … : [fs, 1.6, fs]` | `display.js:1816` | one slot special-cased; find what the routine reads |
-| `CASINO_LEVER` offset `[20, 7, -48]`, `DYNAMITE_SWING_AT`, `GIANT_WING_BLADE_AT`, `GIANT_WING_CLOUDS` | `display.js:671, 848, 934, 941-948` | no address cited; probably ROM immediates, so cite them or check with `stf-tools/verify-stage.mjs` |
+| `platformScale = slot === 7 ? … : [fs, 1.6, fs]` | `display.js:1816` | *Checked (#256):* the board's own rule. `stage_dsp` tests the slot against 7 (Giant Wing) at 0x26530 and scales (fs, fs, fs) there. Now cited, and named `GIANT_WING_SLOT` |
+| `CASINO_LEVER` offset `[20, 7, -48]`, `DYNAMITE_SWING_AT`, `GIANT_WING_BLADE_AT`, `GIANT_WING_CLOUDS` | `display.js:671, 848, 934, 941-948` | *Checked (#256):* all ROM immediates, and all agree with the code: the lever at 0x7442c (scale, then translate 20, 7, 48), the swing at 0x75bf4/0x75d18, the blade at 0x771f8, the clouds at 0x76b04-0x76b6c, 0x76c30, 0x76ca4 and 0x77110. Addresses now cited in `display.js` |
 | `SKY_RADIUS = 600` and the height estimate beside it | `app.js:1146` | the comment says it is an estimate |
 | `SHARED_TEX_SET = 1` and the one-game `texPair: 'literal'` switch | `stages.js:262-273` | taken from captures, not from the routine |
 | `bestTextureSet` / `bankTextureSet` | `texture.js:568-600, 814-835` | guess the set of a model with no stage; fine as a fallback, but nothing tells you it is a guess |

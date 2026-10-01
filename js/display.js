@@ -682,6 +682,7 @@ function pinballDisp({ push, pushAnim, fs }) {
             ['s', [1.6, 1.6, 1.6]],
         ]);
     }
+    /* A scale and then a translate, 0x7442c-0x74488. */
     push(CASINO_LEVER, [['s', [1.6, 1.6, 1.6]], ['t', [20, 7, -48]]]);
     push(CASINO_FLOOR, [['s', [fs, fs, fs]]]);
 }
@@ -859,6 +860,7 @@ const DYNAMITE_GEARS = [
 /* The swinging pair: one rides the value up and the other rides 5.4 minus it
  * down, and each turns 16384 angle units per unit of height. */
 const DYNAMITE_SWING = { speed: 0.05, limit: 5.4, turn: 16384 };
+/* x and z of each, from dynamite_disp's immediates at 0x75bf4 and 0x75d18. */
 const DYNAMITE_SWING_AT = [[23.1, -1.7], [26.3, 1.6]];
 
 /*
@@ -945,13 +947,15 @@ const GIANT_WING_SPINNER = [3888, 3889];
 /* The blade is swapped for an invisible square on every other frame — one
  * frame on and one frame gone, which is the blur. */
 const GIANT_WING_BLADE = [2863, 2846];
-const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];
+const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];   /* immediates at 0x771f8 */
 const GIANT_WING_BLADE_SPIN = 0x1b << 7;
 /* Two sine terms: a rate in 16-bit angle units per frame, an amplitude in the
  * same units, and a phase. */
 const GIANT_WING_ROLL = [[128, 411.0, 0], [192, 133.0, 0x1234]];
 /* Six cloud draws, each a Z that walks toward the plane and starts over at the
- * far limit. The continuation steps two more of these that nothing draws. */
+ * far limit. The continuation steps two more of these that nothing draws. The
+ * starts are giant_wing_init's stores at 0x76b04-0x76b6c, the steps and limits
+ * the continuation's at 0x76c30 and 0x76ca4, the side clouds' x at 0x77110. */
 const GIANT_WING_CLOUDS = [
     { model: 3086, x: 0, start: 6000, step: 12.5, limit: 6000 },
     { model: 3087, x: 0, start: 3000, step: 12.5, limit: 6000 },
@@ -1827,7 +1831,9 @@ export function buildStageDisplayList(stage, frames = null) {
          * time, so the door opens and shuts once every 128 frames. */
         pushAnim('hangarIris', 0, 0, 'ground', inHangar());
     }
-    const platformScale = slot === 7 ? [fs, fs, fs] : [fs, 1.6, fs];
+    /* stage_dsp (0x26530) scales the platform by the floor scale every way on
+     * the Giant Wing, and by 1.6 in Y everywhere else. */
+    const platformScale = slot === GIANT_WING_SLOT ? [fs, fs, fs] : [fs, 1.6, fs];
     if (slot === AURORA_ICEFIELD_SLOT) {
         /* stage_dsp compares the slot against 2 on its second instruction and
          * returns — before the per-stage branches and before it has done

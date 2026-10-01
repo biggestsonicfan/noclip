@@ -479,9 +479,8 @@ function horseRun(r, gallop, { ground }) {
     const s = { last: -1, mode: 'ring', n: 0, prev: [0, 0, 0], pos: null, heading: 0, speed: 0, away: 0 };
     const reset = () => Object.assign(s, { mode: 'ring', n: 0, prev: horseOffset(r.angle), pos: null, away: 0 });
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const block = (v) => ((Math.round(v) + 1024) >> 7) & 15;
     const inView = (cam, x, z) => !cam
-        || (Math.abs(block(x) - block(cam.x)) <= 2 && Math.abs(block(z) - block(cam.z)) <= 2);
+        || (Math.abs(blockOf(x) - blockOf(cam.x)) <= 2 && Math.abs(blockOf(z) - blockOf(cam.z)) <= 2);
     const take = (cam) => {
         s.heading = cam.heading;
         s.speed = HORSE_PACE * Math.min(Math.max(cam.speed, HORSE_MIN_SPEED), HORSE_MAX_SPEED);
@@ -570,10 +569,19 @@ export function courseObjectDraws(rom, course, ground, mode = 'race') {
     return out;
 }
 
-/** The grid block a point stands in — get_m_block. */
+/*
+ * The grid block a point stands in — get_m_block (Rev A 0x172a0): cvtri on x
+ * and z, add 1024, shift down 7, keep 4 bits. cvtri rounds by the AC
+ * register's mode, and the boot code's modac (0xa6c) clears it to round to
+ * nearest, ties to even — not truncation.
+ */
+const cvtri = (v) => {
+    const r = Math.round(v);
+    return r - v === 0.5 && (r & 1) ? r - 1 : r;
+};
+const blockOf = (v) => ((cvtri(v) + 1024) >> 7) & 15;
 export function gridBlock(x, z) {
-    const c = (v) => ((Math.round(v) + 1024) >> 7) & 15;
-    return (c(z) << 4) | c(x);
+    return (blockOf(z) << 4) | blockOf(x);
 }
 
 /*
@@ -599,7 +607,7 @@ export function gridBlock(x, z) {
 export function courseReach(rom, course) {
     const lanes = carLanes(rom, course);
     if (!lanes) return null;
-    const on = new Set(lanes.map(([x, , z]) => boardBlock(x, z)));
+    const on = new Set(lanes.map(([x, , z]) => gridBlock(x, z)));
     const reach = new Set();
     for (const b of on) {
         for (let dz = -AREA_REACH; dz <= AREA_REACH; dz++) {
@@ -637,8 +645,6 @@ export function carLanes(rom, course) {
     }
     return out;
 }
-/* get_m_block as the board computes it, cvtri truncating toward zero. */
-const boardBlock = (x, z) => ((((Math.trunc(z) + 1024) >> 7) & 15) << 4) | (((Math.trunc(x) + 1024) >> 7) & 15);
 
 /*
  * The road under a point, for the pylons: the course's own geometry standing
@@ -665,7 +671,7 @@ export function courseGround(blockModel, lanes = null) {
     return (x, z) => {
         /* The decoder has negated Z, so the point is (x, -z) in its frame. */
         const px = x, pz = -z;
-        const bx = ((Math.round(x) + 1024) >> 7) & 15, bz = ((Math.round(z) + 1024) >> 7) & 15;
+        const bx = blockOf(x), bz = blockOf(z);
         let road = null;
         if (lanes?.length) {
             let near = Infinity;
