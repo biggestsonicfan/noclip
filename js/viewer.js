@@ -428,6 +428,8 @@ const FRAG_SHADER = /* glsl */`
     // with L (model2rd.ipp fetch_bilinear_texel). At L = 0 that reduces to the
     // tile itself. The arithmetic is unsigned because the board's is: the
     // subtraction wraps, and that wrap is what puts the mips where they are.
+    // It is levelOrigin in js/atlas.js, which texture.js writes the mips
+    // through; change the two together.
     ivec4 levelTile(int L) {
         int sheet = flags(4) ? 1 : 0;
         uint x = (uint(int(vTile.x)) - 2048u) >> uint(L);

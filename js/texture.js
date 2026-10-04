@@ -29,11 +29,14 @@
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
+import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
+
+export { SHEET_BYTES };
 
 /* Texture RAM: two 1 MB sheets, each stored 1024x2048 and read as a logical
- * 2048x1024 (x >= 1024 folds back with y ^= 1024). One halfword is a 2x2 block
- * of 4-bit texels, so a texel row is 512 bytes and a row-pair is 0x400. */
-export const SHEET_BYTES = 0x100000;
+ * 2048x1024 (x >= 1024 folds back with y ^= 1024; atlas.js has the layout).
+ * One halfword is a 2x2 block of 4-bit texels, so a texel row is 512 bytes and
+ * a row-pair is 0x400. */
 const SHEET0 = 0;
 const SHEET1 = SHEET_BYTES;
 const ROW_PAIR = 0x400;
@@ -117,44 +120,37 @@ class BitReader {
 /*
  * Turn a page's logical (y, x) origin and bank bit into the list of texram
  * addresses its levels are written to: entry 0 is the full-size page, entries
- * 1.. are the mip chain, which lives at +0xC0000 and alternates banks at every
- * level. A byte address in a sheet is y * 512 + x, and x >= 1024 folds to
- * y + 1024 — the same fold atlas.js undoes when it reads the sheets back.
+ * 1.. are the mip chain. Each level goes where the board looks for it when it
+ * samples (levelOrigin in atlas.js), so the sheets are written by the same
+ * arithmetic the shader reads them with. sub_4C444 gets there by a running
+ * offset from +0xC0000 instead, halving x and y to an even texel at every
+ * level; that lands on the same bytes for every even origin, and a page
+ * origin is always a multiple of 32.
  */
 function pageDestinations(y, x, bank) {
-    /* Bank bit 0 picks which sheet holds the full-size level; the mip chain
-     * then alternates, so the two run in opposite phase. */
-    let near = (bank & 1) ? SHEET0 : SHEET1;
-    let far = (bank & 1) ? SHEET1 : SHEET0;
-
-    const dest = [];
-
+    let sheet = pageSheet(bank);
+    let first = 0;
     if ((x & 0x400) && (y & 0x200)) {
-        /* Folded page in the lower half: no full-size level, only mips. */
+        /* An origin inside the mip area: a page with no full-size level, only
+         * mips. They are the mips of the page at twice the distance on the
+         * other sheet, so the chain starts at that page's level 1. */
         x = (x & ~0x400) << 1;
         y = (y & ~0x200) << 1;
-    } else {
-        const off = (x & 0x400)
-            ? (((y + 0x400) << 9) + (x & ~0x400))   /* fold x into y */
-            : ((y << 9) + x);
-        dest.push(near + off);
-        [near, far] = [far, near];
+        sheet ^= 1;
+        first = 1;
     }
-
-    near += 0xc0000;
-    far += 0xc0000;
-
-    let oy = 0, ox = 0;
-    for (let level = 9; level >= 1; level--) {
-        y = (y >> 1) & ~1;
-        x = (x >> 1) & ~1;
-        dest.push(near + (((oy + y) << 9) + (ox + x)));
-        [near, far] = [far, near];
-        const step = 1 << level;
-        ox += step;
-        oy += step >> 1;
+    const dest = [];
+    for (let L = first; L <= 9; L++) {
+        const at = levelOrigin(x, y + sheet * SHEET_H, L);
+        dest.push(texelByte(at.x, at.y));
     }
     return dest;
+}
+
+/* Bank bit 0 set puts a page's full-size level on sheet 0, clear on sheet 1;
+ * its mips then alternate from there. */
+function pageSheet(bank) {
+    return (bank & 1) ? 0 : 1;
 }
 
 /* ---- Raw pages (send_beta_data) ------------------------------------------ */
@@ -503,7 +499,7 @@ function readWord(b, i) {
 export function texturePages(rom, texSet) {
     return setPages(rom, texSet)
         .filter(({ x, y }) => !((x & 0x400) && (y & 0x200)))   /* mips only, no full size */
-        .map(({ x, y, origin }) => ({ x, y: y + ((origin & 1) ? 0 : 1024) }));
+        .map(({ x, y, origin }) => ({ x, y: y + pageSheet(origin) * SHEET_H }));
 }
 
 /*
