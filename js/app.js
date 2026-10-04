@@ -1529,7 +1529,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
         };
         state.anim.entries.push(item);
     }
-    if (windowed && entry.block != null) state.anim.blocks.push({ entry, mesh, lines, item });
+    if (windowed && (entry.block != null || entry.inView)) state.anim.blocks.push({ entry, mesh, lines, item });
     if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
         state.anim.billboards.push({ entry, mesh, lines });
     }
@@ -1792,10 +1792,11 @@ function liveCamera(frame) {
 /*
  * The blocks set_area_block marks round the camera — the stage's `area`, see
  * courseArea in js/daytona.js: on a course drawn the board's way, show the
- * draws whose block is in it and hide the rest, once a rendered frame, since
- * the camera moves whether the stage runs or not. A draw that hides itself (a
- * dark frame, a horse gone) stays as its own step left it, and a horse that
- * has bolted is in the block it has run to.
+ * blocks in it and the objects whose routine's test it passes (`inView`, see
+ * SHOWN there) and hide the rest, once a rendered frame, since the camera
+ * moves whether the stage runs or not. A draw that hides itself (a dark
+ * frame, a horse gone) stays as its own step left it, and a horse that has
+ * bolted is in the block it has run to.
  */
 function stepBlockWindow() {
     const blocks = state.anim.blocks;
@@ -1803,10 +1804,11 @@ function stepBlockWindow() {
     if (!blocks?.length || !area) return;
     /* Read afresh rather than through liveCamera, which keeps one reading
      * per stage frame and so would stand still while the stage is held. */
-    const open = area(cameraOnCourse());
+    const v = area(cameraOnCourse());
     for (const { entry, mesh, lines, item } of blocks) {
-        const shown = open.has(item?.block ?? entry.block) && (item?.shown ?? true)
-            && state.layerOn[entry.layer] !== false;
+        const inView = item?.block != null ? v.area.has(item.block)
+            : entry.inView ? entry.inView(v) : v.area.has(entry.block);
+        const shown = inView && (item?.shown ?? true) && state.layerOn[entry.layer] !== false;
         mesh.visible = shown;
         if (lines) {
             lines.userData.hidden = !shown;

@@ -2138,9 +2138,10 @@ function daytonaBuild(spec) {
         /* What stands along the courses — see DAYTONA_OBJECTS_A. */
         objects: spec.objects ?? null,
         /*
-         * The two tables set_area_block cuts the 5x5 round the camera by:
+         * The tables set_area_block cuts the 5x5 round the camera by:
          * `heading`, the four record pointers its heading cut picks between
-         * by quarter turn, and `clip`, extra_clip's range table per course.
+         * by quarter turn, `clip`, extra_clip's range table per course, and
+         * `order`, the order it walks the cells in, which picks the near set.
          * See courseArea in js/daytona.js.
          */
         area: spec.area ?? null,
@@ -2186,8 +2187,16 @@ function daytonaBuild(spec) {
  *
  * Revision A and the five sets built on it share one layout; the Special
  * Edition moved its tables and put back the second crowd the 1993 version
- * had. The 1993 version writes several routines its own way — see
- * DAYTONA_OBJECTS_93.
+ * had, and the Saturn advertisements set is the Special Edition's code with
+ * its tables moved on again. The 1993 version writes several routines its own
+ * way — see DAYTONA_OBJECTS_93.
+ *
+ * `shown` names the routines that decide whether to draw other than as
+ * SHOWN in js/daytona.js has their kind: the two lights that look at fixed
+ * blocks — 0x7A or 0x6A in the area, 0x99 or 0x89 near — and the wall, drawn
+ * while the player is between points 520 and 576 (the halfwords at Rev A
+ * 0x2207C). Each crowd carries its own (`shown`): the shuttle's points
+ * 760-830, the plaza's 149-193.
  */
 const DAYTONA_KINDS_A = {
     0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
@@ -2205,27 +2214,48 @@ const DAYTONA_OBJECTS_A = {
     rankBoard: 0x23607c, rankCars: 0x2360b8,
     windmill: { sails: 0x2361b0, still: [0x2843e6c, 0x2843e80] },
     birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
-    crowds: [{ list: 0x236e38, count: 12 }],
+    crowds: [{ list: 0x236e38, count: 12, shown: { road: [0x2f8, 0x33e] } }],
     pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+    shown: { 0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x22018: { road: [0x208, 0x240] } },
+};
+const DAYTONA_KINDS_SE = {
+    0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+    0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+    0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
+    0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
+    0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
+    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+    0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
+    0x226d4: 'horse', 0x22aec: 'curtainCall',
+};
+const DAYTONA_SHOWN_SE = {
+    0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x220e4: { road: [0x208, 0x240] },
 };
 const DAYTONA_OBJECTS_SE = {
-    at: 0x348c8,
-    kinds: {
-        0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
-        0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
-        0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
-        0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
-        0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
-        0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
-        0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
-        0x226d4: 'horse', 0x22aec: 'curtainCall',
-    },
+    at: 0x348c8, kinds: DAYTONA_KINDS_SE, shown: DAYTONA_SHOWN_SE,
     cycles: 0x23780c, checkpoints: 0x237a2c, spinY: -0x100,
     rankBoard: 0x236d48, rankCars: 0x236d84,
     windmill: { sails: 0x236e7c, still: [0x2843e6c, 0x2843e80] },
     birds: 0x234848, horses: 0x2347c8, jeffry: 0x28478a0,
-    crowds: [{ list: 0x237c44, count: 9 }, { list: 0x237b24, count: 12 }],
+    crowds: [
+        { list: 0x237c44, count: 9, shown: { road: [0x95, 0xc1] } },
+        { list: 0x237b24, count: 12, shown: { road: [0x2f8, 0x33e] } },
+    ],
     pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+};
+/* The Saturn advertisements set: the Special Edition's routines at the same
+ * places, its tables 0x510 on and its pylons' models 0x400 back. */
+const DAYTONA_OBJECTS_S = {
+    at: 0x34dd8, kinds: DAYTONA_KINDS_SE, shown: DAYTONA_SHOWN_SE,
+    cycles: 0x237d1c, checkpoints: 0x237f3c, spinY: -0x100,
+    rankBoard: 0x237258, rankCars: 0x237294,
+    windmill: { sails: 0x23738c, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x234d58, horses: 0x234cd8, jeffry: 0x28478a0,
+    crowds: [
+        { list: 0x238154, count: 9, shown: { road: [0x95, 0xc1] } },
+        { list: 0x238034, count: 12, shown: { road: [0x2f8, 0x33e] } },
+    ],
+    pylons: { 0x21730: 0x28508e0, 0x21764: 0x28508f0, 0x21798: 0x2850900, 0x217cc: 0x28508d0 },
 };
 
 /*
@@ -2233,7 +2263,9 @@ const DAYTONA_OBJECTS_SE = {
  * is a routine of its own with its scale and list inline (`checkpointsAt`), one
  * of its two prop routines walks a list of its own (`lists`), the dice turn the
  * other way, and the crowd routine draws both crowds an instruction at a time,
- * traced by daytona-tables.mjs into `groups`.
+ * traced by daytona-tables.mjs into `groups`. Its two plain prop routines and
+ * three of its check points test the near set where Revision A's test the
+ * area (`shown`).
  */
 const DAYTONA_OBJECTS_93 = {
     at: 0x36940,
@@ -2250,6 +2282,10 @@ const DAYTONA_OBJECTS_93 = {
         0x24854: 'horse', 0x24cd0: 'curtainCall',
     },
     lists: { 0x2024c: 0x238b04 },
+    shown: {
+        0x203a4: 'near', 0x20450: 'near', 0x209e4: { area: [0x7a, 0x6a] }, 0x20a7c: { near: [0x99, 0x89] },
+        0x22030: 'near', 0x22090: 'near', 0x2214c: 'near', 0x23ce0: { road: [0x208, 0x240] },
+    },
     cycles: 0x220e7c,
     checkpointsAt: {
         0x22030: { scale: 1, list: null, world: true },
@@ -2265,8 +2301,9 @@ const DAYTONA_OBJECTS_93 = {
     windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
     birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
     crowds: [{
+        /* The plaza's, while the crowd's own block is near. */
+        shown: 'near',
         groups: [
-            /* The plaza's, while its block is in view. */
             { at: [-798, 33.58, 176.8], turns: [['y', 23301]], list: 0x238d20 },
             { at: [-813, 33.58, 187.7], turns: [['y', 21845]], list: 0x238d30 },
             { at: [-804, 33.58, 174], turns: [['y', 22573]], list: 0x238d50 },
@@ -2276,7 +2313,11 @@ const DAYTONA_OBJECTS_93 = {
             { at: [-783.5, 33.58, 162], turns: [['y', 26942]], list: 0x238d90 },
             { at: [-807, 33.58, 191], turns: [['y', 22027]], list: 0x238da0 },
             { at: [-802, 33.58, 182.5], turns: [['y', 22209]], list: 0x238db0 },
-            /* The shuttle's, while the player is on its stretch. */
+        ],
+    }, {
+        /* The shuttle's, while the player is on its stretch. */
+        shown: { road: [0x2f8, 0x33e] },
+        groups: [
             { at: [491.8, 14.5, -923], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d20 },
             { at: [390, 13.7, -970.8], turns: [['z', 0], ['y', 31675], ['x', 0]], list: 0x238d30 },
             { at: [479.5, 13.9, -935], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d50 },
@@ -2313,7 +2354,7 @@ const daytona93 = daytonaBuild({
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
     objects: DAYTONA_OBJECTS_93,
-    area: { heading: 0x17658, clip: 0x17150 },
+    area: { heading: 0x17658, clip: 0x17150, order: 0x17104 },
     /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
      * was worked out on do not carry; its song table is in the program ROM,
      * at 0x231E70. */
@@ -2334,7 +2375,7 @@ const DAYTONA_REV_A = {
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
-    area: { heading: 0x17908, clip: 0x175e0 },
+    area: { heading: 0x17908, clip: 0x175e0, order: 0x17594 },
 };
 
 const daytona = daytonaBuild({
@@ -2354,7 +2395,7 @@ const daytonase = daytonaBuild({
     cabinets: DAYTONA_CABINETS_SE,
     sky: { table: 0x47c8 },
     objects: DAYTONA_OBJECTS_SE,
-    area: { heading: 0x17d84, clip: 0x17a5c },
+    area: { heading: 0x17d84, clip: 0x17a5c, order: 0x17a10 },
 });
 
 const daytonas = daytonaBuild({
@@ -2364,7 +2405,9 @@ const daytonas = daytonaBuild({
     program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
     bankTable: 0x15b4,
-    area: { heading: 0x17df4, clip: 0x17acc },
+    sky: { table: 0x4838 },
+    objects: DAYTONA_OBJECTS_S,
+    area: { heading: 0x17df4, clip: 0x17acc, order: 0x17a80 },
 });
 
 const daytonat = daytonaBuild({

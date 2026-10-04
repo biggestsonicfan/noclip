@@ -334,11 +334,12 @@ of the window also stops on its ellipse, as it does on the board.
 (`M_mode` is `1 << B_mode`, so `0x10000000` is `STAFF_DSP`, the ending) and a
 flag `gear_select` sets when a button is held at the transmission select,
 which `entry_car_event_open` reads to enter no rival cars — time attack. So a
-picker on the Stages panel draws a course as a race (which is also what attract
-mode draws), in time attack — six more flocks of gulls that grow as the race
-goes on, a third group over the first, and the rank board showing your own
-number — or in the ending, with the third group of gulls and the horses'
-curtain call.
+picker on the Stages panel draws a course as a race, in attract mode (which
+differs only in the windmill: in a race it shows on a stretch of road, in
+attract mode while its block is in view), in time attack — six more flocks of
+gulls that grow as the race goes on, a third group over the first, and the rank
+board showing your own number — or in the ending, with the third group of gulls
+and the horses' curtain call.
 
 What is left out: the cones stand where they are placed and are not knocked
 flying, stood on the road the course draws rather than on the collision
