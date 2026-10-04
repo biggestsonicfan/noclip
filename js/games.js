@@ -1997,8 +1997,11 @@ function daytonaBuild(spec) {
     return {
         id: spec.id,
         name: spec.name,
-        /* This build's own program pair, which no other Daytona set carries. */
+        /* This build's own program pair, which no other Daytona set carries,
+         * and their checksums, for a zip that spells the labels otherwise
+         * (`daytonas.zip` drops the `ic` from both). */
         identify: [spec.program[1], spec.program[3]],
+        identifyCrc: [spec.program[2], spec.program[4]],
         regions: {
             /* Two 128KB EPROMs, and the board maps the second half twice: at
              * 0x20000 like any other and again at 0x00220000, which is the
@@ -2477,12 +2480,18 @@ export function detectGame(names, nested = null) {
  * @param {Set<string>|string[]} names  every member name across the zips
  * @param {Set<string>} [nested]  those of them that exist only inside a
  *   clone's directory
+ * @param {Map<number, string>} [byCrc]  a member's name by its checksum, for
+ *   a profile whose `identifyCrc` lets a chip go by another label
  * @returns {object[]} the profiles, the top-level one first
  */
-export function detectGames(names, nested = null) {
+export function detectGames(names, nested = null, byCrc = null) {
     const have = names instanceof Set ? names : new Set(names);
-    const has = (m) => have.has(m);
-    const all = GAMES.filter((g) => g.identify.every(has));
-    const top = all.filter((g) => g.identify.every((m) => !nested?.has(m)));
+    /* The labels a profile is known by, as these zips spell them; null where
+     * one is missing. */
+    const labels = (g) => g.identify.map((m, i) => (have.has(m)
+        ? m
+        : (g.identifyCrc && byCrc?.get(g.identifyCrc[i])) ?? null));
+    const all = GAMES.filter((g) => labels(g).every((m) => m !== null));
+    const top = all.filter((g) => labels(g).every((m) => !nested?.has(m)));
     return [...top, ...all.filter((g) => !top.includes(g))];
 }
