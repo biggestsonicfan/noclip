@@ -10,7 +10,7 @@ import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, B
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
-import { MODES as OBJECT_MODES, gridBlock, inWindow } from './daytona.js';
+import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
 import {
@@ -1747,52 +1747,60 @@ function stepBillboards() {
 }
 
 /*
- * The camera as a `live` draw sees it: where it stands in the board's frame
- * (the decoder's Z negated back), the heading it faces as a board angle — the
- * one a model turned by it faces, (-sin h, cos h) across the ground — and how
- * far it has moved per frame since it was last asked. Computed once a frame.
+ * The camera in the board's frame: where it stands (the decoder's Z negated
+ * back) and the heading it faces as a board angle — the one a model turned by
+ * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's.
  */
 const LIVE_POS = new THREE.Vector3();
 const LIVE_FWD = new THREE.Vector3();
 const LIVE_INV = new THREE.Matrix4();
-function liveCamera(frame) {
-    const a = state.anim;
-    if (a.liveCam && a.liveCam.frame === frame) return a.liveCam;
+const boardAngle = (x, z) => Math.round((Math.atan2(-x, z) * 65536) / (2 * Math.PI)) & 0xffff;
+function cameraOnCourse() {
     const { camera, root } = state.viewer;
     camera.updateMatrixWorld();
     root.updateMatrixWorld();
     LIVE_INV.copy(root.matrixWorld).invert();
     LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
     camera.getWorldDirection(LIVE_FWD).transformDirection(LIVE_INV);
-    const x = LIVE_POS.x, y = LIVE_POS.y, z = -LIVE_POS.z;
-    const heading = Math.round((Math.atan2(-LIVE_FWD.x, -LIVE_FWD.z) * 65536) / (2 * Math.PI)) & 0xffff;
+    return { x: LIVE_POS.x, y: LIVE_POS.y, z: -LIVE_POS.z, heading: boardAngle(LIVE_FWD.x, -LIVE_FWD.z) };
+}
+
+/*
+ * The camera as a `live` draw sees it: cameraOnCourse, and how far it has moved
+ * across the ground per frame since it was last asked (`speed`) and along what
+ * heading (`course`) — the two a car keeps at +0x34 and +0x48 — the heading it
+ * faces while it stands. Computed once a frame.
+ */
+function liveCamera(frame) {
+    const a = state.anim;
+    if (a.liveCam && a.liveCam.frame === frame) return a.liveCam;
+    const cam = cameraOnCourse();
     const prev = a.liveCam;
     const frames = prev ? Math.max(1, frame - prev.frame) : 1;
-    const speed = prev ? Math.hypot(x - prev.x, z - prev.z) / frames : 0;
-    a.liveCam = { frame, x, y, z, heading, speed };
+    const dx = prev ? cam.x - prev.x : 0, dz = prev ? cam.z - prev.z : 0;
+    const speed = Math.hypot(dx, dz) / frames;
+    const course = speed > 0 ? boardAngle(dx, dz) : cam.heading;
+    a.liveCam = { frame, ...cam, speed, course };
     return a.liveCam;
 }
 
 /*
- * The blocks set_area_block marks, round the camera's: on a course drawn the
- * board's way, show the draws whose block is in the window and hide the rest,
- * once a rendered frame, since the camera moves whether the stage runs or not.
- * A draw that hides itself (a dark frame, a horse gone) stays as its own step
- * left it.
+ * The blocks set_area_block marks round the camera — the stage's `area`, see
+ * courseArea in js/daytona.js: on a course drawn the board's way, show the
+ * draws whose block is in it and hide the rest, once a rendered frame, since
+ * the camera moves whether the stage runs or not. A draw that hides itself (a
+ * dark frame, a horse gone) stays as its own step left it, and a horse that
+ * has bolted is in the block it has run to.
  */
 function stepBlockWindow() {
     const blocks = state.anim.blocks;
-    if (!blocks?.length) return;
+    const area = state.stages[state.stageIndex]?.area;
+    if (!blocks?.length || !area) return;
     /* Read afresh rather than through liveCamera, which keeps one reading
      * per stage frame and so would stand still while the stage is held. */
-    const { camera, root } = state.viewer;
-    camera.updateMatrixWorld();
-    root.updateMatrixWorld();
-    LIVE_INV.copy(root.matrixWorld).invert();
-    LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
-    const at = gridBlock(LIVE_POS.x, -LIVE_POS.z);
+    const open = area(cameraOnCourse());
     for (const { entry, mesh, lines, item } of blocks) {
-        const shown = inWindow(entry.block, at) && (item?.shown ?? true)
+        const shown = open.has(item?.block ?? entry.block) && (item?.shown ?? true)
             && state.layerOn[entry.layer] !== false;
         mesh.visible = shown;
         if (lines) {
@@ -1874,6 +1882,7 @@ function stepStageAnimation(now) {
             const r = entry.live(frame, liveCamera(frame));
             swapFrame(it, r.model);
             it.shown = !r.hidden;
+            it.block = r.block;
             it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
             placePart(it, composeOps(ANIM_SCRATCH, r.ops));
         } else if (typeof entry.ops === 'function') {

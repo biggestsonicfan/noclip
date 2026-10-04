@@ -13,7 +13,7 @@
  */
 
 import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
-import { readObjectRecords, courseObjectDraws, courseGround, courseReach } from './daytona.js';
+import { readObjectRecords, courseObjectDraws, courseGround, courseReach, courseArea } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 
 /* set_material (0x29154) uploads 32 material slots to the geometry engine, and
@@ -538,6 +538,8 @@ export function readCourseStages(rom) {
              * reach of, the whole course at once. */
             views: COURSE_VIEWS,
             view: 'reach',
+            /* The blocks in view round a camera, for the first — courseArea. */
+            area: courseArea(rom, c),
             union: 'reach',
             texSets: [c],
             texSet: [c, c],

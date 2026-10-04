@@ -85,6 +85,7 @@ const u32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint32(v.
 const f32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getFloat32(v.off, true); };
 const s16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getInt16(v.off, true); };
 const u16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint16(v.off, true); };
+const u8 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint8(v.off); };
 
 /* A model record's address as a model-table index, or -1. */
 function modelOf(rom, ptr) {
@@ -435,15 +436,9 @@ const HORSE_SHY = 8;                   /* 0x41000000 */
 const HORSE_PACE = 1.5;                /* 0x3FC00000 */
 /* uma_nashi_int: how long a horse that has run out of sight stays gone. */
 const HORSE_AWAY = 5 << 9;
-/* The camera is not a car. It may be standing still when it reaches a horse,
- * which would leave the horse galloping on the spot, or it may have jumped, and
- * a jump measured as a speed would throw the horse out of sight in a frame. So
- * the speed it lends a horse is kept between these two, which are the
- * explorer's numbers, not the board's. */
-const HORSE_MIN_SPEED = 1.0;
-const HORSE_MAX_SPEED = 6.0;
-/* The frames a bolt is stepped through to catch up with the clock, as the
- * trails and the sway chains are; past that it is jumped. */
+/* The frames a horse is stepped through to catch up with the clock, as the
+ * trails and the sway chains are; past that it is jumped. The explorer's
+ * number, not the board's: the board steps every frame. */
 const HORSE_CATCH_UP = 120;
 
 /* Where on its ellipse a horse is after `n` steps, as uma_dsp draws it. */
@@ -457,72 +452,117 @@ function horseOffset(a) {
 }
 
 /*
- * The bolt: uma_getaway_chk, uma_getaway_int and uma_nashi_int, with the
- * camera standing in for the car.
+ * The bolt (Rev A 0x22608-0x22A20), with the camera standing in for the car.
  *
- * On its ellipse a horse checks, each frame, how far the car is from where it
- * stood the frame before; inside 8 it bolts. Bolting, it takes the car's
- * heading and half again its speed and runs straight along that heading on
- * the ground (get_y_position under it, looking for the road nearest the
- * height it runs at), and whenever the car comes within 8 again it takes them afresh.
- * TGP function 0x47 steps it: by speed along the heading, which is the
- * direction the model faces when turned by it. It runs until its block is out
- * of view — the 5x5 blocks round the car that set_area_block marks, less the
- * heading clip extra_clip takes off, which is not ported — and is then gone
- * for 2560 frames before uma_int puts it back on its ellipse.
+ * uma_int (0x22608) zeroes the step count and hands over to uma_dsp (0x22630),
+ * which does nothing at all while the horse's block is out of the area
+ * set_area_block marks (see courseArea). In it, uma_getaway_chk (0x2276C) asks
+ * TGP function 0x43 how far the car is, across the ground, from where the horse
+ * stood the frame before — the record's place plus the offset at +0x34/+0x3C —
+ * and inside 8 it bolts the next frame; either way this frame steps the count,
+ * stores the new offset and draws on the ellipse.
  *
- * The board also stops a horse's ellipse while its block is out of view. So
- * does the explorer when the course is drawn as the board draws it, round the
- * camera's block; drawn whole, the ellipse always runs.
+ * Bolting (0x2283C) the horse starts from where it last stood, takes the
+ * car's heading (car +0x48) and half again its speed (car +0x34), and runs on
+ * into the step (0x228B0) the same frame. Each frame of the run first asks
+ * uma_getaway_chk2 (0x227DC) whether the car is within 8 of it, and if so it
+ * takes heading and speed afresh the next frame; then, while its own block is
+ * in the area, it puts itself on the road with get_y_position, has TGP
+ * function 0x47 step it by the speed along the heading — the direction the
+ * model faces when turned by it — and is drawn there. When its block leaves
+ * the area it is gone: uma_nashi_int (0x229E4) counts 2560 frames and goes
+ * back to uma_int. The place it ran to is left at +0x34/+0x3C, so the first
+ * check back on the ellipse is against the record's place plus that, as the
+ * board's is.
+ *
+ * Measured in MAME, car +0x34 is the car's move across the ground per frame
+ * and car +0x48 the heading it moves along, so the camera lends the same: how
+ * far it has moved across the ground per frame and which way (liveCamera in
+ * js/app.js). Standing still it lends nothing, and the horse stands too, as it
+ * does on the board for a car stopped beside it.
+ *
+ * Drawn whole ('reach'), the course has no area and the ellipse always runs,
+ * but a bolt still ends where the board's would, at the area round the camera.
  *
  * Stateful, unlike everything else here, so it is a `live` hook the app steps
- * with the camera: `live(frame, cam)` returns the ops, the model and whether
- * the draw is hidden.
+ * with the camera: `live(frame, cam)` returns the ops, the model, whether the
+ * draw is hidden and the block it stands in.
  */
-function horseRun(r, gallop, { ground, view }) {
-    const s = { last: -1, mode: 'ring', n: 0, prev: [0, 0, 0], pos: null, heading: 0, speed: 0, away: 0 };
-    const reset = () => Object.assign(s, { mode: 'ring', n: 0, prev: horseOffset(r.angle), pos: null, away: 0 });
+function horseRun(r, gallop, { ground, view, area }) {
+    /* uma_int's get_m_block: the block the task stands in, which is not
+     * always the block whose list the record is kept in. */
+    const home = gridBlock(r.pos[0], r.pos[2]);
+    const s = {
+        last: -1, mode: 'start', n: 0, prev: [0, 0, 0], pos: [0, 0, 0], y: 0, at: 0,
+        heading: 0, speed: 0, away: 0, drawn: null,
+    };
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const inView = (cam, x, z) => !cam || inWindow(gridBlock(x, z), gridBlock(cam.x, cam.z));
+    const inArea = (cam, block) => !cam || area(cam).has(block);
+    /* 0x228B0: uma_getaway_chk2, then a step along the heading. */
+    const run = (cam) => {
+        s.mode = near(cam, s.pos[0], s.pos[2]) ? 'take' : 'bolt';
+        s.n++;
+        s.at = gridBlock(s.pos[0], s.pos[2]);
+        if (!inArea(cam, s.at)) { s.mode = 'away'; s.away = 0; return; }
+        /* It is drawn at the height it had: the routine loads the place before
+         * get_y_position stores the new one. */
+        s.y = s.pos[1];
+        const g = ground?.(s.pos[0], s.pos[2], s.pos[1]);
+        if (g) s.pos[1] = g.y;
+        const h = (s.heading & 0xffff) * (2 * Math.PI / 65536);
+        s.pos[0] -= Math.sin(h) * s.speed;
+        s.pos[2] += Math.cos(h) * s.speed;
+        s.prev = [s.pos[0], 0, s.pos[2]];
+        s.drawn = 'bolt';
+    };
+    /* 0x2286C: the car's heading and half again its speed, then on into it. */
     const take = (cam) => {
-        s.heading = cam.heading;
-        s.speed = HORSE_PACE * Math.min(Math.max(cam.speed, HORSE_MIN_SPEED), HORSE_MAX_SPEED);
+        s.heading = cam?.course ?? 0;
+        s.speed = HORSE_PACE * (cam?.speed ?? 0);
+        run(cam);
     };
     const step = (cam) => {
-        if (s.mode === 'ring') {
-            if (view === 'camera' && cam && !inWindow(r.block, gridBlock(cam.x, cam.z))) return;
-            const bolt = near(cam, r.pos[0] + s.prev[0], r.pos[2] + s.prev[2]);
+        s.drawn = null;
+        switch (s.mode) {
+        case 'start':           /* uma_int */
+            s.n = 0;
+            s.mode = 'ring';
+            return;
+        case 'ring':            /* uma_dsp */
+            if (view === 'camera' && !inArea(cam, home)) return;
+            if (near(cam, r.pos[0] + s.prev[0], r.pos[2] + s.prev[2])) s.mode = 'getaway';
             s.n++;
             s.prev = horseOffset(r.angle + (s.n << 6));
-            if (bolt) {
-                s.mode = 'bolt';
-                s.pos = [r.pos[0] + s.prev[0], r.pos[1], r.pos[2] + s.prev[2]];
-                take(cam);
-            }
+            s.drawn = 'ring';
             return;
-        }
-        if (s.mode === 'bolt') {
-            if (near(cam, s.pos[0], s.pos[2])) take(cam);
-            if (!inView(cam, s.pos[0], s.pos[2])) { s.n++; s.mode = 'away'; s.away = 0; return; }
-            const g = ground?.(s.pos[0], s.pos[2], s.pos[1]);
-            if (g) s.pos[1] = g.y;
-            const h = (s.heading & 0xffff) * (2 * Math.PI / 65536);
-            s.pos[0] -= Math.sin(h) * s.speed;
-            s.pos[2] += Math.cos(h) * s.speed;
-            s.n++;
+        case 'getaway':         /* uma_getaway_int */
+            s.pos = [r.pos[0] + s.prev[0], r.pos[1], r.pos[2] + s.prev[2]];
+            take(cam);
             return;
+        case 'take':
+            take(cam);
+            return;
+        case 'bolt':
+            run(cam);
+            return;
+        default:                /* uma_nashi_int */
+            if (++s.away >= HORSE_AWAY) s.mode = 'start';
         }
-        if (++s.away >= HORSE_AWAY) reset();
     };
     return (frame, cam) => {
-        if (s.last < 0 || frame < s.last) { reset(); s.last = frame - 1; }
+        if (s.last < 0 || frame < s.last) {
+            Object.assign(s, { mode: 'start', prev: [0, 0, 0], away: 0, drawn: null });
+            s.last = frame - 1;
+        }
         const from = Math.max(s.last + 1, frame - HORSE_CATCH_UP + 1);
         for (let f = from; f <= frame; f++) step(cam);
         s.last = frame;
         const model = gallop[s.n & 31];
-        if (s.mode === 'ring') return { model, ops: horseRing(r, s.n || 1) };
-        if (s.mode === 'bolt') return { model, ops: [T(...s.pos), RY(s.heading)] };
-        return { model, ops: [], hidden: true };
+        if (s.drawn === 'ring') return { model, ops: horseRing(r, s.n), block: home };
+        if (s.drawn === 'bolt') {
+            return { model, ops: [T(s.pos[0], s.y, s.pos[2]), RY(s.heading)], block: s.at };
+        }
+        return { model, ops: [], hidden: true, block: home };
     };
 }
 
@@ -547,9 +587,9 @@ export const MODES = [
 /**
  * The draws for one course's objects, in the explorer's shape.
  *
- * `view` is which blocks are drawn: 'camera' when only the window round the
- * camera's block is, as the board draws (see inWindow), and the horses then
- * keep to that too.
+ * `view` is which blocks are drawn: 'camera' when only the area round the
+ * camera is, as the board draws (see courseArea), and the horses then keep to
+ * that too.
  *
  * `ground(x, z, ref)` answers where the road is under a point — a height and
  * the turns that tip a model to its slope — see courseGround; the cones stand
@@ -559,7 +599,7 @@ export const MODES = [
 export function courseObjectDraws(rom, course, ground, mode = 'race', view = 'reach') {
     const O = rom.game.objects;
     if (!O) return [];
-    const ctx = { rom, O, course, ground, mode, view };
+    const ctx = { rom, O, course, ground, mode, view, area: courseArea(rom, course) };
     const out = [];
     for (const r of readObjectRecords(rom, course)) {
         /* sub_216e4 calls whatever routine its argument names, once a frame,
@@ -633,8 +673,9 @@ export function gridBlock(x, z) {
  *
  * It never draws a course whole. set_area_block takes the camera's block and
  * marks the 5x5 round it, and where that runs off the grid it masks the
- * columns and rows that would — the grid does not wrap; extra_clip then takes
- * off more by where on the road the car is. So a block is drawn only if a car
+ * columns and rows that would — the grid does not wrap; it then takes off more
+ * by where on the road the car is and which way the camera faces (courseArea).
+ * So a block is drawn only if a car
  * can stand within two blocks of it, and the road is in the ROM: the row
  * change_course_bank reads per course (the sky's `table`) names, at +0x10, the
  * car lines — eight lanes, each a pointer and a count of 28-byte points with x
@@ -667,17 +708,162 @@ const CAR_LANES = 8;
 const AREA_REACH = 2;
 
 /*
- * Whether set_area_block marks a block from the camera's: the 5x5 round it,
- * clipped at the grid's edge rather than wrapped, which two block numbers
- * already are. extra_clip's further cut by heading is not ported.
+ * The blocks set_area_block (Rev A 0x172E8) marks in view, at 0x501520 — the
+ * set every course block and every object task tests — for a camera at x, z
+ * facing `heading`, the board angle 0x5014A8 holds.
+ *
+ * It starts from the 5x5 round the block the point stands in (get_m_block),
+ * a bit a cell, (dz + 2) * 5 + (dx + 2), and takes off three things:
+ *
+ * - the cells off the grid's edge, which does not wrap;
+ * - extra_clip's (0x17688): by where on the road the player's car is, its
+ *   point along the car lines (car +0x12C, see courseRoad), a table per
+ *   course names ranges of points and for each a row of bits per grid row,
+ *   the cells to leave out — five rows, shifted to the column. Only Dinosaur
+ *   Canyon has any ranges (points 190-351 and 376-432); the other courses'
+ *   entry is the sentinel alone;
+ * - the heading cut (0x1770C, unnamed): of four 160-byte records in the data
+ *   ROM, one per quarter turn of the heading, two halves of six corner
+ *   points, each an offset from the block's corner and a mask of the cells
+ *   that corner opens. A corner is ahead when it is in the quarter that opens
+ *   45 degrees either side of the heading — both of its coordinates, turned
+ *   by -heading - 0x2000, not negative (0x17918). Each half opens the
+ *   first of its first two corners that is ahead; failing those, both of the
+ *   next two that are; failing any, the first of the last two. The centre is
+ *   always open.
+ *
+ * Checked against 0x501520 in MAME over 5,700 attract-mode frames on three
+ * courses: the same set on all but 23 — single cells whose corner stands
+ * within a unit and a half of the quarter's edge, where the TGP's sine and
+ * the explorer's differ, and the frames of a camera cut, where the board
+ * read the heading the frame before.
+ *
+ * `rom.game.area` is where the build keeps the two tables: `heading`, the
+ * four record pointers, and `clip`, extra_clip's pointer per course. Without
+ * them this is the 5x5 with the edge alone.
+ *
+ * `courseArea(rom, course)` gives `area({ x, y, z, heading })`, a Set of block
+ * numbers; asked again for the same camera it answers the same Set.
  */
-export function inWindow(block, camera) {
-    return Math.abs((block & 15) - (camera & 15)) <= AREA_REACH
-        && Math.abs((block >> 4) - (camera >> 4)) <= AREA_REACH;
+export function courseArea(rom, course) {
+    const A = rom.game.area;
+    const road = A ? courseRoad(rom, course) : null;
+    let key = null, last = null;
+    return (cam) => {
+        const k = `${cam.x},${cam.y},${cam.z},${cam.heading}`;
+        if (k === key) return last;
+        const block = gridBlock(cam.x, cam.z);
+        let open = AREA_ALL;
+        if (A) {
+            open = headingCut(rom, A.heading, cam.x, cam.z, cam.heading);
+            if (road) open &= ~roadCut(rom, A.clip, course, block, road(cam));
+        }
+        const out = new Set();
+        for (let i = 0; i < 25; i++) {
+            const dx = (i % 5) - AREA_REACH, dz = Math.floor(i / 5) - AREA_REACH;
+            const x = (block & 15) + dx, z = (block >> 4) + dz;
+            if ((open >> i) & 1 && x >= 0 && x < 16 && z >= 0 && z < 16) out.add((z << 4) | x);
+        }
+        key = k;
+        last = out;
+        return out;
+    };
+}
+const AREA_ALL = (1 << 25) - 1;
+
+/* The heading cut, 0x1770C: the cells open ahead of `heading`. */
+function headingCut(rom, table, x, z, heading) {
+    const rec = u32(rom, table + (((heading + 0x2000) >> 14) & 3) * 4);
+    const cx = cvtri(x) & ~127, cz = cvtri(z) & ~127;
+    const t = ((-heading - 0x2000) & 0xffff) * (2 * Math.PI / 65536);
+    const c = Math.cos(t), s = Math.sin(t);
+    /* The sign bit, so -0 is behind as on the board. */
+    const behind = (v) => v < 0 || Object.is(v, -0);
+    const ahead = (off) => {
+        const dx = cx + f32(rom, rec + off) - x, dz = cz + f32(rom, rec + off + 4) - z;
+        return !behind(c * dx - s * dz) && !behind(s * dx + c * dz);
+    };
+    const opens = (off) => u32(rom, rec + off + 8);
+    let open = 0;
+    for (const b of [0, 0x50]) {
+        if (ahead(b)) { open |= opens(b); continue; }
+        if (ahead(b + 0x0c)) { open |= opens(b + 0x0c); continue; }
+        if (ahead(b + 0x18)) open |= opens(b + 0x18);
+        if (ahead(b + 0x24)) open |= opens(b + 0x24);
+        if (open) continue;
+        if (ahead(b + 0x30)) open |= opens(b + 0x30);
+        else if (ahead(b + 0x3c)) open |= opens(b + 0x3c);
+    }
+    return open | (1 << 12);
 }
 
-/* Every point on a course's eight car lanes as [x, y, z] — the height is at +4,
- * between the two the grid reads — or null where the row names no lanes. */
+/* extra_clip, 0x17688: the cells left out at point `road` of the car lines.
+ * A range is 36 bytes, the first and last point and sixteen rows of bits. */
+function roadCut(rom, table, course, block, road) {
+    let rec = u32(rom, table + course * 4);
+    for (let i = 0; i < 64 && road > u16(rom, rec + 2); i++) rec += 36;
+    if (road < u16(rom, rec)) return 0;
+    const col = block & 15, row = block >> 4;
+    let cut = 0;
+    for (let k = 0; k < 5; k++) {
+        const bits = u16(rom, rec + 4 + ((row - AREA_REACH + k) & 15) * 2);
+        cut |= (((bits << 2) >> col) & 31) << (5 * k);
+    }
+    return cut;
+}
+
+/*
+ * Where along the road a camera is, as car +0x12C has it for the player's car
+ * (0x10F30): the point of the car lines that the road polygon under the car
+ * names. get_y_position (0x11C28) answers the polygon under a point as well as
+ * the height, and the car keeps it at +0x30 only when the byte the row's +0x0C
+ * names per polygon has 1 in its low four bits — a polygon of the road, so off
+ * it the car keeps the last; the row's +4 names a table, past an eight-byte
+ * head, of four bytes a polygon whose first half is that polygon's point.
+ * Measured in MAME, +0x12C is that point on every frame of a race, and
+ * courseGround at the car's logged place finds the car's polygon on 92% of
+ * them and the one before it on the rest. The computer's cars keep +0x30 from
+ * the lane point they are on instead, whose 28 bytes carry the polygon at
+ * +0x1A.
+ *
+ * Without the coprocessor ROM there is no ground to ask, and the nearest lane
+ * point stands in: the car's point on four frames in five, and otherwise
+ * mostly the one before it.
+ */
+function courseRoad(rom, course) {
+    const ground = courseGround(rom, course);
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
+    if (ground) {
+        const row = u32(rom, rom.game.sky.table + course * 4);
+        const points = u32(rom, row + 4), kinds = u32(rom, row + 12);
+        if (inData(points, 8) && inData(kinds, 4) && inData(u32(rom, kinds), 1)) {
+            const kind = u32(rom, kinds);
+            let poly = -1;
+            return (cam) => {
+                const p = ground(cam.x, cam.z, cam.y).poly;
+                if (p != null && (u8(rom, kind + p) & 15) === 1) poly = p;
+                const at = points + 8 + poly * 4;
+                return poly < 0 || !inData(at, 2) ? 0 : u16(rom, at);
+            };
+        }
+    }
+    const lanes = carLanes(rom, course);
+    return lanes ? (cam) => nearestPoint(lanes, cam) : null;
+}
+
+/* Which point along its lane the lane point nearest the camera is. */
+function nearestPoint(lanes, cam) {
+    let best = Infinity, at = 0;
+    for (const [x, y, z, i] of lanes) {
+        const d = (x - cam.x) ** 2 + (y - cam.y) ** 2 + (z - cam.z) ** 2;
+        if (d < best) { best = d; at = i; }
+    }
+    return at;
+}
+
+/* Every point on a course's eight car lanes as [x, y, z, i] — the height is at
+ * +4, between the two the grid reads, and `i` is where along its lane the point
+ * is — or null where the row names no lanes. */
 export function carLanes(rom, course) {
     const table = rom.game.sky?.table;
     if (table == null) return null;
@@ -694,7 +880,7 @@ export function carLanes(rom, course) {
             const q = p + i * 28;
             const x = f32(rom, q), y = f32(rom, q + 4), z = f32(rom, q + 8);
             if (!(Math.abs(x) < 1024 && Math.abs(z) < 1024)) return null;
-            out.push([x, y, z]);
+            out.push([x, y, z, i]);
         }
     }
     return out;
@@ -735,7 +921,8 @@ export function carLanes(rom, course) {
  * the point is in — and turns X by -atan2(nz, ny) and then Z by
  * atan2(nx, ny), TGP function 0x0A being atan2 in the board's 16-bit angle.
  *
- * `ground(x, z, ref)` gives { y, tilt } — or null for a set without the
+ * `ground(x, z, ref)` gives { y, tilt, poly }, `poly` the polygon's number
+ * where there is one — or null for a set without the
  * coprocessor ROM, which leaves the callers on the record's own height.
  */
 const fr = Math.fround;
@@ -773,7 +960,7 @@ export function courseGround(rom, course) {
             if (!best || m <= best.m) best = { m, y, p };
         }
         if (!best || Object.is(best.y, 0)) return { y: NO_GROUND, tilt: [] };
-        return { y: best.y, tilt: quadTilt(corners(best.p)) };
+        return { y: best.y, tilt: quadTilt(corners(best.p)), poly: best.p };
     };
 }
 

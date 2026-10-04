@@ -2138,6 +2138,13 @@ function daytonaBuild(spec) {
         /* What stands along the courses — see DAYTONA_OBJECTS_A. */
         objects: spec.objects ?? null,
         /*
+         * The two tables set_area_block cuts the 5x5 round the camera by:
+         * `heading`, the four record pointers its heading cut picks between
+         * by quarter turn, and `clip`, extra_clip's range table per course.
+         * See courseArea in js/daytona.js.
+         */
+        area: spec.area ?? null,
+        /*
          * The sky, which is not geometry but the tile layer's panorama: 256
          * tiles round the full turn, eight patterns of 32, streamed into the
          * tilemap as the car turns (js/scroll.js, buildCourseSky). `table` is
@@ -2306,6 +2313,7 @@ const daytona93 = daytonaBuild({
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
     objects: DAYTONA_OBJECTS_93,
+    area: { heading: 0x17658, clip: 0x17150 },
     /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
      * was worked out on do not carry; its song table is in the program ROM,
      * at 0x231E70. */
@@ -2326,6 +2334,7 @@ const DAYTONA_REV_A = {
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
+    area: { heading: 0x17908, clip: 0x175e0 },
 };
 
 const daytona = daytonaBuild({
@@ -2345,6 +2354,7 @@ const daytonase = daytonaBuild({
     cabinets: DAYTONA_CABINETS_SE,
     sky: { table: 0x47c8 },
     objects: DAYTONA_OBJECTS_SE,
+    area: { heading: 0x17d84, clip: 0x17a5c },
 });
 
 const daytonas = daytonaBuild({
@@ -2354,6 +2364,7 @@ const daytonas = daytonaBuild({
     program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
     bankTable: 0x15b4,
+    area: { heading: 0x17df4, clip: 0x17acc },
 });
 
 const daytonat = daytonaBuild({
