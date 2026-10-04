@@ -28,20 +28,19 @@
  * H=128: W rows of block-pairs, H halfwords each.
  */
 
+import { MAIN_DATA_BASE } from './romset.js';
+import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
+
+export { SHEET_BYTES };
+
 /* Texture RAM: two 1 MB sheets, each stored 1024x2048 and read as a logical
- * 2048x1024 (x >= 1024 folds back with y ^= 1024). One halfword is a 2x2 block
- * of 4-bit texels, so a texel row is 512 bytes and a row-pair is 0x400. */
-export const SHEET_BYTES = 0x100000;
+ * 2048x1024 (x >= 1024 folds back with y ^= 1024; atlas.js has the layout).
+ * One halfword is a 2x2 block of 4-bit texels, so a texel row is 512 bytes and
+ * a row-pair is 0x400. */
 const SHEET0 = 0;
 const SHEET1 = SHEET_BYTES;
 const ROW_PAIR = 0x400;
 
-/* main_data header, 0x300000 in both games. +0x08 and +0x0C are pointers to the
- * destination-list and page-list arrays; +0x10 is the 256-entry literal table
- * the Huffman symbols below 0x100 index. Both games reach it the same way —
- * `ld off_230000C, r4` in unp_send_tex_para_sub — so it is not per-game, but it
- * is read off the profile with everything else rather than kept here. */
-const MAIN_DATA_BASE = 0x02000000;
 
 /* Symbol-space partition used when the code table is built (unpack_lod_data
  * +0x28C). Below LITERAL the symbol indexes the 256-entry ROM table; the four
@@ -121,44 +120,37 @@ class BitReader {
 /*
  * Turn a page's logical (y, x) origin and bank bit into the list of texram
  * addresses its levels are written to: entry 0 is the full-size page, entries
- * 1.. are the mip chain, which lives at +0xC0000 and alternates banks at every
- * level. A byte address in a sheet is y * 512 + x, and x >= 1024 folds to
- * y + 1024 — the same fold atlas.js undoes when it reads the sheets back.
+ * 1.. are the mip chain. Each level goes where the board looks for it when it
+ * samples (levelOrigin in atlas.js), so the sheets are written by the same
+ * arithmetic the shader reads them with. sub_4C444 gets there by a running
+ * offset from +0xC0000 instead, halving x and y to an even texel at every
+ * level; that lands on the same bytes for every even origin, and a page
+ * origin is always a multiple of 32.
  */
 function pageDestinations(y, x, bank) {
-    /* Bank bit 0 picks which sheet holds the full-size level; the mip chain
-     * then alternates, so the two run in opposite phase. */
-    let near = (bank & 1) ? SHEET0 : SHEET1;
-    let far = (bank & 1) ? SHEET1 : SHEET0;
-
-    const dest = [];
-
+    let sheet = pageSheet(bank);
+    let first = 0;
     if ((x & 0x400) && (y & 0x200)) {
-        /* Folded page in the lower half: no full-size level, only mips. */
+        /* An origin inside the mip area: a page with no full-size level, only
+         * mips. They are the mips of the page at twice the distance on the
+         * other sheet, so the chain starts at that page's level 1. */
         x = (x & ~0x400) << 1;
         y = (y & ~0x200) << 1;
-    } else {
-        const off = (x & 0x400)
-            ? (((y + 0x400) << 9) + (x & ~0x400))   /* fold x into y */
-            : ((y << 9) + x);
-        dest.push(near + off);
-        [near, far] = [far, near];
+        sheet ^= 1;
+        first = 1;
     }
-
-    near += 0xc0000;
-    far += 0xc0000;
-
-    let oy = 0, ox = 0;
-    for (let level = 9; level >= 1; level--) {
-        y = (y >> 1) & ~1;
-        x = (x >> 1) & ~1;
-        dest.push(near + (((oy + y) << 9) + (ox + x)));
-        [near, far] = [far, near];
-        const step = 1 << level;
-        ox += step;
-        oy += step >> 1;
+    const dest = [];
+    for (let L = first; L <= 9; L++) {
+        const at = levelOrigin(x, y + sheet * SHEET_H, L);
+        dest.push(texelByte(at.x, at.y));
     }
     return dest;
+}
+
+/* Bank bit 0 set puts a page's full-size level on sheet 0, clear on sheet 1;
+ * its mips then alternate from there. */
+function pageSheet(bank) {
+    return (bank & 1) ? 0 : 1;
 }
 
 /* ---- Raw pages (send_beta_data) ------------------------------------------ */
@@ -336,6 +328,10 @@ function unpackLodData(md, ptr, lut) {
                  * table already matched come out of the stream. */
                 let p = v, n = 8;
                 for (;;) {
+                    /* A walk that leaves the table never finds a leaf. Most of
+                     * Fighting Vipers' sets 71 and 72 do it on their first
+                     * code; give up on the page rather than spin. */
+                    if (p >= tree.length) return null;
                     const t = tree[p];
                     const bit = r.bit(n);
                     n++;
@@ -488,18 +484,6 @@ function readWord(b, i) {
 
 /* ---- Driver (unp_send_tex_para_sub) -------------------------------------- */
 
-/**
- * Unpack one or more texture sets into a pair of sheets.
- *
- * A stage names two texture numbers (its record's +0x0C and +0x0E) and the
- * game queues both, so they land in the same texture RAM — one set's full-size
- * pages share a sheet with the other's mip chain. Pass both to reproduce what
- * the hardware actually holds while that stage is on screen.
- *
- * @param {object} rom              loaded ROM set
- * @param {number|number[]} texSets texture number(s), each 0..0x11
- * @returns {{sheet0: Uint8Array, sheet1: Uint8Array, pages: number}}
- */
 /*
  * Where a texture set's full-size pages land, without unpacking any of them.
  *
@@ -517,10 +501,33 @@ function readWord(b, i) {
  * @returns {{x:number, y:number}[]} page origins in atlas space
  */
 export function texturePages(rom, texSet) {
+    return setPages(rom, texSet)
+        .filter(({ x, y }) => !((x & 0x400) && (y & 0x200)))   /* mips only, no full size */
+        .map(({ x, y, origin }) => ({ x, y: y + pageSheet(origin) * SHEET_H }));
+}
+
+/*
+ * Walk one texture set's page list: { pagePtr, origin, x, y } per page, in the
+ * order the game sends them, with x and y the page's place on the ROM page
+ * grid.
+ *
+ * Every pointer is checked before it is followed. The game never checks
+ * because it only ever reads set numbers its own tables name; the viewer will
+ * happily be asked for any number at all, and Fighting Vipers' page-list array
+ * has no terminator to stop a walk off the end.
+ */
+function setPages(rom, texSet) {
     const md = rom.mainData;
     const dv = rom.mainDataView;
     const cv = rom.mainCpuView;
     const off = (a) => a - MAIN_DATA_BASE;
+    /* TEX_HEADER is the main_data header, 0x300000 in both games: +0x08 and
+     * +0x0C point to the destination-list and page-list arrays, and +0x10 is
+     * the 256-entry literal table the Huffman symbols below 0x100 index. Both
+     * games reach it the same way — `ld off_230000C, r4` in
+     * unp_send_tex_para_sub — but it is read off the profile with everything
+     * else. PAGE_TABLE is the page grid in the program ROM, which is the one
+     * address of the two that moves between games. See js/games.js. */
     const TEX_HEADER = rom.game.texture.header;
     const PAGE_TABLE = rom.game.texture.pageTable;
     const ptrOk = (p, need = 4) => p >= MAIN_DATA_BASE && off(p) + need <= md.length;
@@ -534,6 +541,8 @@ export function texturePages(rom, texSet) {
     const setPtr = dv.getUint32(setAddr, true);
     if (!ptrOk(setPtr)) return out;
 
+    /* The set's first word selects which destination list its pages use;
+     * the list starts with a count and then one packed origin per page. */
     const listIdx = dv.getUint32(off(setPtr), true);
     const listAddr = off(destTable) + listIdx * 4;
     if (listAddr + 4 > md.length) return out;
@@ -543,14 +552,16 @@ export function texturePages(rom, texSet) {
 
     for (let i = 0; i < count; i++) {
         if (!ptrOk(setPtr + 4 + i * 4) || !ptrOk(listPtr + 4 + i * 4)) break;
-        if (!ptrOk(dv.getUint32(off(setPtr) + 4 + i * 4, true))) continue;
+        const pagePtr = dv.getUint32(off(setPtr) + 4 + i * 4, true);
+        if (!ptrOk(pagePtr)) continue;
+        /* Origin word: a page slot in its low half plus a byte offset in each
+         * of the top two bytes, resolved against the ROM page grid. */
         const origin = dv.getUint32(off(listPtr) + 4 + i * 4, true);
         const slot = (origin & 0xffff) >>> 1;
         if (PAGE_TABLE + slot * 4 + 4 > rom.maincpu.length) continue;
         const y = cv.getInt16(PAGE_TABLE + slot * 4, true) + (origin >>> 24);
         const x = cv.getInt16(PAGE_TABLE + slot * 4 + 2, true) + ((origin >>> 16) & 0xff);
-        if ((x & 0x400) && (y & 0x200)) continue;   /* mips only, no full size */
-        out.push({ x, y: y + ((origin & 1) ? 0 : 1024) });
+        out.push({ pagePtr, origin, x, y });
     }
     return out;
 }
@@ -834,6 +845,18 @@ export function bankTextureSet(rom, index) {
     return bankSets[Math.min(bank, bankSets.length - 1)];
 }
 
+/**
+ * Unpack one or more texture sets into a pair of sheets.
+ *
+ * A stage names two texture numbers (its record's +0x0C and +0x0E) and the
+ * game queues both, so they land in the same texture RAM — one set's full-size
+ * pages share a sheet with the other's mip chain. Pass both to reproduce what
+ * the hardware actually holds while that stage is on screen.
+ *
+ * @param {object} rom              loaded ROM set
+ * @param {number|number[]} texSets texture number(s), each 0..0x11
+ * @returns {{sheet0: Uint8Array, sheet1: Uint8Array, pages: number}}
+ */
 export function buildTexram(rom, texSets) {
     if (rom.game.texture.raw) {
         return rom.game.texture.raw.layout === 'daytona'
@@ -842,58 +865,17 @@ export function buildTexram(rom, texSets) {
     }
     const md = rom.mainData;
     const dv = rom.mainDataView;
-    const cv = rom.mainCpuView;
     const off = (a) => a - MAIN_DATA_BASE;
+    const TEX_HEADER = rom.game.texture.header;
 
     const tex = new Uint8Array(SHEET_BYTES * 2);
-
-    /* TEX_HEADER is the data-region header; PAGE_TABLE is the page grid in the
-     * program ROM, which is the one address of the two that moves between
-     * games. See js/games.js. */
-    const TEX_HEADER = rom.game.texture.header;
-    const PAGE_TABLE = rom.game.texture.pageTable;
-
-    const destTable = dv.getUint32(TEX_HEADER + 0x08, true);
-    const pageTable = dv.getUint32(TEX_HEADER + 0x0c, true);
 
     const lut = new Int32Array(0x100);
     for (let i = 0; i < 0x100; i++) lut[i] = dv.getInt32(TEX_HEADER + 0x10 + i * 4, true);
 
-    /* A pointer the game would follow, checked before following it. The game
-     * never checks because it only ever reads set numbers its own tables name;
-     * the viewer will happily be asked for any number at all, and Fighting
-     * Vipers' page-list array has no terminator to stop a walk off the end. */
-    const ptrOk = (p, need = 4) => p >= MAIN_DATA_BASE && off(p) + need <= md.length;
-
     let pages = 0;
     for (const texSet of [].concat(texSets)) {
-        if (texSet < 0) continue;
-        const setAddr = off(pageTable) + texSet * 4;
-        if (setAddr + 4 > md.length) continue;
-        const setPtr = dv.getUint32(setAddr, true);
-        if (!ptrOk(setPtr)) continue;
-
-        /* The set's first word selects which destination list its pages use;
-         * the list starts with a count and then one packed origin per page. */
-        const listIdx = dv.getUint32(off(setPtr), true);
-        const listAddr = off(destTable) + listIdx * 4;
-        if (listAddr + 4 > md.length) continue;
-        const listPtr = dv.getUint32(listAddr, true);
-        if (!ptrOk(listPtr)) continue;
-        const count = dv.getUint32(off(listPtr), true);
-
-        for (let i = 0; i < count; i++) {
-            if (!ptrOk(setPtr + 4 + i * 4) || !ptrOk(listPtr + 4 + i * 4)) break;
-            const pagePtr = dv.getUint32(off(setPtr) + 4 + i * 4, true);
-            if (!ptrOk(pagePtr)) continue;
-
-            /* Origin word: a page slot in its low half plus a byte offset in
-             * each of the top two bytes, resolved against the ROM page grid. */
-            const origin = dv.getUint32(off(listPtr) + 4 + i * 4, true);
-            const slot = (origin & 0xffff) >>> 1;
-            const y = cv.getInt16(PAGE_TABLE + slot * 4, true) + (origin >>> 24);
-            const x = cv.getInt16(PAGE_TABLE + slot * 4 + 2, true) + ((origin >>> 16) & 0xff);
-
+        for (const { pagePtr, origin, x, y } of setPages(rom, texSet)) {
             const dest = pageDestinations(y, x, origin & 1);
             const type = dv.getUint32(off(pagePtr), true);
             const body = off(pagePtr) + 4;
@@ -902,6 +884,7 @@ export function buildTexram(rom, texSets) {
                 sendBetaData(md, body, tex, dest);
             } else {
                 const page = unpackLodData(md, body, lut);
+                if (!page) continue;
                 sendLodData(tex, dest[0], page);
                 sendLodDataQ(tex, dest, page);
             }

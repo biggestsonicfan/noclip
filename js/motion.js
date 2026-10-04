@@ -40,7 +40,7 @@
  * targets the pose engine solves against — see `js/pose.js`.
  */
 
-import { xtraToMainData, XTRA_DATA_BASE } from './romset.js';
+import { xtraToMainData, XTRA_DATA_BASE, MAIN_DATA_BASE } from './romset.js';
 
 export const MOTION_LIST_ADDR = 0x06400004;
 export const MOTION_COUNT = 519;
@@ -237,7 +237,7 @@ export const TANGENT_RATE = 30;
 
 /* Where a block address lands in the assembled main-data region, or -1. */
 function blockOffset(addr) {
-    if (addr >= 0x02000000 && addr < 0x03000000) return addr - 0x02000000;
+    if (addr >= MAIN_DATA_BASE && addr < 0x03000000) return addr - MAIN_DATA_BASE;
     if (addr >= XTRA_DATA_BASE) return xtraToMainData(addr);
     return -1;
 }

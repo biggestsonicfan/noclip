@@ -29,6 +29,8 @@
  * stf-tools/test-colors.mjs.
  */
 
+import { MAIN_DATA_BASE } from './romset.js';
+
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
  * 16-bit entries, 32 palette rows of 256 luma slots each. Luma RAM
@@ -44,8 +46,11 @@ export const PALETTE_LUMA0 = 48;
 const CXLAT_CHANNEL = 0x4000;
 const CXLAT_ROW = 0x200;                /* bytes per palette row: 256 entries */
 
-/* main_data addresses, as the i960 sees them. */
-const MAIN_DATA_BASE = 0x02000000;
+/* A writer for one colorxlat entry, by channel, palette row and luma slot. */
+function cxlatWriter(cxlat) {
+    const view = new DataView(cxlat.buffer, cxlat.byteOffset, cxlat.byteLength);
+    return (ch, row, luma, v) => view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
+}
 
 /*
  * Everything below is shape, not address.
@@ -147,23 +152,16 @@ export function buildLumaram(rom) {
     const src = rom.game.colors.luma.source ?? 'mainData';
     const dv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
     const md = src === 'maincpu' ? rom.maincpu : rom.mainData;
-    /* The House of the Dead states no count: sub_1610 copies a fixed 0x4000
-     * bytes, data 0xC8EB40..0xC92B3F, to the even addresses. */
-    if (rom.game.colors.luma.bytes) {
-        const { data, bytes } = rom.game.colors.luma;
-        const luma = new Uint8Array(LUMA_BYTES);
-        for (let i = 0; i < Math.min(bytes, LUMA_BYTES / 2); i++) luma[i * 2] = md[data + i];
-        return luma;
-    }
     /* essential_color_handling reads a block count and then that many 128-byte
      * bands, one per lumabase. Fighting Vipers reaches its pair through the
      * XTRA_DATA mirror -- `lda unk_64266E0` -- which folds to a data offset like
-     * any other, so both games are the same two reads. */
-    const { count, data } = rom.game.colors.luma;
-    const bands = dv.getUint32(count, true);
+     * any other, so both games are the same two reads. The House of the Dead
+     * states no count: sub_1610 copies a fixed 0x4000 bytes, data
+     * 0xC8EB40..0xC92B3F, to the even addresses. */
+    const { count, data, bytes } = rom.game.colors.luma;
+    const n = Math.min(bytes ?? dv.getUint32(count, true) * LUMA_BAND, LUMA_BYTES / 2);
 
     const luma = new Uint8Array(LUMA_BYTES);
-    const n = Math.min(bands * LUMA_BAND, LUMA_BYTES / 2);
     for (let i = 0; i < n; i++) luma[i * 2] = md[data + i];
     return luma;
 }
@@ -233,11 +231,9 @@ function buildRampColorxlat(rom) {
     const C = rom.game.colors;
     const { step, span, bias, flat } = C.cabinets?.[rom.cabinet ?? C.cabinet]?.ramp ?? C.ramp;
     const out = new Uint8Array(CXLAT_BYTES);
-    const view = new DataView(out.buffer);
+    const set = cxlatWriter(out);
     const put = (row, luma, v) => {
-        for (let ch = 0; ch < 3; ch++) {
-            view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
-        }
+        for (let ch = 0; ch < 3; ch++) set(ch, row, luma, v);
     };
     const entries = Math.ceil(span / step);
     for (let row = 0; row < 32; row++) {
@@ -276,13 +272,10 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
-    const view = new DataView(out.buffer);
     const rgb = tint.map((t) => Math.round(t * TINT_UNITY));
     const add = C.add, mul = C.mul;
 
-    const put = (ch, row, luma, v) => {
-        view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
-    };
+    const put = cxlatWriter(out);
     /* Every upload lays sixteen colours over luma 48..63, so only the source
      * and the rows change between them. */
     const palette = (src, row0, rows) => sendTexCol(dv, put, rgb, add, mul, {
@@ -386,10 +379,7 @@ function buildCurveColorxlat(rom, colorSet) {
     const C = rom.game.colors;
     const cv = rom.mainCpuView;
     const out = new Uint8Array(CXLAT_BYTES);
-    const view = new DataView(out.buffer);
-    const put = (ch, row, luma, v) => {
-        view.setUint16(ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2, v, true);
-    };
+    const put = cxlatWriter(out);
     const f = Math.fround;
     const cap = (v) => Math.min(Math.trunc(v), 255);
     /* ½√v + ½v²: the square root and its half in single, the square in double,
@@ -461,7 +451,7 @@ export function cycleStageColors(rom, cxlat, { colorSet = 0, tint = [1, 1, 1], r
     const st = rom.game.colors.stage;
     if (row < st.row0 || row >= st.row0 + st.rows) return;
     const dv = rom.mainDataView;
-    const view = new DataView(cxlat.buffer, cxlat.byteOffset, cxlat.byteLength);
+    const put = cxlatWriter(cxlat);
     const rgb = tint.map((t) => Math.round(t * TINT_UNITY));
 
     const C = rom.game.colors;
@@ -470,9 +460,7 @@ export function cycleStageColors(rom, cxlat, { colorSet = 0, tint = [1, 1, 1], r
     for (let ch = 0; ch < 3; ch++) {
         for (let i = 0; i < GROUP_COLORS; i++) {
             const src = dv.getUint16(group + ch * GROUP_CHANNEL + ((phase + i) & 15) * 2, true);
-            view.setUint16(
-                ch * CXLAT_CHANNEL + row * CXLAT_ROW + (PALETTE_LUMA0 + i) * 2,
-                intensity(src, rgb[ch], C.add[ch], C.mul[ch]), true);
+            put(ch, row, PALETTE_LUMA0 + i, intensity(src, rgb[ch], C.add[ch], C.mul[ch]));
         }
     }
 }

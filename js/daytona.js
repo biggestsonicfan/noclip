@@ -45,6 +45,8 @@
  * stands, since the TGP functions that choose one are not ported.
  */
 
+import { MAIN_DATA_BASE } from './romset.js';
+
 /* The board's 16-bit angle, and the conversion. */
 const ANGLE_DEG = 360 / 65536;
 
@@ -70,13 +72,12 @@ const S = (x, y = x, z = x) => ['s', [x, y, z]];
 
 /* ---- reading the ROM ------------------------------------------------------- */
 
-const DATA_BASE = 0x02000000;
 /* The program ROM's second half is mapped twice, at 0x20000 and again at
  * 0x00220000, and the program's own pointers use the alias. */
 const PROG_ALIAS = 0x00200000;
 
 function view(rom, addr) {
-    if (addr >= DATA_BASE) return { dv: rom.mainDataView, off: addr - DATA_BASE, len: rom.mainData.length };
+    if (addr >= MAIN_DATA_BASE) return { dv: rom.mainDataView, off: addr - MAIN_DATA_BASE, len: rom.mainData.length };
     const off = addr >= PROG_ALIAS ? addr - PROG_ALIAS : addr;
     return { dv: rom.mainCpuView, off, len: rom.maincpu.length };
 }
@@ -88,7 +89,7 @@ const u16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint16(v.
 /* A model record's address as a model-table index, or -1. */
 function modelOf(rom, ptr) {
     const t = rom.game.modelTable;
-    const i = (ptr - DATA_BASE - t.offset) / t.stride;
+    const i = (ptr - MAIN_DATA_BASE - t.offset) / t.stride;
     return Number.isInteger(i) && i >= 0 && i < t.count ? i : -1;
 }
 /* A run of `n` model-record pointers. */
@@ -644,7 +645,7 @@ export function inWindow(block, camera) {
 export function carLanes(rom, course) {
     const table = rom.game.sky?.table;
     if (table == null) return null;
-    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
     const row = u32(rom, table + course * 4);
     if (!inData(row, 20)) return null;
     const lines = u32(rom, row + 16);
@@ -708,7 +709,7 @@ export function courseGround(rom, course) {
     const cv = rom.coproView;
     const table = rom.game.sky?.table;
     if (!cv || table == null) return null;
-    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
     const row = u32(rom, table + course * 4);
     if (!inData(row, 12) || !inData(u32(rom, row + 8), 4)) return null;
     const cells = u32(rom, u32(rom, row + 8));

@@ -73,7 +73,7 @@
  * the arena.
  */
 
-import { xtraResolve } from './romset.js';
+import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
 import { palette555ToBytes } from './atlas.js';
 
 const CHAR_BASE = 0x01080000;
@@ -99,12 +99,12 @@ function at(rom, addr) {
         const r = xtraResolve(rom, addr);
         return { view: r.view, u8: r.data, off: r.off };
     }
-    return { view: rom.mainDataView, u8: rom.mainData, off: addr - 0x02000000 };
+    return { view: rom.mainDataView, u8: rom.mainData, off: addr - MAIN_DATA_BASE };
 }
 
 function ptrOk(rom, addr) {
     if (addr >= 0x06000000 && addr < 0x07000000) return true;
-    const o = addr - 0x02000000;
+    const o = addr - MAIN_DATA_BASE;
     return o >= 0 && o < rom.mainData.length;
 }
 
@@ -169,8 +169,8 @@ export function buildCourseSky(rom, course, cxlat = null) {
     const T = rom.game.sky;
     if (!T) return null;
     const word = (addr) => {
-        if (addr >= 0x02000000) {
-            const o = addr - 0x02000000;
+        if (addr >= MAIN_DATA_BASE) {
+            const o = addr - MAIN_DATA_BASE;
             return o >= 0 && o + 4 <= rom.mainData.length ? rom.mainDataView.getUint32(o, true) : 0;
         }
         const o = addr >= 0x00200000 ? addr - 0x00200000 : addr;

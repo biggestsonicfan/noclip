@@ -6,6 +6,7 @@ import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './roms
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
+import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, BOARD_H, BOARD_FOCAL } from './skyeye.js';
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
@@ -15,7 +16,7 @@ import { buildSkyPanorama } from './scroll.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
-    stageLightYaw, stageMaterials, stageWorldFrame,
+    stageLightYaw, stageBright, stageMaterials, stageWorldFrame, eggLabFootage,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
@@ -23,11 +24,11 @@ import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
     useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
 import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
 import {
-    readTails, tailParts, propellerPart, PROPELLER_HELI,
+    readTails, tailParts, propellerPart,
     PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
 } from './tails.js';
 import {
-    readMechArms, readRoboHead, readRoboAnims, armModel, headFrame,
+    readMechArms, readRoboHead, readRoboAnims, headFrame,
     BOSS_CHARS, MINION_CHARS, CHEST_SLOT as EGG_CHEST_SLOT,
     HEAD_SLOT as EGG_HEAD_SLOT, ARM_SHIFT, ARM_COUNT,
 } from './eggrobo.js';
@@ -128,21 +129,16 @@ const state = {
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
     wireframe: false,
     modelCache: new Map(),
-    /* The scroll layer's sky, decoded once per stage and kept. */
+    /* The scroll layer's sky, decoded once per stage and kept: slot ->
+     * { tex, aspect, horizon, topColor }, or null where it would not decode.
+     * See addSkyPanorama. */
     sky: null,
-    skyTextures: new Map(),
-    skyPanoScale: new Map(),
-    skyHorizon: new Map(),
-    skyTopColor: new Map(),
+    skyPanoramas: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
      * a texture number. null is "work it out from the model"; a number is the
      * set the user chose. `texSetCache` memoises the worked-out answer. */
     texSetChoice: null,
     texSetCache: new Map(),
-    /* For a game with no stage record: which scene colour block fills the
-     * scene rows of colorxlat, which character's blocks fill the part and skin
-     * rows, and the light vector, since none of the three is in a table the
-     * viewer can read. -1 for the fighter leaves those rows at zero. */
     /* Whose part and skin colours to fill colorxlat's fighter rows with, for a
      * game the viewer has no roster for. A stage record does not say who is
      * standing in it, so it is a choice on the panel; -1 leaves those rows at
@@ -155,6 +151,9 @@ const state = {
      * camera wants; true stands it on the arena, which is what the board does
      * and what reading a moving arena needs. */
     rideStage: false,
+    /* The arena's bounds in the board's frame, which `rideStage` frames on —
+     * see loadStage. */
+    stageArena: null,
     /* Everything a stage animates is a pure function of the game's frame
      * counter, so the whole clock is one number. It is derived from elapsed
      * time rather than counted per rendered frame: the board ran at 60 Hz and
@@ -165,6 +164,10 @@ const state = {
          * because what moves them is the camera rather than the frame counter,
          * so they have to be stepped whether the stage is animating or not. */
         billboards: [],
+        /* Eggman's lab's monitor windows — see buildEggLabFootage. */
+        footage: null,
+        /* The camera as the `live` draws last saw it — see liveCamera. */
+        liveCam: null,
     },
     cxlat: null,        /* colorxlat bytes, whether built or dumped */
     /* A dropped texture-RAM dump pins the sheets: it is a capture of one
@@ -201,6 +204,12 @@ function applyTransfer(c, mode) {
     return c.map((v) => Math.min(Math.max(f(v), 0), 1));
 }
 
+/* The explicit SRGBColorSpace is load-bearing. THREE.Color is asymmetric:
+ * setHex defaults to SRGBColorSpace, but setRGB — which the three-float
+ * constructor routes to — defaults to the working space, i.e. linear. So
+ * passing display-referred floats without the tag leaves three to encode
+ * them a second time on output, which is what made the backdrop
+ * rgb(0,120,240) instead of rgb(0,0,184). */
 function applyBackdropTransfer() {
     const bg = applyTransfer(state.bgRGB, state.transfer);
     state.viewer.scene.background = new THREE.Color()
@@ -307,10 +316,7 @@ function resetRomState() {
     state.stages = [];
     state.modelCache.clear();
     state.texSetCache.clear();
-    state.skyTextures.clear();
-    state.skyPanoScale.clear();
-    state.skyHorizon.clear();
-    state.skyTopColor.clear();
+    clearSkyPanoramas();
     state.modelScenes = null;
     state.rigOwners = null;
     state.frames = null;
@@ -320,6 +326,12 @@ function resetRomState() {
     state.motion.decoded = null;
     state.motion.parts = [];
     state.motion.skeleton = null;
+    /* What a fighter carries across a change of tab is this build's: its slot,
+     * its chain and the trail it laid. */
+    state.motion.id = 0;
+    state.motion.slot = 0;
+    state.motion.chain = null;
+    state.motion.trailKey = null;
     state.sky = null;
     state.cxlat = null;
     state.texramKey = null;
@@ -494,15 +506,28 @@ function makeDataTexture(data, w, h) {
     return t;
 }
 
-/** Point the fill shader's atlas path at a pair of texture-RAM sheets. */
-function setAtlasSheets(sheet0, sheet1) {
-    const u = state.viewer.material.uniforms;
+/** A pair of texture-RAM sheets as the shader's atlas texture. */
+function atlasTexture(sheet0, sheet1) {
     const atlas = makeDataTexture(buildAtlas(sheet0, sheet1), ATLAS_W, ATLAS_H);
     atlas.magFilter = THREE.LinearFilter;
     atlas.minFilter = THREE.LinearFilter;
+    return atlas;
+}
+
+/** Point the fill shader's atlas path at a pair of texture-RAM sheets. */
+function setAtlasSheets(sheet0, sheet1) {
+    const u = state.viewer.material.uniforms;
     u.uAtlas.value?.dispose?.();
-    u.uAtlas.value = atlas;
+    u.uAtlas.value = atlasTexture(sheet0, sheet1);
     u.uUseAtlas.value = 1;
+}
+
+/* The sets to unpack for `texSets`: which set sits behind the named ones is
+ * the game's own arrangement, so it comes off the profile; a game with none
+ * named just gets what was asked. */
+function texramQueue(texSets) {
+    const resident = state.rom.game.texture.residentSet;
+    return resident == null ? texSets : [resident, ...texSets];
 }
 
 /* The sheets do not exist in ROM in a readable form — about 85% of the pages
@@ -524,11 +549,7 @@ function useRomTexram(texSets) {
     const key = texSets.join(',');
     if (key === state.texramKey) return;
 
-    /* Which set sits behind the named ones is the game's own arrangement, so it
-     * comes off the profile; a game with none named just gets what was asked. */
-    const resident = state.rom.game.texture.residentSet;
-    const queue = resident == null ? texSets : [resident, ...texSets];
-    const { sheet0, sheet1 } = buildTexram(state.rom, queue);
+    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets));
     setAtlasSheets(sheet0, sheet1);
     state.texramKey = key;
 
@@ -610,11 +631,8 @@ function materialForSet(set, stage) {
     const key = `${set}:${stage.tint.join(',')}`;
     const have = v.setMaterials.get(key);
     if (have) return have;
-    const resident = state.rom.game.texture.residentSet;
-    const { sheet0, sheet1 } = buildTexram(state.rom, resident == null ? [set] : [resident, set]);
-    const atlas = makeDataTexture(buildAtlas(sheet0, sheet1), ATLAS_W, ATLAS_H);
-    atlas.magFilter = THREE.LinearFilter;
-    atlas.minFilter = THREE.LinearFilter;
+    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue([set]));
+    const atlas = atlasTexture(sheet0, sheet1);
     /* Pinned tables are a capture of a real machine and stand for every part;
      * a game with no colour pipeline ported has none to build. */
     const cxlat = state.rom.game.colors && !state.lutsPinned
@@ -712,8 +730,6 @@ function modelsPickTextures() {
     return !t || !!t.flat;
 }
 
-/* ---- Colour and light for a game with no stage table --------------------- */
-
 /* ---- Texture set for a lone model ---------------------------------------- */
 
 /*
@@ -777,18 +793,17 @@ function modelCount() {
 /* A game whose face palette changes with the loaded set bakes different colours
  * into the same mesh under each, so the set is part of the key. */
 function getModel(idx) {
-    const key = state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx;
-    if (state.modelCache.has(key)) return state.modelCache.get(key);
-    const m = decodeModel(state.rom, idx);
-    state.modelCache.set(key, m);
-    return m;
+    return cachedDecode(state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx, idx);
 }
 
 /* A draw whose texture points set_obj_tpd replaces gets a decode of its own,
  * under a key the model's own decode cannot take: the override is not always a
  * copy of what it replaces, so the two are different meshes. */
 function getTpdModel(idx, points, tag = 'tpd') {
-    const key = `${idx}:${tag}`;
+    return cachedDecode(`${idx}:${tag}`, idx, points);
+}
+
+function cachedDecode(key, idx, points) {
     if (state.modelCache.has(key)) return state.modelCache.get(key);
     const m = decodeModel(state.rom, idx, points);
     state.modelCache.set(key, m);
@@ -1109,6 +1124,13 @@ function useModelScene(idx) {
                 status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
             }
         }
+        /* Where one set number is the sheets, the palette and the colour tables
+         * at once, the tables are the set just picked for the sheets, whatever
+         * stage is up — building them from the loaded stage would read a model
+         * against another set's colours. A game with colour tables and no stage
+         * table has the same answer for want of any other. */
+        const ownSet = set != null && state.rom.game.colors
+            ? { texSet: [set, set], tint: [1, 1, 1] } : null;
         /* A fighter takes whichever scene is loaded, since every scene holds
          * its sheets. A model no scene claims takes it too, and for the same
          * reason the ramp exists: the colour it shows is not a colour but a row
@@ -1119,20 +1141,13 @@ function useModelScene(idx) {
          * second head, model 3554, a white blob beside model 2230, the same
          * head with its colours in the mesh. Whose tables they are read
          * against is a separate question, and the panel says which. */
+        const scene = state.rom.game.palette
+            ? ownSet
+            : state.stages[state.stageIndex] ?? ownSet;
         /* The sheets stay whichever stage is loaded — every scene holds set 1 —
          * but the fighter rows of the colour table do not: they are the
          * character's, and a part read without them shows black where its own
          * palette should be. */
-        /* Where one set number is the sheets, the palette and the colour tables
-         * at once, the tables are the set just picked for the sheets, whatever
-         * stage is up — building them from the loaded stage would read a model
-         * against another set's colours. A game with colour tables and no stage
-         * table has the same answer for want of any other. */
-        const ownSet = set != null && state.rom.game.colors
-            ? { texSet: [set, set], tint: [1, 1, 1] } : null;
-        const scene = state.rom.game.palette
-            ? ownSet
-            : state.stages[state.stageIndex] ?? ownSet;
         useRomColorLuts(scene, modelFighter(idx));
         u.uUseRamp.value = state.cxlat && scene ? 1 : 0;
         return;
@@ -1179,8 +1194,8 @@ function addSkyPanorama(slot) {
     if (!state.rom.game.stageTable.scroll && !stage?.panorama) return;
 
     state.sky = null;
-    let tex = state.skyTextures.get(slot);
-    if (tex === undefined) {
+    let sky = state.skyPanoramas.get(slot);
+    if (sky === undefined) {
         /* On the board the palette goes through the scene's colour tables,
          * which useRomColorLuts has just put in place for this stage. Both
          * games with a sky here build those tables byte for byte as a MAME
@@ -1191,10 +1206,9 @@ function addSkyPanorama(slot) {
             : buildSkyPanorama(state.rom, slot, state.cxlat);
         /* Not makeDataTexture: that one is for the single-channel lookup
          * tables the fill shader reads, and this is an image. */
-        tex = pano
-            ? new THREE.DataTexture(pano.rgba, pano.width, pano.height, THREE.RGBAFormat)
-            : null;
-        if (tex) {
+        sky = null;
+        if (pano) {
+            const tex = new THREE.DataTexture(pano.rgba, pano.width, pano.height, THREE.RGBAFormat);
             /* The panorama's first row is the top of the sky, and a DataTexture
              * puts its first row at the bottom unless told otherwise. */
             tex.flipY = true;
@@ -1203,33 +1217,42 @@ function addSkyPanorama(slot) {
             tex.minFilter = THREE.LinearFilter;
             tex.wrapS = THREE.RepeatWrapping;
             tex.needsUpdate = true;
-            /* The strip's height as a fraction of the radius. */
-            state.skyPanoScale.set(slot, pano.focal
-                ? pano.height / pano.focal
-                : 2 * Math.PI * pano.height / pano.width);
-            /* The row that sits on the eye line, as a fraction down the
-             * strip: its foot unless the panorama says otherwise. */
-            state.skyHorizon.set(slot, (pano.horizon ?? pano.height) / pano.height);
-            state.skyTopColor.set(slot, pano.topColor.map((c) => c / 255));
+            sky = {
+                tex,
+                /* The strip's height as a fraction of the radius. */
+                scale: pano.focal
+                    ? pano.height / pano.focal
+                    : 2 * Math.PI * pano.height / pano.width,
+                /* The row that sits on the eye line, as a fraction down the
+                 * strip: its foot unless the panorama says otherwise. */
+                horizon: (pano.horizon ?? pano.height) / pano.height,
+                topColor: pano.topColor.map((c) => c / 255),
+            };
         }
-        state.skyTextures.set(slot, tex);
+        state.skyPanoramas.set(slot, sky);
     }
-    if (!tex) return;
+    if (!sky) return;
 
     /* One turn across; up, the board's focal where the panorama gives one. */
-    const height = SKY_RADIUS * state.skyPanoScale.get(slot);
+    const height = SKY_RADIUS * sky.scale;
     const geom = new THREE.CylinderGeometry(
         SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
     const mat = new THREE.MeshBasicMaterial({
-        map: tex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+        map: sky.tex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.renderOrder = BACKDROP_ORDER;
     mesh.userData.layer = 'sky';
     mesh.frustumCulled = false;
     v.root.add(mesh);
-    state.sky = { mesh, height, horizon: state.skyHorizon.get(slot) ?? 1 };
+    state.sky = { mesh, height, horizon: sky.horizon };
     stepSky();
+}
+
+/* Throw the decoded skies away, with their textures. */
+function clearSkyPanoramas() {
+    for (const sky of state.skyPanoramas.values()) sky?.tex.dispose();
+    state.skyPanoramas.clear();
 }
 
 /*
@@ -1293,65 +1316,30 @@ function loadStage(slot, { keepCamera = false } = {}) {
     const windowed = stageView(stage) === 'camera';
     const sceneSet = state.rom.paletteSet;
     const partSets = new Set();
-    for (const entry of list) {
-        totals[entry.layer]++;
-        const partMaterial = perPart && entry.set != null ? materialForSet(entry.set, stage) : null;
-        if (partMaterial) { state.rom.paletteSet = entry.set; partSets.add(entry.set); }
-        const d = entry.scroll?.points
-            ? getTpdModel(entry.model, entry.scroll.points)
-            : getModel(entry.model);
-        if (!d) continue;
-        composeOps(m, opsAt(entry, 0));
-
-        /* A draw that moves gets its geometry from the frame cache from the
-         * start, so swapping a frame in is a pointer assignment. */
-        const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
-            typeof entry.ops === 'function';
-        const geom = entry.anim ? frameGeometry(entry.model) : null;
-        const { mesh, lines } = addModelToScene(d, {
-            layer: entry.layer, matrix: m, geom, backdrop: entry.backdrop, shellFirst,
-            zWindow: entry.window,
-            planeBias: entry.planeBias,
-            material: partMaterial,
-        });
-        /* buildGeometry hands the decoder's own array straight to the attribute,
-         * so a draw whose header is rewritten per frame takes a copy first —
-         * otherwise it would write a band into the shared decode and every
-         * later view of that model would show it. */
-        if (entry.band) {
-            mesh.geometry.setAttribute('aLumaBase',
-                new THREE.BufferAttribute(Float32Array.from(d.lumaBases), 1));
+    try {
+        for (const entry of list) {
+            totals[entry.layer]++;
+            const partMaterial = perPart && entry.set != null ? materialForSet(entry.set, stage) : null;
+            if (partMaterial) { state.rom.paletteSet = entry.set; partSets.add(entry.set); }
+            const d = entry.scroll?.points
+                ? getTpdModel(entry.model, entry.scroll.points)
+                : getModel(entry.model);
+            if (!d) continue;
+            composeOps(m, opsAt(entry, 0));
+            const mesh = addStageDraw(entry, d, m, { shellFirst, windowed, material: partMaterial });
+            layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry });
+            counts[entry.layer]++;
+            const box = transformedBounds(d, m);
+            drawn.push(box);
+            if (!BACKDROP_LAYERS.has(entry.layer)) visible.push(box);
+            if (ARENA_LAYERS.has(entry.layer)) arena.push(box);
         }
-        /* And the same for a texture-point override, which rewrites the UVs. */
-        if (entry.scroll) {
-            mesh.geometry.setAttribute('aTexel',
-                new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
-        }
-        mesh.visible = state.layerOn[entry.layer] !== false;
-        layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry });
-        counts[entry.layer]++;
-        const box = transformedBounds(d, m);
-        drawn.push(box);
-        if (!BACKDROP_LAYERS.has(entry.layer)) visible.push(box);
-        if (ARENA_LAYERS.has(entry.layer)) arena.push(box);
-        /* The decoded UVs stay the offset's origin: the copy above is written
-         * from them every frame rather than walked on from where it stands. */
-        let item = null;
-        if (moves) {
-            item = {
-                entry, mesh, lines, model: entry.model,
-                uvs: entry.scroll ? d.uvs : null,
-            };
-            state.anim.entries.push(item);
-        }
-        if (windowed && entry.block != null) state.anim.blocks.push({ entry, mesh, lines, item });
-        if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
-            state.anim.billboards.push({ entry, mesh, lines });
-        }
+    } finally {
+        /* Back to the scene's own set, which is what the Models tab and anything
+         * else decoding after this expects to be loaded — the model cache is
+         * keyed on it. */
+        state.rom.paletteSet = sceneSet;
     }
-    /* Back to the scene's own set, which is what the Models tab and anything
-     * else decoding after this expects to be loaded. */
-    state.rom.paletteSet = sceneSet;
     if (partSets.size) {
         const status = $('#tex-status');
         const sets = [...partSets].sort((a, b) => a - b).join(', ');
@@ -1359,6 +1347,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
     }
     applyFaceLayers(layered);
     applyWireVisibility();
+    buildEggLabFootage(stage);
 
     const u = v.material.uniforms;
     /* The light, the material slots and the two output scales, which between
@@ -1368,37 +1357,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
     /* And the slots the stage rewrites as it runs, at the frame it opens on. */
     stepStageMaterials(0);
     u.uFogDensity.value = 0;
-    /* Both the clear colour and the fog tint are flat palette colours, so they
-     * take the same colorxlat path a face does.
-     *
-     * The explicit SRGBColorSpace is load-bearing. THREE.Color is asymmetric:
-     * setHex defaults to SRGBColorSpace, but setRGB — which the three-float
-     * constructor routes to — defaults to the working space, i.e. linear. So
-     * passing display-referred floats without the tag leaves three to encode
-     * them a second time on output, which is what made this backdrop
-     * rgb(0,120,240) instead of rgb(0,0,184). */
-    /*
-     * The backdrop, which is whatever shows where the sky does not reach.
-     *
-     * A game whose sky is a tilemap band has the answer in the band itself:
-     * addSkyPanorama takes the commonest colour along its top row, which is
-     * what the sky is doing where it runs out, and it is per stage. Falling
-     * back to the profile's boot-time constant covers a stage whose panorama
-     * would not decode; falling back to the record's own field is the other
-     * game, where the backdrop is a field and there is no tilemap at all.
-     */
-    const top = state.skyTopColor.get(slot);
-    if (top) {
-        state.bgRGB = top;
-    } else {
-        const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
-        state.bgRGB = palette555ToRGB(state.cxlat, bg555);
-    }
-    applyBackdropTransfer();
-    /* Left untransformed on purpose: the fill shader applies the transfer to
-     * this uniform itself, so the surface and the fog it blends into stay in
-     * one space. Transforming it here too would run the curve twice. */
-    u.uFogColor.value.set(...state.bgRGB);
+    applyStageBackdrop(stage, slot);
 
     /* The arena's own bounds, in the board's frame — which is the frame it is
      * shown in whenever `ride the carpet` is up, since that is the framing
@@ -1434,6 +1393,80 @@ function loadStage(slot, { keepCamera = false } = {}) {
 
     renderStagePanel(stage, counts, totals, list);
     updateHud();
+}
+
+/*
+ * One draw of a stage's list, into the scene at `matrix`, and onto the
+ * animation lists if it moves. Returns the mesh.
+ */
+function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
+    /* A draw that moves gets its geometry from the frame cache from the
+     * start, so swapping a frame in is a pointer assignment. */
+    const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
+        typeof entry.ops === 'function';
+    const geom = entry.anim ? frameGeometry(entry.model) : null;
+    const { mesh, lines } = addModelToScene(d, {
+        layer: entry.layer, matrix, geom, backdrop: entry.backdrop, shellFirst,
+        zWindow: entry.window,
+        planeBias: entry.planeBias,
+        material,
+    });
+    /* buildGeometry hands the decoder's own array straight to the attribute,
+     * so a draw whose header is rewritten per frame takes a copy first —
+     * otherwise it would write a band into the shared decode and every
+     * later view of that model would show it. */
+    if (entry.band) {
+        mesh.geometry.setAttribute('aLumaBase',
+            new THREE.BufferAttribute(Float32Array.from(d.lumaBases), 1));
+    }
+    /* And the same for a texture-point override, which rewrites the UVs. */
+    if (entry.scroll) {
+        mesh.geometry.setAttribute('aTexel',
+            new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
+    }
+    mesh.visible = state.layerOn[entry.layer] !== false;
+    /* The decoded UVs stay the offset's origin: the copy above is written
+     * from them every frame rather than walked on from where it stands. */
+    let item = null;
+    if (moves) {
+        item = {
+            entry, mesh, lines, model: entry.model,
+            uvs: entry.scroll ? d.uvs : null,
+        };
+        state.anim.entries.push(item);
+    }
+    if (windowed && entry.block != null) state.anim.blocks.push({ entry, mesh, lines, item });
+    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
+        state.anim.billboards.push({ entry, mesh, lines });
+    }
+    return mesh;
+}
+
+/*
+ * The backdrop, which is whatever shows where the sky does not reach, and the
+ * fog tint. Both are flat palette colours, so they take the same colorxlat
+ * path a face does.
+ *
+ * A game whose sky is a tilemap band has the answer in the band itself:
+ * addSkyPanorama takes the commonest colour along its top row, which is
+ * what the sky is doing where it runs out, and it is per stage. Falling
+ * back to the profile's boot-time constant covers a stage whose panorama
+ * would not decode; falling back to the record's own field is the other
+ * game, where the backdrop is a field and there is no tilemap at all.
+ */
+function applyStageBackdrop(stage, slot) {
+    const top = state.skyPanoramas.get(slot)?.topColor;
+    if (top) {
+        state.bgRGB = top;
+    } else {
+        const bg555 = state.rom.game.stageTable.backdrop ?? stage.bgColor555;
+        state.bgRGB = palette555ToRGB(state.cxlat, bg555);
+    }
+    applyBackdropTransfer();
+    /* Left untransformed on purpose: the fill shader applies the transfer to
+     * this uniform itself, so the surface and the fog it blends into stay in
+     * one space. Transforming it here too would run the curve twice. */
+    state.viewer.material.uniforms.uFogColor.value.set(...state.bgRGB);
 }
 
 /* ---- Stage animation ------------------------------------------------------
@@ -1549,12 +1582,14 @@ function setRideStage(on) {
  * torn down — the other two views clear the same root. */
 function resetStageAnimation() {
     const a = state.anim;
+    disposeEggLabFootage();
     for (const g of a.geom.values()) { g.mesh.dispose(); g.edges.dispose(); }
     a.geom.clear();
     a.entries = [];
     a.billboards = [];
     a.blocks = [];
     a.phases = [];
+    a.liveCam = null;
     a.start = performance.now();
     a.frame = -1;
 }
@@ -1678,6 +1713,27 @@ function stepBlockWindow() {
     }
 }
 
+/* Put a moving draw on another of its frames' models. */
+function swapFrame(it, model) {
+    if (model === it.model) return;
+    it.model = model;
+    const g = frameGeometry(model);
+    it.mesh.geometry = g.mesh;
+    if (it.lines) it.lines.geometry = g.edges;
+}
+
+/* Set a part's matrix, mesh and wire overlay alike. */
+function placePart(part, matrix) {
+    part.mesh.matrix.copy(matrix);
+    if (part.lines) part.lines.matrix.copy(matrix);
+}
+
+/* The same from a flat column-major 4x4 — a pose's, see js/pose.js. */
+function placePartAt(part, elements) {
+    part.mesh.matrix.fromArray(elements);
+    if (part.lines) part.lines.matrix.fromArray(elements);
+}
+
 /** Advance every animated draw on this stage to whatever frame we are on. */
 function stepStageAnimation(now) {
     const a = state.anim;
@@ -1689,12 +1745,7 @@ function stepStageAnimation(now) {
         const { entry } = it;
         if (entry.anim) {
             const model = frameModel(entry.anim, frame);
-            if (model !== it.model) {
-                it.model = model;
-                const g = frameGeometry(model);
-                it.mesh.geometry = g.mesh;
-                if (it.lines) it.lines.geometry = g.edges;
-            }
+            swapFrame(it, model);
             /* A frame table can name model 0 — the fence's dark frames are the
              * zero halves of its longs — and that draws nothing. Set every
              * frame, not just on a change, so a layer toggled back on cannot
@@ -1709,9 +1760,9 @@ function stepStageAnimation(now) {
             const v = frameBand(entry.band, frame) * LUMA_BAND;
             if (v !== it.band) {
                 it.band = v;
-                const a = it.mesh.geometry.getAttribute('aLumaBase');
-                a.array.fill(v);
-                a.needsUpdate = true;
+                const attr = it.mesh.geometry.getAttribute('aLumaBase');
+                attr.array.fill(v);
+                attr.needsUpdate = true;
             }
         }
         if (entry.scroll) {
@@ -1722,38 +1773,171 @@ function stepStageAnimation(now) {
             const dv = frameScroll(entry.scroll, frame);
             if (dv !== it.scroll) {
                 it.scroll = dv;
-                const a = it.mesh.geometry.getAttribute('aTexel');
+                const attr = it.mesh.geometry.getAttribute('aTexel');
                 const first = entry.scroll.axis === 'u' ? 0 : 1;
-                for (let i = first; i < a.array.length; i += 2) a.array[i] = it.uvs[i] + dv;
-                a.needsUpdate = true;
+                for (let i = first; i < attr.array.length; i += 2) attr.array[i] = it.uvs[i] + dv;
+                attr.needsUpdate = true;
             }
         }
         if (entry.live) {
             /* A draw with state of its own, stepped with the camera — the
              * Daytona horses, which bolt from it. It picks its own model. */
             const r = entry.live(frame, liveCamera(frame));
-            if (r.model !== it.model) {
-                it.model = r.model;
-                const g = frameGeometry(r.model);
-                it.mesh.geometry = g.mesh;
-                if (it.lines) it.lines.geometry = g.edges;
-            }
+            swapFrame(it, r.model);
             it.shown = !r.hidden;
             it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
-            composeOps(ANIM_SCRATCH, r.ops);
-            it.mesh.matrix.copy(ANIM_SCRATCH);
-            if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
+            placePart(it, composeOps(ANIM_SCRATCH, r.ops));
         } else if (typeof entry.ops === 'function') {
-            composeOps(ANIM_SCRATCH, entry.ops(frame));
-            it.mesh.matrix.copy(ANIM_SCRATCH);
-            if (it.lines) it.lines.matrix.copy(ANIM_SCRATCH);
+            placePart(it, composeOps(ANIM_SCRATCH, entry.ops(frame)));
         }
     }
 
+    stepEggLabFootage(frame);
     setWorldFrame(frame);
     stepStageColors(frame);
     stepStageLight(frame);
     stepStageMaterials(frame);
+}
+
+/*
+ * Eggman's lab: the footage on the monitor wall.
+ *
+ * adv_movie_egg_disp draws what each monitor shows into a set_window rectangle
+ * of the board's picture, in view space, under a projection centred on the
+ * window — and each rectangle lies exactly over one of the wall's three panels
+ * from the cut's camera. Drawn that way here, it would only line up from that
+ * one spot. So each window is rendered into a texture of its own, through a
+ * lens that is the board's cut down to the window, and the texture is laid
+ * over its panel on the rectangle the window covers there: the picture the
+ * board shows from its camera, and still a screen on the wall from anywhere
+ * else. A window does not clear, so the texture starts transparent and the
+ * panel shows through wherever the footage does not cover it.
+ *
+ * The draws share the stage's material, uniforms and all, so the footage takes
+ * the room's flickering light as the board's does (see stageBright).
+ */
+const FOOTAGE_SCALE = 4;    /* texture pixels to a board pixel */
+const FOOTAGE_POOL = 5;     /* the most draws one window makes in a frame */
+const FOOTAGE_LIFT = 0.02;  /* off the face of the panel it lies on */
+const FOOTAGE_NEAR = 0.05;
+const FOOTAGE_FAR = 1000;
+
+const FOOTAGE_VERT = /* glsl */`
+    out vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+/* Passed through as it stands: the fill shader's output is already the
+ * display-referred colour, in the texture as on the screen. */
+const FOOTAGE_FRAG = /* glsl */`
+    uniform sampler2D uMap;
+    in vec2 vUv;
+    out vec4 fragColor;
+    void main() {
+        vec4 c = texture(uMap, vUv);
+        if (c.a < 0.5) discard;
+        fragColor = vec4(c.rgb, 1.0);
+    }
+`;
+
+function buildEggLabFootage(stage) {
+    const footage = eggLabFootage(stage, state.frames);
+    if (!footage) return;
+    const v = state.viewer;
+    const [ex, ey, ez] = footage.eye;
+    const windows = footage.windows.map((w) => {
+        const rt = new THREE.WebGLRenderTarget(
+            (w.x1 - w.x0) * FOOTAGE_SCALE, (w.y1 - w.y0) * FOOTAGE_SCALE, { samples: 4 });
+        const scene = new THREE.Scene();
+        scene.onBeforeRender = (renderer) => {
+            renderer.getCurrentViewport(v.material.uniforms.uViewport.value);
+        };
+        /* The board's focal length about the window's own centre, which is
+         * where set_window puts the projection's. */
+        const camera = new THREE.PerspectiveCamera();
+        const k = FOOTAGE_NEAR / BOARD_FOCAL;
+        camera.projectionMatrix.makePerspective(
+            (w.x0 - w.cx) * k, (w.x1 - w.cx) * k, (w.cy - w.y0) * k, (w.cy - w.y1) * k,
+            FOOTAGE_NEAR, FOOTAGE_FAR);
+        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        const pool = Array.from({ length: FOOTAGE_POOL }, () => {
+            const mesh = new THREE.Mesh(new THREE.BufferGeometry(), v.material);
+            mesh.matrixAutoUpdate = false;
+            mesh.visible = false;
+            scene.add(mesh);
+            return mesh;
+        });
+
+        /* The window's rectangle, seen from the cut's camera, on the face of
+         * the panel under it. The decoder's Z runs toward that camera. */
+        const g = frameGeometry(w.panel).mesh;
+        g.computeBoundingBox();
+        const z = g.boundingBox.max.z + FOOTAGE_LIFT;
+        const d = ez - z;
+        const sx = (px) => ex + ((px - BOARD_W / 2) / BOARD_FOCAL) * d;
+        const sy = (py) => ey + ((BOARD_H / 2 - py) / BOARD_FOCAL) * d;
+        const quad = new THREE.Mesh(
+            new THREE.PlaneGeometry(sx(w.x1) - sx(w.x0), sy(w.y0) - sy(w.y1)),
+            new THREE.ShaderMaterial({
+                glslVersion: THREE.GLSL3,
+                vertexShader: FOOTAGE_VERT,
+                fragmentShader: FOOTAGE_FRAG,
+                uniforms: { uMap: { value: rt.texture } },
+            }));
+        quad.position.set((sx(w.x0) + sx(w.x1)) / 2, (sy(w.y0) + sy(w.y1)) / 2, z);
+        quad.userData.layer = 'inside';
+        quad.visible = state.layerOn.inside !== false;
+        v.root.add(quad);
+        return { rt, scene, camera, pool, quad };
+    });
+    state.anim.footage = { draws: footage.draws, windows };
+}
+
+/** Put what each window shows at this frame into its pool of draws. */
+function stepEggLabFootage(frame) {
+    const footage = state.anim.footage;
+    if (!footage) return;
+    const lists = footage.draws(frame);
+    footage.windows.forEach((w, i) => {
+        w.pool.forEach((mesh, k) => {
+            const draw = lists[i][k];
+            mesh.visible = Boolean(draw);
+            if (!draw) return;
+            mesh.geometry = frameGeometry(draw.model).mesh;
+            composeOps(mesh.matrix, draw.ops);
+        });
+    });
+}
+
+/** Render the windows into their textures, ahead of the picture they are in. */
+const FOOTAGE_CLEAR = new THREE.Color();
+function renderEggLabFootage() {
+    const footage = state.anim.footage;
+    if (!footage || !footage.windows[0].quad.visible) return;
+    const r = state.viewer.renderer;
+    const target = r.getRenderTarget();
+    r.getClearColor(FOOTAGE_CLEAR);
+    const alpha = r.getClearAlpha();
+    r.setClearColor(0x000000, 0);
+    for (const w of footage.windows) {
+        r.setRenderTarget(w.rt);
+        r.clear();
+        r.render(w.scene, w.camera);
+    }
+    r.setRenderTarget(target);
+    r.setClearColor(FOOTAGE_CLEAR, alpha);
+}
+
+function disposeEggLabFootage() {
+    const footage = state.anim.footage;
+    if (!footage) return;
+    for (const w of footage.windows) {
+        w.rt.dispose();
+        w.quad.material.dispose();
+    }
+    state.anim.footage = null;
 }
 
 /*
@@ -1775,18 +1959,21 @@ function stepStageMaterials(frame) {
 /*
  * The stage light, at this frame.
  *
- * Only the Flying Carpet moves it, and it moves it to stand still: the angle it
- * rewrites is the one the light is built in the stage's own frame from, so
+ * Eggman's lab dims and brightens it. The Flying Carpet turns it, and turns it
+ * to stand still: the angle it rewrites is the one the light is built in the
+ * stage's own frame from, so
  * taking the carpet's heading back out again is what leaves the sun where it is
  * in the world. Rebuilt from the record each time rather than rotated in place,
  * because that is the arithmetic camera_init does.
  */
 function stepStageLight(frame) {
     const stage = state.stages[state.stageIndex];
-    const yaw = stage ? stageLightYaw(stage, frame, state.frames) : null;
-    if (yaw === null) return;
+    if (!stage) return;
+    const yaw = stageLightYaw(stage, frame, state.frames);
+    const bright = stageBright(stage, frame);
+    if (yaw === null && bright === null) return;
     state.viewer.material.uniforms.uLight.value.set(
-        ...stageLight(stage.bright, stage.vecter[0], yaw));
+        ...stageLight(bright ?? stage.bright, stage.vecter[0], yaw ?? stage.vecter[1]));
 }
 
 /*
@@ -1888,7 +2075,6 @@ function applyFaceLayers(draws, space = state.viewer.root) {
          * so do the others', and the course blocks around it can be left out,
          * which is most of the time this takes. */
         let alone = null;
-        const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
         for (const frame of entry?.anim?.frames ?? []) {
             const d = getModel(frame);
             if (!d) continue;
@@ -1900,7 +2086,7 @@ function applyFaceLayers(draws, space = state.viewer.root) {
             }
             if (alone === null) {
                 const solo = coplanarLayers([{ decoded, matrix }])[0];
-                alone = same(solo.plane, layers[i].plane);
+                alone = sameEntries(solo.plane, layers[i].plane);
             }
             /* In the order the game submits them, which the sort's ties go by. */
             const box = boxOf(d, matrix);
@@ -2049,13 +2235,26 @@ function motionSample(m, f) {
 function buildCycle(ids) {
     const cycle = ids.map((id) => {
         const d = getModel(id);
-        return d ? {
-            decoded: d,
-            mesh: buildGeometry(d),
-            edges: d.edges.length ? buildEdgeGeometry(d) : null,
-        } : null;
+        return d ? geomBundle(d) : null;
     });
     return cycle.every(Boolean) ? cycle : null;
+}
+
+/* One decode's uploaded geometry, with no wire overlay where it has no edges. */
+function geomBundle(d) {
+    return { decoded: d, mesh: buildGeometry(d), edges: d.edges.length ? buildEdgeGeometry(d) : null };
+}
+
+/* A rig part: a mesh and its wires, placed by hand each frame. `geom` is a
+ * bundle already uploaded — an entry of a cycle — for the part to start on. */
+function addRigPart(decoded, geom = null) {
+    return addModelToScene(decoded, { matrix: new THREE.Matrix4(), geom });
+}
+
+/* A part that swaps through a built cycle, starting on entry `phase`. */
+function addCyclePart(cycle, phase = 0) {
+    const { mesh, lines } = addRigPart(cycle[phase].decoded, cycle[phase]);
+    return { mesh, lines, cycle, phase };
 }
 
 /* Step a part built on such a cycle to another entry. One mesh swaps geometry,
@@ -2126,8 +2325,7 @@ function rebuildRig({ keepCamera = true } = {}) {
         if (!id) continue;
         const d = getModel(id);
         if (!d) continue;
-        const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
-        if (lines) { lines.matrixAutoUpdate = false; }
+        const { mesh, lines } = addRigPart(d);
         m.parts.push({ slot: i, mesh, lines, bounds: d.bounds });
     }
 
@@ -2155,8 +2353,7 @@ function rebuildRig({ keepCamera = true } = {}) {
         const points = c.face.eyePoints[i];
         const d = points ? getTpdModel(id, points, 'eye') : getModel(id);
         if (!d) return;
-        const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
-        if (lines) { lines.matrixAutoUpdate = false; }
+        const { mesh, lines } = addRigPart(d);
         m.parts.push({ slot: HEAD_SLOT, mesh, lines, bounds: d.bounds, eye: true });
     });
     /* Sway chains — Honey's pigtails, Fang's tail — are not on the skeleton, so
@@ -2169,8 +2366,7 @@ function rebuildRig({ keepCamera = true } = {}) {
     for (const p of osageParts(restPoseFor(c), m.osage, { floorY: NO_FLOOR })) {
         const d = getModel(p.model);
         if (!d) continue;
-        const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
-        if (lines) { lines.matrixAutoUpdate = false; }
+        const { mesh, lines } = addRigPart(d);
         m.osageParts.push({ mesh, lines, bounds: d.bounds });
     }
 
@@ -2185,11 +2381,7 @@ function rebuildRig({ keepCamera = true } = {}) {
         const cycle = buildCycle(m.tails.cycle);
         if (cycle) {
             for (const p of tailParts(restPoseFor(c), m.tails, 0)) {
-                const g = cycle[p.phase];
-                const { mesh, lines } = addModelToScene(g.decoded,
-                    { matrix: new THREE.Matrix4(), geom: g });
-                if (lines) { lines.matrixAutoUpdate = false; }
-                m.tailParts.push({ mesh, lines, cycle, phase: p.phase });
+                m.tailParts.push(addCyclePart(cycle, p.phase));
             }
         }
     }
@@ -2199,11 +2391,8 @@ function rebuildRig({ keepCamera = true } = {}) {
     if (m.tails) {
         const cycle = buildCycle(m.tails.blur);
         if (cycle) {
-            const { mesh, lines } = addModelToScene(cycle[0].decoded,
-                { matrix: new THREE.Matrix4(), geom: cycle[0] });
-            if (lines) { lines.matrixAutoUpdate = false; }
-            mesh.visible = false;
-            m.propPart = { mesh, lines, cycle, phase: 0 };
+            m.propPart = addCyclePart(cycle);
+            m.propPart.mesh.visible = false;
         }
     }
 
@@ -2217,20 +2406,13 @@ function rebuildRig({ keepCamera = true } = {}) {
     if (m.exhaust && !state.useSquished) {
         for (const id of m.exhaust.bodies) {
             const d = getModel(id);
-            if (d) m.chestGeoms.set(id, { decoded: d, mesh: buildGeometry(d),
-                edges: d.edges.length ? buildEdgeGeometry(d) : null });
+            if (d) m.chestGeoms.set(id, geomBundle(d));
         }
     }
     if (m.exhaust) {
         const cycle = buildCycle(m.exhaust.cycle);
         const p = cycle && exhaustPart(restPoseFor(c), m.exhaust, 0);
-        if (p) {
-            const g = cycle[p.phase];
-            const { mesh, lines } = addModelToScene(g.decoded,
-                { matrix: new THREE.Matrix4(), geom: g });
-            if (lines) { lines.matrixAutoUpdate = false; }
-            m.exhaustPart = { mesh, lines, cycle, phase: p.phase };
-        }
+        if (p) m.exhaustPart = addCyclePart(cycle, p.phase);
     }
     /* The Egg robots' two timed animations, neither of them in the motion: the
      * boss's arms swing on an extra object hung off the chest, and the minion's
@@ -2240,36 +2422,17 @@ function rebuildRig({ keepCamera = true } = {}) {
     if (BOSS_CHARS.includes(c.charIndex)) {
         const arms = readMechArms(state.rom);
         const cycle = arms && buildCycle(arms);
-        if (cycle) {
-            const g = cycle[0];
-            const { mesh, lines } = addModelToScene(g.decoded,
-                { matrix: new THREE.Matrix4(), geom: g });
-            if (lines) { lines.matrixAutoUpdate = false; }
-            m.eggArms = { mesh, lines, cycle, phase: 0, arms };
-        }
+        if (cycle) m.eggArms = { ...addCyclePart(cycle), arms };
     }
     m.eggHead = null;
     if (MINION_CHARS.includes(c.charIndex)) {
         const heads = readRoboHead(state.rom);
         const cycle = heads && buildCycle(heads);
-        if (cycle) {
-            const g = cycle[0];
-            const { mesh, lines } = addModelToScene(g.decoded,
-                { matrix: new THREE.Matrix4(), geom: g });
-            if (lines) { lines.matrixAutoUpdate = false; }
-            m.eggHead = { mesh, lines, cycle, phase: 0, heads,
-                          anims: readRoboAnims(state.rom) };
-        }
+        if (cycle) m.eggHead = { ...addCyclePart(cycle), heads, anims: readRoboAnims(state.rom) };
     }
     applyWireVisibility();
 
-    /* One line list for the whole skeleton, rewritten in place each frame. */
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SLOT_COUNT - 1) * 6), 3));
-    m.skeleton = new THREE.LineSegments(g, v.skeletonMaterial);
-    m.skeleton.renderOrder = 2;
-    m.skeleton.frustumCulled = false;
-    v.root.add(m.skeleton);
+    m.skeleton = addSkeletonLines(SLOT_COUNT - 1);
 
     poseRig();
 
@@ -2285,9 +2448,26 @@ function rebuildRig({ keepCamera = true } = {}) {
                 },
             };
         });
-        const b = unionBounds(placed, 2);
-        v.frame(b.center, b.radius * 1.25, { dir: [-0.45, 0.18, -0.9] });
+        frameRig(placed, 2);
     }
+}
+
+/* One line list for the whole skeleton, `bones` segments, rewritten in place
+ * each frame. */
+function addSkeletonLines(bones) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bones * 6), 3));
+    const lines = new THREE.LineSegments(g, state.viewer.skeletonMaterial);
+    lines.renderOrder = 2;
+    lines.frustumCulled = false;
+    state.viewer.root.add(lines);
+    return lines;
+}
+
+/* Frame the camera on a rig's placed parts, from the front quarter. */
+function frameRig(placed, fallbackRadius) {
+    const b = unionBounds(placed, fallbackRadius);
+    state.viewer.frame(b.center, b.radius * 1.25, { dir: [-0.45, 0.18, -0.9] });
 }
 
 /*
@@ -2413,8 +2593,7 @@ function placeTrails(m, c, pose, poseAt) {
         if (m.trails) {
             for (const id of trailModels(m.trails)) {
                 const d = getModel(id);
-                if (d) m.trailGeoms.set(id, { decoded: d, mesh: buildGeometry(d),
-                    edges: d.edges.length ? buildEdgeGeometry(d) : null });
+                if (d) m.trailGeoms.set(id, geomBundle(d));
             }
         }
     }
@@ -2449,9 +2628,7 @@ function placeTrails(m, c, pose, poseAt) {
         const first = m.trailGeoms.values().next().value;
         m.trailPool = [];
         for (let i = 0; i < TRAIL_POOL; i++) {
-            const { mesh, lines } = addModelToScene(first.decoded,
-                { matrix: new THREE.Matrix4(), geom: first });
-            if (lines) lines.matrixAutoUpdate = false;
+            const { mesh, lines } = addRigPart(first.decoded, first);
             m.trailPool.push({ mesh, lines, model: first.decoded.index });
         }
     }
@@ -2474,8 +2651,7 @@ function placeTrails(m, c, pose, poseAt) {
             if (p.lines && g.edges) p.lines.geometry = g.edges;
         }
         const mat = viewerMatrix(d);
-        p.mesh.matrix.fromArray(mat);
-        if (p.lines) p.lines.matrix.fromArray(mat);
+        placePartAt(p, mat);
     });
 }
 
@@ -2496,16 +2672,11 @@ function poseRig() {
         ? buildPose(skeleton, motionSample(m, m.frame))
         /* A slot with no motion still has to draw something, so solve the pose
          * every channel reads as zero — which is the game's own rest. */
-        : buildPose(skeleton, {
-            angles: new Uint16Array(36),
-            targets: new Float32Array(24),
-            targetUsed: new Uint8Array(8),
-        });
+        : restPoseFor(c);
 
     const mats = poseMatrices(pose);
     for (const p of m.parts) {
-        p.mesh.matrix.fromArray(mats[p.slot]);
-        if (p.lines) p.lines.matrix.fromArray(mats[p.slot]);
+        placePartAt(p, mats[p.slot]);
     }
     /* What the motion's script has switched by this frame. */
     if (m.scriptId !== m.id || m.scriptOf !== m.decoded) {
@@ -2522,8 +2693,7 @@ function poseRig() {
         const placed = placeOsage(m, pose, m.decoded ? {} : { floorY: NO_FLOOR });
         for (let i = 0; i < m.osageParts.length && i < placed.length; i++) {
             const mat = viewerMatrix(placed[i]);
-            m.osageParts[i].mesh.matrix.fromArray(mat);
-            if (m.osageParts[i].lines) m.osageParts[i].lines.matrix.fromArray(mat);
+            placePartAt(m.osageParts[i], mat);
         }
     }
     /* Tails' pair: placed from the pose, but stepped through their own cycle by
@@ -2534,8 +2704,7 @@ function poseRig() {
     for (const part of m.tailParts ?? []) showPart(part, !prop);
     if (prop && m.propPart) {
         const mat = viewerMatrix(prop);
-        m.propPart.mesh.matrix.fromArray(mat);
-        if (m.propPart.lines) m.propPart.lines.matrix.fromArray(mat);
+        placePartAt(m.propPart, mat);
         stepCycle(m.propPart, prop.phase);
     }
     if (m.tails && !prop) {
@@ -2543,8 +2712,7 @@ function poseRig() {
         for (let i = 0; i < m.tailParts.length && i < placed.length; i++) {
             const part = m.tailParts[i];
             const mat = viewerMatrix(placed[i]);
-            part.mesh.matrix.fromArray(mat);
-            if (part.lines) part.lines.matrix.fromArray(mat);
+            placePartAt(part, mat);
             stepCycle(part, placed[i].phase);
         }
     }
@@ -2555,8 +2723,7 @@ function poseRig() {
         const part = m.exhaustPart;
         const placed = exhaustPart(pose, m.exhaust, m.tick);
         const mat = viewerMatrix(placed);
-        part.mesh.matrix.fromArray(mat);
-        if (part.lines) part.lines.matrix.fromArray(mat);
+        placePartAt(part, mat);
         stepCycle(part, placed.phase);
     }
     /* The afterimages: the coprocessor's ring, run on the pose frame by frame. */
@@ -2567,8 +2734,7 @@ function poseRig() {
      * routine adds no transform of its own, only a model. */
     if (m.eggArms) {
         const mat = viewerMatrix(pose[EGG_CHEST_SLOT]);
-        m.eggArms.mesh.matrix.fromArray(mat);
-        if (m.eggArms.lines) m.eggArms.lines.matrix.fromArray(mat);
+        placePartAt(m.eggArms, mat);
         /* The table repeats models on the way back down, so step the cycle by
          * the table index the counter gives rather than by the model id. */
         stepCycle(m.eggArms, (m.tick >>> ARM_SHIFT) & (ARM_COUNT - 1));
@@ -2591,8 +2757,7 @@ function poseRig() {
             const turned = { r: turnedBy(pose[EGG_HEAD_SLOT].r, 0, 0, h.spin),
                              t: pose[EGG_HEAD_SLOT].t };
             const mat = viewerMatrix(turned);
-            m.eggHead.mesh.matrix.fromArray(mat);
-            if (m.eggHead.lines) m.eggHead.lines.matrix.fromArray(mat);
+            placePartAt(m.eggHead, mat);
             stepCycle(m.eggHead, m.eggHead.heads.indexOf(h.model));
         }
     }
@@ -2683,25 +2848,17 @@ function rebuildBody({ keepCamera = true } = {}) {
     m.skinMesh = null;
     applyWireVisibility();
 
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(
-        new Float32Array(Math.max(1, body.parts.length - 1) * 6), 3));
-    m.skeleton = new THREE.LineSegments(g, v.skeletonMaterial);
-    m.skeleton.renderOrder = 2;
-    m.skeleton.frustumCulled = false;
-    v.root.add(m.skeleton);
+    m.skeleton = addSkeletonLines(Math.max(1, body.parts.length - 1));
 
     poseRig();
 
     if (!keepCamera) {
         const drawn = m.parts.flatMap((p) => p.slots.filter((x) => x.decoded)
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
-        const b = unionBounds(drawn, 10);
-        v.frame(b.center, b.radius * 1.25, { dir: [-0.45, 0.18, -0.9] });
+        frameRig(drawn, 10);
     }
 }
 
-/* Point a part's slot at a model, or at nothing. */
 const IDENTITY_MATRIX = new THREE.Matrix4().elements;
 
 /*
@@ -2722,6 +2879,7 @@ function rankBodyPart(slot) {
     applyFaceLayers([{ decoded: slot.decoded, matrix: IDENTITY_MATRIX, mesh: slot.mesh }], slot.mesh);
 }
 
+/* Point a part's slot at a model, or at nothing. */
 function setBodySlot(slot, model) {
     if (slot.model === model) return;
     slot.model = model;
@@ -2757,9 +2915,7 @@ function poseBodyRig() {
             if (k >= p.slots.length) {
                 const d = getModel(models[k]);
                 if (!d?.positions.length) continue;
-                const { mesh, lines } = addModelToScene(d,
-                    { matrix: new THREE.Matrix4(), geom: frameGeometry(models[k]) });
-                if (lines) { lines.matrixAutoUpdate = false; }
+                const { mesh, lines } = addRigPart(d, frameGeometry(models[k]));
                 p.slots.push({ mesh, lines, model: models[k], decoded: d });
                 rankBodyPart(p.slots[p.slots.length - 1]);
                 continue;
@@ -2767,8 +2923,7 @@ function poseBodyRig() {
             setBodySlot(p.slots[k], k < models.length ? models[k] : null);
         }
         for (const x of p.slots) {
-            x.mesh.matrix.fromArray(matrices[p.part]);
-            if (x.lines) x.lines.matrix.fromArray(matrices[p.part]);
+            placePartAt(x, matrices[p.part]);
         }
     }
 
@@ -2779,9 +2934,7 @@ function poseBodyRig() {
         if (d) {
             d.index = null;
             if (!m.skinMesh) {
-                const { mesh, lines } = addModelToScene(d, { matrix: new THREE.Matrix4() });
-                if (lines) { lines.matrixAutoUpdate = false; }
-                m.skinMesh = { mesh, lines };
+                m.skinMesh = addRigPart(d);
             } else {
                 m.skinMesh.mesh.geometry.dispose();
                 m.skinMesh.mesh.geometry = buildGeometry(d);
@@ -2790,8 +2943,7 @@ function poseBodyRig() {
                     m.skinMesh.lines.geometry = buildEdgeGeometry(d);
                 }
             }
-            m.skinMesh.mesh.matrix.fromArray(matrices[m.skin.hips]);
-            if (m.skinMesh.lines) m.skinMesh.lines.matrix.fromArray(matrices[m.skin.hips]);
+            placePartAt(m.skinMesh, matrices[m.skin.hips]);
         }
     }
 
@@ -2872,6 +3024,7 @@ function renderStagePanel(stage, counts, totals, list) {
      * other thirteen the checkbox would be a control over nothing. */
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
+    $('#skyeye-field').hidden = state.rom.game.id !== 'sfight';
     $('#mode-field').hidden = !stage.objectDraws;
     /* A stage's views: House of the Dead's zones, Daytona's camera window. */
     const views = stage.views?.length > 1 ? stage.views : null;
@@ -3575,13 +3728,20 @@ function wirePicking() {
     });
 }
 
+/* Build whichever view is up again, from the tables as they now stand. */
+function reloadView({ keepCamera }) {
+    if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera });
+    else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera });
+    else rebuildRig({ keepCamera });
+}
+
 function switchTab(tab) {
     state.tab = tab;
     for (const b of $('#tabs').children) b.classList.toggle('active', b.dataset.tab === tab);
     for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.tab !== tab;
     if (tab === 'stage') loadStage(state.stageIndex);
     else if (tab === 'model') loadModel(state.modelIndex);
-    else loadCharacter(state.charIndex, { keepPose: true });
+    else loadCharacter(state.charIndex, { keepMotion: true });
     updateHud();
 }
 
@@ -3723,10 +3883,8 @@ function wireOptions() {
         state.rom.cabinet = +e.target.value;
         state.lutKey = null;
         v.clearSetMaterials();
-        for (const t of state.skyTextures.values()) t?.dispose?.();
-        state.skyTextures.clear();
-        if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera: true });
-        else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera: true });
+        clearSkyPanoramas();
+        reloadView({ keepCamera: true });
     });
     $('#opt-wire').addEventListener('change', (e) => {
         state.wireframe = e.target.checked;
@@ -3745,13 +3903,17 @@ function wireOptions() {
     $('#opt-cull').addEventListener('change', (e) => v.backfaceCull(e.target.checked));
     $('#opt-smooth-holes').addEventListener('change', (e) => v.smoothHoles(e.target.checked));
     $('#opt-ride').addEventListener('change', (e) => setRideStage(e.target.checked));
+    $('#skyeye-copy').addEventListener('click', () => {
+        const text = updateSkyEye();
+        if (text) navigator.clipboard?.writeText(text).catch(() => {});
+    });
+    $('#opt-board-lens').addEventListener('change', (e) => setBoardLens(e.target.checked));
     /* The ROM's own mistakes, mended in place, and the view rebuilt where it
      * stands: the models decoded from the old bytes go with the cache. */
     $('#opt-fix-errors').addEventListener('change', (e) => {
         useRomFixes(e.target.checked);
         state.modelCache.clear();
-        if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera: true });
-        else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera: true });
+        reloadView({ keepCamera: true });
     });
 
     $('#tex-file').addEventListener('change', (e) => {
@@ -3782,25 +3944,12 @@ function wireOptions() {
         if (e.target.matches('input, select, textarea')) return;
         if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(modelCount() - 1, state.modelIndex + 1));
         if (state.tab === 'model' && e.code === 'BracketLeft') selectModel(Math.max(0, state.modelIndex - 1));
-        if (e.code === 'KeyF') {
-            if (state.tab === 'stage') loadStage(state.stageIndex);
-            else if (state.tab === 'model') loadModel(state.modelIndex);
-            else rebuildRig({ keepCamera: false });
-        }
+        if (e.code === 'KeyF') reloadView({ keepCamera: false });
     });
 }
 
 /* ---- Boot ---------------------------------------------------------------- */
 
-/*
- * Show only the tabs the loaded game has tables for.
- *
- * The stage list, the rigs and the motions are each read out of a table located
- * in one game's program ROM, and a second game keeps its own somewhere else. So
- * a title the repo has only the model table for gets the Models tab and nothing
- * else, rather than three panels where two are empty or, worse, full of another
- * game's addresses read against these ROMs.
- */
 /* The Models tab's texture picker. Shown only when no stage record is going to
  * name a texture number, which is the same condition that hides the Stages tab.
  * "From the model" is the default and is what the auto search does. */
@@ -3818,13 +3967,14 @@ function renderTextureSetPicker() {
         sel.appendChild(o);
     }
     sel.value = 'auto';
-    sel.addEventListener('change', () => {
+    /* Assigned, not added: this runs again for every build loaded. */
+    sel.onchange = () => {
         state.texSetChoice = sel.value === 'auto' ? null : Number(sel.value);
         /* The sheets are keyed on the set, so a change has to invalidate that
          * key or the rebuild is skipped as a repeat. */
         state.texramKey = null;
         loadModel(state.modelIndex, { keepCamera: true });
-    });
+    };
     $('#model-texset-field').hidden = false;
 
     /* Scene colours and whose parts to read, the two a stage record would name.
@@ -3856,10 +4006,10 @@ function renderTextureSetPicker() {
     };
     const fighter = fill('#model-fighter', C.part.blocks, 'fighter', 'none');
     fighter.value = String(state.colorFighter);
-    fighter.addEventListener('change', () => {
+    fighter.onchange = () => {
         state.colorFighter = Number(fighter.value);
         rebuild();
-    });
+    };
     $('#model-colour-field').hidden = false;
 }
 
@@ -3940,6 +4090,15 @@ async function setMusic(on) {
     playStageMusic();
 }
 
+/*
+ * Show only the tabs the loaded game has tables for.
+ *
+ * The stage list, the rigs and the motions are each read out of a table located
+ * in one game's program ROM, and a second game keeps its own somewhere else. So
+ * a title the repo has only the model table for gets the Models tab and nothing
+ * else, rather than three panels where two are empty or, worse, full of another
+ * game's addresses read against these ROMs.
+ */
 function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
@@ -3974,6 +4133,12 @@ function applyGameFeatures() {
     return on;
 }
 
+/* A new set loads as it shipped, so the switch is carried over to it here. */
+function useRomFixes(on) {
+    const failed = setRomPatches(state.rom, on);
+    if (failed.length) console.warn(`fix errors: ${failed.join(', ')} not where expected, left alone`);
+}
+
 /*
  * Everything the loaded build decides, as against everything the page decides.
  *
@@ -3982,12 +4147,6 @@ function applyGameFeatures() {
  * not the renderer, the canvas or the wiring. So the two are separated: start()
  * runs once and this runs again on every swap.
  */
-/* A new set loads as it shipped, so the switch is carried over to it here. */
-function useRomFixes(on) {
-    const failed = setRomPatches(state.rom, on);
-    if (failed.length) console.warn(`fix errors: ${failed.join(', ')} not where expected, left alone`);
-}
-
 function loadGameContent() {
     $('#fix-field').hidden = !state.rom.game.patches?.length;
     useRomFixes($('#opt-fix-errors').checked);
@@ -4048,6 +4207,31 @@ function loadGameContent() {
 }
 
 /*
+ * The view as the game's own camera record (js/skyeye.js), for the SKY EYE
+ * readout on the Stages tab. Returns the text, or null where there is no such
+ * record to show — another game, or another tab. Written only when it changes,
+ * so it can be selected and copied while the page runs.
+ */
+function updateSkyEye() {
+    const out = $('#skyeye-readout');
+    if (!out || state.tab !== 'stage' || state.rom?.game.id !== 'sfight') return null;
+    const v = state.viewer;
+    const text = describeBoardCamera(boardCamera(v.camera, v.root), state.stageIndex);
+    if (out.textContent !== text) out.textContent = text;
+    return text;
+}
+
+/* The board's lens, or back to the explorer's own. */
+let explorerFov = null;
+function setBoardLens(on) {
+    const cam = state.viewer.camera;
+    if (on && explorerFov === null) explorerFov = cam.fov;
+    cam.fov = on ? BOARD_FOV : explorerFov ?? cam.fov;
+    if (!on) explorerFov = null;
+    cam.updateProjectionMatrix();
+}
+
+/*
  * The rest of a report's link, once the panel is wired: loadGameContent has
  * already opened the tab and what it was showing, and this puts back the
  * clock, the switches, the motion and, last, the camera.
@@ -4100,7 +4284,15 @@ function restoreLinkedView() {
     if (link.cam !== v.mode) $(`#camera-mode [data-mode="${link.cam}"]`)?.click();
     if (link.pos) v.camera.position.set(...link.pos);
     if (link.target) v.orbit.target.set(...link.target);
-    if (v.mode === 'fly' && link.look) {
+    if (!link.pos && link.board && state.tab === 'stage') {
+        /* A link that carries only the game's camera record — the one m2-hle2
+         * writes from the board's camera. The orbit target goes a little way
+         * ahead, so a switch of rig keeps the direction. */
+        const { eye, at } = placeFromBoard(v.camera, v.root, link.board);
+        v.orbit.target.copy(at.sub(eye).multiplyScalar(5).add(eye));
+        v.fly.syncFromCamera();
+        v.orbit.update();
+    } else if (v.mode === 'fly' && link.look) {
         v.fly.face(link.look[0], link.look[1]);
     } else {
         v.camera.lookAt(v.orbit.target);
@@ -4150,8 +4342,9 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); renderEggLabFootage(); }
         state.viewer.render();
+        if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;
             $('#stats').textContent = `${s.drawCalls} draws · ${s.triangles.toLocaleString()} tris`;

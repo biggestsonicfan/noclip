@@ -559,6 +559,27 @@ because the query string belongs to the `?mobile` / `?desktop` switch.
 
 The one thing worth adding by hand is a screenshot. Drag it into the issue.
 
+### The game's own camera (Sonic the Fighters)
+
+On a Sonic the Fighters stage the panel has a **Game camera (SKY EYE)** field:
+where the board's own camera would have to stand to see what the explorer sees,
+in the numbers the game's debug menu uses. SKY EYE is the page of STF's debug
+menu that flies the game's camera record by hand; the readout is that record,
+`Xpos`/`Ypos`/`Zpos` in board units and `Xang`/`Yang` as the 16-bit angles the
+page edits (0x10000 a turn), with the stage numbered as CAMERA POSITION 2 numbers
+it. **Copy** puts it on the clipboard. **board lens** sets the explorer's field
+of view to the board's (68.9° vertical, focal length 280 on 496×384), so a
+picture taken here lines up with one taken on the board.
+
+A Sonic the Fighters stage link carries the same camera as `eye=x,y,z` and
+`ang=xang,yang,zang`, beside the explorer's own `pos`. A link with only `eye` and
+`ang` opens on that camera. m2-hle2 reads the link the other way: its `sky_eye`
+command (or `--sky-eye`, or its SKY EYE window) goes to the link's stage, waits
+until the stage's textures have finished loading, and holds the board's camera
+there, so a picture of the board can be laid over the explorer's. Its
+`sky_eye_link` command writes the board's camera back out as one of these links.
+`js/skyeye.js` has the conversion.
+
 ## Deploying
 
 The site is static, so publishing it is a copy. A push to `master` runs

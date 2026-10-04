@@ -121,7 +121,7 @@ export function readRoboHead(rom) {
         const a = EGG_ROBO_HEAD_ADDR + i * 4;
         if (a + 4 > rom.maincpu.length) return null;
         const id = dv.getUint32(a, true);
-        if (!id || id > 5103) return null;
+        if (!id || id >= rom.game.modelTable.count) return null;
         out.push(id);
     }
     return out;

@@ -12,20 +12,15 @@
  * and the platform each carry a transform from the function that draws them.
  */
 
-export const STAGE_DATA_ADDR = 0x0008f3d0;
-import { xtraResolve } from './romset.js';
+import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
 import { readObjectRecords, courseObjectDraws, courseGround, courseReach } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
-
-export const STAGE_STRIDE = 256;
-export const STAGE_COUNT = 16;
 
 /* set_material (0x29154) uploads 32 material slots to the geometry engine, and
  * sub_29110 picks which table to upload with the stage slot. A slot is one
  * packed word: diffuse in bits 0-7, ambient in 8-15, then specular. The
  * geometry engine lights every polygon with the slot its attribute word names
  * — see model.js for that half, and viewer.js for the arithmetic. */
-const MATERIAL_TABLE_PTRS = 0x000909e0;
 export const MATERIAL_COUNT = 32;
 
 /* Field offsets inside one 256-byte stage record. */
@@ -150,6 +145,37 @@ const SFIGHT_STAGE_NAMES = {
 /* The attract movie's stage, and the light direction its Tails' lab scene sets. */
 const TAILS_LAB_SLOT = 15;
 const TAILS_LAB_VECTER_Y = 0xA400 - 0x10000;
+
+/*
+ * Eggman's lab, the movie's second scene, on the same slot as Tails' lab.
+ *
+ * ADV_SEGA_PIC_INT sets stage_num to 15 once, for the whole movie, so every
+ * scene runs on the one record and draws its own set at the origin; the lab
+ * would stand inside Tails' hangar. It is listed as a stage of its own after
+ * the record's sixteen, with the record's backdrop and sheets, and display.js
+ * draws it by `scene`. adv_movie_egg_init stores VECTER_X 0xF000, VECTER_Y
+ * 0x8000 and BRIGHT 2.0; adv_movie_egg rewrites BRIGHT every frame (see
+ * stageBright in js/display.js). It also sets fa_camera bit 17, which makes
+ * camera_init skip doom_cnt, so the record's backdrop is not drawn, and clears
+ * the screen to colour 0 (change_bg_color with g0 = 0).
+ */
+const EGG_LAB_SCENE = 'eggLab';
+const EGG_LAB_VECTER = [0xF000 - 0x10000, 0x8000 - 0x10000];
+const EGG_LAB_BRIGHT = 2.0;
+
+function eggLabStage(movie) {
+    return {
+        ...movie,
+        scene: EGG_LAB_SCENE,
+        name: "Eggman's Lab (ADV_MOVIE)",
+        bright: EGG_LAB_BRIGHT,
+        vecter: EGG_LAB_VECTER.slice(),
+        light: stageLight(EGG_LAB_BRIGHT, ...EGG_LAB_VECTER),
+        sky: [],
+        layers: { ...movie.layers, sky: [] },
+        bgColor555: 0,
+    };
+}
 
 /*
  * The light the geometry engine dots every polygon normal against.
@@ -334,6 +360,8 @@ export function readStageTable(rom) {
         stages.push({
             slot: s,
             num,
+            /* Geometry already in world space: see stageTable.flat. */
+            flat: Boolean(T.flat),
             name: named ?? `Stage ${num}`,
             named: named !== undefined,
             flags: dv.getUint32(b + F.flags, true),
@@ -376,6 +404,7 @@ export function readStageTable(rom) {
         });
     }
 
+    if (T.source === 'maincpu' && stages[TAILS_LAB_SLOT]) stages.push(eggLabStage(stages[TAILS_LAB_SLOT]));
     return stages;
 }
 
@@ -411,10 +440,6 @@ function readMaterials(rom, slot) {
     }
     return out;
 }
-
-/* The data region as the i960 sees it, which is what every pointer in a
- * course table is expressed in. */
-const MAIN_DATA_BASE = 0x02000000;
 
 /* ---- Daytona USA's courses ------------------------------------------------ */
 

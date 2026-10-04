@@ -47,7 +47,7 @@ const STAGE_X = 8.0;
 const CAGE_HEIGHT_DIV = 3.1;
 
 /* Slots the code special-cases by name in the decompilation. */
-export const SOUTH_ISLAND_SLOTS = [0, 13, 14];
+const SOUTH_ISLAND_SLOTS = [0, 13, 14];
 const FLYING_CARPET_SLOT = 1;
 const AURORA_ICEFIELD_SLOT = 2;
 const MUSHROOM_HILL_SLOT = 3;
@@ -78,6 +78,8 @@ const FRAME_TABLES = {
     hangarIris: [0x00090ccc, 128, 2],   /* circular_door_open_close_anim */
     canyonRing: [0x00024aac, 4, 4],     /* canyon_cruise_ring_objects */
     labScreens: [0x0009762c, 4, 4],     /* tails_display_screen, less the black 1201 */
+    eggScreens: [0x000975f0, 4, 4],     /* eggman_lab_viewscreens */
+    eggHeadRise: [0x00097600, 11, 4],   /* egg_robo_head_rising_anim */
     /* ... and the tables the stage objects walk. */
     cards: [0x0007451c, 32, 4],         /* floating_cards_objects */
     conveyor: [0x00076184, 32, 2],      /* dynamite_bg_bombs_conveyor_belt */
@@ -101,6 +103,7 @@ export function readFrameTables(rom) {
     }
     out.blade = PROPELLER_BLADE.slice();
     out.labScreen = labScreenTable(out.labScreens);
+    out.eggWindows = readEggLabWindows(dv);
     /* Not a run of model ids but the records the ice pillars are built from —
      * read here so a stage is still built out of one pass over the ROM. */
     out.pillars = readIcePillars(rom);
@@ -156,8 +159,7 @@ export function frameModel(anim, frame) {
  * banks the plane under a horizon that stays where it is.
  */
 export function stageWorldFrame(stage, frame, frames = null) {
-    /* The slots below are Sonic The Fighters'; a placement stage has none. */
-    if (stage.placements) return null;
+    if (!sfightSlots(stage)) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return worldPrologue(carpetAt(frame));
     if (stage.slot === CANYON_CRUISE_SLOT) {
         return frames?.canyon ? worldPrologue(canyonAt(frames.canyon, frame)) : null;
@@ -169,6 +171,13 @@ export function stageWorldFrame(stage, frame, frames = null) {
         return [['rz', giantWingRoll(frame) * ANGLE_DEG]];
     }
     return null;
+}
+
+/* The slots these functions test are Sonic The Fighters'. A placement stage
+ * has none, and a flat one is Fighting Vipers', whose slots share the numbers
+ * and none of what is drawn on them: its slot 1 is no carpet. */
+function sfightSlots(stage) {
+    return !stage.placements && !stage.flat;
 }
 
 /** The op list a draw uses at a given frame; a static draw ignores the frame. */
@@ -347,6 +356,195 @@ const LAB_ROCKET_DOME_AT = [0, 8.967, -2.88];
  */
 const LAB_SCREEN_START = 64;        /* adv_anm_timers_tails_lab[0] */
 const LAB_SCREEN_STEP = 30;
+
+/*
+ * Eggman's lab, the movie's second scene — adv_movie_egg_disp.
+ *
+ * It runs on slot 15 like Tails' lab, so js/stages.js lists it as a stage of
+ * its own (EGG_LAB_SCENE) to keep the two rooms apart. The routine opens a
+ * matrix on the camera and draws the room at the identity, at its own size:
+ * 3333, then three monitor panels, each held back until the inset window over
+ * it has opened.
+ *
+ * The windows (word_978FC, word_97914, word_9792C) are the footage on the
+ * monitor wall. Each is a set_window rectangle that lies exactly over its
+ * panel from the second cut's camera, and what is drawn in it loads the
+ * identity (op 3) and stands in view space: two Egg Robos flying past, four
+ * dark ones standing about and one sinking, and an upper body whose head turns
+ * and rises. A window does not clear, so its panel is the picture's backdrop.
+ * The viewer renders each window into a texture of its own and lays it over
+ * its panel (app.js, buildEggLabFootage), which is the picture the board shows
+ * from that camera and still a screen on the wall from anywhere else.
+ *
+ * movie_flags, dword_5004D8 and dword_5004DC start at 16, 40 and 64 and count
+ * down once a frame through the second cut (am_num 1, am_cntr from 128). In
+ * the last sixteen frames of the count, amed_open_window draws the "giant
+ * square" 3769 in the window, at (0, 0.22 n, 2.5) for a count n running down
+ * to 0: a solid card sliding down over the window, which is the screen
+ * switching on. At zero the panel is drawn in the room and the footage takes
+ * over the window. The footage only runs while am_num is 1; the viewer loops
+ * the cut (EGG_LAB_LOOP) so it keeps playing. Eggman and the Egg Robo standing
+ * beside him (fa_rob0 at the origin, fa_rob1 at (6.5, 0, -2.5)) are left out.
+ */
+const EGG_LAB_SCENE = 'eggLab';    /* the `scene` js/stages.js gives it */
+const EGG_LAB_ROOM = 3333;          /* "Inside of Eggmans Lab" */
+const EGG_LAB_CUT = 128;            /* word_97266[0]: am_cntr as the second cut starts */
+/* The second cut is 192 frames (word_97266[1] - [0]); the loop runs it twice
+ * as long, so the footage plays for a while once the last window is up. */
+const EGG_LAB_LOOP = 384;
+/* Where the second cut's camera stands (adv_movie_egg, am_num 1), in the
+ * decoder's frame, square on to the wall: the windows are laid on the panels
+ * from here. */
+const EGG_LAB_EYE = [0, 4.5, 6];
+const EGG_LAB_SQUARE = 3769;        /* "Giant square" — amed_open_window */
+const EGG_LAB_WIPE = 16;            /* the counts amed_open_window is drawn on */
+/* The three windows, in the order adv_movie_egg_disp opens them: the counter
+ * each waits on starts at `opens`, the rectangle is read from ROM, and the
+ * panel is drawn under it once it is open. */
+const EGG_LAB_WINDOWS = [
+    { rect: 0x000978fc, opens: 16, panel: 3770 },           /* movie_flags; "Viewscreen" */
+    { rect: 0x00097914, opens: 40, panel: 'eggScreens' },   /* dword_5004D8 */
+    { rect: 0x0009792c, opens: 64, panel: 3771 },           /* dword_5004DC */
+];
+
+/** The movie's clock at a stage frame: the frame into the cut, and am_cntr. */
+function eggLabClock(frame) {
+    const t = ((frame % EGG_LAB_LOOP) + EGG_LAB_LOOP) % EGG_LAB_LOOP;
+    return { t, cntr: EGG_LAB_CUT + t };
+}
+
+/*
+ * The set_window rectangles: six pairs of shorts, of which the first three
+ * matter — (bottom, left), (top, right) and the centre (y, x) the window
+ * projects about, in the board's 496x384 picture, y running down. set_window
+ * turns y the other way (383 - y) on its way to the GEO.
+ */
+function readEggLabWindows(dv) {
+    return EGG_LAB_WINDOWS.map(({ rect }) => {
+        const s = (i) => dv.getUint16(rect + i * 2, true);
+        return { y1: s(0), x0: s(1), y0: s(2), x1: s(3), cy: s(4), cx: s(5) };
+    });
+}
+
+/*
+ * adv_movie_egg sets BRIGHT every frame, before camera_init builds the light
+ * from it: 2 + sin(am_cntr · 0x1300) + cos(am_cntr · 0x500), in the board's
+ * 16-bit angles. The room's light flickers between nothing and twice the
+ * scene's 2.0 on two beats, the faster about once every 13 frames.
+ * adv_movie_egg_disp's 1.0 for the windows is written after the light is
+ * built, and the next frame's write replaces it before the next one is, so the
+ * footage flickers with the room.
+ */
+export function stageBright(stage, frame) {
+    if (stage.scene !== EGG_LAB_SCENE) return null;
+    const { cntr } = eggLabClock(frame);
+    const ang = (step) => (((cntr * step) & 0xffff) * 2 * Math.PI) / 65536;
+    return 2 + Math.sin(ang(0x1300)) + Math.cos(ang(0x500));
+}
+
+/* Board angles and view-space positions into the viewer's ops. The decoder
+ * negates Z, so a translation loses its Z and an ang_z its sign; ang_x and
+ * ang_y go in as they are (see "Each entry composes" in TECHNICAL.md). */
+const viewAt = (x, y, z) => ['t', [x, y, -z]];
+const angY = (a) => ['r', (a & 0xffff) * ANGLE_DEG];
+const angX = (a) => ['rx', (a & 0xffff) * ANGLE_DEG];
+const angZ = (a) => ['rz', -(a & 0xffff) * ANGLE_DEG];
+const boardSin = (a) => Math.sin(((a & 0xffff) * 2 * Math.PI) / 65536);
+/* A 32-frame count run up and back down, as the hangar's robots turn by. */
+const swing32 = (n) => ((n & 0x1f) & 0x10 ? 0x1f - (n & 0x1f) : n & 0x1f);
+
+/* What adv_movie_egg_disp draws in each window at am_cntr `cntr`, `t` frames
+ * into the cut, once it is open. */
+function eggLabWindowDraws(i, t, cntr, frames) {
+    if (i === 0) {
+        /* Two Egg Robos flying out of the picture on a 32-frame lap. The second
+         * adds its step to what the first left in the registers, so it flies
+         * twice as fast, 32 frames further along. */
+        const n = cntr & 0x1f;
+        const out = [];
+        let x = 0.7, y = 0.5, z = 10.0;
+        for (const k of [n, 32 + n]) {
+            x += k * -0.07; y += k * -0.065; z += k * 1.0;
+            out.push({ model: 2681, ops: [viewAt(x, y, z), angY(0x6000), angZ(0xe000), angX(0xe000)] });
+        }
+        return out;
+    }
+    if (i === 1) {
+        /* The hangar: four dark robots turning to and fro on a 32-frame swing,
+         * and one more sinking out of the picture from when the window opens. */
+        const a = swing32(cntr) * 0x100 + 0x4700;
+        const b = swing32(cntr + 8) * 0x100 + 0x7000;
+        return [
+            { model: 3851, ops: [viewAt(-2.24, -2.81, 10.77), angY(a)] },
+            { model: 3853, ops: [viewAt(1.24, -2.81, 20.77), angY(a + 0xc000)] },
+            { model: 3852, ops: [viewAt(2.52, -2.81, 12.82), angY(b)] },
+            { model: 3852, ops: [viewAt(-1.52, -2.81, 22.82), angY(b + 0x3000)] },
+            { model: 3853, ops: [viewAt(0, 1.2 - 0.02 * (t - 40), 11.5), angY(0x8000)] },
+        ];
+    }
+    /* An upper body, and its head on top: for 64 frames the head looks from
+     * side to side, for the next 64 it rises out of the body through
+     * egg_robo_head_rising_anim, turns round once it is up and sinks back. */
+    const out = [{ model: 223, ops: [viewAt(0, -0.95, 5.0), angY(0x7000), angX(0xf000)] }];
+    const r = t - 64;
+    let model = 2895;
+    let yaw;
+    if (!(r & 0x40)) {
+        yaw = Math.round(boardSin(r * 0x400) * 12288) + 0xb000;
+    } else {
+        const u = r & 0x3f;
+        let k = u > 48 ? 0x3f - u : u;
+        yaw = 0xb000;
+        if (u > 16 && u <= 48) { yaw += (u - 16) * 0x800; k = 10; }
+        model = frames.eggHeadRise[Math.min(k, 10)];
+    }
+    out.push({ model, ops: [viewAt(0, -0.2, 5.0), angY(yaw), angX(0xc000)] });
+    return out;
+}
+
+/*
+ * The footage, for app.js: the three windows (their rectangles and the panel
+ * each lies over), and a function from a stage frame to what each window
+ * shows — the sliding card, the footage, or nothing while it is shut.
+ */
+export function eggLabFootage(stage, frames) {
+    if (stage.scene !== EGG_LAB_SCENE || !frames?.eggWindows) return null;
+    return {
+        eye: EGG_LAB_EYE,
+        windows: EGG_LAB_WINDOWS.map((w, i) => ({
+            ...frames.eggWindows[i],
+            panel: typeof w.panel === 'string' ? frames[w.panel][0] : w.panel,
+        })),
+        draws(frame) {
+            const { t, cntr } = eggLabClock(frame);
+            return EGG_LAB_WINDOWS.map(({ opens }, i) => {
+                const n = opens - t - 1;        /* the count once this frame's decrement is in */
+                if (n >= 0 && n <= EGG_LAB_WIPE) {
+                    return [{ model: EGG_LAB_SQUARE, ops: [viewAt(0, 0.22 * n, 2.5)] }];
+                }
+                return n < 0 ? eggLabWindowDraws(i, t, cntr, frames) : [];
+            });
+        },
+    };
+}
+
+/* The room and its panels: each panel is a frame table of its own, naming 0 —
+ * nothing — until its window has opened. */
+function eggLabDisp(push, out, frames) {
+    push(EGG_LAB_ROOM, 'inside', []);
+    if (!frames) return;
+    for (const { opens, panel } of EGG_LAB_WINDOWS) {
+        const shown = typeof panel === 'string' ? frames[panel] : [panel];
+        const anim = {
+            frames: [0, ...shown],
+            index: (f) => {
+                const { t, cntr } = eggLabClock(f);
+                return t < opens ? 0 : 1 + (cntr % shown.length);
+            },
+        };
+        out.push({ model: shown[0], anim, layer: 'inside', ops: [] });
+    }
+}
 
 /** The monitor's 256-frame lap as a frame table, out of tails_display_screen. */
 function labScreenTable(screens) {
@@ -565,7 +763,7 @@ const CARPET_LIGHT_BASE = 0x271c;
 const CANYON_LIGHT_BASE = 0x12000 - 0x20;
 
 export function stageLightYaw(stage, frame, frames = null) {
-    if (stage.placements) return null;
+    if (!sfightSlots(stage)) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return CARPET_LIGHT_BASE - carpetAt(frame).yaw;
     if (stage.slot === CANYON_CRUISE_SLOT && frames?.canyon) {
         return CANYON_LIGHT_BASE - canyonAt(frames.canyon, frame - 1).yaw;
@@ -783,7 +981,7 @@ const ICE_PILLAR_ORDER = [0, 1, 2, 3, 4, 5, 6, 8];
 const ICE_DIAMOND_SPIN = 0x100;     /* per frame_counter frame */
 
 /** The ice pillar records, in the order aurora_ice_pillar_init draws them. */
-export function readIcePillars(rom) {
+function readIcePillars(rom) {
     const dv = rom.mainCpuView;
     return ICE_PILLAR_ORDER.map((i) => {
         const b = ICE_PILLARS + i * ICE_PILLAR_STRIDE;
@@ -945,9 +1143,8 @@ const GIANT_WING_BODY = 2947;
 const GIANT_WING_HAZE = [3321, 3322];
 const GIANT_WING_ENGINE = 259;
 const GIANT_WING_SPINNER = [3888, 3889];
-/* The blade is swapped for an invisible square on every other frame — one
- * frame on and one frame gone, which is the blur. */
-const GIANT_WING_BLADE = [2863, 2846];
+/* The blade is PROPELLER_BLADE, swapped for an invisible square on every other
+ * frame — one frame on and one frame gone, which is the blur. */
 const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];   /* immediates at 0x771f8 */
 const GIANT_WING_BLADE_SPIN = 0x1b << 7;
 /* Two sine terms: a rate in 16-bit angle units per frame, an amplitude in the
@@ -1087,7 +1284,7 @@ const CANYON_WATER = [
 ];
 
 /** The script, the heading table and the scenery, read out of the ROM. */
-export function readCanyonFlight(rom) {
+function readCanyonFlight(rom) {
     const dv = rom.mainCpuView;
 
     const keys = [];
@@ -1345,7 +1542,7 @@ function canyonTunnelScale(c) {
  * slots ever differ from the record, so only these are handed back.
  */
 export function stageMaterials(stage, frame, frames = null) {
-    if (stage.placements || stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
+    if (!sfightSlots(stage) || stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
     const k = canyonTunnelScale(canyonMoveClock(frame));
     return CANYON_TUNNEL_SLOTS.map((slot) => {
         const m = stage.materials[slot];
@@ -1472,8 +1669,8 @@ function bossDisp({ push, pushBackdrop, pushTpd, sx, frames }) {
 }
 
 /* ---- draw_sphynx_head: the Flying Carpet's second object ----
- * See the note above sphynxOps for where the head belongs, and the one above
- * carpetWorld for why it alone of these three carries the arena's frame. */
+ * See the note above SPHYNX_HEAD for where the head belongs, and why it alone
+ * of these three carries the arena's frame. */
 function sphynxDisp({ push, sx, fs }) {
     push(SPHYNX_HEAD, (f) => sphynxOps(carpetAt(f)));
     for (let i = 0; i < 4; i++) {
@@ -1513,12 +1710,6 @@ const OBJECT_ROUTINES = new Map([
     [0x000774c4, null],                 /* post_metal_stage_init — ret */
 ]);
 
-/**
- * Build the draw list for one stage.
- * @param {object} stage  from readStageTable()
- * @param {object} frames from readFrameTables(); without it a stage is built
- *                        at rest, with every animated draw held on frame 0.
- */
 /*
  * The draw list of a stage whose geometry is already in world space.
  *
@@ -1540,6 +1731,10 @@ const OBJECT_ROUTINES = new Map([
  * Still missing is the object list at 0xB4, which animates: a stage built here
  * is the stage standing still.
  */
+/* Fighting Vipers' own slots, which sub_235BC and pole_disp test by number. */
+const FV_NO_PLATFORM_SLOTS = [7, 14];
+const FV_NO_POLE_SLOT = 7;
+
 export function buildFlatDisplayList(stage) {
     const out = [];
     const f = stage.flags;
@@ -1588,7 +1783,7 @@ export function buildFlatDisplayList(stage) {
     /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
      * read at 0x1A. It runs after both of the ground passes, so the platform
      * keeps the front of the plane like the 0x24 list. */
-    if (stage.slot !== 7 && stage.slot !== 14) {
+    if (!FV_NO_PLATFORM_SLOTS.includes(stage.slot)) {
         for (const m of stage.layers.platform ?? []) push(m, 'platform', { planeBias: 0 });
     }
 
@@ -1619,7 +1814,7 @@ export function buildFlatDisplayList(stage) {
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
      * returns before that. */
-    if ((f & (1 << 0x12)) && stage.slot !== 7) push(stage.cagePole, 'poles');
+    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) push(stage.cagePole, 'poles');
 
     /*
      * The railing round the arena.
@@ -1688,6 +1883,12 @@ const OBJECT_WINDOWS = new Map([
     [1124, 2],
 ]);
 
+/**
+ * Build the draw list for one stage.
+ * @param {object} stage  from readStageTable()
+ * @param {object} frames from readFrameTables(); without it a stage is built
+ *                        at rest, with every animated draw held on frame 0.
+ */
 export function buildStageDisplayList(stage, frames = null) {
     const out = [];
     const flags = stage.flags;
@@ -1711,8 +1912,8 @@ export function buildStageDisplayList(stage, frames = null) {
     const push = (model, layer, ops) => {
         if (model) out.push({ model, layer, window: win, ops });
     };
-    /* An animated draw is pushed under the model it shows at rest, so a stage
-     * built without a frame table is exactly the stage this used to build. */
+    /* An animated draw is pushed under the model it shows at rest. It needs
+     * the frame tables, so a stage built without them leaves it out. */
     const pushAnim = (table, shift, phase, layer, ops) => {
         if (!frames) return;
         const anim = { frames: frames[table], shift, phase };
@@ -2035,7 +2236,9 @@ export function buildStageDisplayList(stage, frames = null) {
     }
 
     /* ---- adv_movie_disp: the attract movie's own scene ---- */
-    if (slot === TAILS_LAB_SLOT) {
+    if (stage.scene === EGG_LAB_SCENE) {
+        eggLabDisp(push, out, frames);
+    } else if (slot === TAILS_LAB_SLOT) {
         /* adv_movie_snc_disp. The sea goes through set_obj_thd with the header
          * send_st15_sea_thd rebuilt this frame — nine quads for the model's nine
          * faces, each its own header but for the lumabase, walked 7..70 at half

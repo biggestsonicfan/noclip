@@ -22,6 +22,7 @@
  */
 
 import { GAMES } from './games.js';
+import { boardCamera, boardCameraParams, readBoardCameraParams } from './skyeye.js';
 
 /** Where a link points: the published site, whatever the reporter was on. */
 export const SITE = 'https://noclip.sonicthefighte.rs/';
@@ -51,6 +52,7 @@ const CONTROLS = {
     ],
     stage: [
         { key: 'ride', sel: '#opt-ride' },
+        { key: 'lens', sel: '#opt-board-lens' },
     ],
     model: [
         { key: 'q', sel: '#model-search' },
@@ -97,6 +99,14 @@ export function viewLink(state) {
         /* The stage clock: which frame of the palms, the carpet and the sea.
          * -1 is a stage that has not stepped yet, which is where a load starts. */
         if (state.anim.frame >= 0) p.set('t', state.anim.frame);
+        /* The same camera as the game's own record (js/skyeye.js): what
+         * m2-hle2's SKY EYE mode reads, and what a link written by it carries
+         * instead of `pos` and `look`. */
+        if (rom.game.id === 'sfight') {
+            const b = boardCameraParams(boardCamera(v.camera, v.root));
+            p.set('eye', b.eye);
+            p.set('ang', b.ang);
+        }
     } else if (state.tab === 'model') {
         p.set('model', state.modelIndex);
     } else if (state.tab === 'anim') {
@@ -168,6 +178,7 @@ export function readViewLink(hash = location.hash) {
         target: vec(p.get('target'), 3),
         look: vec(p.get('look'), 2),
         speed: Number(p.get('speed')) || null,
+        board: readBoardCameraParams(p),
         controls: p,
     };
 }
