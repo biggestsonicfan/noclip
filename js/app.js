@@ -1302,6 +1302,9 @@ function addSkyPanorama(slot) {
                 horizon: (pano.horizon ?? pano.height) / pano.height,
                 /* How far off that row stands, where it is not at infinity. */
                 distance: pano.distance ?? 0,
+                /* The column ahead of a camera at Yang 0. */
+                centre: pano.centre,
+                width: pano.width,
                 topColor: pano.topColor.map((c) => c / 255),
             };
         }
@@ -1323,6 +1326,12 @@ function addSkyPanorama(slot) {
     mesh.renderOrder = BACKDROP_ORDER;
     mesh.userData.layer = 'sky';
     mesh.frustumCulled = false;
+    /* Seen from inside, a cylinder's texture runs right to left, and the
+     * board's strip runs left to right as the camera turns (js/scroll.js), so
+     * it is turned inside out along Z; then round, so that the column the
+     * board centres at Yang 0 lies down the board's +Z, the explorer's -Z. */
+    mesh.scale.z = -1;
+    mesh.rotation.y = (2 * Math.PI * sky.centre) / sky.width;
     v.root.add(mesh);
     state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance };
     stepSky();

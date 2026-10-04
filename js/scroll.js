@@ -25,9 +25,9 @@
  * Only sixteen of the eighteen are ever on screen. The routine that runs the
  * sky each frame (0x29A40, which ends by calling the stage's own routine out
  * of the record's 0x08) takes the camera's heading — 0x10000 to the turn —
- * scrolls the layer by `-heading >> 4` and streams in column pair
- * `-heading >> 8 & 0xFF` from the strip, so a full turn is 4096 pixels, 512
- * tiles, sixteen patterns. Patterns 16 and 17 repeat 0 and 1 on every stage and
+ * scrolls the layer by `heading >> 4` (as `0 - (-heading >> 4)`) and
+ * streams in column pair `-heading >> 8 & 0xFF` from the strip, so a full turn
+ * is 4096 pixels, 512 tiles, sixteen patterns. Patterns 16 and 17 repeat 0 and 1 on every stage and
  * nothing reads them. Decoding all eighteen put a 64-tile seam into each turn
  * and squeezed the rest by an eighth.
  *
@@ -39,6 +39,22 @@
  * centred on row 192 (window_data_init's table at 0x5F5C), so level, the eye
  * line is panorama row 192 + list[2], and a row sits `focal` pixels per unit of
  * tangent from it. buildSkyPanorama hands the viewer both.
+ *
+ * The heading the routine scrolls by is not the camera's alone. It adds the
+ * camera's Yang (+0x26) to sixteen times list[0] (0x503040, which sub_29728
+ * copies from the list) and to 0x50A022, a turn of the whole arena that the 3D
+ * takes too and the explorer has no need of. Screen column x then shows strip
+ * column x - heading / 16: in a MAME run of the attract, the columns the board
+ * shows matched the decoded strip at exactly that offset, unmirrored, on every
+ * frame tried. So list[0] is each stage's turn of its sky against the arena,
+ * up to half a turn (slot 2's 2059 is 181 degrees), and with the camera at
+ * Yang 0 the centre of the 496-pixel picture is column 248 - list[0].
+ *
+ * The routine also clamps the pitch it scrolls by to list+0x4C and list+0x4E,
+ * 45 degrees either way (43 up on four stages), so that the layer never scrolls
+ * its 512-row tilemap round. Past it the board's sky stops following the
+ * camera. That is a limit of a flat layer, and the cylinder has nothing to wrap,
+ * so it is not copied: the explorer's sky stays on the horizon at any pitch.
  *
  * Formats, each read off the routine that walks it:
  *
@@ -86,11 +102,13 @@ const PATTERN_STRIDE = 64;      /* bytes per pattern row */
 const TURN_PATTERNS = 16;
 /* The pattern list: a heading offset, the vertical scroll at level, then the
  * pattern numbers. */
+const LIST_HEADING = 0;
 const LIST_SCROLL_Y = 2;
 const LIST_PATTERNS = 4;
 /* The fight camera's focal length and the view's centre row (see above). */
 const FIGHT_FOCAL = 480;
 const VIEW_CENTRE_ROW = 192;
+const VIEW_CENTRE_COL = 248;
 
 /* A pointer in this game lands either in the data region or in the mirror
  * window, and both appear in the same lists, so every read goes through here. */
@@ -116,8 +134,9 @@ function ptrOk(rom, addr) {
  * @param {?Uint8Array} cxlat  the scene's colorxlat, which the palette goes
  *                         through as it does on the board; null for raw colour
  * @returns {null|{width:number, height:number, rgba:Uint8Array,
- *            horizon:number, focal:number}}  horizon is the panorama row on
- *            the eye line, focal the pixels per unit of tangent up the strip
+ *            horizon:number, focal:number, centre:number}}  horizon is the
+ *            panorama row on the eye line, focal the pixels per unit of tangent
+ *            up the strip, centre the column ahead of a camera at Yang 0
  */
 export function buildSkyPanorama(rom, slot, cxlat = null) {
     const S = rom.game.stageTable.scroll;
@@ -145,6 +164,8 @@ export function buildSkyPanorama(rom, slot, cxlat = null) {
     if (pano) {
         pano.horizon = VIEW_CENTRE_ROW + L.view.getInt16(L.off + LIST_SCROLL_Y, true);
         pano.focal = FIGHT_FOCAL;
+        const turn = pano.width;
+        pano.centre = ((VIEW_CENTRE_COL - L.view.getInt16(L.off + LIST_HEADING, true)) % turn + turn) % turn;
     }
     return pano;
 }
@@ -187,6 +208,11 @@ export function buildCourseSky(rom, course, cxlat = null) {
         pano.distance = DAYTONA_SKY_DISTANCE;
         /* Up at the drawing camera's focal, not one of its own. */
         pano.lensFocal = true;
+        /* The heading here is the camera's own: 0x5FE11A is the Yang of
+         * js/skyeye.js (0 down +Z, a quarter turn to -X at 0xC000), and in
+         * MAME screen column x shows strip column x - heading / 32,
+         * unmirrored, as Fighting Vipers' does at its own scale. */
+        pano.centre = VIEW_CENTRE_COL;
     }
     return pano;
 }
