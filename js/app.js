@@ -1174,10 +1174,11 @@ function useModelScene(idx) {
  * of the pitch, which is what a flat picture `focal` pixels away does: a row
  * `n` pixels above the eye line stands n / focal of the radius above it. A
  * panorama that read the routine says its focal and its eye-line row
- * (Fighting Vipers'; js/scroll.js has the arithmetic). Daytona USA's Y scroll
- * goes through TGP functions that are not ported, so it gets the eye-line row
- * measured in MAME and, still an estimate, the same pixels per radian up as
- * across.
+ * (Fighting Vipers'; js/scroll.js has the arithmetic). Daytona USA's routine
+ * takes the camera's own focal, which runs from about 200 to 600 across the
+ * camera modes and so is not one number here; it gets the same pixels per
+ * radian up as across, the board's at a focal of 326. Its eye-line row moves
+ * with the camera's height (stepSky).
  *
  * The radius itself changes nothing on screen. The cylinder rides on the
  * camera (stepSky) and is drawn without the depth test, and its height scales
@@ -1226,6 +1227,8 @@ function addSkyPanorama(slot) {
                 /* The row that sits on the eye line, as a fraction down the
                  * strip: its foot unless the panorama says otherwise. */
                 horizon: (pano.horizon ?? pano.height) / pano.height,
+                /* How far off that row stands, where it is not at infinity. */
+                distance: pano.distance ?? 0,
                 topColor: pano.topColor.map((c) => c / 255),
             };
         }
@@ -1245,7 +1248,7 @@ function addSkyPanorama(slot) {
     mesh.userData.layer = 'sky';
     mesh.frustumCulled = false;
     v.root.add(mesh);
-    state.sky = { mesh, height, horizon: sky.horizon };
+    state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance };
     stepSky();
 }
 
@@ -1264,12 +1267,27 @@ function clearSkyPanoramas() {
  * it is carried on the camera instead, with the foot of the strip on the eye
  * line. That is the same thing a skybox does, and here it is not a convention
  * but the behaviour being reproduced.
+ *
+ * Daytona USA's eye-line row stands `distance` off on the ground instead
+ * (js/scroll.js), so a camera above the ground looks down on it: the board's
+ * camd_99 drops the layer by the angle atan2(height, distance), and the strip
+ * goes down by that angle's tangent of the radius. The height is the eye's in
+ * the board's frame, the y a `live` draw reads (liveCamera).
  */
+const SKY_EYE = new THREE.Vector3();
+const SKY_INV = new THREE.Matrix4();
 function stepSky() {
     const sky = state.sky;
     if (!sky) return;
-    const c = state.viewer.camera;
-    sky.mesh.position.set(c.position.x, c.position.y + sky.height * (sky.horizon - 0.5), c.position.z);
+    const { camera: c, root } = state.viewer;
+    let y = c.position.y + sky.height * (sky.horizon - 0.5);
+    if (sky.distance) {
+        root.updateMatrixWorld();
+        SKY_INV.copy(root.matrixWorld).invert();
+        SKY_EYE.copy(c.position).applyMatrix4(SKY_INV);
+        y -= SKY_RADIUS * SKY_EYE.y / sky.distance;
+    }
+    sky.mesh.position.set(c.position.x, y, c.position.z);
 }
 
 /* ---- Stage view ---------------------------------------------------------- */

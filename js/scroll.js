@@ -182,28 +182,39 @@ export function buildCourseSky(rom, course, cxlat = null) {
     const patterns = [];
     for (let i = 0; i < DAYTONA_PATTERNS; i++) patterns.push(word(sky + 8 + i * 4));
     const pano = decodePanorama(rom, word(sky), word(sky + 4), patterns, DAYTONA_CHAR_BYTES, cxlat);
-    if (pano) pano.horizon = DAYTONA_HORIZON_ROW;
+    if (pano) {
+        pano.horizon = DAYTONA_LEVEL_ROW;
+        pano.distance = DAYTONA_SKY_DISTANCE;
+    }
     return pano;
 }
 
 /*
- * The panorama row that sits on the eye line.
+ * Where the sky stands against the eye line.
  *
  * Like Fighting Vipers' strips, these carry what lies below the horizon too —
  * the grass round the Three-Seven Speedway, the sea off Seaside Street Galaxy,
  * a floor of cloud under Dinosaur Canyon — so the strip's foot is not the eye
- * line. Which row is comes out of two things the
- * board does the same way on every course: the streamer writes a panorama's
- * first row into tilemap row 6, 48 pixels down, and camd_99 sets the layer's Y
- * scroll from nothing but the camera — its height and pitch and the view
- * record — through TGP functions that are not ported. Level, that scroll
- * hovers round zero (MAME, the attract race), which puts tilemap pixel 192,
- * the middle of the 384-line screen, on the eye line: panorama row 144,
- * eighteen tiles down. It is where the Speedway and the Canyon paint their
- * horizons; Seaside Street Galaxy paints its sea line at row 185, and on the
- * board it sits that much below the eye line, as it does here.
+ * line. camd_99, the tail every camera mode ends in (0x70C0-0x71C0 in Rev A),
+ * sets the layer's Y scroll, and only from the camera:
+ *
+ *   A = atan2(eye height, 2048)                          TGP 0x0A
+ *   a = view pitch, down positive, minus A               camera +0x52, +0x28
+ *   V = cy + focal * sin a / cos a                       TGP 0x1B, 0x1C, 0x24-0x29, 0x25
+ *
+ * cy and focal are the view record's (0x501730, 0x501734), the same two the 3D
+ * view takes: its centre is 320 + cy up the frame (the table at 0x17E68), and
+ * with the vertical sync register at -2 that is screen line 192 - cy. The
+ * streamer writes a panorama's first row into tilemap row 6, 48 pixels down,
+ * so row p shows on line 48 + p - V. Put together, cy cancels, the pitch moves
+ * the sky with the 3D at the focal's pixels per unit of tangent, and the row
+ * on the eye line is 192 - 48 = 144 less focal * tan A. That is the sky as if
+ * its row 144 stood on the ground 2048 units off: the camera rising looks down
+ * on it. The board does this on every course; Seaside Street Galaxy paints its
+ * sea line at row 185, so the sea sits that much below the eye line.
  */
-const DAYTONA_HORIZON_ROW = 144;
+const DAYTONA_LEVEL_ROW = VIEW_CENTRE_ROW - 48;
+const DAYTONA_SKY_DISTANCE = 2048;
 const DAYTONA_PATTERNS = 8;
 /* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
 const DAYTONA_CHAR_BYTES = 0x80000;
