@@ -185,6 +185,8 @@ export function buildCourseSky(rom, course, cxlat = null) {
     if (pano) {
         pano.horizon = DAYTONA_LEVEL_ROW;
         pano.distance = DAYTONA_SKY_DISTANCE;
+        /* Up at the drawing camera's focal, not one of its own. */
+        pano.lensFocal = true;
     }
     return pano;
 }

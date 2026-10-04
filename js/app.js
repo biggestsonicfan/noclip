@@ -1246,10 +1246,10 @@ function useModelScene(idx) {
  * `n` pixels above the eye line stands n / focal of the radius above it. A
  * panorama that read the routine says its focal and its eye-line row
  * (Fighting Vipers'; js/scroll.js has the arithmetic). Daytona USA's routine
- * takes the camera's own focal, which runs from about 200 to 600 across the
- * camera modes and so is not one number here; it gets the same pixels per
- * radian up as across, the board's at a focal of 326. Its eye-line row moves
- * with the camera's height (stepSky).
+ * takes the focal of the camera that draws the scene, about 200 to 600 across
+ * its camera modes, so here it takes the explorer camera's: the focal its
+ * field of view would have on the board's 384-line picture. Its eye-line row
+ * moves with the camera's height (stepSky).
  *
  * The radius itself changes nothing on screen. The cylinder rides on the
  * camera (stepSky) and is drawn without the depth test, and its height scales
@@ -1291,10 +1291,12 @@ function addSkyPanorama(slot) {
             tex.needsUpdate = true;
             sky = {
                 tex,
-                /* The strip's height as a fraction of the radius. */
-                scale: pano.focal
-                    ? pano.height / pano.focal
-                    : 2 * Math.PI * pano.height / pano.width,
+                /* The strip's height as a fraction of the radius: at the
+                 * panorama's focal, at the camera's, or at one turn across. */
+                rows: pano.height,
+                focal: pano.focal ?? 0,
+                lens: !!pano.lensFocal,
+                scale: 2 * Math.PI * pano.height / pano.width,
                 /* The row that sits on the eye line, as a fraction down the
                  * strip: its foot unless the panorama says otherwise. */
                 horizon: (pano.horizon ?? pano.height) / pano.height,
@@ -1308,7 +1310,10 @@ function addSkyPanorama(slot) {
     if (!sky) return;
 
     /* One turn across; up, the board's focal where the panorama gives one. */
-    const height = SKY_RADIUS * sky.scale;
+    const focal = sky.lens
+        ? BOARD_H / 2 / Math.tan((v.camera.fov * Math.PI) / 360)
+        : sky.focal;
+    const height = SKY_RADIUS * (focal ? sky.rows / focal : sky.scale);
     const geom = new THREE.CylinderGeometry(
         SKY_RADIUS, SKY_RADIUS, height, 64, 1, true);
     const mat = new THREE.MeshBasicMaterial({
