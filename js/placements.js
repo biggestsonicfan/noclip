@@ -179,6 +179,167 @@ function spawnProps(rom, at, set, out) {
     }
 }
 
+/*
+ * Which zones each prop is drawn in, by running the board's clock over the
+ * scripts.
+ *
+ * A prop does not belong to a zone. It is a task the spawn opcode opens, and
+ * it stays up until it closes itself, which only sub_33320 makes it do — the
+ * routine its handler (0x30670) calls each frame before it draws:
+ *
+ *     ldib 0x520089, g7        ; the section's script index
+ *     ld   0x2E4(r4), g4       ; against the one the object last saw;
+ *     ...                      ; a change is counted at obj+0x318,
+ *     ldis 0x6C(r4), g6        ; and once past the record's halfword
+ *     cmpible g5, g6, ...
+ *     call sub_10D60           ; the task closes itself
+ *
+ * and then, for a record with a window row, flips obj+0x2E8 — the flag the
+ * handler draws under — each time the camera frame (0x51E788) equals the
+ * row's next entry, closing once the row ends with it hidden. So what decides
+ * a prop's zones is time: how many scripts have gone by, and how far the
+ * camera has played, when each opcode 20 runs. That is walked here the way
+ * the interpreter runs it. Opcode 60's type-0 command queues a camera stretch
+ * {start, end, path, flags}; 83 waits for the queue to play out, 84 for a
+ * frame past its argument, 81 for that many frames; the rest take no time.
+ * 93 moves to the next script, and the end of a section goes where the branch
+ * table says, at script 1 (sub_51490; script 0 is the start the game takes
+ * in its other mode). A prop is in a zone if it is drawn on a frame while
+ * that zone is current. A choice between two sections takes both.
+ *
+ * Returns a Map from spawn record to a Set of zones, or null where the profile
+ * does not say how a prop closes.
+ */
+const OP_WAIT_FRAMES = 81;
+const OP_WAIT_CAMERA = 83;
+const OP_WAIT_PAST = 84;
+const WINDOW_END = 0xffff;
+
+function propZones(rom, chapter, sections, props) {
+    const O = rom.game.objects;
+    const branches = rom.game.stageTable.placements.branches;
+    if (!O?.spawns || branches == null) return null;
+    const dv = rom.mainCpuView;
+    const scripts = sections.map((section) => pointerList(rom, section).map((script) => {
+        const ops = [];
+        walkScript(rom, script, (op, p) => ops.push([op, p]));
+        return ops;
+    }));
+    const table = dv.getUint32(branches + chapter * 4, true);
+    /* The sections that can follow one, as sub_51490 picks them. A section
+     * with no script 1 ends the chapter. */
+    const after = (s) => {
+        const at = table + s * 16;
+        const kind = rom.maincpu[at];
+        const next = [];
+        if (kind === 0) next.push(rom.maincpu[at + 4]);
+        else if (kind === 2) next.push(s + 1);
+        else if (kind === 1) {
+            for (let q = at + 4; q < at + 16 && dv.getUint32(q, true) !== END; q += 4) next.push(rom.maincpu[q]);
+        }
+        return next.filter((n) => scripts[n]?.length > 1);
+    };
+    const sweep = O.sweep?.chapter === chapter ? O.sweep : null;
+    const out = new Map();
+
+    /*
+     * Run the interpreter from script `i`, instruction `e` of section `s`,
+     * with `c` the camera and the current zone, and `t` the object, if one is
+     * up yet. Without one it stops at `stop` = [script, instruction] and hands
+     * back the state there; with one, it runs until the object closes or the
+     * chapter ends, crediting zones as it goes.
+     */
+    function run(s, i, e, c, t, stop = null, seen = new Set()) {
+        /* One frame of the object's task: sub_33320, in its order. */
+        const frame = () => {
+            if (!t) return true;
+            if (sweep && s === sweep.section && i === sweep.script && t.type !== sweep.spare
+                && c.frame > sweep.after) return false;
+            if (i !== t.seen) {
+                t.seen = i;
+                if (++t.count > t.life) return false;
+            }
+            if (t.window) {
+                if (c.frame === t.window[t.w]) { t.drawn = !t.drawn; t.w++; }
+                if (!t.drawn && t.window[t.w] === WINDOW_END) return false;
+            }
+            if (t.drawn && c.zone != null) out.get(t.rec).add(c.zone);
+            return true;
+        };
+        /* The camera's next frame, or the one it holds when nothing is queued. */
+        const tick = () => {
+            const q = c.queue[0];
+            if (q) {
+                c.frame = q[0]++;
+                if (q[0] > q[1]) c.queue.shift();
+            }
+            return frame();
+        };
+        for (let sections = 0; sections < 64; sections++) {
+            const list = scripts[s];
+            for (; i < list.length; i++, e = 0) {
+                for (; e < list[i].length; e++) {
+                    if (stop && i === stop[0] && e === stop[1]) return c;
+                    const [op, p] = list[i][e];
+                    const arg = dv.getUint32(p + 4, true);
+                    if (op === OP_ZONE) c.zone = arg;
+                    else if (op === OP_CAMERA && (arg & 15) === 0 && arg >>> 4 >= 2) {
+                        const start = dv.getUint32(p + 8, true);
+                        const last = c.queue.length ? c.queue[c.queue.length - 1][1] : c.frame;
+                        c.queue.push([start === END ? last + 1 : start, dv.getInt32(p + 12, true)]);
+                    } else if (op === OP_WAIT_CAMERA) {
+                        while (c.queue.length) if (!tick()) return null;
+                    } else if (op === OP_WAIT_PAST && arg) {
+                        while (c.queue.length && !(c.frame > arg)) if (!tick()) return null;
+                    } else if (op === OP_WAIT_FRAMES) {
+                        for (let k = 0; k < Math.min(arg, 3600); k++) if (!tick()) return null;
+                    }
+                }
+            }
+            if (stop) return c;
+            /* The section is done: on to each that can follow, at script 1. A
+             * branch already taken in the same state adds nothing. */
+            const next = after(s).filter((n) => {
+                const key = `${n}:${t.count}:${t.w}:${t.drawn}:${c.zone}:${c.frame}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            if (!next.length) return null;
+            for (const n of next.slice(1)) {
+                run(n, 1, 0, { ...c, queue: c.queue.map((q) => [...q]) }, { ...t }, null, seen);
+            }
+            [s, i, e] = [next[0], 1, 0];
+        }
+        return null;
+    }
+
+    scripts.forEach((list, s) => list.forEach((ops, i) => ops.forEach(([op, p], e) => {
+        const form = SPAWN_OPS.has(op) && O.spawns[op];
+        if (!form) return;
+        for (let q = p + 4; inRom(rom, q); q += 4) {
+            const rec = dv.getUint32(q, true);
+            if (rec === END) break;
+            const prop = props.get(rec);
+            if (!prop) continue;
+            if (!out.has(rec)) out.set(rec, new Set());
+            const row = form.window != null ? rom.maincpu[rec + form.window] : 0;
+            const window = [];
+            for (let k = 0; row && k < 8; k++) {
+                window.push(dv.getUint16(O.windows + row * 16 + k * 2, true));
+                if (window[k] === WINDOW_END) break;
+            }
+            /* The interpreter as it stands at the spawn, then the object. */
+            const c = run(s, 0, 0, { zone: null, frame: 0, queue: [] }, null, [i, e]);
+            run(s, i, e + 1, c, {
+                rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
+                seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
+            });
+        }
+    })));
+    return out;
+}
+
 /* A prop's three angles, in the order and the sign the scenery's single turn
  * already uses. Yaw is all but six of them carry. */
 function propTurn([x, y, z]) {
@@ -426,6 +587,10 @@ export function readPlacementStages(rom) {
             }
         });
 
+        /* And which zones each prop is drawn in, for the zone picker. */
+        const lives = propZones(rom, chapter, sections, props);
+        if (lives) for (const [rec, o] of props) o.zones = lives.get(rec) ?? new Set();
+
         /* Which zones list each placement, over every zone the chapter reaches. */
         const zonesOf = new Map();
         for (const g of groups.values()) {
@@ -564,9 +729,14 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         });
         sky.push({ model: band, layer: 'sky', ops: at(0) });
     }
+    /* The zone picked, if one is: only what it lists, under the set it is
+     * drawn with (see zoneViews). */
+    const zone = /^zone:/.test(view ?? '') ? stage.zones?.[+view.slice(5)] : null;
     /* The props go in under their own layer, so they can be turned off and so
-     * the camera frames on the room rather than on them. */
-    const objects = (stage.objects ?? []).map((o) => ({
+     * the camera frames on the room rather than on them. Under a zone, only
+     * those still standing while it is current (see propZones). */
+    const objects = (stage.objects ?? [])
+        .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).map((o) => ({
         model: o.model,
         layer: 'objects',
         set: o.set,
@@ -578,9 +748,6 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
      * Daytona USA's, whose routines are in js/daytona.js. */
     const built = (stage.objectDraws?.(getModel, mode, view) ?? [])
         .map((d) => ({ layer: 'objects', set: stage.texSets?.[0], ...d }));
-    /* The zone picked, if one is: only what it lists, under the set it is
-     * drawn with (see zoneViews). */
-    const zone = /^zone:/.test(view ?? '') ? stage.zones?.[+view.slice(5)] : null;
     /* And a course left to the camera's window keeps every block, which the
      * window then hides and shows; otherwise only the ones a car reaches. */
     const draws = stage.draws.filter((d) => (zone ? d.zones?.has(zone.zone)

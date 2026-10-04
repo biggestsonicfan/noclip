@@ -2253,6 +2253,45 @@ table's address locates it, and the pointer *to* that routine locates the class
 table — in the prototype the instruction is at 0x2EE70, the pointer to its
 function at 0x86E10, and 0x86E10 less 0x80 entries is the base.
 
+#### Taking the props down
+
+No script opcode removes a prop. Each prop closes itself, in `sub_33320`, which
+the prop handler (0x30670) calls every frame before it draws. In the prototype
+there are two rules:
+
+- **Script count.** Each spawn opcode copies a halfword of the record to
+  obj+0x6C (opcodes 10 and 12 from +0x22, 9 from +0x20, 11 from +0x04). The
+  object keeps the script index (0x520089) it last saw at obj+0x2E4. Each frame
+  it sees a different index, it adds one to obj+0x318. Once that count passes
+  the halfword, it calls `sub_10D60`, which closes the current task.
+- **Camera window.** Opcodes 10 and 12 copy the record's byte +0x25 to obj+0x64.
+  A non-zero value picks a 16-byte row of 0x85940: camera frames, ending in
+  0xFFFF. When the camera frame (0x51E788) equals the next entry, the routine
+  flips obj+0x2E8, the flag the handler draws under. When the row ends with the
+  object hidden, the object closes.
+
+One more case is hard-coded. In the first chapter, section 7, script 2, every
+object except type 7 closes once the camera passes frame 170. The handler can
+also close a prop itself (0x30B40) once its type's model list reaches a zero
+entry. Which props get there, and whether only shot ones do, was not traced, so
+`propZones` leaves that rule out.
+
+Both rules count time, not zones. So `propZones` (js/placements.js) runs the
+interpreter's clock over the scripts:
+
+- Opcode 60's type-0 commands queue camera stretches.
+- 83, 84 and 81 wait on them. Nothing else takes a frame.
+- 93 moves to the next script. A section's end goes where `off_83290` says, at
+  script 1 (`sub_51490`). Where the table offers a choice, both sections are
+  followed.
+- A prop is in a zone if it is drawn on a frame while that zone is current.
+
+Scripts that pass in the same frame count as one change, as they do on the
+board. The Zone picker draws only those props, and "every zone at once" draws
+all of them. In Stage 1, set 1, zone 1 keeps 2 of the set's 31 props, zone 3
+none, and zone 14 keeps 17. The finished game's profiles carry none of these
+fields, so it still draws every prop in every zone.
+
 #### Auditing the props
 
 The same questions the bodies were swept with, asked of every prop of every
