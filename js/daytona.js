@@ -35,14 +35,14 @@
  * only by drawing a different model each frame.
  *
  * What is drawn in which state. The routines test the game's mode and the
- * time-attack flag, so the explorer offers the three states that differ — a
- * race (which is also what attract mode draws), time attack and the ending —
- * see MODES. What is left out in all of them: the cones stand and are never
- * knocked flying; the Jeffry statue does not do its turn, which the board
- * saves for a player who stops beside it and presses the view button; and the
- * two windows — the grandstand's glass and the covered walkway's — show the
- * first of the 64 frames of sky the board picks between by where the car
- * stands, since the TGP functions that choose one are not ported.
+ * time-attack flag, so the explorer offers the four states that differ — a
+ * race, attract mode, time attack and the ending — see MODES. What is left
+ * out in all of them: the cones stand and are never knocked flying; the
+ * Jeffry statue does not do its turn, which the board saves for a player who
+ * stops beside it and presses the view button; and the two windows — the
+ * grandstand's glass and the covered walkway's — show the first of the 64
+ * frames of sky the board picks between by where the car stands, since the
+ * TGP functions that choose one are not ported.
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
@@ -283,7 +283,7 @@ const KINDS = {
      * more circle a point (5, 2) off it, on half the beat. Two more, a further
      * (-12, -1) on, are drawn only during the ending or in time attack.
      */
-    birds: (r, ctx) => gullFlock(r, ctx, { third: ctx.mode !== 'race', grows: false }),
+    birds: (r, ctx) => gullFlock(r, ctx, { third: ctx.mode === 'ending' || ctx.mode === 'timeAttack', grows: false }),
 
     /*
      * tori_syumi: six more flocks of the same gulls, which only time attack
@@ -339,23 +339,30 @@ const KINDS = {
     /*
      * ctykya: the crowds on Seaside Street Galaxy — groups of cut-out people,
      * each a place and up to three turns, and a four-model list walked every
-     * eighth frame, which is them waving. The board draws the shuttle's crowd
-     * only while the player is on the stretch of road it lines, and the
-     * plaza's while its block is in view. The 1993 build has both, written
+     * eighth frame, which is them waving. The 1993 build has both, written
      * out one instruction at a time; Revision A keeps only the shuttle's, in a
      * table of {list, x, y, z, turns}, and the Special Edition put the plaza's
-     * back as a second table.
+     * back as a second table. Each crowd has its own test (`shown`, see
+     * SHOWN) and the routine draws the first whose test passes: in the later
+     * builds a stretch of road the player is on, in 1993 the plaza's while
+     * the crowd's own block is near and the shuttle's by its stretch.
      */
     crowd: (r, { rom, O }) => {
         const out = [];
         const wave = (f) => ((f + 1) >> 3) & 3;
         const turn = { x: RX, y: RY, z: RZ };
-        for (const c of O.crowds) {
+        /* Each crowd's test, and it draws only when no crowd before it has. */
+        const tests = O.crowds.map((c) => showTest(c.shown, gridBlock(r.pos[0], r.pos[2])));
+        for (const [n, c] of O.crowds.entries()) {
+            const before = tests.slice(0, n).filter(Boolean);
+            const own = tests[n];
+            const inView = (v) => (!own || own(v)) && !before.some((t) => t(v));
             if (c.groups) {
                 for (const g of c.groups) {
                     out.push({
                         ...cycle(modelList(rom, g.list, 4), wave),
                         ops: [T(...g.at), ...g.turns.map(([axis, a]) => turn[axis](a))],
+                        inView,
                     });
                 }
                 continue;
@@ -366,6 +373,7 @@ const KINDS = {
                     ...cycle(modelList(rom, u32(rom, p), 4), wave),
                     ops: [T(f32(rom, p + 4), f32(rom, p + 8), f32(rom, p + 12)),
                         RZ(s16(rom, p + 16)), RY(s16(rom, p + 18)), RX(s16(rom, p + 20))],
+                    inView,
                 });
             }
         }
@@ -375,6 +383,57 @@ const KINDS = {
     /* The ones that draw nothing in any state the explorer shows. */
     none: () => [],
 };
+
+/*
+ * What decides whether a routine draws, when the course is drawn round the
+ * camera (courseArea). The routines test one of three things before they draw:
+ *
+ * - 'area' or 'near': the block the task stands in, which get_m_block (Rev A
+ *   0x172A0) works out from its own x and z at the start — not the block whose
+ *   list the record is kept in, which is often another — in 0x501520 or
+ *   0x501540;
+ * - `{ area: [...] }` or `{ near: [...] }`: fixed blocks instead, any one of
+ *   them, out of the routine's operands or a table beside it;
+ * - `{ road: [first, last] }`: the player's point along the road, car +0x12C
+ *   (+0x128 in 1993), between two points, both included; no block at all.
+ *
+ * 'always' draws with no test. Most routines test the same way in every build,
+ * and this is by kind; a profile's `objects.shown` names the routines that do
+ * not, by address. The numbers below are the same in every build:
+ *
+ * - ship: blocks 0x75 and 0x55, the halfwords at Rev A 0x235DD0;
+ * - flags: 0x55, 0x65 and 0x75, at Rev A 0x2366B8;
+ * - windmill (wing, Rev A 0x20D34): in a race or time attack (GAME_DSP set
+ *   in M_mode) points 250-360, otherwise — attract mode, the ending — its own
+ *   block in the area;
+ * - jeffry (Rev A 0x20E54): points 242-320; in the ending also while the
+ *   clock (0x5010A8) is 1016-1211, which the explorer, with no clock, takes
+ *   as the whole ending;
+ * - the light at Rev A 0x212A4 and the curtain call test nothing.
+ *
+ * The crowds carry their own (crowd).
+ */
+const SHOWN = {
+    static: 'area', cycle: 'near', cycle4: 'near', slot: 'area', spinZ: 'near', spinY: 'near',
+    ship: { area: [0x75, 0x55] }, flags: { near: [0x55, 0x65, 0x75] }, light: 'always',
+    world: 'area', rank: 'area', checkpoint: 'area', checkpointAt: 'area', pylon: 'area',
+    window: 'area', flock: 'area', birds: 'area', bigBird: 'area', horse: 'area',
+    windmill: (mode) => (mode === 'race' || mode === 'timeAttack' ? { road: [250, 360] } : 'area'),
+    jeffry: (mode) => (mode === 'ending' ? 'always' : { road: [242, 320] }),
+    curtainCall: 'always',
+};
+
+/* A rule of SHOWN's as a test of the view round the camera, or null for none.
+ * A course with no road passes every road test. */
+function showTest(rule, own) {
+    if (!rule || rule === 'always') return null;
+    if (rule === 'area') return (v) => v.area.has(own);
+    if (rule === 'near') return (v) => v.near.has(own);
+    if (rule.road) return (v) => v.road == null || (v.road >= rule.road[0] && v.road <= rule.road[1]);
+    const set = rule.area ? 'area' : 'near';
+    const blocks = rule[set];
+    return (v) => blocks.some((b) => v[set].has(b));
+}
 
 /* slot's three reels: where each stands — lda'd floats — and its step a frame. */
 const SLOT_REELS = [
@@ -497,7 +556,7 @@ function horseRun(r, gallop, { ground, view, area }) {
         heading: 0, speed: 0, away: 0, drawn: null,
     };
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const inArea = (cam, block) => !cam || area(cam).has(block);
+    const inArea = (cam, block) => !cam || area(cam).area.has(block);
     /* 0x228B0: uma_getaway_chk2, then a step along the heading. */
     const run = (cam) => {
         s.mode = near(cam, s.pos[0], s.pos[2]) ? 'take' : 'bolt';
@@ -574,10 +633,12 @@ function horseRun(r, gallop, { ground, view, area }) {
  * entry in mode_control's table — 0x400000 GAME_DSP, 0x10000000 STAFF_DSP, the
  * ending — and 0x501a80, which gear_select sets when switch bit 4 is held at
  * the transmission select and which entry_car_event_open reads to enter no
- * rival cars: time attack. Attract mode draws what a race does.
+ * rival cars: time attack. Attract mode is ADV_DSP (8, measured in MAME), not
+ * GAME_DSP, and differs from a race only in the windmill (SHOWN).
  */
 export const MODES = [
-    ['race', 'Race (and attract)'],
+    ['race', 'Race'],
+    ['attract', 'Attract'],
     ['timeAttack', 'Time attack'],
     ['ending', 'Ending'],
 ];
@@ -589,7 +650,8 @@ export const MODES = [
  *
  * `view` is which blocks are drawn: 'camera' when only the area round the
  * camera is, as the board draws (see courseArea), and the horses then keep to
- * that too.
+ * that too. For it each draw carries `inView(v)`, its routine's test of the
+ * view courseArea gives (SHOWN); a draw without one is always drawn.
  *
  * `ground(x, z, ref)` answers where the road is under a point — a height and
  * the turns that tip a model to its slope — see courseGround; the cones stand
@@ -609,9 +671,12 @@ export function courseObjectDraws(rom, course, ground, mode = 'race', view = 're
         if (kind === 'runs') kind = O.kinds[r.arg & ~PROG_ALIAS] ?? 'none';
         const build = KINDS[kind];
         if (!build) continue;
+        let rule = O.shown?.[r.init] ?? SHOWN[kind];
+        if (typeof rule === 'function') rule = rule(mode);
+        const inView = showTest(rule, gridBlock(r.pos[0], r.pos[2]));
         for (const d of build(r, ctx)) {
             if (d.model < 0) continue;
-            out.push({ ...d, kind, block: r.block });
+            out.push({ inView, ...d, kind });
         }
     }
     return out;
@@ -738,12 +803,23 @@ const AREA_REACH = 2;
  * the explorer's differ, and the frames of a camera cut, where the board
  * read the heading the frame before.
  *
- * `rom.game.area` is where the build keeps the two tables: `heading`, the
- * four record pointers, and `clip`, extra_clip's pointer per course. Without
- * them this is the 5x5 with the edge alone.
+ * The same walk marks a second, smaller set, at 0x501540, which some object
+ * routines test instead: it goes through the cells in an order of the ROM's
+ * (0x17594), the centre first and then outwards, and of the first ten in that
+ * order marks the ones the full set has. That is the 3x3 round the camera and
+ * the cell two on in z, or, on Dinosaur Canyon (sel_course 2) with the
+ * camera in block 72 or 88, the walk takes the order after it, which swaps
+ * that cell for the one two on in z and one on in x.
  *
- * `courseArea(rom, course)` gives `area({ x, y, z, heading })`, a Set of block
- * numbers; asked again for the same camera it answers the same Set.
+ * `rom.game.area` is where the build keeps the three tables: `heading`, the
+ * four record pointers, `clip`, extra_clip's pointer per course, and `order`,
+ * the walk's order, the other 25 bytes on. Without them this is the 5x5 with
+ * the edge alone.
+ *
+ * `courseArea(rom, course)` gives `area({ x, y, z, heading })`, the view round
+ * that camera: `area` and `near`, Sets of block numbers, and `road`, the
+ * car's point along the road (courseRoad), null where the course has none.
+ * Asked again for the same camera it answers the same view.
  */
 export function courseArea(rom, course) {
     const A = rom.game.area;
@@ -753,23 +829,36 @@ export function courseArea(rom, course) {
         const k = `${cam.x},${cam.y},${cam.z},${cam.heading}`;
         if (k === key) return last;
         const block = gridBlock(cam.x, cam.z);
+        const at = road ? road(cam) : null;
         let open = AREA_ALL;
         if (A) {
             open = headingCut(rom, A.heading, cam.x, cam.z, cam.heading);
-            if (road) open &= ~roadCut(rom, A.clip, course, block, road(cam));
+            if (road) open &= ~roadCut(rom, A.clip, course, block, at);
         }
-        const out = new Set();
-        for (let i = 0; i < 25; i++) {
+        const cell = (i) => {
             const dx = (i % 5) - AREA_REACH, dz = Math.floor(i / 5) - AREA_REACH;
             const x = (block & 15) + dx, z = (block >> 4) + dz;
-            if ((open >> i) & 1 && x >= 0 && x < 16 && z >= 0 && z < 16) out.add((z << 4) | x);
+            return (open >> i) & 1 && x >= 0 && x < 16 && z >= 0 && z < 16 ? (z << 4) | x : -1;
+        };
+        const area = new Set(), near = new Set();
+        for (let i = 0; i < 25; i++) if (cell(i) >= 0) area.add(cell(i));
+        if (A?.order != null) {
+            const order = A.order + (course === 2 && AREA_SWAP.includes(block) ? 25 : 0);
+            for (let n = 0; n < AREA_NEAR; n++) {
+                const b = cell(u8(rom, order + n));
+                if (b >= 0) near.add(b);
+            }
         }
         key = k;
-        last = out;
-        return out;
+        last = { area, near: A?.order != null ? near : area, road: at };
+        return last;
     };
 }
 const AREA_ALL = (1 << 25) - 1;
+/* The first ten of the walk are the near set; and the blocks it walks the
+ * other order from. */
+const AREA_NEAR = 10;
+const AREA_SWAP = [72, 88];
 
 /* The heading cut, 0x1770C: the cells open ahead of `heading`. */
 function headingCut(rom, table, x, z, heading) {
