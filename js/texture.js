@@ -328,6 +328,10 @@ function unpackLodData(md, ptr, lut) {
                  * table already matched come out of the stream. */
                 let p = v, n = 8;
                 for (;;) {
+                    /* A walk that leaves the table never finds a leaf. Most of
+                     * Fighting Vipers' sets 71 and 72 do it on their first
+                     * code; give up on the page rather than spin. */
+                    if (p >= tree.length) return null;
                     const t = tree[p];
                     const bit = r.bit(n);
                     n++;
@@ -880,6 +884,7 @@ export function buildTexram(rom, texSets) {
                 sendBetaData(md, body, tex, dest);
             } else {
                 const page = unpackLodData(md, body, lut);
+                if (!page) continue;
                 sendLodData(tex, dest[0], page);
                 sendLodDataQ(tex, dest, page);
             }
