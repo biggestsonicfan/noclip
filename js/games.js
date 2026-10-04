@@ -693,6 +693,10 @@ const hotdp = {
         placements: {
             chapters: 2,
             maps: 0x92db0, zones: 0x92d90, scripts: 0xe0000, sectionSets: 0x83360,
+            /* off_83290[chapter]: 16 bytes a section, what follows it — 0 goes
+             * to the section at +4, 1 picks +4 or +8 by the byte at 0x51EFE4,
+             * 2 goes on to the next section or ends the chapter (sub_51490). */
+            branches: 0x83290,
             turns: { 55: 0x4000 },
             bounds: 0xcdde20,
         },
@@ -741,6 +745,25 @@ const hotdp = {
         table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
         prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
         scale: 0x28,
+        /*
+         * What takes a prop down again, read in sub_33320, which the prop's
+         * handler calls before it draws (see propZones in js/placements.js).
+         * Each spawn opcode copies a halfword of its record to obj+0x6C, at
+         * `life`: how many times the script index (0x520089) may change
+         * before the object closes itself. Opcodes 10 and 12 also copy the
+         * byte at `window` to obj+0x64, a row of `windows` (16 bytes a row,
+         * camera frames ending in 0xFFFF) at whose frames the object is hidden
+         * or shown again, and which closes it when it ends hidden. `sweep` is
+         * the one case the routine hard-codes: in the first chapter, section 7,
+         * script 2, every object but type 7 closes once the camera is past
+         * frame 170.
+         */
+        spawns: {
+            9: { life: 0x20 }, 10: { life: 0x22, window: 0x25 },
+            11: { life: 0x04 }, 12: { life: 0x22, window: 0x25 },
+        },
+        windows: 0x85940,
+        sweep: { chapter: 0, section: 7, script: 2, after: 170, spare: 7 },
     },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
