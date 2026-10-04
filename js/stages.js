@@ -12,20 +12,15 @@
  * and the platform each carry a transform from the function that draws them.
  */
 
-export const STAGE_DATA_ADDR = 0x0008f3d0;
-import { xtraResolve } from './romset.js';
+import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
 import { readObjectRecords, courseObjectDraws, courseGround, courseReach, carLanes } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
-
-export const STAGE_STRIDE = 256;
-export const STAGE_COUNT = 16;
 
 /* set_material (0x29154) uploads 32 material slots to the geometry engine, and
  * sub_29110 picks which table to upload with the stage slot. A slot is one
  * packed word: diffuse in bits 0-7, ambient in 8-15, then specular. The
  * geometry engine lights every polygon with the slot its attribute word names
  * — see model.js for that half, and viewer.js for the arithmetic. */
-const MATERIAL_TABLE_PTRS = 0x000909e0;
 export const MATERIAL_COUNT = 32;
 
 /* Field offsets inside one 256-byte stage record. */
@@ -364,6 +359,8 @@ export function readStageTable(rom) {
         stages.push({
             slot: s,
             num,
+            /* Geometry already in world space: see stageTable.flat. */
+            flat: Boolean(T.flat),
             name: named ?? `Stage ${num}`,
             named: named !== undefined,
             flags: dv.getUint32(b + F.flags, true),
@@ -443,10 +440,6 @@ function readMaterials(rom, slot) {
     }
     return out;
 }
-
-/* The data region as the i960 sees it, which is what every pointer in a
- * course table is expressed in. */
-const MAIN_DATA_BASE = 0x02000000;
 
 /* ---- Daytona USA's courses ------------------------------------------------ */
 

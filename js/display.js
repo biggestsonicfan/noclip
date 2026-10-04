@@ -47,7 +47,7 @@ const STAGE_X = 8.0;
 const CAGE_HEIGHT_DIV = 3.1;
 
 /* Slots the code special-cases by name in the decompilation. */
-export const SOUTH_ISLAND_SLOTS = [0, 13, 14];
+const SOUTH_ISLAND_SLOTS = [0, 13, 14];
 const FLYING_CARPET_SLOT = 1;
 const AURORA_ICEFIELD_SLOT = 2;
 const MUSHROOM_HILL_SLOT = 3;
@@ -159,8 +159,7 @@ export function frameModel(anim, frame) {
  * banks the plane under a horizon that stays where it is.
  */
 export function stageWorldFrame(stage, frame, frames = null) {
-    /* The slots below are Sonic The Fighters'; a placement stage has none. */
-    if (stage.placements) return null;
+    if (!sfightSlots(stage)) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return worldPrologue(carpetAt(frame));
     if (stage.slot === CANYON_CRUISE_SLOT) {
         return frames?.canyon ? worldPrologue(canyonAt(frames.canyon, frame)) : null;
@@ -172,6 +171,13 @@ export function stageWorldFrame(stage, frame, frames = null) {
         return [['rz', giantWingRoll(frame) * ANGLE_DEG]];
     }
     return null;
+}
+
+/* The slots these functions test are Sonic The Fighters'. A placement stage
+ * has none, and a flat one is Fighting Vipers', whose slots share the numbers
+ * and none of what is drawn on them: its slot 1 is no carpet. */
+function sfightSlots(stage) {
+    return !stage.placements && !stage.flat;
 }
 
 /** The op list a draw uses at a given frame; a static draw ignores the frame. */
@@ -384,11 +390,11 @@ const EGG_LAB_ROOM = 3333;          /* "Inside of Eggmans Lab" */
 const EGG_LAB_CUT = 128;            /* word_97266[0]: am_cntr as the second cut starts */
 /* The second cut is 192 frames (word_97266[1] - [0]); the loop runs it twice
  * as long, so the footage plays for a while once the last window is up. */
-export const EGG_LAB_LOOP = 384;
+const EGG_LAB_LOOP = 384;
 /* Where the second cut's camera stands (adv_movie_egg, am_num 1), in the
  * decoder's frame, square on to the wall: the windows are laid on the panels
  * from here. */
-export const EGG_LAB_EYE = [0, 4.5, 6];
+const EGG_LAB_EYE = [0, 4.5, 6];
 const EGG_LAB_SQUARE = 3769;        /* "Giant square" — amed_open_window */
 const EGG_LAB_WIPE = 16;            /* the counts amed_open_window is drawn on */
 /* The three windows, in the order adv_movie_egg_disp opens them: the counter
@@ -756,7 +762,7 @@ const CARPET_LIGHT_BASE = 0x271c;
 const CANYON_LIGHT_BASE = 0x12000 - 0x20;
 
 export function stageLightYaw(stage, frame, frames = null) {
-    if (stage.placements) return null;
+    if (!sfightSlots(stage)) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return CARPET_LIGHT_BASE - carpetAt(frame).yaw;
     if (stage.slot === CANYON_CRUISE_SLOT && frames?.canyon) {
         return CANYON_LIGHT_BASE - canyonAt(frames.canyon, frame - 1).yaw;
@@ -973,7 +979,7 @@ const ICE_PILLAR_ORDER = [0, 1, 2, 3, 4, 5, 6, 8];
 const ICE_DIAMOND_SPIN = 0x100;     /* per frame_counter frame */
 
 /** The ice pillar records, in the order aurora_ice_pillar_init draws them. */
-export function readIcePillars(rom) {
+function readIcePillars(rom) {
     const dv = rom.mainCpuView;
     return ICE_PILLAR_ORDER.map((i) => {
         const b = ICE_PILLARS + i * ICE_PILLAR_STRIDE;
@@ -1134,9 +1140,8 @@ const GIANT_WING_BODY = 2947;
 const GIANT_WING_HAZE = [3321, 3322];
 const GIANT_WING_ENGINE = 259;
 const GIANT_WING_SPINNER = [3888, 3889];
-/* The blade is swapped for an invisible square on every other frame — one
- * frame on and one frame gone, which is the blur. */
-const GIANT_WING_BLADE = [2863, 2846];
+/* The blade is PROPELLER_BLADE, swapped for an invisible square on every other
+ * frame — one frame on and one frame gone, which is the blur. */
 const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];
 const GIANT_WING_BLADE_SPIN = 0x1b << 7;
 /* Two sine terms: a rate in 16-bit angle units per frame, an amplitude in the
@@ -1274,7 +1279,7 @@ const CANYON_WATER = [
 ];
 
 /** The script, the heading table and the scenery, read out of the ROM. */
-export function readCanyonFlight(rom) {
+function readCanyonFlight(rom) {
     const dv = rom.mainCpuView;
 
     const keys = [];
@@ -1532,7 +1537,7 @@ function canyonTunnelScale(c) {
  * slots ever differ from the record, so only these are handed back.
  */
 export function stageMaterials(stage, frame, frames = null) {
-    if (stage.placements || stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
+    if (!sfightSlots(stage) || stage.slot !== CANYON_CRUISE_SLOT || !frames?.canyon) return null;
     const k = canyonTunnelScale(canyonMoveClock(frame));
     return CANYON_TUNNEL_SLOTS.map((slot) => {
         const m = stage.materials[slot];
@@ -1664,8 +1669,8 @@ function bossDisp({ push, pushBackdrop, pushTpd, sx, frames }) {
 }
 
 /* ---- draw_sphynx_head: the Flying Carpet's second object ----
- * See the note above sphynxOps for where the head belongs, and the one above
- * carpetWorld for why it alone of these three carries the arena's frame. */
+ * See the note above SPHYNX_HEAD for where the head belongs, and why it alone
+ * of these three carries the arena's frame. */
 function sphynxDisp({ push, pushConceding, sx, fs }) {
     push(SPHYNX_HEAD, (f) => sphynxOps(carpetAt(f)));
     for (let i = 0; i < 4; i++) {
@@ -1711,12 +1716,6 @@ const OBJECT_ROUTINES = new Map([
     [0x000774c4, null],             /* post_metal_stage_init — ret */
 ]);
 
-/**
- * Build the draw list for one stage.
- * @param {object} stage  from readStageTable()
- * @param {object} frames from readFrameTables(); without it a stage is built
- *                        at rest, with every animated draw held on frame 0.
- */
 /*
  * The draw list of a stage whose geometry is already in world space.
  *
@@ -1738,6 +1737,10 @@ const OBJECT_ROUTINES = new Map([
  * Still missing is the object list at 0xB4, which animates: a stage built here
  * is the stage standing still.
  */
+/* Fighting Vipers' own slots, which sub_235BC and pole_disp test by number. */
+const FV_NO_PLATFORM_SLOTS = [7, 14];
+const FV_NO_POLE_SLOT = 7;
+
 export function buildFlatDisplayList(stage) {
     const out = [];
     const f = stage.flags;
@@ -1786,7 +1789,7 @@ export function buildFlatDisplayList(stage) {
     /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
      * read at 0x1A. It runs after both of the ground passes, so the platform
      * keeps the front of the plane like the 0x24 list. */
-    if (stage.slot !== 7 && stage.slot !== 14) {
+    if (!FV_NO_PLATFORM_SLOTS.includes(stage.slot)) {
         for (const m of stage.layers.platform ?? []) push(m, 'platform', { planeBias: 0 });
     }
 
@@ -1817,7 +1820,7 @@ export function buildFlatDisplayList(stage) {
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
      * returns before that. */
-    if ((f & (1 << 0x12)) && stage.slot !== 7) push(stage.cagePole, 'poles');
+    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) push(stage.cagePole, 'poles');
 
     /*
      * The railing round the arena.
@@ -1842,6 +1845,12 @@ export function buildFlatDisplayList(stage) {
     return out;
 }
 
+/**
+ * Build the draw list for one stage.
+ * @param {object} stage  from readStageTable()
+ * @param {object} frames from readFrameTables(); without it a stage is built
+ *                        at rest, with every animated draw held on frame 0.
+ */
 export function buildStageDisplayList(stage, frames = null) {
     const out = [];
     const flags = stage.flags;
@@ -1863,8 +1872,8 @@ export function buildStageDisplayList(stage, frames = null) {
     const push = (model, layer, ops) => {
         if (model) out.push({ model, layer, ops });
     };
-    /* An animated draw is pushed under the model it shows at rest, so a stage
-     * built without a frame table is exactly the stage this used to build. */
+    /* An animated draw is pushed under the model it shows at rest. It needs
+     * the frame tables, so a stage built without them leaves it out. */
     const pushAnim = (table, shift, phase, layer, ops) => {
         if (!frames) return;
         const anim = { frames: frames[table], shift, phase };
@@ -2019,7 +2028,7 @@ export function buildStageDisplayList(stage, frames = null) {
          * time, so the door opens and shuts once every 128 frames. */
         pushAnim('hangarIris', 0, 0, 'ground', inHangar());
     }
-    const platformScale = slot === 7 ? [fs, fs, fs] : [fs, 1.6, fs];
+    const platformScale = slot === GIANT_WING_SLOT ? [fs, fs, fs] : [fs, 1.6, fs];
     if (slot === AURORA_ICEFIELD_SLOT) {
         /* stage_dsp compares the slot against 2 on its second instruction and
          * returns — before the per-stage branches and before it has done
