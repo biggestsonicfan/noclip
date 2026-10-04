@@ -578,6 +578,42 @@ export function courseObjectDraws(rom, course, ground, mode = 'race', view = 're
 }
 
 /*
+ * Which courses' records name each model: everything courseObjectDraws draws,
+ * plus the frames it does not — a window's 63 other reflections, which the
+ * board picks by where the car stands, and the second list of a check point,
+ * the one on the lap that finishes the race. A model named by one course only
+ * is drawn on that course's bank.
+ *
+ * @returns {Map<number, Set<number>>} model -> courses
+ */
+export function courseNamedModels(rom) {
+    if (rom.courseNamed) return rom.courseNamed;
+    const O = rom.game.objects;
+    const out = new Map();
+    const add = (m, course) => {
+        if (m < 0) return;
+        if (!out.has(m)) out.set(m, new Set());
+        out.get(m).add(course);
+    };
+    const courses = O ? rom.game.texture.sets : 0;
+    for (let course = 0; course < courses; course++) {
+        for (const d of courseObjectDraws(rom, course, null, 'race', 'all')) {
+            add(d.model, course);
+            for (const m of d.anim?.frames ?? []) add(m, course);
+        }
+        for (const r of readObjectRecords(rom, course)) {
+            const kind = O.kinds[r.init];
+            if (kind === 'window') for (const m of modelList(rom, r.arg, 64)) add(m, course);
+            if (kind === 'checkpoint') {
+                for (const m of modelList(rom, u32(rom, O.checkpoints + r.id * 24 + 20), 64)) add(m, course);
+            }
+        }
+    }
+    rom.courseNamed = out;
+    return out;
+}
+
+/*
  * The grid block a point stands in — get_m_block (Rev A 0x172a0): cvtri on x
  * and z, add 1024, shift down 7, keep 4 bits. cvtri rounds by the AC
  * register's mode, and the boot code's modac (0xa6c) clears it to round to

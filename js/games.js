@@ -294,6 +294,13 @@ const fvipers = {
          * for it (0x4ACBC); every stage uploads beside it. See resolveTexSets
          * in js/stages.js. */
         bootSet: 36,
+        /* The fighters' sets. Player set-up (0x1243C) reads the character
+         * record `ld 0x640D2B0[char*4]`: sixteen part models listed at +0,
+         * copied into the player at 0x12554, and the set at +0x20, handed to
+         * the request at 0x4B0FC (0x12AF8), whose handler 0x4B1C0 loads it
+         * and the next into the player's slot. Sets 1, 3 ... 17 and 93 for
+         * characters 0-10 and 13; 11 and 12 have 0 and no textured part. */
+        fighters: { records: 0x640d2b0, count: 14, parts: 0x00, partCount: 16, set: 0x20 },
     },
     /*
      * The colour tables, which turned out to be the same machinery again.
