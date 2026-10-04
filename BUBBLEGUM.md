@@ -128,4 +128,8 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 2. ~~**Submission index instead of `planeBias` (§1).**~~ Already the cited draw order; stays.
 3. ~~**The FV luma column and the HOTD light (§5).**~~ Done (#250), both checked against MAME.
 4. ~~**Live key ranking in face layers (§2).**~~ Done (Pinboard #259), graded on STF and Daytona.
-5. **A current-zone/block state (§3) and the TGP ground query (§4).** These are larger features. They are worth doing when the Daytona/HOTD work comes back round.
+5. ~~**A current-zone/block state (§3) and the TGP ground query (§4).**~~ Done (#260, #261).
+
+Still open, none of them blocking: the horse speed clamps and `extra_clip`'s heading cut (§3), which HOTD handler removes a spawned prop (§3), the finished HOTD's own enemy routines (§5), `DAYTONA_HORIZON_ROW` until `camd_99` is ported (§4), and `bestTextureSet` as a fallback (§6).
+
+Merging master (Pinboard #440): master's issue 58 fix for Tails' lab's posters (`keepFar`'s layer -1 floor and `leaveApart`'s reordering, `dadf307`, `2f800f0`) was written for the static vote that §2 removed, so it went with it. With the live ranking the issue 58 view renders clean on the RTX 3070 and under SwiftShader.
