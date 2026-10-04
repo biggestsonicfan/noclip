@@ -46,7 +46,7 @@ import {
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
-import { buildTexram, bestTextureSet, bankTextureSet } from './texture.js';
+import { buildTexram, bestTextureSet, bestTextureCombo, bankTextureSet, programTextureSets, fighterSetList } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
 
@@ -733,53 +733,120 @@ function modelsPickTextures() {
 /* ---- Texture set for a lone model ---------------------------------------- */
 
 /*
- * Which texture number to unpack for a model, when no stage record names one.
+ * Which sets to unpack for a model, when no stage record names one.
  *
  * `null` from the picker means work it out from the model; any other value is
  * the set the user chose and is used as given, including when it covers
  * nothing — seeing a model against the wrong sheets is a legitimate thing to
  * want to do while working out which sheets are the right ones.
  *
- * The answer is cached per model because the search walks every set's page
- * list, which is cheap but not free, and clicking down the list would repeat it
- * on every row.
+ * The answer is cached per model because the searches walk page lists, which
+ * is cheap but not free, and clicking down the list would repeat them on every
+ * row.
  *
- * It comes back with how it was reached, so the panel can say when the set is a
- * guess: `how` is 'chosen' (the picker), 'bank' (bankTextureSet), 'coverage'
- * (bestTextureSet, with `covered` of `tiles`) or 'default' (the profile's
- * opening set, for a game neither can answer).
+ * It comes back as `{sets, set, how}`: `sets` what to unpack, in load order,
+ * and `set` the one that stands for them (the colour tables, the panel). `how`
+ * says where it came from:
+ *
+ *   chosen      the picker
+ *   untextured  the model samples no texture, so no set matters
+ *   fighter     a fighter's part, on its pair and the boot set
+ *   boot        the boot set, which holds every tile the model samples
+ *   course      Daytona: the course whose records name the model
+ *   bank        the set the model's bank of the table is drawn under
+ *   resident    a guess: of the sets the board loads together, the first that
+ *               covers most of the model's tiles
+ *   coverage    a guess: the single set that covers most of them
+ *   default     a guess: the profile's opening set
+ *
+ * See programTextureSets and bankTextureSet for the first five.
  */
 function modelTextureGuess(idx) {
-    if (state.texSetChoice !== null) return { set: state.texSetChoice, how: 'chosen' };
+    if (state.texSetChoice !== null) {
+        return { sets: [state.texSetChoice], set: state.texSetChoice, how: 'chosen' };
+    }
     if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
-    /* A game that says which set each bank of its model table is drawn under
-     * is taken at its word; see bankTextureSet for why tile coverage cannot
-     * answer it there. */
-    const banked = bankTextureSet(state.rom, idx);
-    const found = banked === null
-        ? bestTextureSet(state.rom, getModel(idx), state.rom.game.texture.sets)
-        : null;
-    /* Neither can answer for a game whose sheets are raw banks and which has no
-     * table saying which bank goes with which set — Daytona USA, whose course
-     * data is unread. It opens on the set its profile names and the picker
-     * moves it. */
-    const guess = banked !== null ? { set: banked, how: 'bank' }
-        : found ? { set: found.set, how: 'coverage', covered: found.covered, tiles: found.tiles }
-            : { set: state.rom.game.texture.defaultSet ?? null, how: 'default' };
+    const guess = workOutTextureSets(idx);
     state.texSetCache.set(idx, guess);
     return guess;
 }
 
-/* How the panel words a guess, or '' when the set was not guessed. No stage
- * record names a set for these models, so whatever the viewer picks for them
- * is its own inference, not the game's. */
-function describeTextureGuess(g) {
-    if (g.how === 'coverage') {
-        return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
+function workOutTextureSets(idx) {
+    const rom = state.rom;
+    const T = rom.game.texture;
+    const fallback = T.defaultSet ?? null;
+    /* A game that says which set each bank of its model table is drawn under
+     * is taken at its word; see bankTextureSet for why tile coverage cannot
+     * answer it there. */
+    const banked = bankTextureSet(rom, idx);
+    if (banked !== null) return { sets: [banked], set: banked, how: 'bank' };
+
+    const decoded = getModel(idx);
+    const derived = programTextureSets(rom, idx, decoded);
+    if (derived) {
+        /* An untextured model, or one on Daytona's boot bank, is the same
+         * under any set, so it stands on the one the game opens on. */
+        const sets = derived.sets.length ? derived.sets : fallback == null ? [] : [fallback];
+        /* A fighter's pair stands for itself by its first set. */
+        const set = derived.how === 'fighter' ? sets[1] : sets.length ? sets[sets.length - 1] : null;
+        return { ...derived, sets, set };
     }
-    if (g.how === 'bank') return `set ${g.set} is a guess: the set this bank of the model table is drawn under`;
-    if (g.how === 'default' && g.set != null) return `set ${g.set} is a guess: the game's opening set`;
-    return '';
+
+    /* Nothing names it. Where the program's loads are known, the guess is
+     * kept to what the board can have in at once: the boot set with a
+     * fighter's pair, or with a stage's set. */
+    const combos = residentCombos();
+    const best = combos.length ? bestTextureCombo(rom, decoded, combos) : null;
+    if (best && best.covered === best.tiles) {
+        const sets = best.sets;
+        const fighter = fighterSetList(rom).includes(sets[sets.length - 2]);
+        return {
+            sets, set: fighter ? sets[sets.length - 2] : sets[sets.length - 1], how: 'resident',
+            slot: fighter ? 'fighter' : 'stage', covered: best.covered, tiles: best.tiles,
+        };
+    }
+    const found = bestTextureSet(rom, decoded, T.sets);
+    /* Neither can answer for a game whose sheets are raw banks and which has
+     * no table saying which bank goes with which set. It opens on the set its
+     * profile names and the picker moves it. */
+    if (found) return { sets: [found.set], set: found.set, how: 'coverage', covered: found.covered, tiles: found.tiles };
+    return { sets: fallback == null ? [] : [fallback], set: fallback, how: 'default' };
+}
+
+/* What the board can have resident together, for a game whose fighters' sets
+ * are read: the boot set and a fighter's pair, or the boot set and a stage's
+ * sets. Empty for any other game. */
+function residentCombos() {
+    const boot = state.rom.game.texture.bootSet;
+    const fighters = fighterSetList(state.rom);
+    if (boot == null || !fighters.length) return [];
+    const combos = fighters.map((n) => [boot, n, n + 1]);
+    const seen = new Set();
+    for (const s of state.stages) {
+        const sets = s.texSets ?? [];
+        const key = sets.join(',');
+        if (sets.length && !seen.has(key)) { seen.add(key); combos.push(sets); }
+    }
+    return combos;
+}
+
+/* How the panel words the answer: what the set is and how it was reached,
+ * saying so when it is a guess. '' for the picker's own choice. */
+function describeTextureGuess(g) {
+    const sets = g.sets?.length ? `set${g.sets.length > 1 ? 's' : ''} ${g.sets.join(', ')}` : '';
+    switch (g.how) {
+    case 'untextured': return 'samples no texture';
+    case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
+    case 'boot': return state.rom.game.texture.raw
+        ? 'sheet 1 only, the bank boot loads for every course'
+        : `${sets}: the boot set holds every tile it samples`;
+    case 'course': return `${sets}: the course whose records name it`;
+    case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
+    case 'resident': return `${sets} ${g.sets.length > 1 ? 'are' : 'is'} a guess: it is on the ${g.slot}s' pages, and nothing says which ${g.slot}'s`;
+    case 'coverage': return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
+    case 'default': return g.set != null ? `set ${g.set} is a guess: the game's opening set` : '';
+    default: return '';
+    }
 }
 
 /* ---- Model cache --------------------------------------------------------- */
@@ -1106,21 +1173,25 @@ function useModelScene(idx) {
          *
          * The other game answers this with the loaded stage, because every one
          * of its scenes holds the fighters' set. A game whose stages name a
-         * hundred sets between them does not have that property, so the model
-         * is asked instead: a face names a 32-pixel tile, and the set whose
-         * pages cover those tiles is the one the game would have had resident.
-         * The picker on the panel overrides it.
+         * hundred sets between them does not have that property, so the
+         * program is asked instead — which fighter's part it is, whether the
+         * boot set holds it, which course or bank names it — and where it says
+         * nothing, the tiles are: a face names a 32-pixel tile, and the sets
+         * whose pages cover them are the guess. See modelTextureGuess. The
+         * picker on the panel overrides it.
          */
         let set = null;
         if (modelsPickTextures()) {
             const guess = modelTextureGuess(idx);
             set = guess.set;
-            if (set != null) useRomTexram([set]);
+            if (guess.sets.length) useRomTexram(guess.sets);
             /* Said on the status line, since the picture alone cannot tell a
              * set the game names from one the viewer picked. */
             const status = $('#tex-status');
             const why = describeTextureGuess(guess);
-            if (status && set != null) {
+            if (status && guess.how === 'untextured') {
+                status.textContent = 'the model samples no texture';
+            } else if (status && set != null) {
                 status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
             }
         }

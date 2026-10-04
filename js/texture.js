@@ -28,7 +28,8 @@
  * H=128: W rows of block-pairs, H halfwords each.
  */
 
-import { MAIN_DATA_BASE } from './romset.js';
+import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
+import { courseNamedModels } from './daytona.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -581,8 +582,23 @@ export function bestTextureSet(rom, decoded, setCount) {
      * bank fills the whole sheet, so every set covers every tile — and such a
      * game has no page lists to walk in the first place. See bankTextureSet. */
     if (rom.game.texture.raw) return null;
-    if (!decoded || !decoded.tiles.length) return null;
+    const want = sampledTiles(decoded);
+    if (!want.length) return null;
+
+    let best = -1, bestN = -1;
+    for (let s = 0; s < setCount; s++) {
+        if (!texturePages(rom, s).length) continue;
+        const n = tilesCovered(rom, want, [s]);
+        if (n > bestN) { bestN = n; best = s; }
+    }
+    return best < 0 ? null : { set: best, covered: bestN, tiles: want.length / 2 };
+}
+
+/* The atlas tiles a decoded model samples, once each, as x, y pairs. A face
+ * whose width is 0 is untextured and samples none. */
+function sampledTiles(decoded) {
     const want = [];
+    if (!decoded?.tiles?.length) return want;
     const seen = new Set();
     for (let i = 0; i < decoded.tiles.length; i += 4) {
         if (!decoded.tiles[i + 2]) continue;           /* untextured face */
@@ -592,22 +608,40 @@ export function bestTextureSet(rom, decoded, setCount) {
         seen.add(key);
         want.push(tx, ty);
     }
-    if (!want.length) return null;
+    return want;
+}
 
-    let best = -1, bestN = -1;
-    for (let s = 0; s < setCount; s++) {
-        const pages = texturePages(rom, s);
-        if (!pages.length) continue;
-        let n = 0;
-        for (let i = 0; i < want.length; i += 2) {
-            const tx = want[i], ty = want[i + 1];
-            for (const p of pages) {
-                if (tx >= p.x && tx < p.x + 256 && ty >= p.y && ty < p.y + 256) { n++; break; }
-            }
+/* How many of those tiles some page of the given sets covers. */
+function tilesCovered(rom, want, sets) {
+    const pages = sets.flatMap((s) => texturePages(rom, s));
+    let n = 0;
+    for (let i = 0; i < want.length; i += 2) {
+        const tx = want[i], ty = want[i + 1];
+        for (const p of pages) {
+            if (tx >= p.x && tx < p.x + 256 && ty >= p.y && ty < p.y + 256) { n++; break; }
         }
-        if (n > bestN) { bestN = n; best = s; }
     }
-    return best < 0 ? null : { set: best, covered: bestN, tiles: want.length / 2 };
+    return n;
+}
+
+/**
+ * Which of a list of set combinations covers most of a model's tiles: the
+ * fallback for a model the program names nowhere, narrowed to what the board
+ * can have resident at once rather than any one of a hundred sets.
+ *
+ * @param {number[][]} combos  each a list of sets loaded together
+ * @returns {{sets:number[], covered:number, tiles:number}|null} the first best
+ */
+export function bestTextureCombo(rom, decoded, combos) {
+    if (rom.game.texture.raw) return null;
+    const want = sampledTiles(decoded);
+    if (!want.length) return null;
+    let best = null, bestN = -1;
+    for (const sets of combos) {
+        const n = tilesCovered(rom, want, sets);
+        if (n > bestN) { bestN = n; best = sets; }
+    }
+    return best && { sets: best, covered: bestN, tiles: want.length / 2 };
 }
 
 /* ---- Raw banks (The House of the Dead) ----------------------------------- */
@@ -843,6 +877,89 @@ export function bankTextureSet(rom, index) {
     let bank = 0;
     for (let b = 0; b < rom.modelBanks.length && rom.modelBanks[b] <= i; b++) bank = b;
     return bankSets[Math.min(bank, bankSets.length - 1)];
+}
+
+/* ---- The sets the program loads for a lone model ------------------------- */
+
+/*
+ * The fighters' own sets, model by model: Fighting Vipers' player set-up
+ * (0x1243C) takes the character record `ld 0x640D2B0[char*4]`, copies the
+ * sixteen part models listed at its +0 into the player, and hands its +0x20 to
+ * the texture request at 0x4B0FC; the handler (0x4B1C0) loads that set and the
+ * next one into the player's slot. Set 0 is the untextured characters'.
+ */
+function fighterSets(rom) {
+    if (rom.fighterSets) return rom.fighterSets;
+    const F = rom.game.texture.fighters;
+    const rd = (a) => { const r = xtraResolve(rom, a); return r.view.getUint32(r.off, true); };
+    const owners = new Map();
+    for (let c = 0; c < F.count; c++) {
+        const rec = rd(F.records + c * 4);
+        const set = rd(rec + F.set);
+        if (!set) continue;
+        const list = rd(rec + F.parts);
+        for (let k = 0; k < F.partCount; k++) {
+            const m = rd(list + k * 4);
+            if (!owners.has(m)) owners.set(m, new Set());
+            owners.get(m).add(set);
+        }
+    }
+    rom.fighterSets = owners;
+    return owners;
+}
+
+/** The set each fighter's pair starts at, in character order, without repeats. */
+export function fighterSetList(rom) {
+    if (!rom.game.texture.fighters) return [];
+    return [...new Set([...fighterSets(rom).values()].flatMap((s) => [...s]))].sort((a, b) => a - b);
+}
+
+/**
+ * The sets the board has resident when it draws a model no stage record
+ * names, where the program says which.
+ *
+ * - A model that samples no texture needs none; `how` 'untextured'.
+ * - A fighter's part (above) is drawn on the boot set and its pair, N and N+1.
+ * - A model whose every tile lies on the boot set's pages is drawn on the
+ *   boot set, which send_tex_default loads before anything else and no
+ *   request asks for again.
+ * - Daytona USA: a model on sheet 1 alone is on the bank boot uploads there
+ *   (0x1454) and no course replaces, so every course draws it the same. One on
+ *   sheet 0 takes the bank sel_course picks (0x1438, `ld 0x15A0[course*4]`),
+ *   and the course is the one whose object records name it.
+ *
+ * @returns {{sets:number[], how:string}|null} null where nothing says
+ */
+export function programTextureSets(rom, index, decoded) {
+    const T = rom.game.texture;
+    if (T.raw?.layout === 'daytona') {
+        if (!decoded) return null;
+        let sheet0 = false, sheet1 = false;
+        for (let i = 0; i < decoded.tiles.length; i += 4) {
+            if (!decoded.tiles[i + 2]) continue;
+            if (decoded.tiles[i + 1] >= SHEET_H) sheet1 = true; else sheet0 = true;
+        }
+        if (!sheet0 && !sheet1) return { sets: [], how: 'untextured' };
+        if (!sheet0) return { sets: [], how: 'boot' };
+        const courses = courseNamedModels(rom).get(index);
+        return courses?.size === 1 ? { sets: [...courses], how: 'course' } : null;
+    }
+    if (T.raw || T.bankSets) return null;
+    if (!decoded) return null;
+    const want = sampledTiles(decoded);
+    if (!want.length) return { sets: [], how: 'untextured' };
+    const boot = T.bootSet;
+    if (T.fighters) {
+        const sets = fighterSets(rom).get(index);
+        if (sets?.size === 1) {
+            const n = [...sets][0];
+            return { sets: [boot, n, n + 1], how: 'fighter' };
+        }
+    }
+    if (boot != null && tilesCovered(rom, want, [boot]) === want.length / 2) {
+        return { sets: [boot], how: 'boot' };
+    }
+    return null;
 }
 
 /**

@@ -148,6 +148,12 @@ tiles it covers. Over 3550 textured models that picks a fully-covering set for
 all but one, in about half a second for the whole table; unpacking all 100 sets
 to find out would have cost seconds per model.
 
+Coverage is now the last resort, not the first. A fighter's parts take the
+set its character record names. A model wholly on the boot set takes the boot
+set. What is left is scored against the sets the board can hold at once (the
+boot set with a fighter's pair, or with a stage's set), not each set alone.
+See `programTextureSets`.
+
 ### Working out a later build of the same game
 
 *The House of the Dead* shipped two years after the prototype above, and the
