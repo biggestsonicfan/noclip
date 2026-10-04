@@ -95,10 +95,12 @@ const SCR_LUMA_COUNT = 64;
 /*
  * The test-menu colour settings, as check_sram_all writes them when the
  * battery-backed copy does not check out — so what a machine in its shipped
- * state runs with. Sonic The Fighters keeps one add and one multiply for all
- * three channels; Fighting Vipers keeps a pair per channel (0x500234..0x500239)
- * and ships all three at the same numbers, which are also the other game's. So
- * the arithmetic below is per-channel for both and comes out identical.
+ * state runs with. These are Sonic The Fighters', one add and one multiply for
+ * all three channels. Fighting Vipers keeps a pair per channel
+ * (0x500234..0x500239) and ships its own numbers, add 0x40 and multiply 0x25
+ * (js/games.js). The arithmetic below is per-channel for both, and with each
+ * game's numbers the ramp, the flat band and the palette band all come out as
+ * MAME's colorxlat holds them after a boot on empty NVRAM.
  */
 export const TST_ADD = 22;
 export const TST_MUL = 54;

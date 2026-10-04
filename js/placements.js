@@ -179,6 +179,167 @@ function spawnProps(rom, at, set, out) {
     }
 }
 
+/*
+ * Which zones each prop is drawn in, by running the board's clock over the
+ * scripts.
+ *
+ * A prop does not belong to a zone. It is a task the spawn opcode opens, and
+ * it stays up until it closes itself, which only sub_33320 makes it do — the
+ * routine its handler (0x30670) calls each frame before it draws:
+ *
+ *     ldib 0x520089, g7        ; the section's script index
+ *     ld   0x2E4(r4), g4       ; against the one the object last saw;
+ *     ...                      ; a change is counted at obj+0x318,
+ *     ldis 0x6C(r4), g6        ; and once past the record's halfword
+ *     cmpible g5, g6, ...
+ *     call sub_10D60           ; the task closes itself
+ *
+ * and then, for a record with a window row, flips obj+0x2E8 — the flag the
+ * handler draws under — each time the camera frame (0x51E788) equals the
+ * row's next entry, closing once the row ends with it hidden. So what decides
+ * a prop's zones is time: how many scripts have gone by, and how far the
+ * camera has played, when each opcode 20 runs. That is walked here the way
+ * the interpreter runs it. Opcode 60's type-0 command queues a camera stretch
+ * {start, end, path, flags}; 83 waits for the queue to play out, 84 for a
+ * frame past its argument, 81 for that many frames; the rest take no time.
+ * 93 moves to the next script, and the end of a section goes where the branch
+ * table says, at script 1 (sub_51490; script 0 is the start the game takes
+ * in its other mode). A prop is in a zone if it is drawn on a frame while
+ * that zone is current. A choice between two sections takes both.
+ *
+ * Returns a Map from spawn record to a Set of zones, or null where the profile
+ * does not say how a prop closes.
+ */
+const OP_WAIT_FRAMES = 81;
+const OP_WAIT_CAMERA = 83;
+const OP_WAIT_PAST = 84;
+const WINDOW_END = 0xffff;
+
+function propZones(rom, chapter, sections, props) {
+    const O = rom.game.objects;
+    const branches = rom.game.stageTable.placements.branches;
+    if (!O?.spawns || branches == null) return null;
+    const dv = rom.mainCpuView;
+    const scripts = sections.map((section) => pointerList(rom, section).map((script) => {
+        const ops = [];
+        walkScript(rom, script, (op, p) => ops.push([op, p]));
+        return ops;
+    }));
+    const table = dv.getUint32(branches + chapter * 4, true);
+    /* The sections that can follow one, as sub_51490 picks them. A section
+     * with no script 1 ends the chapter. */
+    const after = (s) => {
+        const at = table + s * 16;
+        const kind = rom.maincpu[at];
+        const next = [];
+        if (kind === 0) next.push(rom.maincpu[at + 4]);
+        else if (kind === 2) next.push(s + 1);
+        else if (kind === 1) {
+            for (let q = at + 4; q < at + 16 && dv.getUint32(q, true) !== END; q += 4) next.push(rom.maincpu[q]);
+        }
+        return next.filter((n) => scripts[n]?.length > 1);
+    };
+    const sweep = O.sweep?.chapter === chapter ? O.sweep : null;
+    const out = new Map();
+
+    /*
+     * Run the interpreter from script `i`, instruction `e` of section `s`,
+     * with `c` the camera and the current zone, and `t` the object, if one is
+     * up yet. Without one it stops at `stop` = [script, instruction] and hands
+     * back the state there; with one, it runs until the object closes or the
+     * chapter ends, crediting zones as it goes.
+     */
+    function run(s, i, e, c, t, stop = null, seen = new Set()) {
+        /* One frame of the object's task: sub_33320, in its order. */
+        const frame = () => {
+            if (!t) return true;
+            if (sweep && s === sweep.section && i === sweep.script && t.type !== sweep.spare
+                && c.frame > sweep.after) return false;
+            if (i !== t.seen) {
+                t.seen = i;
+                if (++t.count > t.life) return false;
+            }
+            if (t.window) {
+                if (c.frame === t.window[t.w]) { t.drawn = !t.drawn; t.w++; }
+                if (!t.drawn && t.window[t.w] === WINDOW_END) return false;
+            }
+            if (t.drawn && c.zone != null) out.get(t.rec).add(c.zone);
+            return true;
+        };
+        /* The camera's next frame, or the one it holds when nothing is queued. */
+        const tick = () => {
+            const q = c.queue[0];
+            if (q) {
+                c.frame = q[0]++;
+                if (q[0] > q[1]) c.queue.shift();
+            }
+            return frame();
+        };
+        for (let sections = 0; sections < 64; sections++) {
+            const list = scripts[s];
+            for (; i < list.length; i++, e = 0) {
+                for (; e < list[i].length; e++) {
+                    if (stop && i === stop[0] && e === stop[1]) return c;
+                    const [op, p] = list[i][e];
+                    const arg = dv.getUint32(p + 4, true);
+                    if (op === OP_ZONE) c.zone = arg;
+                    else if (op === OP_CAMERA && (arg & 15) === 0 && arg >>> 4 >= 2) {
+                        const start = dv.getUint32(p + 8, true);
+                        const last = c.queue.length ? c.queue[c.queue.length - 1][1] : c.frame;
+                        c.queue.push([start === END ? last + 1 : start, dv.getInt32(p + 12, true)]);
+                    } else if (op === OP_WAIT_CAMERA) {
+                        while (c.queue.length) if (!tick()) return null;
+                    } else if (op === OP_WAIT_PAST && arg) {
+                        while (c.queue.length && !(c.frame > arg)) if (!tick()) return null;
+                    } else if (op === OP_WAIT_FRAMES) {
+                        for (let k = 0; k < Math.min(arg, 3600); k++) if (!tick()) return null;
+                    }
+                }
+            }
+            if (stop) return c;
+            /* The section is done: on to each that can follow, at script 1. A
+             * branch already taken in the same state adds nothing. */
+            const next = after(s).filter((n) => {
+                const key = `${n}:${t.count}:${t.w}:${t.drawn}:${c.zone}:${c.frame}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            if (!next.length) return null;
+            for (const n of next.slice(1)) {
+                run(n, 1, 0, { ...c, queue: c.queue.map((q) => [...q]) }, { ...t }, null, seen);
+            }
+            [s, i, e] = [next[0], 1, 0];
+        }
+        return null;
+    }
+
+    scripts.forEach((list, s) => list.forEach((ops, i) => ops.forEach(([op, p], e) => {
+        const form = SPAWN_OPS.has(op) && O.spawns[op];
+        if (!form) return;
+        for (let q = p + 4; inRom(rom, q); q += 4) {
+            const rec = dv.getUint32(q, true);
+            if (rec === END) break;
+            const prop = props.get(rec);
+            if (!prop) continue;
+            if (!out.has(rec)) out.set(rec, new Set());
+            const row = form.window != null ? rom.maincpu[rec + form.window] : 0;
+            const window = [];
+            for (let k = 0; row && k < 8; k++) {
+                window.push(dv.getUint16(O.windows + row * 16 + k * 2, true));
+                if (window[k] === WINDOW_END) break;
+            }
+            /* The interpreter as it stands at the spawn, then the object. */
+            const c = run(s, 0, 0, { zone: null, frame: 0, queue: [] }, null, [i, e]);
+            run(s, i, e + 1, c, {
+                rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
+                seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
+            });
+        }
+    })));
+    return out;
+}
+
 /* A prop's three angles, in the order and the sign the scenery's single turn
  * already uses. Yaw is all but six of them carry. */
 function propTurn([x, y, z]) {
@@ -270,78 +431,28 @@ function placementCount(rom, map) {
 }
 
 /*
- * Versions of one piece: placements standing at the same spot that no zone
- * draws together. The chapter's tables are full of them — PN_niwa01_03a, 03b
- * and 03c, PN_room_1b and 1bb, PN_hashi01_00a and 00b — and each zone lists
- * one, so which a player sees depends on where the camera is. A stage made of
- * every zone a set reaches would stand them all in one place, and they are
- * modelled on top of each other: three copies of a wall, its window glow and
- * its window frame, each window showing whichever copy the depth buffer
- * happened to keep. One is drawn and the rest are kept apart, so the Models tab
- * still knows the stage draws them.
+ * Which placements are standing while one zone is current.
  *
- * The one drawn is the one the stage opens with: of the zones that list it, the
- * first any script makes current. These are states, not levels of detail —
- * PN_niwa01_03c is the mansion with its doors shut, 03b the same front from
- * nearer, and 03a has the doorway standing open, which is what the player is
- * shown once the doors have opened in front of them. Zones 11 and 12 list it,
- * in section 4; zone 1 lists 03c, in section 0. Keeping the most detailed
- * version instead took the doors off the house. Same for the bridge, where 00a
- * is a single zone at the end of the chapter and 00b is the eight before it.
- *
- * Sharing a spot is not enough on its own: Chapter 2's rooms are modelled in
- * world space and several are placed at the same origin, PN_room2_04a and 06a
- * among them, without a cubic unit in common. So versions must also fill much
- * the same space — their bounding boxes, from the table the sphere cull reads
- * (`bounds`: a pointer per model to max xyz, min xyz, radius), overlapping by
- * at least a quarter of their union. The bridge's a and b halves overlap by a
- * third; rooms that merely share an origin do not overlap at all.
+ * The chapter's tables are full of versions of one piece at one spot —
+ * PN_niwa01_03a, 03b and 03c, PN_room_1b and 1bb, PN_hashi01_00a and 00b — and
+ * each zone lists one: PN_niwa01_03c is the mansion with its doors shut, which
+ * zone 1 lists in section 0, and 03a has the doorway standing open, which zones
+ * 11 and 12 list in section 4, once the doors have opened in front of the
+ * player. A stage made of every zone a set reaches stands them all in one place,
+ * modelled on top of each other. The board never does: it draws the one zone
+ * the section script last made current (opcode 20), and nothing else. So a stage
+ * carries its zones in the order the scripts reach them, and the viewer draws
+ * whichever one is picked, opening on the first. Every zone at once stays as a
+ * view of its own, versions and all.
  */
-function resolveAlternates(rom, draws, zonesOf, zoneOrder) {
-    const T = rom.game.modelTable;
-    const model = (d) => (d.cycle ? d.cycle[0] : d.model);
-    /* How early the piece is first standing there: the least script order of
-     * any zone that lists it. */
-    const opens = (d) => Math.min(...[...(zonesOf.get(d.index) ?? [])]
-        .map((z) => zoneOrder.get(z) ?? Infinity), Infinity);
-    const polygons = (d) => rom.mainDataView.getUint32(T.offset + model(d) * T.stride + 12, true);
-    const boundsAt = rom.game.stageTable.placements.bounds;
-    const box = (d) => {
-        const md = rom.mainDataView;
-        const p = boundsAt ? md.getUint32(boundsAt + model(d) * 4, true) - 0x02000000 : -1;
-        if (p < 0 || p + 28 > rom.mainData.length) return null;
-        const f = (o) => md.getFloat32(p + o, true);
-        return { max: [f(0), f(4), f(8)], min: [f(12), f(16), f(20)] };
-    };
-    const overlap = (a, b) => {
-        const A = box(a), B = box(b);
-        if (!A || !B) return true;
-        let inter = 1, va = 1, vb = 1;
-        for (let k = 0; k < 3; k++) {
-            inter *= Math.max(0, Math.min(A.max[k], B.max[k]) - Math.max(A.min[k], B.min[k]));
-            va *= Math.max(1e-6, A.max[k] - A.min[k]);
-            vb *= Math.max(1e-6, B.max[k] - B.min[k]);
-        }
-        return inter / (va + vb - inter) >= 0.25;
-    };
-    const spots = new Map();
-    for (const d of draws) {
-        const k = d.pos.map((v) => v.toFixed(2)).join(',');
-        if (!spots.has(k)) spots.set(k, []);
-        spots.get(k).push(d);
-    }
-    const drop = new Set();
-    for (const here of spots.values()) {
-        if (here.length < 2) continue;
-        const together = (a, b) => [...(zonesOf.get(a.index) ?? [])].some((z) => zonesOf.get(b.index)?.has(z));
-        const exclusive = here.every((a) => here.every((b) => a === b || (!together(a, b) && overlap(a, b))));
-        if (!exclusive) continue;
-        const keep = [...here].sort((a, b) => opens(a) - opens(b)
-            || (zonesOf.get(b.index)?.size ?? 0) - (zonesOf.get(a.index)?.size ?? 0)
-            || polygons(b) - polygons(a) || a.index - b.index)[0];
-        for (const d of here) if (d !== keep) drop.add(d);
-    }
-    return { draws: draws.filter((d) => !drop.has(d)), alternates: draws.filter((d) => drop.has(d)) };
+function zoneViews(zones, zoneOrder, zoneSections, set = null, zoneSet = null) {
+    return [...zones]
+        .sort((a, b) => (zoneOrder.get(a) ?? Infinity) - (zoneOrder.get(b) ?? Infinity))
+        .map((zone) => ({
+            zone,
+            set: set ?? zoneSet.get(zone),
+            label: `zone ${zone} · section ${runs(zoneSections.get(zone) ?? [])}`,
+        }));
 }
 
 /*
@@ -373,7 +484,7 @@ function skyDraws(rom, sky) {
 /* A stage entry in the shape the viewer's stage list takes. The set is the
  * atlas, the palette and the colour tables at once — sub_2B720 loads all three
  * from the one number. */
-function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, alternates = [], meta, mixedSets = false }) {
+function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, zones = [], meta, mixedSets = false }) {
     stages.push({
         slot: stages.length,
         placements: true,
@@ -384,7 +495,13 @@ function placementStage(stages, lit, chapter, { name, set, draws, objects = [], 
         draws,
         objects,
         sky,
-        alternates,
+        zones,
+        /* The view the stage opens in: its first zone, or every placement
+         * where it has no zones to choose between. See zoneViews. */
+        views: [...zones.map((z, i) => [`zone:${i}`, z.label]),
+            ['all', zones.length ? 'Every zone at once' : 'Every placement']],
+        view: zones.length ? 'zone:0' : 'all',
+        union: 'all',
         texSets: [set],
         texSet: [set, set],
         tint: [1, 1, 1],
@@ -420,11 +537,11 @@ export function readPlacementStages(rom) {
         /* Zones in the order the scripts reach them, each under the set loaded
          * when it is made current: the section's own set as it starts, then any
          * set a script loads part way through. That order is also what says
-         * which of two versions of a piece the stage opens with — see
-         * resolveAlternates. */
+         * which zone the stage opens in — see zoneViews. */
         const groups = new Map();
         const zoneOrder = new Map();
         const zoneSet = new Map();
+        const zoneSections = new Map();
         /* The sky is a pair of bytes the scripts write and the drawing task
          * reads, so it carries across sections exactly as it does on the
          * machine: a set's sky is what is standing when its first zone is made
@@ -453,7 +570,7 @@ export function readPlacementStages(rom) {
                     if (op !== OP_ZONE) return;
                     if (!groups.has(set)) {
                         groups.set(set, {
-                            zones: new Set(), sections: new Set(),
+                            zones: new Set(), sections: new Set(), zoneSections: new Map(),
                             sky: { index: sky.index, on: sky.on !== 0, spin: sky.on === 1 },
                         });
                     }
@@ -461,10 +578,18 @@ export function readPlacementStages(rom) {
                     const zone = dv.getUint32(p + 4, true);
                     g.zones.add(zone);
                     g.sections.add(number);
+                    for (const m of [g.zoneSections, zoneSections]) {
+                        if (!m.has(zone)) m.set(zone, new Set());
+                        m.get(zone).add(number);
+                    }
                     if (!zoneOrder.has(zone)) { zoneOrder.set(zone, zoneOrder.size); zoneSet.set(zone, set); }
                 });
             }
         });
+
+        /* And which zones each prop is drawn in, for the zone picker. */
+        const lives = propZones(rom, chapter, sections, props);
+        if (lives) for (const [rec, o] of props) o.zones = lives.get(rec) ?? new Set();
 
         /* Which zones list each placement, over every zone the chapter reaches. */
         const zonesOf = new Map();
@@ -505,8 +630,12 @@ export function readPlacementStages(rom) {
             const listed = [...indices].sort((a, b) => a - b)
                 .map((i) => readPlacement(rom, map, i))
                 .filter((d) => d && (d.model || d.cycle));
-            for (const d of listed) { reached.add(d.index); d.set = set; }
-            const { draws, alternates } = resolveAlternates(rom, listed, zonesOf, zoneOrder);
+            for (const d of listed) {
+                reached.add(d.index);
+                d.set = set;
+                d.zones = zonesOf.get(d.index) ?? new Set();
+            }
+            const draws = listed;
             if (!widest || draws.length > widest.count) widest = { set, count: draws.length };
 
             const sky = skyDraws(rom, g.sky);
@@ -517,7 +646,7 @@ export function readPlacementStages(rom) {
                 draws,
                 objects,
                 sky,
-                alternates,
+                zones: zoneViews(g.zones, zoneOrder, g.zoneSections, set),
                 meta: [
                     ['texture set', set],
                     ['sections', runs(g.sections)],
@@ -525,7 +654,6 @@ export function readPlacementStages(rom) {
                     ['placements', draws.length],
                     ...(objects.length ? [['props', objects.length]] : []),
                     ['sky', sky ? `${sky.dome}${sky.spin ? ', drifting' : ', held'}` : 'off'],
-                    ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
             });
         }
@@ -549,9 +677,10 @@ export function readPlacementStages(rom) {
             const d = readPlacement(rom, map, i);
             if (!d) continue;
             d.set = setOf.get(i) ?? widest?.set;
+            d.zones = zonesOf.get(i) ?? new Set();
             table.push(d);
         }
-        const { draws: all, alternates } = resolveAlternates(rom, table, zonesOf, zoneOrder);
+        const all = table;
         if (all.length && widest) {
             placementStage(stages, lit, chapter, {
                 name: `Stage ${chapter + 1} · all placements`,
@@ -561,14 +690,15 @@ export function readPlacementStages(rom) {
                  * is the set this stage is framed as. */
                 sky: skyDraws(rom, groups.get(widest.set)?.sky),
                 objects: [...props.values()],
-                alternates,
+                /* Each zone under the set loaded when it is first made
+                 * current, which is the set its pieces are drawn under. */
+                zones: zoneViews(zoneOrder.keys(), zoneOrder, zoneSections, null, zoneSet),
                 mixedSets: true,
                 meta: [
                     ['texture set', `${[...new Set(all.map((d) => d.set))].sort((a, b) => a - b).join(', ')}, per part`],
                     ['placements', table.length],
                     ...(props.size ? [['props', props.size]] : []),
                     ['in no reached zone', table.filter((d) => !reached.has(d.index)).length],
-                    ...(alternates.length ? [['other versions', `${alternates.length}, not drawn`]] : []),
                 ],
             });
         }
@@ -586,7 +716,7 @@ export function readPlacementStages(rom) {
  * The board turns Y by the negated angle and its Z is the viewer's reversed,
  * which leaves a board turn of +a as an ordinary Y turn of +a here.
  */
-export function buildPlacementDisplayList(stage, getModel = null, mode = undefined) {
+export function buildPlacementDisplayList(stage, getModel = null, mode = undefined, view = stage.view) {
     const sky = [];
     if (stage.sky) {
         const { dome, band, y, spin } = stage.sky;
@@ -599,9 +729,14 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         });
         sky.push({ model: band, layer: 'sky', ops: at(0) });
     }
+    /* The zone picked, if one is: only what it lists, under the set it is
+     * drawn with (see zoneViews). */
+    const zone = /^zone:/.test(view ?? '') ? stage.zones?.[+view.slice(5)] : null;
     /* The props go in under their own layer, so they can be turned off and so
-     * the camera frames on the room rather than on them. */
-    const objects = (stage.objects ?? []).map((o) => ({
+     * the camera frames on the room rather than on them. Under a zone, only
+     * those still standing while it is current (see propZones). */
+    const objects = (stage.objects ?? [])
+        .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).map((o) => ({
         model: o.model,
         layer: 'objects',
         set: o.set,
@@ -611,15 +746,20 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
     }));
     /* Objects a stage builds itself, already in the draw list's own shape —
      * Daytona USA's, whose routines are in js/daytona.js. */
-    const built = (stage.objectDraws?.(getModel, mode) ?? [])
+    const built = (stage.objectDraws?.(getModel, mode, view) ?? [])
         .map((d) => ({ layer: 'objects', set: stage.texSets?.[0], ...d }));
-    return sky.concat(objects, built, stage.draws.map((d) => ({
+    /* And a course left to the camera's window keeps every block, which the
+     * window then hides and shows; otherwise only the ones a car reaches. */
+    const draws = stage.draws.filter((d) => (zone ? d.zones?.has(zone.zone)
+        : view === 'camera' || d.reach !== false));
+    return sky.concat(objects, built, draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
         anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,
         layer: 'scenery',
         /* Which texture set the piece is drawn under, for a stage that spans
          * several — see the all-placements stage in readPlacementStages. */
-        set: d.set,
+        set: zone ? zone.set : d.set,
+        ...(d.block != null ? { block: d.block } : {}),
         ops: [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
             ...(d.turn ? [['r', (d.turn * 360) / 0x10000]] : [])],
     })));

@@ -98,7 +98,7 @@ function readParts(rom, root) {
  * Every body in the table.
  *
  * @param {object} rom loaded ROM set
- * @returns {object[]} {index, name, joints, scale, roles, skin, parts}
+ * @returns {object[]} {index, name, joints, scale, roles, skin, hitMotions, start, root, parts}
  */
 export function readBodies(rom) {
     const B = rom.game.rig.bodies;
@@ -125,6 +125,9 @@ export function readBodies(rom) {
              * reads it. */
             skin: (B.skinsSource === 'maincpu' ? dv : md).getInt16(B.skins + i * 2, true),
             hitMotions: readHitMotions(rom, i),
+            /* The motion sub_23060 starts the body on, where the build has
+             * the table: `ld 0x22F70[g1*4],g2` before sub_2DFD0. */
+            start: B.starts === undefined ? -1 : dv.getUint32(B.starts + i * 4, true),
             root,
             parts: readParts(rom, root),
         });
@@ -216,112 +219,37 @@ export function readMotions(rom, bodies) {
     return list;
 }
 
-/*
- * Whether a motion's name looks like it belongs to a body. Nothing in the
- * tables pairs the two: an enemy's routine picks its body and then its motions
- * by number, one call at a time. The names are the only hint. A motion's first
- * word is often the body's family, a letter for the big ones (MO_z_walk_a for
- * the zombies, MO_k_ for the researchers) or the name itself (MO_mrg_aruki for
- * BO_mr_g). So a motion is kin to a body when that first word starts the body's
- * name, or when the two names share their first three letters (MO_handra for
- * BO_handrb). It is a guess about the names and only orders the list: 29 of the
- * 68 bodies have kin, and the zombies with names of their own (BO_neil,
- * BO_mummy) find none.
- */
-export function motionKin(body, motion) {
-    const stem = (s) => s.replace(/^(BO|MO)_/, '').toLowerCase();
-    const b = stem(body.name).replace(/_/g, '');
-    const m = stem(motion.name);
-    if (b.startsWith(m.split('_')[0])) return true;
-    const flat = m.replace(/_/g, '');
-    let i = 0;
-    while (i < b.length && i < flat.length && b[i] === flat[i]) i++;
-    return i >= 3;
-}
-
-/* A motion's family: the first word of its name, or its first four letters
- * where the name has no words (MO_ddoggaruki00a, MO_ddogghashiru). */
-function motionFamily(motion) {
-    const s = motion.name.replace(/^MO_/, '').toLowerCase();
-    return s.includes('_') ? s.split('_')[0] : s.slice(0, 4);
-}
-
 /**
- * The motions a body can play, and the ones most likely written for it.
+ * The motions a body can play, and the ones the game plays on it.
  *
  * Any motion of the body's joint count plays on it, but one keyed on another
  * skeleton bends it out of shape: BO_zonbi_b_2 has the dogs' joint count and
- * none of their build. Nothing in the data pairs a body with its motions but
- * the hit reactions, so the lead is worked out in steps, and each only orders
- * the list and picks where to start:
+ * none of their build. Each enemy's routine picks its body, then its motions
+ * by number; `rig.bodyMotions` holds those numbers per body, read out of the
+ * program by tools/hotd-motions/body_motions.py. Those of the body's joint
+ * count lead, with its hit reactions (readHitMotions), and the one the game
+ * starts the body on (`rig.bodies.starts`) first. A routine shared by several
+ * bodies lists what any of them plays, so the joint count is what keeps the
+ * researchers' motions off the ladies of another build.
  *
- *   1. Motions named like the body lead (motionKin).
- *   2. Otherwise motions go by family (their first word), and each family is
- *      scored by the skeleton: posed on a motion its own, a body stands on the
- *      floor, so the score is how far its lowest joint sits from height 0
- *      through the motion, as a share of its size, the median over the family.
- *      Families of fewer than three are passed over while a larger one is left.
- *   3. The family holding the body's own hit reactions (readHitMotions) is
- *      taken if it scores near the best.
- *   4. Failing that, a family named for another body of the same joint count
- *      (MO_mrg_* for BO_mr_g) is passed over while one named for no body is
- *      left: a flyer never touches the floor, and Devilon would otherwise stand
- *      on Mr. G's motions rather than fly on MO_b2_*.
- *   5. The best score of what remains.
+ * The finished game's table is the prototype's, carried over by name
+ * (`rig.bodyMotionsLabel` says so); a body with no row there leads with its
+ * hit reactions alone.
  *
- * A family starts on its first motion in the table, usually the walk or the
- * stance, not its best-scoring one, which is as often a body lying down.
- *
+ * @param {object} rom loaded ROM set
  * @param {object} body from readBodies
  * @param {object[]} motions from readMotions
- * @param {object[]} bodies every body, for which families other bodies name
  * @returns {{fits: object[], lead: object[], label: string}}
  */
-export function rankMotions(body, motions, bodies = []) {
+export function bodyMotionList(rom, body, motions) {
     const fits = motions.filter((m) => m.joints === body.joints);
-    const kin = fits.filter((m) => motionKin(body, m));
-    if (kin.length || !fits.length) return { fits, lead: kin, label: `Named like ${body.name}` };
-
-    let size = 0;
-    for (const o of poseBody(body, null, 1).origins) size = Math.max(size, Math.hypot(o[0], o[1], o[2]));
-    const score = new Map();
-    for (const m of fits) {
-        const lows = [];
-        const step = Math.max(1, Math.floor(m.frames / 12));
-        for (let f = 1; f <= m.frames; f += step) {
-            let low = Infinity;
-            for (const o of poseBody(body, m, f).origins) low = Math.min(low, o[1]);
-            lows.push(Math.abs(low));
-        }
-        lows.sort((a, b) => a - b);
-        score.set(m, lows[lows.length >> 1] / (size || 1));
-    }
-    const families = new Map();
-    for (const m of fits) {
-        const k = motionFamily(m);
-        if (!families.has(k)) families.set(k, []);
-        families.get(k).push(m);
-    }
-    const median = (list) => {
-        const s = list.map((m) => score.get(m)).sort((a, b) => a - b);
-        return s[s.length >> 1];
-    };
-    const byScore = (list) => [...list].sort((a, b) => median(a) - median(b));
-    const all = [...families.values()];
-    const big = all.filter((f) => f.length >= 3);
-    const pool = byScore(big.length ? big : all);
-    const top = median(pool[0]);
-
-    const hits = (f) => f.filter((m) => body.hitMotions.includes(m.index)).length;
-    const own = pool.filter((f) => hits(f) && median(f) <= Math.max(1.5 * top, top + 0.05))
-        .sort((a, b) => hits(b) - hits(a))[0];
-    const others = bodies.filter((b) => b !== body && b.joints === body.joints);
-    const unclaimed = pool.filter((f) => !others.some((b) => f.some((m) => motionKin(b, m))));
-    const best = own ?? unclaimed[0] ?? pool[0];
-    const why = own ? 'its hit reactions' : unclaimed.includes(best) && unclaimed.length < pool.length
-        ? 'named for no other body' : 'stands it on the floor';
-    const lead = [...best].sort((a, b) => a.index - b.index);
-    return { fits, lead, label: `${motionFamily(best[0])} family, ${why}` };
+    const table = rom.game.rig.bodyMotions?.[body.index];
+    const own = new Set([...(table ?? []), ...body.hitMotions]);
+    const lead = fits.filter((m) => own.has(m.index));
+    const start = lead.findIndex((m) => m.index === body.start);
+    if (start > 0) lead.unshift(...lead.splice(start, 1));
+    const label = table?.length ? rom.game.rig.bodyMotionsLabel ?? 'Played by its routine' : 'Its hit reactions';
+    return { fits, lead, label };
 }
 
 /* ---- posing -------------------------------------------------------------- */

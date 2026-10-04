@@ -36,6 +36,10 @@ const VERT_SHADER = /* glsl */`
     uniform float uZsortRecede;
     // The board's own front/back test, on unless the panel turns it off.
     uniform float uBoardCull;
+    // Which pass of Viewer.drawScene this is: 0 a plain draw, 1 the nearest
+    // surface and its key, 2 a window's faces sorted by key, 3 the picture by
+    // true depth that the keyed one is laid over. See drawScene.
+    uniform int uZPass;
 
     // Everything the decoder writes once per face and copies to all three of
     // its vertices is flat, and has to be: the fill path truncates vTile and
@@ -66,6 +70,8 @@ const VERT_SHADER = /* glsl */`
     flat out vec3 vFacePt;
     flat out float vLayer;
     flat out vec4 vPlane;
+    // The board's sort key in view z, and whether the draw is mirrored.
+    flat out vec2 vKey;
 
     void main() {
         vColor = aColor;
@@ -179,9 +185,11 @@ const VERT_SHADER = /* glsl */`
         // recede put across them. Worse, the island 518 standing on all four is
         // not deep and does recede, so it sank into the water it stands in.
         // Neither is a tie a depth test can be asked to break, and neither is
-        // the bound's fault: the board sorts the two plates by a corner
-        // hundreds of units out and everything standing in them wins. So they
-        // are told to say that -- see waterMaterial and floorMaterial.
+        // the bound's fault: the board never compares them at all. The floor
+        // is in the geometry processor's first window and the sea and ground
+        // in its second, so each covers the one before whatever the depths,
+        // and the island is sorted against them by its key only inside that
+        // window -- see drawScene.
         //
         // Fighting Vipers takes none of it, and the bound is a uniform so that
         // a game can say so. Its stages are several plates laid in one plane at
@@ -204,17 +212,10 @@ const VERT_SHADER = /* glsl */`
         float zf = (zNear - zFar) <= ZSORT_RECEDE && aLayer < 0.5
             ? clamp(zb, mv.z - ZSORT_RECEDE, mv.z)
             : mv.z;
-#ifdef ZSORT_CONCEDE
-        // And a draw that is the floor of the world stands the whole bound back
-        // whether its faces are shallow or not, because it is the one kind of
-        // surface the deep-face rule leaves stranded in front of things that
-        // are standing on it -- see waterMaterial.
-        zf = min(zf, mv.z - ZSORT_RECEDE);
-#endif
-#ifdef ZSORT_KEEP
-        // And a draw standing on a floor that cannot concede keeps its own
-        // depth outright -- see standingMaterial.
-        zf = mv.z;
+#ifdef ZSORT_PLATES
+        // The keyed passes start from the truth: what sorts by key does it in
+        // the fragment shader, against the nearest surface the truth found.
+        if (uZPass != 0) zf = mv.z;
 #endif
         // Carried as z/w rather than as a depth, so the clipper keeps it: it
         // interpolates z and w together and their ratio is what survives.
@@ -256,6 +257,10 @@ const VERT_SHADER = /* glsl */`
                 dot(vViewNormal, vFacePt) < 0.0) {
             gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         }
+
+#ifdef ZSORT_PLATES
+        vKey = vec2(zb, determinant(mat3(modelMatrix)) < 0.0 ? 1.0 : 0.0);
+#endif
     }
 `;
 
@@ -312,8 +317,12 @@ const FRAG_SHADER = /* glsl */`
     flat in vec3 vFacePt;
     flat in float vLayer;
     flat in vec4 vPlane;
+    flat in vec2 vKey;
     uniform mat4 projectionMatrix;
     uniform float uZsortRecede;
+    uniform int uZPass;
+    uniform sampler2D uKeyTex;
+    uniform float uKeyReach;
 
     out vec4 fragColor;
 
@@ -516,6 +525,11 @@ const FRAG_SHADER = /* glsl */`
     }
 
     void main() {
+#if defined(ZSORT_PLATES) && !defined(FACE_LAYERS)
+        // The keyed pass writes its own depth below, and a shader that writes
+        // it anywhere has to write it everywhere.
+        gl_FragDepth = gl_FragCoord.z;
+#endif
 #ifdef FACE_LAYERS
         // A face lying on others in its own plane is pulled in front of them by
         // its layer. The board settles such faces a polygon at a time with no
@@ -559,33 +573,34 @@ const FRAG_SHADER = /* glsl */`
             }
         }
         gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
-        // A far-corner face in its group's plane keeps its own depth, receded
-        // or not, but takes the plane's as a floor (layer -1, see keepFar in
-        // js/layers.js): rounding never stands it in front of the decals that
-        // plane carries.
-        if (vLayer < 0.0) gl_FragDepth = clamp(max(gl_FragCoord.z, layerDepth), 0.0, 1.0);
-#endif
-#ifdef ZSORT_CONCEDE_PIXEL
-        // The whole bound behind this pixel's own point, in place of any depth
-        // the face would otherwise have had -- see concedeMaterial.
-#ifdef FACE_LAYERS
-        // But not in place of its layer. A plate that concedes still carries
-        // the faces laid on it, and they concede with it: Tails' lab's ground
-        // 78 has the hangar's shadow 0.01 over the sand, a near-corner face the
-        // board draws over it, which stepped back by the same bound as the sand
-        // and no layer between them lost half of itself to it.
-        float concedeDepth = viewDepth(layerZ - uZsortRecede);
-        float concedeSlope = fwidth(concedeDepth) * step(1e-30, layerSlope);
-        gl_FragDepth = clamp(concedeDepth - max(vLayer, 0.0) * (concedeSlope + 2.0 / 16777216.0), 0.0, 1.0);
-#else
-        gl_FragDepth = clamp(viewDepth(vViewPos.z - uZsortRecede), 0.0, 1.0);
-#endif
 #endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
         // the rest (model2rd.ipp steps x by 2 and skips the opposite parity).
         // South Island uses it on the water planes and the waterfall.
         if (flags(2) && ((int(gl_FragCoord.x) ^ int(gl_FragCoord.y)) & 1) == 0) discard;
+
+#ifdef ZSORT_PLATES
+        // A face drawn by its key, as the board's z-sort draws it, but only
+        // where it reaches the nearest surface of pass 1 (e: key, view z,
+        // mirrored, slant). The board can sort the far side of the world over
+        // the near one because its camera never stands where that shows; this
+        // one can stand anywhere, so a face further behind the nearest than
+        // the reach -- in view units scaled by how squarely that surface faces
+        // the camera, so a floor seen edge on reaches as far as its own pixel
+        // spans -- is the truth's business, not the key's. A mirrored draw
+        // (Aurora's reflection, through a negative scale) never comes up
+        // through a surface that is not itself mirrored, which is the ice it
+        // is seen in. Depth is then the key, nearer for a smaller one.
+        if (uZPass == 2) {
+            vec4 e = texelFetch(uKeyTex, ivec2(gl_FragCoord.xy - uViewport.xy), 0);
+            if (e.y > -1e8) {
+                if ((e.y - vViewPos.z) * e.w > uKeyReach) discard;
+                if (vKey.y > 0.5 && e.z < 0.5 && vViewPos.z < e.y - 0.01) discard;
+            }
+            gl_FragDepth = 1.0 - 1.0 / (1.0 + max(-vKey.x, 0.0));
+        }
+#endif
 
         vec3 n = normalize(vNormal);
 
@@ -706,6 +721,16 @@ const FRAG_SHADER = /* glsl */`
         rgb = mix(rgb, transfer(uFogColor), clamp(1.0 - exp(-d * d), 0.0, 1.0));
 
         fragColor = vec4(rgb, coverage);
+#ifdef ZSORT_PLATES
+        // The nearest surface for pass 2: its key, its view z, whether it is
+        // mirrored, and how squarely it faces the camera: its plane's distance
+        // from the eye over its view depth, near 1 head on and 0 edge on.
+        if (uZPass == 1) {
+            vec3 fn = cross(dFdx(vViewPos), dFdy(vViewPos));
+            float slant = abs(dot(normalize(fn), vViewPos)) / max(-vViewPos.z, 1e-6);
+            fragColor = vec4(vKey.x, vViewPos.z, vKey.y, slant);
+        }
+#endif
     }
 `;
 
@@ -772,6 +797,9 @@ export function createModelMaterial() {
             uSmoothHoles: { value: 0 },
             /* Set as each render starts; see the scene's onBeforeRender. */
             uViewport: { value: new THREE.Vector4(0, 0, 0, 0) },
+            uZPass: { value: 0 },
+            uKeyTex: { value: placeholderTexture() },
+            uKeyReach: { value: 1.0 },
         },
         /* Only the smooth-holes switch writes an alpha below 1; everything
          * else writes 1, which covers every sample, as without it. */
@@ -1053,131 +1081,6 @@ export class Viewer {
         this.variantMaterials = [];
         this.backdropMaterial = this.variantMaterial({ depthTest: false });
         /*
-         * And the same material again for camera_init's floor plate, which
-         * concedes every tie it is in.
-         *
-         * The board has no depth buffer and no per-pixel tie-break. A polygon
-         * carries one z, polygons bucket on it, and a bucket is rasterized
-         * newest-first — model2_v.cpp prepends to the list — into a fill that
-         * writes a pixel only where nothing has (`if (fill[x] == 0)`). So the
-         * *last* submission over a bucket keeps the pixel, and `camera_init`
-         * draws `stage_floor` before any other pass: the floor is the one
-         * surface in the arena that loses every tie it is in.
-         *
-         * South Island is where that decides a picture rather than a seam. The
-         * floor plate 517 and the sea 555 carry the same four quads over the
-         * same ground — not merely coplanar but sorted on the *same four
-         * corners*, so they resolve to one z at every camera that exists and no
-         * depth test anywhere can separate them (stf-tools/dl-order.mjs). Which of
-         * them showed was three.js's answer rather than the board's: the opaque
-         * sort keys on the geometry's bounding-sphere centre, and the sea's
-         * plate is lopsided enough — x -94.5..318.8 against the floor's ±24 —
-         * that its centre lands the sea before or after the floor depending on
-         * where the camera stands. Standing over the island it landed the sea
-         * first, and the floor took the whole ring off it: 222,389 pixels of
-         * still plate through the scrolling sea at one frame.
-         *
-         * So the floor states the concession itself: one depth unit and one
-         * slope unit back. That settles the shallow tie by the unit and the
-         * raked one by the slope, where two triangulations of the same flat
-         * quad — the sea cuts three of these four along the other diagonal —
-         * round apart and speckle. Measured over four cameras the floor takes no
-         * pixel of the sea at all, and the ground pass keeps the ones it had: its
-         * shore chunks sit 0.0016 over the plate, which is under the buffer's
-         * resolution at this range either way, and they are submitted after the
-         * floor too, so the step moves that tie the way the board already
-         * moved it.
-         *
-         * It costs a rim. On the Flying Carpet, Mushroom Hill, Dynamite Plant
-         * and Giant Wing a hairline where the plate meets the surface around it
-         * — 2,035 pixels at worst — now goes to that surface, which is the same
-         * answer for the same reason: everything is submitted after the floor.
-         *
-         * And a depth unit only settles ties. The plate loses more than ties —
-         * everything standing in it wins over it outright on the board, because
-         * `stage_floor` is one plate hundreds of units across sorted by its own
-         * farthest corner. That is the concede below, and the floor takes it for
-         * the same reason the water does; the depth unit stays on top of it to
-         * part the floor from the sea, which concedes the same amount.
-         */
-        this.floorMaterial = this.variantMaterial({
-            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-            defines: { ZSORT_CONCEDE: '1' },
-        });
-        /*
-         * And the same material again for the open water, which takes the
-         * board's sort in full instead of being left out of it.
-         *
-         * The recede is bounded, and a face deeper than the bound is left at
-         * the depth the projection gave it — right for scenery, and wrong for
-         * exactly one kind of surface. South Island's sea 555 is one plate six
-         * hundred units across: deep from every camera, so it never moves,
-         * while the island 518 standing in it is a box of bumpy rock faces a
-         * few units deep that recede in full. The board sorts both by their
-         * farthest corner and the island wins by hundreds of units. Here the
-         * island stepped back its own three or four and the sea, standing
-         * still, took the difference — a flat waterline slicing a third off the
-         * rock wall and riding up and down it as the camera moved, which is how
-         * the bug was reported. Canyon Cruise has it too, and worse: its river
-         * swallowed the boat's hull and left the cabin floating.
-         *
-         * So the water concedes the whole bound whether its faces are shallow
-         * or not. What that can cost is whatever is modelled under the water
-         * within twelve units, and in this game nothing is — the sea plate and
-         * the river are the lowest surfaces their stages have, which is the
-         * same fact that makes the board's own unbounded sort safe on them.
-         *
-         * Measured over 216 cameras around South Island's arena, the sea and
-         * the floor plate together took 1,975,304 of the island's 30,490,191
-         * pixels and now take 202,172 — and what is left is the stipple edge of
-         * the island's own shadow plate, which is modelled in the sea's plane,
-         * drawn after it, and comes back with the rock. Across the sixteen
-         * stages at six cameras each the change is 5,234 pixels, all of it
-         * water meeting something standing in it.
-         */
-        this.waterMaterial = this.variantMaterial({ defines: { ZSORT_CONCEDE: '1' } });
-        /*
-         * And the other side of that bargain, for a floor that cannot make it.
-         *
-         * Aurora Icefield's ice is 1602, four wedges hundreds of units across
-         * that the board sorts by a corner out at the tip, so the ice pillars
-         * and the walrus statues standing on it win every pixel they cover. It
-         * cannot concede the way the sea does, because the stage hangs things
-         * under it -- the walruses' reflection and the lower half of the cage,
-         * which the concession would stand up through it (see ZSORT_RECEDE in
-         * the vertex shader). So the ice keeps its depth, and what stands on it
-         * was left to recede: every face of the pillars and the walruses asks
-         * for its farthest corner, and those faces are shallow, so each stepped
-         * back by up to its own depth -- through the ice it stands on. The ice
-         * cut the pillars' flared bases off flat and the walruses' feet with
-         * them. Inside a pillar each face was flattened to its far corner too,
-         * so the inside of the far wall came through the near one as streaks
-         * of the wrong panel.
-         *
-         * A draw that says it stands on such a floor keeps the depth the
-         * projection gave it. Each of these is a closed solid, which a depth
-         * buffer resolves on its own, and where the board's order is what
-         * counts -- the solid over the ice -- the true depth gives the same.
-         */
-        this.standingMaterial = this.variantMaterial({ defines: { ZSORT_KEEP: '1' } });
-        /*
-         * And the water's concession again, taken a pixel at a time, for a
-         * plate the camera can stand over.
-         *
-         * The vertex shader concedes the bound only at a vertex the camera is in
-         * front of (see ZSORT_CONCEDE there), and a plate the eye hangs over has
-         * corners behind the lens. Those keep the depth the projection gave
-         * them, and the interpolation carries it most of the way across the
-         * plate. The Flying Carpet's rug plate is that plate: the board's own
-         * camera rides a few units over the rug, inside the plate's bounds, and
-         * the near half of the rug still went flat wherever the ripple dipped
-         * under it. Stepping back from the view position the fragment already
-         * has is the same concession with no vertex to lose. See sphynxDisp.
-         */
-        this.concedeMaterial = this.variantMaterial({
-            defines: { ZSORT_CONCEDE: '1', ZSORT_CONCEDE_PIXEL: '1' },
-        });
-        /*
          * Depth bias for surfaces that share a plane exactly.
          *
          * The board has no depth buffer. Co-planar polygons land in one z
@@ -1219,6 +1122,8 @@ export class Viewer {
         this.scene.add(this.axes);
 
         this._lastTime = performance.now();
+        /* Called with the camera just before each draw (see rankFaceLayers). */
+        this.beforeDraw = null;
         this._onResize = () => this.resize();
         window.addEventListener('resize', this._onResize);
         this.resize();
@@ -1333,10 +1238,13 @@ export class Viewer {
          * the fragment shader, which turns off the early depth test. */
         for (const m of [this.material, ...this.variantMaterials, ...this.setMaterials.values()]) {
             const has = 'FACE_LAYERS' in (m.defines ?? {});
-            if (has === layers) continue;
+            const plates = 'ZSORT_PLATES' in (m.defines ?? {});
+            if (has === layers && plates === recede > 0) continue;
             m.defines = { ...(m.defines ?? {}) };
             if (layers) m.defines.FACE_LAYERS = '1';
             else delete m.defines.FACE_LAYERS;
+            if (recede > 0) m.defines.ZSORT_PLATES = '1';
+            else delete m.defines.ZSORT_PLATES;
             m.needsUpdate = true;
         }
     }
@@ -1403,13 +1311,186 @@ export class Viewer {
         this.grid.scale.setScalar(Math.max(0.05, r / 100));
     }
 
+    /*
+     * Draw the scene into the current target, sorted the way the board sorts
+     * it where the game's materials say so (ZSORT_PLATES, any game with a
+     * recede).
+     *
+     * The board has no depth buffer. Its geometry processor files every draw
+     * in one of eight windows, and the rasterizer fills them last to first
+     * with a fill that writes a pixel once, so a later window covers an
+     * earlier one whatever the depths; inside a window the polygons go by
+     * their z-sort key. Each stage mesh carries its window in userData.zWindow
+     * (js/display.js says which and why) and this reproduces both orders:
+     *
+     *   1  the nearest surface at each pixel outside window 1, with its
+     *      key, into keyTarget;
+     *   2  the picture by true depth, for whatever no keyed face reaches;
+     *   3  every keyed face at its key depth, a window at a time with the
+     *      depth cleared between them, into plateTarget -- each face limited
+     *      by uKeyReach to the surfaces pass 1 found, see the fragment shader;
+     *   4  that over the picture, then everything not keyed.
+     *
+     * That is what replaced the per-model plate flags. The floor standing back
+     * for what stands on it, the river conceding to Canyon Cruise's deck, the
+     * Sphynx's rug under the sphinx and the lab's ground under its hangar were
+     * each a window: the earlier draw loses to the later one by the board's
+     * own rule, which a depth bias could only approximate.
+     */
+    drawScene() {
+        const r = this.renderer;
+        const u = this.material.uniforms;
+        const early = [];
+        const keyed = [];
+        const others = [];
+        if (u.uZsortRecede.value > 0) {
+            this.scene.traverseVisible((o) => {
+                if (!o.isMesh && !o.isLine && !o.isPoints && !o.isSprite) return;
+                if (o.material?.uniforms?.uZPass !== u.uZPass
+                        || !('ZSORT_PLATES' in (o.material.defines ?? {}))) others.push(o);
+                else if (o.renderOrder < 0) early.push(o);
+                else keyed.push(o);
+            });
+        }
+        if (!keyed.length) {
+            u.uZPass.value = 0;
+            r.render(this.scene, this.camera);
+            return;
+        }
+        const solid = keyed.filter((o) => !o.material.transparent);
+        const target = r.getRenderTarget();
+        const vp = r.getCurrentViewport(new THREE.Vector4());
+        const w = vp.z, h = vp.w;
+        const samples = target ? target.samples
+            : r.getContext().getContextAttributes().antialias ? 4 : 0;
+        if (!this.keyTarget || this.keyTarget.width !== w || this.keyTarget.height !== h
+                || this.plateTarget.samples !== samples) {
+            this.keyTarget?.dispose();
+            this.plateTarget?.dispose();
+            this.keyTarget = new THREE.WebGLRenderTarget(w, h, {
+                type: THREE.FloatType, format: THREE.RGBAFormat,
+                minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+                depthBuffer: true, generateMipmaps: false,
+            });
+            this.plateTarget = new THREE.WebGLRenderTarget(w, h, {
+                minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+                depthBuffer: true, generateMipmaps: false, samples,
+            });
+        }
+        const bg = this.scene.background;
+        const clear = r.getClearColor(new THREE.Color());
+        const clearAlpha = r.getClearAlpha();
+        const autoClear = r.autoClear;
+        const only = (list, pass) => {
+            const keep = new Set(list);
+            const hide = [];
+            this.scene.traverseVisible((o) => {
+                if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && !keep.has(o)) hide.push(o);
+            });
+            for (const o of hide) o.visible = false;
+            u.uZPass.value = pass;
+            r.render(this.scene, this.camera);
+            for (const o of hide) o.visible = true;
+        };
+
+        const windows = new Map();
+        for (const o of keyed) {
+            const w = o.userData.zWindow ?? 0;
+            if (!windows.has(w)) windows.set(w, []);
+            windows.get(w).push(o);
+        }
+        const order = [...windows.keys()].sort((a, b) => a - b);
+
+        /* 1: the nearest surface at each pixel, leaving out window 1. That is
+         * the board's backdrop -- the floor and sky, Giant Wing's hull and
+         * haze -- which every later window paints over at any depth: a cloud
+         * sheet beyond the hull is still drawn over it. The other windows
+         * stay in, so a room's wall keeps hiding the dish outside it, which
+         * the board only gets away with by never looking from there.
+         *
+         * The clear is "no surface here" (a view z under -1e8), and its alpha
+         * is 1 because three.js premultiplies the clear colour by its alpha:
+         * at 0 the clear came out all zeros, a surface at the eye that faces
+         * nothing. */
+        this.scene.background = null;
+        r.autoClear = false;
+        r.setRenderTarget(this.keyTarget);
+        r.setClearColor(new THREE.Color(-1e9, -1e9, 0), 1);
+        r.clear(true, true, true);
+        only(solid.filter((o) => o.userData.zWindow !== 1), 1);
+
+        /* 2: the picture by true depth, under the keyed one. */
+        r.setClearColor(clear, clearAlpha);
+        r.setRenderTarget(target);
+        this.scene.background = bg;
+        r.autoClear = autoClear;
+        only(early, 0);
+        r.autoClear = false;
+        this.scene.background = null;
+        only(solid, 3);
+
+        /* 3: every face at its key, within the reach of the nearest, a window
+         * at a time. */
+        r.setRenderTarget(this.plateTarget);
+        r.setClearColor(new THREE.Color(0, 0, 0), 0);
+        r.clear(true, true, true);
+        /* The key texture is bound only for this pass, and the placeholder put
+         * back after it. Left bound, the next frame's pass 1 draws into the
+         * texture its own program samples, which WebGL refuses as a feedback
+         * loop, every draw of it: the key texture held only its clear, and no
+         * face was held to the reach. That let the palms outside Tails' lab,
+         * a window later than the room, come through its wall at the
+         * world-map poster. */
+        const idle = u.uKeyTex.value;
+        u.uKeyTex.value = this.keyTarget.texture;
+        r.setOpaqueSort((a, b) => a.id - b.id);
+        for (const w of order) {
+            r.clear(false, true, false);
+            only(windows.get(w), 2);
+        }
+        r.setOpaqueSort(null);
+        u.uKeyTex.value = idle;
+
+        /* 4: the keyed picture over it, and what is not keyed. */
+        r.setRenderTarget(target);
+        if (!this.plateQuad) {
+            this.plateQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+                glslVersion: THREE.GLSL3,
+                vertexShader: 'out vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+                fragmentShader: 'precision highp float; uniform sampler2D uPlates; in vec2 vUv; out vec4 c;'
+                    + ' void main() { c = texture(uPlates, vUv); }',
+                uniforms: { uPlates: { value: null } },
+                depthTest: false, depthWrite: false, transparent: true,
+                blending: THREE.CustomBlending, blendSrc: THREE.OneFactor,
+                blendDst: THREE.OneMinusSrcAlphaFactor,
+            }));
+            this.plateQuad.frustumCulled = false;
+            this.plateScene = new THREE.Scene();
+            this.plateScene.add(this.plateQuad);
+            this.plateCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        }
+        this.plateQuad.material.uniforms.uPlates.value = this.plateTarget.texture;
+        r.render(this.plateScene, this.plateCamera);
+        if (others.length) only(others, 0);
+
+        this.scene.background = bg;
+        r.setClearColor(clear, clearAlpha);
+        r.autoClear = autoClear;
+        u.uZPass.value = 0;
+    }
+
     render() {
         const now = performance.now();
         const dt = Math.min((now - this._lastTime) / 1000, 0.1);
         this._lastTime = now;
         if (this.mode === 'orbit') this.orbit.update();
         else this.fly.update(dt);
-        this.renderer.render(this.scene, this.camera);
+        if (this.beforeDraw) {
+            this.scene.updateMatrixWorld();
+            this.camera.updateMatrixWorld();
+            this.beforeDraw(this.camera);
+        }
+        this.drawScene();
         const info = this.renderer.info.render;
         this.stats.drawCalls = info.calls;
         this.stats.triangles = info.triangles;

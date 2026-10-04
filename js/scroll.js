@@ -17,11 +17,44 @@
  *                      0x14 and lays them side by side into a work buffer
  *
  * Eighteen patterns of 32 tiles each is 576 tiles across, and the tilemap the
- * hardware actually shows is 64 wide. So what is built is a panorama nine times
- * wider than the screen, windowed by the scroll registers as the camera turns:
- * 576 tiles to the full turn, 64 of them in view, which is the board's own
- * horizontal field. That is why it is decoded here as one wide strip and put on
- * a cylinder rather than blitted as a flat backdrop.
+ * hardware actually shows is 64 wide. So what is built is a panorama wider than
+ * the screen, windowed by the scroll registers as the camera turns. That is why
+ * it is decoded here as one wide strip and put on a cylinder rather than
+ * blitted as a flat backdrop.
+ *
+ * Only sixteen of the eighteen are ever on screen. The routine that runs the
+ * sky each frame (0x29A40, which ends by calling the stage's own routine out
+ * of the record's 0x08) takes the camera's heading — 0x10000 to the turn —
+ * scrolls the layer by `heading >> 4` (as `0 - (-heading >> 4)`) and
+ * streams in column pair `-heading >> 8 & 0xFF` from the strip, so a full turn
+ * is 4096 pixels, 512 tiles, sixteen patterns. Patterns 16 and 17 repeat 0 and 1 on every stage and
+ * nothing reads them. Decoding all eighteen put a 64-tile seam into each turn
+ * and squeezed the rest by an eighth.
+ *
+ * The same routine sets the vertical scroll to `list[2] - 480 * tan(pitch)`
+ * (0x29AD8): list[2] is the second halfword of the stage's pattern list, and
+ * 480 is the focal length the fight's camera is set to (0x501084, stored at
+ * 0x1ED64) and the same one the 3D is projected with. MAME's segaic24 puts
+ * tilemap row `screen y + scroll` on screen row y, and the 384-line view is
+ * centred on row 192 (window_data_init's table at 0x5F5C), so level, the eye
+ * line is panorama row 192 + list[2], and a row sits `focal` pixels per unit of
+ * tangent from it. buildSkyPanorama hands the viewer both.
+ *
+ * The heading the routine scrolls by is not the camera's alone. It adds the
+ * camera's Yang (+0x26) to sixteen times list[0] (0x503040, which sub_29728
+ * copies from the list) and to 0x50A022, a turn of the whole arena that the 3D
+ * takes too and the explorer has no need of. Screen column x then shows strip
+ * column x - heading / 16: in a MAME run of the attract, the columns the board
+ * shows matched the decoded strip at exactly that offset, unmirrored, on every
+ * frame tried. So list[0] is each stage's turn of its sky against the arena,
+ * up to half a turn (slot 2's 2059 is 181 degrees), and with the camera at
+ * Yang 0 the centre of the 496-pixel picture is column 248 - list[0].
+ *
+ * The routine also clamps the pitch it scrolls by to list+0x4C and list+0x4E,
+ * 45 degrees either way (43 up on four stages), so that the layer never scrolls
+ * its 512-row tilemap round. Past it the board's sky stops following the
+ * camera. That is a limit of a flat layer, and the cylinder has nothing to wrap,
+ * so it is not copied: the explorer's sky stays on the horizon at any pitch.
  *
  * Formats, each read off the routine that walks it:
  *
@@ -65,7 +98,17 @@ const CHAR_MASK = 0x3fff;       /* the character field of a tilemap entry */
 const TILE_BYTES = 32;          /* 8x8 at 4bpp */
 const PATTERN_TILES = 32;       /* tiles across one pattern */
 const PATTERN_STRIDE = 64;      /* bytes per pattern row */
-const PATTERNS = 18;
+/* The patterns one turn reads; the list holds two more. See above. */
+const TURN_PATTERNS = 16;
+/* The pattern list: a heading offset, the vertical scroll at level, then the
+ * pattern numbers. */
+const LIST_HEADING = 0;
+const LIST_SCROLL_Y = 2;
+const LIST_PATTERNS = 4;
+/* The fight camera's focal length and the view's centre row (see above). */
+const FIGHT_FOCAL = 480;
+const VIEW_CENTRE_ROW = 192;
+const VIEW_CENTRE_COL = 248;
 
 /* A pointer in this game lands either in the data region or in the mirror
  * window, and both appear in the same lists, so every read goes through here. */
@@ -90,7 +133,10 @@ function ptrOk(rom, addr) {
  * @param {number} slot   stage slot
  * @param {?Uint8Array} cxlat  the scene's colorxlat, which the palette goes
  *                         through as it does on the board; null for raw colour
- * @returns {null|{width:number, height:number, rgba:Uint8Array}}
+ * @returns {null|{width:number, height:number, rgba:Uint8Array,
+ *            horizon:number, focal:number, centre:number}}  horizon is the
+ *            panorama row on the eye line, focal the pixels per unit of tangent
+ *            up the strip, centre the column ahead of a camera at Yang 0
  */
 export function buildSkyPanorama(rom, slot, cxlat = null) {
     const S = rom.game.stageTable.scroll;
@@ -107,14 +153,21 @@ export function buildSkyPanorama(rom, slot, cxlat = null) {
     const cgList = word(S.cgTable + cg * 4);
     const palList = word(S.cgTable + (cg + 1) * 4);
 
-    /* The eighteen patterns, by number through the pattern table. */
+    /* The patterns one turn shows, by number through the pattern table. */
     const L = at(rom, listPtr);
     const patterns = [];
-    for (let i = 0; i < PATTERNS; i++) {
-        const p = L.view.getUint32(L.off + 4 + i * 4, true);
+    for (let i = 0; i < TURN_PATTERNS; i++) {
+        const p = L.view.getUint32(L.off + LIST_PATTERNS + i * 4, true);
         patterns.push(word(S.patternTable + p * 4));
     }
-    return decodePanorama(rom, cgList, palList, patterns, S.charBytes, cxlat);
+    const pano = decodePanorama(rom, cgList, palList, patterns, S.charBytes, cxlat);
+    if (pano) {
+        pano.horizon = VIEW_CENTRE_ROW + L.view.getInt16(L.off + LIST_SCROLL_Y, true);
+        pano.focal = FIGHT_FOCAL;
+        const turn = pano.width;
+        pano.centre = ((VIEW_CENTRE_COL - L.view.getInt16(L.off + LIST_HEADING, true)) % turn + turn) % turn;
+    }
+    return pano;
 }
 
 /**
@@ -150,28 +203,46 @@ export function buildCourseSky(rom, course, cxlat = null) {
     const patterns = [];
     for (let i = 0; i < DAYTONA_PATTERNS; i++) patterns.push(word(sky + 8 + i * 4));
     const pano = decodePanorama(rom, word(sky), word(sky + 4), patterns, DAYTONA_CHAR_BYTES, cxlat);
-    if (pano) pano.horizon = DAYTONA_HORIZON_ROW;
+    if (pano) {
+        pano.horizon = DAYTONA_LEVEL_ROW;
+        pano.distance = DAYTONA_SKY_DISTANCE;
+        /* Up at the drawing camera's focal, not one of its own. */
+        pano.lensFocal = true;
+        /* The heading here is the camera's own: 0x5FE11A is the Yang of
+         * js/skyeye.js (0 down +Z, a quarter turn to -X at 0xC000), and in
+         * MAME screen column x shows strip column x - heading / 32,
+         * unmirrored, as Fighting Vipers' does at its own scale. */
+        pano.centre = VIEW_CENTRE_COL;
+    }
     return pano;
 }
 
 /*
- * The panorama row that sits on the eye line.
+ * Where the sky stands against the eye line.
  *
- * Unlike Fighting Vipers' strips, which end at the horizon, these carry what
- * lies below it too — the grass round the Three-Seven Speedway, the sea off
- * Seaside Street Galaxy, a floor of cloud under Dinosaur Canyon — so the
- * strip's foot is not the eye line. Which row is comes out of two things the
- * board does the same way on every course: the streamer writes a panorama's
- * first row into tilemap row 6, 48 pixels down, and camd_99 sets the layer's Y
- * scroll from nothing but the camera — its height and pitch and the view
- * record — through TGP functions that are not ported. Level, that scroll
- * hovers round zero (MAME, the attract race), which puts tilemap pixel 192,
- * the middle of the 384-line screen, on the eye line: panorama row 144,
- * eighteen tiles down. It is where the Speedway and the Canyon paint their
- * horizons; Seaside Street Galaxy paints its sea line at row 185, and on the
- * board it sits that much below the eye line, as it does here.
+ * Like Fighting Vipers' strips, these carry what lies below the horizon too —
+ * the grass round the Three-Seven Speedway, the sea off Seaside Street Galaxy,
+ * a floor of cloud under Dinosaur Canyon — so the strip's foot is not the eye
+ * line. camd_99, the tail every camera mode ends in (0x70C0-0x71C0 in Rev A),
+ * sets the layer's Y scroll, and only from the camera:
+ *
+ *   A = atan2(eye height, 2048)                          TGP 0x0A
+ *   a = view pitch, down positive, minus A               camera +0x52, +0x28
+ *   V = cy + focal * sin a / cos a                       TGP 0x1B, 0x1C, 0x24-0x29, 0x25
+ *
+ * cy and focal are the view record's (0x501730, 0x501734), the same two the 3D
+ * view takes: its centre is 320 + cy up the frame (the table at 0x17E68), and
+ * with the vertical sync register at -2 that is screen line 192 - cy. The
+ * streamer writes a panorama's first row into tilemap row 6, 48 pixels down,
+ * so row p shows on line 48 + p - V. Put together, cy cancels, the pitch moves
+ * the sky with the 3D at the focal's pixels per unit of tangent, and the row
+ * on the eye line is 192 - 48 = 144 less focal * tan A. That is the sky as if
+ * its row 144 stood on the ground 2048 units off: the camera rising looks down
+ * on it. The board does this on every course; Seaside Street Galaxy paints its
+ * sea line at row 185, so the sea sits that much below the eye line.
  */
-const DAYTONA_HORIZON_ROW = 144;
+const DAYTONA_LEVEL_ROW = VIEW_CENTRE_ROW - 48;
+const DAYTONA_SKY_DISTANCE = 2048;
 const DAYTONA_PATTERNS = 8;
 /* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
 const DAYTONA_CHAR_BYTES = 0x80000;

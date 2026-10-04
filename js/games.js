@@ -88,6 +88,9 @@ const sfight = {
          * character-select screens leave it resident, and the stage sets do not
          * overwrite its deepest mip levels. */
         residentSet: 16,
+        /* send_tex_default ends `send_tex_rob(1, 0, 0)` (0x4A994), and every
+         * stage uploads beside it. See resolveTexSets in js/stages.js. */
+        bootSet: 1,
     },
     /* Where each colour upload reads from. `at` is a main_data offset, and
      * `indirect` says it holds a pointer to the table rather than being it —
@@ -140,21 +143,12 @@ const sfight = {
      * the board's sort does. Faces it ranks do not recede; everything else
      * still does.
      *
-     * With two of the ranking's rules turned off (`layerRules`), because
-     * m2-hle2 graded the plain ranking against MAME's pictures and on Casino
-     * Night it moved nearly every pixel it changed further from the board
-     * (its issue #75, tools/grade-zsort.mjs). A face sorted by its farthest
-     * corner keeps the recede and takes no layer or plane (`keepFar`), which
-     * is what stands the floor emblem, model 194, out of the way of the green
-     * beside it; and a pair held apart by more than the tie and asking for
-     * the same corner is left to the depth buffer (`leaveApart`), which keeps
-     * a glove's faces, 1813 and 1818, where they are modelled. Neither touches
-     * 580 or 188, whose decals are near-corner faces on far-corner ones. The
-     * House of the Dead and Daytona keep both rules: their rooms and courses
-     * are far-corner faces laid on far-corner faces. */
+     * The order is the board's sort from the camera, worked out every frame.
+     * Graded against MAME's pictures on Casino Night, it moved four pixels in
+     * five that it changed nearer the board than the old three-in-four vote
+     * did: the blue disc it laid over the floor is gone, as on the board. */
     depth: {
         recede: 12, nearMin: 0.02, layers: true,
-        layerRules: { keepFar: true, leaveApart: true },
     },
     scenes: null,
     /* The sound board's ROMs, read only once the music is switched on
@@ -293,19 +287,32 @@ const fvipers = {
         header: 0x300000, pageTable: 0x4b9c0, sets: 100,
         /* 100 because unp_send_tex_req rejects anything above it:
          * `lda unk_63, r3 / cmpoble g0, r3` — texture numbers run 0..0x63.
-         * Which set is resident behind the others is not known for this game,
+         * No capture says what the attract screens leave behind the others,
          * so nothing is forced in ahead of the chosen one. */
         residentSet: null,
+        /* send_tex_default ends `addo 0x1F, 5, g0` and asks unp_send_tex_req
+         * for it (0x4ACBC); every stage uploads beside it. See resolveTexSets
+         * in js/stages.js. */
+        bootSet: 36,
+        /* The fighters' sets. Player set-up (0x1243C) reads the character
+         * record `ld 0x640D2B0[char*4]`: sixteen part models listed at +0,
+         * copied into the player at 0x12554, and the set at +0x20, handed to
+         * the request at 0x4B0FC (0x12AF8), whose handler 0x4B1C0 loads it
+         * and the next into the player's slot. Sets 1, 3 ... 17 and 93 for
+         * characters 0-10 and 13; 11 and 12 have 0 and no textured part. */
+        fighters: { records: 0x640d2b0, count: 14, parts: 0x00, partCount: 16, set: 0x20 },
     },
     /*
      * The colour tables, which turned out to be the same machinery again.
      * send_tex_col_go here is instruction for instruction the other game's
      * send_tex_col_loop, the ramp in chg_pol_color_req uses the same 0x1C/0x12,
      * and sub_74C builds the intensity curve on the same pivot and divisor
-     * (`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37). check_sram_all ships
-     * add 22, multiply 54 and brightness 31, which are the other game's numbers
-     * too, though this one keeps a pair per channel at 0x500234..0x500239
-     * rather than one for all three.
+     * (`shlo 2, 0x1D` and `addo 0x1F, 6` — 116 and 37). The settings are not
+     * the other game's, though: this one keeps a pair per channel at
+     * 0x500234..0x500239, and a boot on empty NVRAM in MAME leaves 0x40, 0x25
+     * in each pair and 31 at 0x50023A. With those, colorxlat comes out as
+     * MAME's dump byte for byte; with the other game's 22 and 54, the flat
+     * band ran 28..224 where MAME's runs 68..202.
      *
      * What differs is naming and rows. There is no pointer block: each upload
      * names its table outright — `lda unk_2109700` for the scene's,
@@ -318,8 +325,8 @@ const fvipers = {
         /* essential_color_handling reads these through the XTRA_DATA mirror as
          * unk_64266DC and unk_64266E0, which fold to these data offsets. */
         luma: { count: 0x10266dc, data: 0x10266e0 },
-        add: [22, 22, 22],
-        mul: [54, 54, 54],
+        add: [64, 64, 64],
+        mul: [37, 37, 37],
         bright: 31,
         /* Nine scene blocks carry colours and the rest are empty, which is
          * the arena count; thirteen character blocks do, which is the roster.
@@ -343,7 +350,7 @@ const fvipers = {
      * bank, and change_scene indexes it with `shlo 8, r12, r4` off stage_num.
      * Every field the other game's reader knows is at the same offset: the
      * flags word at 0, the brightness at 4, the two rotations at 8 and 0x0A,
-     * the texture pair at 0x0C, the trim at 0x10, the four single models from
+     * the texture set and colour block at 0x0C, the trim at 0x10, the four single models from
      * 0x18, the sixteen parts at 0x64, the cage at 0x84 and the object list
      * pointer at 0xB4. They were checked one at a time against the routine that
      * reads each — change_scene, stage_disp, pole_disp, cage_clip_m,
@@ -359,8 +366,6 @@ const fvipers = {
         /* A second array indexed the same way: sub_24878 walks 32 slots out
          * of `off_6CE33A4[stage_num*4]`. */
         materials: { source: 'xtra', ptrs: 0x06ce33a4 },
-        /* change_scene hands both numbers to send_tex_stage. */
-        texPair: 'literal',
         /*
          * The backdrop colour, which is not the sky.
          *
@@ -695,6 +700,10 @@ const hotdp = {
         placements: {
             chapters: 2,
             maps: 0x92db0, zones: 0x92d90, scripts: 0xe0000, sectionSets: 0x83360,
+            /* off_83290[chapter]: 16 bytes a section, what follows it — 0 goes
+             * to the section at +4, 1 picks +4 or +8 by the byte at 0x51EFE4,
+             * 2 goes on to the next section or ends the chapter (sub_51490). */
+            branches: 0x83290,
             turns: { 55: 0x4000 },
             bounds: 0xcdde20,
         },
@@ -743,6 +752,25 @@ const hotdp = {
         table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
         prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
         scale: 0x28,
+        /*
+         * What takes a prop down again, read in sub_33320, which the prop's
+         * handler calls before it draws (see propZones in js/placements.js).
+         * Each spawn opcode copies a halfword of its record to obj+0x6C, at
+         * `life`: how many times the script index (0x520089) may change
+         * before the object closes itself. Opcodes 10 and 12 also copy the
+         * byte at `window` to obj+0x64, a row of `windows` (16 bytes a row,
+         * camera frames ending in 0xFFFF) at whose frames the object is hidden
+         * or shown again, and which closes it when it ends hidden. `sweep` is
+         * the one case the routine hard-codes: in the first chapter, section 7,
+         * script 2, every object but type 7 closes once the camera is past
+         * frame 170.
+         */
+        spawns: {
+            9: { life: 0x20 }, 10: { life: 0x22, window: 0x25 },
+            11: { life: 0x04 }, 12: { life: 0x22, window: 0x25 },
+        },
+        windows: 0x85940,
+        sweep: { chapter: 0, section: 7, script: 2, after: 170, spare: 7 },
     },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
@@ -772,11 +800,195 @@ const hotdp = {
          * its skin, or -1. */
         bodies: {
             names: 0x96020, count: 68, joints: 0x94f30, trees: 0x94e20, scales: 0xdc0050,
-            roles: 0xdc0380, skins: 0xd80000, hitMotions: 0xde5150,
+            roles: 0xdc0380, skins: 0xd80000, hitMotions: 0xde5150, starts: 0x22f70,
         },
         /* `flatAnkles` is a byte per motion: set, the ankles are turned from the
          * body's own frame instead of the shin's (sub_2BA50). */
         motions: { names: 0x96130, count: 508, data: 0x95040, frames: 0x95830, flatAnkles: 0x5e880 },
+        /* The motions each body's routines play, by body: every motion number
+         * that reaches a setter (sub_2DFD0, sub_2E570, sub_2D870...) in the
+         * code its routine runs, and what the body-indexed tables at 0x94940,
+         * 0x94C00, 0x94D10 and 0x59FA0 hold. Written by
+         * tools/hotd-motions/body_motions.py, which says how; it lists motions
+         * of any joint count, and bodyMotionList keeps the body's. */
+        bodyMotions: [
+            /* 0 BO_dkiller_kihon */
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 19, 20, 21, 35, 36, 37, 38, 39, 40, 41, 42,
+             43, 45, 47, 48, 108, 109, 111, 115, 117, 129, 130, 131, 139, 172, 208, 210, 211, 212, 213,
+             214, 218, 262, 264, 266, 267, 268, 269, 371],
+            /* 1 BO_mon_kihon */
+            [53, 55, 57, 62, 63, 65, 66, 68, 271, 277, 278, 281, 284, 285, 286, 292, 293, 295, 296, 298,
+             301, 302, 307, 313, 314, 316, 371],
+            /* 2 BO_tom */
+            [108, 109, 111, 115, 117, 331],
+            /* 3 BO_ebita */
+            [176, 344, 346, 355, 368, 371, 374, 376, 378, 379, 382, 385, 398, 428, 429, 431, 432, 433, 437,
+             438, 439, 453, 477, 478, 489, 490, 491, 494, 495],
+            /* 4 BO_ebitb */
+            [73, 74, 75, 76, 77, 78, 80, 81, 82, 85, 86, 88, 93, 94, 97, 98],
+            /* 5 BO_mr_g */
+            [226],
+            /* 6 BO_handrb */
+            [126],
+            /* 7 BO_molb */
+            [208, 209, 210, 211, 212, 213, 214, 218, 371],
+            /* 8 BO_frog_ct */
+            [108, 109, 111, 115, 117],
+            /* 9 BO_mon_boss */
+            [278],
+            /* 10 BO_dkiller_black */
+            [35, 36, 37, 38, 39, 40, 41, 42, 43, 45, 47, 48, 129, 130, 131],
+            /* 11 BO_mon_black */
+            [53, 55, 57, 62, 63, 65, 66, 68, 271, 277, 278, 281, 284, 285, 286, 292, 293, 295, 296, 298,
+             301, 302, 307, 313, 314, 316, 371],
+            /* 12 BO_tom2 */
+            [329],
+            /* 13 BO_syndy */
+            [118, 125, 232, 244, 248, 250, 320, 331],
+            /* 14 BO_gman */
+            [329],
+            /* 15 BO_zom */
+            [176, 229, 330, 334, 344, 346, 348, 349, 351, 355, 356, 361, 368, 369, 371, 374, 376, 378, 379,
+             385, 393, 394, 397, 398, 410, 411, 428, 429, 431, 432, 433, 468, 477, 478, 487, 489, 490, 491,
+             494, 495, 504],
+            /* 16 BO_debu */
+            [344, 346, 349, 350, 368, 371, 373, 374, 376, 378, 379, 401, 402, 405, 408, 416, 428, 429, 431,
+             432, 433],
+            /* 17 BO_gman_kihon */
+            [329],
+            /* 18 BO_haride */
+            [337],
+            /* 19 BO_staje */
+            [332],
+            /* 20 BO_zonbiman */
+            [176, 344, 346, 355, 368, 371, 374, 376, 378, 379, 397, 398, 410, 411, 416, 428, 429, 431, 432,
+             433, 468, 473, 474, 475, 476, 477, 489, 490, 491, 494, 495],
+            /* 21 BO_kenkyu */
+            [119, 135, 137, 138, 139, 140, 141, 147, 148, 152, 155, 156, 165, 166, 172, 180, 181, 185, 186,
+             190, 194, 197, 204, 253, 329],
+            /* 22 BO_semu */
+            [53, 55, 57, 62, 63, 65, 66, 68, 271, 277, 278, 281, 284, 285, 286, 292, 293, 295, 296, 298,
+             301, 302, 307, 313, 314, 316, 371],
+            /* 23 BO_kenkyu_c */
+            [119, 135, 137, 138, 139, 140, 141, 147, 148, 152, 155, 156, 165, 166, 172, 180, 181, 185, 186,
+             190, 194, 197, 204, 329],
+            /* 24 BO_kenkyu_h */
+            [119, 135, 137, 138, 139, 140, 141, 147, 148, 152, 155, 156, 165, 166, 172, 180, 181, 185, 186,
+             190, 194, 197, 204, 329],
+            /* 25 BO_kenkyu_m */
+            [119, 134, 135, 137, 138, 139, 140, 141, 144, 147, 148, 151, 152, 155, 156, 165, 166, 168, 172,
+             174, 178, 179, 180, 181, 185, 186, 190, 191, 194, 197, 204, 329],
+            /* 26 BO_kenkyu_s */
+            [329],
+            /* 27 BO_lady_o */
+            [119, 135, 137, 138, 139, 140, 141, 147, 148, 152, 155, 156, 165, 166, 172, 180, 181, 185, 186,
+             190, 194, 197, 204, 329],
+            /* 28 BO_mummy */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477, 489, 490, 491, 494, 495],
+            /* 29 BO_lady_l */
+            [119, 134, 135, 137, 138, 139, 140, 141, 144, 147, 148, 151, 152, 155, 156, 165, 166, 168, 172,
+             174, 178, 179, 180, 181, 185, 186, 190, 191, 194, 197, 204, 329],
+            /* 30 BO_lady_m */
+            [134, 138, 141, 144, 151, 156, 168, 172, 174, 178, 179, 186, 190, 191, 204, 329],
+            /* 31 BO_lady_n */
+            [119, 135, 137, 138, 139, 140, 141, 147, 148, 152, 155, 156, 165, 166, 172, 180, 181, 185, 186,
+             190, 194, 197, 204, 329],
+            /* 32 BO_neil */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 374, 376, 378, 379, 385, 397, 398, 410, 411,
+             428, 429, 431, 432, 433, 468, 477, 489, 490, 491, 494, 495],
+            /* 33 BO_siriru */
+            [176, 229, 230, 344, 346, 348, 349, 351, 355, 360, 361, 368, 369, 371, 374, 376, 378, 379, 385,
+             397, 398, 410, 411, 428, 429, 431, 432, 433, 461, 464, 465, 468, 469, 470, 489, 490, 491, 494,
+             495],
+            /* 34 BO_tarab */
+            [321],
+            /* 35 BO_samson */
+            [176, 229, 231, 344, 346, 348, 349, 350, 355, 357, 371, 372, 379, 380, 383, 385, 397, 410, 411,
+             417, 420, 421, 422, 424, 428, 429, 431, 432, 433, 446, 448, 449, 450, 451, 468, 489, 490, 491,
+             494, 495],
+            /* 36 BO_haris */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 397, 398, 428, 477],
+            /* 37 BO_gilmoa */
+            [176, 344, 346, 355, 368, 371, 374, 376, 378, 379, 385, 398, 428, 429, 431, 432, 433, 440, 441,
+             442, 443, 444, 445, 473, 474, 475, 476, 477, 489, 490, 491, 494, 495],
+            /* 38 BO_bentry */
+            [176, 344, 346, 349, 350, 368, 371, 373, 374, 376, 378, 379, 397, 401, 402, 405, 408, 416, 428,
+             429, 431, 432, 433, 489, 490, 491, 494, 495],
+            /* 39 BO_sophi */
+            [139, 172, 262, 264, 266, 267, 268, 269, 329],
+            /* 40 BO_hyum */
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 19, 20, 21, 40, 349, 350, 351, 355, 357, 371,
+             373, 385, 398, 477],
+            /* 41 BO_harid2 */
+            [337, 371],
+            /* 42 BO_staj2 */
+            [337],
+            /* 43 BO_kenkenkyu */
+            [329],
+            /* 44 BO_hyumhada */
+            [355, 371, 398, 477],
+            /* 45 BO_mickyb */
+            [205],
+            /* 46 BO_dreik */
+            [53, 55, 57, 62, 63, 65, 66, 68, 271, 277, 278, 281, 284, 285, 286, 292, 293, 295, 296, 298,
+             301, 302, 307, 313, 314, 316, 371],
+            /* 47 BO_kage */
+            [53, 55, 57, 62, 63, 65, 66, 68, 271, 277, 278, 281, 284, 285, 286, 292, 293, 295, 296, 298,
+             301, 302, 307, 313, 314, 316, 371],
+            /* 48 BO_lubin */
+            [278],
+            /* 49 BO_dkillerb */
+            [35, 36, 37, 38, 39, 40, 41, 42, 43, 45, 47, 48, 129, 130, 131],
+            /* 50 BO_neopetit */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429,
+             431, 432, 433, 477, 489, 490, 491, 492, 493, 494, 495],
+            /* 51 BO_neopetit2 */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429,
+             431, 432, 433, 477, 489, 490, 491, 492, 493, 494, 495],
+            /* 52 BO_neopetit3 */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429,
+             431, 432, 433, 477, 489, 490, 491, 492, 493, 494, 495],
+            /* 53 BO_pkenb */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477, 490, 492, 493, 494],
+            /* 54 BO_bentryb */
+            [176, 344, 346, 349, 350, 368, 371, 373, 374, 376, 378, 379, 397, 401, 402, 405, 408, 416, 428,
+             429, 431, 432, 433, 489, 490, 491, 494, 495],
+            /* 55 BO_pdolob */
+            [176, 344, 346, 355, 368, 371, 374, 376, 378, 379, 385, 398, 428, 429, 431, 432, 433, 477, 478,
+             489, 490, 491, 494, 495],
+            /* 56 BO_harisb */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 477],
+            /* 57 BO_taraba_b */
+            [322],
+            /* 58 BO_kenkyu_j */
+            [329],
+            /* 59 BO_devilon */
+            [22, 26, 27, 29, 32, 329],
+            /* 60 BO_bentryc */
+            [176, 344, 346, 349, 350, 368, 371, 373, 374, 376, 378, 379, 397, 401, 402, 405, 408, 416, 428,
+             429, 431, 432, 433, 489, 490, 491, 494, 495],
+            /* 61 BO_disiprin */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477],
+            /* 62 BO_tetuman */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477],
+            /* 63 BO_zonbi_b_2 */
+            [344, 346, 349, 350, 351, 355, 357, 368, 371, 373, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477],
+            /* 64 BO_devilonm */
+            [22, 26, 27, 29, 32, 371],
+            /* 65 BO_neozom */
+            [344, 346, 355, 368, 371, 374, 376, 378, 379, 385, 428, 429, 431, 432, 433, 477, 478, 491],
+            /* 66 BO_mummy2 */
+            [176, 344, 346, 349, 350, 351, 355, 357, 368, 371, 374, 376, 378, 379, 385, 398, 428, 429, 431,
+             432, 433, 477, 489, 490, 491, 494, 495],
+            /* 67 BO_gilmoab */
+            [176, 344, 346, 355, 368, 371, 374, 376, 378, 379, 385, 398, 428, 429, 431, 432, 433, 440, 441,
+             442, 443, 444, 445, 473, 474, 475, 476, 477, 489, 490, 491, 494, 495],
+        ],
         /* The polygons joining chest to hips (sub_4DEF0, sub_4DF90), all in the
          * data ROM and indexed by skin: a template of 0x640 bytes, its texture
          * point and header pointers, its polygon count, twelve points in the
@@ -1242,6 +1454,245 @@ const hotdo = {
                 sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997,
             },
         },
+        /* The prototype's bodyMotions, carried over by name. This build's code
+         * was rewritten too far for body_motions.py to read it the same way:
+         * the per-body tables moved into the data ROM behind pointers in RAM.
+         * So each body that kept its prototype name takes the motions that
+         * body's routine plays there, renumbered by motion name, and those
+         * named for the first time here (36 of them: BO_moody, BO_kyurian, the
+         * mummies, the later bosses...) have none. Written by
+         * `body_motions.py hotdp.zip hotd.zip`. */
+        bodyMotions: [
+            /* 0 BO_dkiller_kihon */
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 19, 20, 21, 100, 101, 102, 103, 104, 105,
+             106, 107, 108, 110, 112, 113, 178, 179, 181, 185, 187, 206, 207, 208, 220, 255, 302, 304, 305,
+             306, 307, 308, 312, 386, 388, 390, 391, 399, 401, 497],
+            /* 1 BO_mon_kihon */
+            [118, 120, 122, 128, 129, 131, 135, 137, 404, 410, 411, 414, 417, 418, 419, 425, 426, 428, 429,
+             430, 433, 434, 439, 445, 446, 448, 497],
+            /* 2 BO_tom */
+            [178, 179, 181, 185, 187, 461],
+            /* 3 BO_ebita */
+            [259, 472, 474, 483, 494, 497, 500, 502, 504, 505, 509, 512, 519, 560, 561, 563, 564, 565, 569,
+             570, 571, 594, 621, 626, 643, 644, 645, 648, 649],
+            /* 4 BO_ebitb */
+            [142, 143, 144, 145, 146, 147, 149, 150, 151, 154, 156, 158, 163, 164, 167, 168],
+            /* 5 BO_mr_g */
+            [333],
+            /* 6 BO_molb */
+            [302, 303, 304, 305, 306, 307, 308, 312, 497],
+            /* 7 BO_frog_ct */
+            [178, 179, 181, 185, 187],
+            /* 8 BO_dkiller_black */
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 110, 112, 113, 206, 207, 208],
+            /* 9 BO_mon_black */
+            [118, 120, 122, 128, 129, 131, 135, 137, 404, 410, 411, 414, 417, 418, 419, 425, 426, 428, 429,
+             430, 433, 434, 439, 445, 446, 448, 497],
+            /* 10 BO_syndy */
+            [188, 196, 339, 360, 370, 371, 452, 461],
+            /* 11 BO_zom */
+            [259, 336, 460, 472, 474, 476, 477, 479, 483, 484, 487, 494, 495, 497, 500, 502, 504, 505, 512,
+             516, 517, 518, 519, 534, 535, 560, 561, 563, 564, 565, 612, 621, 626, 641, 643, 644, 645, 648,
+             649, 658],
+            /* 12 BO_debu */
+            [472, 474, 477, 478, 494, 497, 499, 500, 502, 504, 505, 523, 524, 529, 532, 540, 560, 561, 563,
+             564, 565],
+            /* 13 BO_gman_kihon */
+            [459],
+            /* 14 BO_haride */
+            [466],
+            /* 15 BO_staje */
+            [462],
+            /* 16 BO_zonbiman */
+            [259, 472, 474, 483, 494, 497, 500, 502, 504, 505, 518, 519, 534, 535, 540, 560, 561, 563, 564,
+             565, 612, 617, 618, 619, 620, 621, 643, 644, 645, 648, 649],
+            /* 17 BO_kenkyu */
+            [189, 212, 217, 218, 220, 221, 222, 228, 229, 232, 235, 236, 245, 246, 255, 264, 266, 270, 271,
+             274, 278, 281, 288, 374, 459],
+            /* 18 BO_semu */
+            [118, 120, 122, 128, 129, 131, 135, 137, 404, 410, 411, 414, 417, 418, 419, 425, 426, 428, 429,
+             430, 433, 434, 439, 445, 446, 448, 497],
+            /* 19 BO_kenkyu_c */
+            [189, 212, 217, 218, 220, 221, 222, 228, 229, 232, 235, 236, 245, 246, 255, 264, 266, 270, 271,
+             274, 278, 281, 288, 459],
+            /* 20 BO_kenkyu_h */
+            [189, 212, 217, 218, 220, 221, 222, 228, 229, 232, 235, 236, 245, 246, 255, 264, 266, 270, 271,
+             274, 278, 281, 288, 459],
+            /* 21 BO_kenkyu_m */
+            [189, 211, 212, 217, 218, 220, 221, 222, 225, 228, 229, 231, 232, 235, 236, 245, 246, 248, 255,
+             257, 262, 263, 264, 266, 270, 271, 274, 276, 278, 281, 288, 459],
+            /* 22 BO_kenkyu_s */
+            [459],
+            /* 23 BO_lady_o */
+            [189, 212, 217, 218, 220, 221, 222, 228, 229, 232, 235, 236, 245, 246, 255, 264, 266, 270, 271,
+             274, 278, 281, 288, 459],
+            /* 24 BO_mummy */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621, 643, 644, 645, 648, 649],
+            /* 25 BO_lady_l */
+            [189, 211, 212, 217, 218, 220, 221, 222, 225, 228, 229, 231, 232, 235, 236, 245, 246, 248, 255,
+             257, 262, 263, 264, 266, 270, 271, 274, 276, 278, 281, 288, 459],
+            /* 26 BO_lady_m */
+            [211, 218, 222, 225, 231, 236, 248, 255, 257, 262, 263, 271, 274, 276, 288, 459],
+            /* 27 BO_lady_n */
+            [189, 212, 217, 218, 220, 221, 222, 228, 229, 232, 235, 236, 245, 246, 255, 264, 266, 270, 271,
+             274, 278, 281, 288, 459],
+            /* 28 BO_neil */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 500, 502, 504, 505, 512, 518, 519, 534, 535,
+             560, 561, 563, 564, 565, 612, 621, 643, 644, 645, 648, 649],
+            /* 29 BO_siriru */
+            [259, 336, 337, 472, 474, 476, 477, 479, 483, 486, 487, 494, 495, 497, 500, 502, 504, 505, 512,
+             518, 519, 534, 535, 560, 561, 563, 564, 565, 604, 608, 609, 612, 613, 614, 643, 644, 645, 648,
+             649],
+            /* 30 BO_samson */
+            [259, 336, 338, 472, 474, 476, 477, 478, 483, 485, 497, 498, 505, 507, 510, 512, 518, 534, 535,
+             542, 549, 550, 552, 554, 560, 561, 563, 564, 565, 587, 589, 590, 591, 592, 612, 643, 644, 645,
+             648, 649],
+            /* 31 BO_haris */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 518, 519, 560, 621],
+            /* 32 BO_gilmoa */
+            [259, 472, 474, 483, 494, 497, 500, 502, 504, 505, 512, 519, 560, 561, 563, 564, 565, 572, 575,
+             576, 584, 585, 586, 617, 618, 619, 620, 621, 643, 644, 645, 648, 649],
+            /* 33 BO_bentry */
+            [259, 472, 474, 477, 478, 494, 497, 499, 500, 502, 504, 505, 518, 523, 524, 529, 532, 540, 560,
+             561, 563, 564, 565, 643, 644, 645, 648, 649],
+            /* 34 BO_sophi */
+            [220, 255, 386, 388, 390, 391, 399, 401, 459],
+            /* 35 BO_hyum */
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 19, 20, 21, 105, 477, 478, 479, 483, 485,
+             497, 499, 512, 519, 621],
+            /* 36 BO_hyumhada */
+            [483, 497, 519, 621],
+            /* 37 BO_dreik */
+            [118, 120, 122, 128, 129, 131, 135, 137, 404, 410, 411, 414, 417, 418, 419, 425, 426, 428, 429,
+             430, 433, 434, 439, 445, 446, 448, 497],
+            /* 38 BO_kage */
+            [118, 120, 122, 128, 129, 131, 135, 137, 404, 410, 411, 414, 417, 418, 419, 425, 426, 428, 429,
+             430, 433, 434, 439, 445, 446, 448, 497],
+            /* 39 BO_lubin */
+            [411],
+            /* 40 BO_dkillerb */
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 110, 112, 113, 206, 207, 208],
+            /* 41 BO_neopetit */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561,
+             563, 564, 565, 621, 643, 644, 645, 646, 647, 648, 649],
+            /* 42 BO_neopetit2 */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561,
+             563, 564, 565, 621, 643, 644, 645, 646, 647, 648, 649],
+            /* 43 BO_neopetit3 */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561,
+             563, 564, 565, 621, 643, 644, 645, 646, 647, 648, 649],
+            /* 44 BO_pkenb */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621, 644, 646, 647, 648],
+            /* 45 BO_bentryb */
+            [259, 472, 474, 477, 478, 494, 497, 499, 500, 502, 504, 505, 518, 523, 524, 529, 532, 540, 560,
+             561, 563, 564, 565, 643, 644, 645, 648, 649],
+            /* 46 BO_pdolob */
+            [259, 472, 474, 483, 494, 497, 500, 502, 504, 505, 512, 519, 560, 561, 563, 564, 565, 621, 626,
+             643, 644, 645, 648, 649],
+            /* 47 BO_harisb */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 621],
+            /* 48 BO_taraba_b */
+            [],
+            /* 49 BO_kenkyu_j */
+            [459],
+            /* 50 BO_devilon */
+            [22, 27, 29, 32, 35, 459],
+            /* 51 BO_bentryc */
+            [259, 472, 474, 477, 478, 494, 497, 499, 500, 502, 504, 505, 518, 523, 524, 529, 532, 540, 560,
+             561, 563, 564, 565, 643, 644, 645, 648, 649],
+            /* 52 BO_disiprin */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621],
+            /* 53 BO_tetuman */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621],
+            /* 54 BO_zonbi_b_2 */
+            [472, 474, 477, 478, 479, 483, 485, 494, 497, 499, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621],
+            /* 55 BO_devilonm */
+            [22, 27, 29, 32, 35, 497],
+            /* 56 BO_neozom */
+            [472, 474, 483, 494, 497, 500, 502, 504, 505, 512, 560, 561, 563, 564, 565, 621, 626, 645],
+            /* 57 BO_mummy2 */
+            [259, 472, 474, 477, 478, 479, 483, 485, 494, 497, 500, 502, 504, 505, 512, 519, 560, 561, 563,
+             564, 565, 621, 643, 644, 645, 648, 649],
+            /* 58 BO_gilmoab */
+            [259, 472, 474, 483, 494, 497, 500, 502, 504, 505, 512, 519, 560, 561, 563, 564, 565, 572, 575,
+             576, 584, 585, 586, 617, 618, 619, 620, 621, 643, 644, 645, 648, 649],
+            /* 59 BO_moody */
+            [],
+            /* 60 BO_kyurian */
+            [],
+            /* 61 BO_mummyb */
+            [],
+            /* 62 BO_mummy2b */
+            [],
+            /* 63 BO_gilmoac */
+            [],
+            /* 64 BO_boss3 */
+            [],
+            /* 65 BO_bentryd */
+            [],
+            /* 66 BO_pbaba */
+            [],
+            /* 67 BO_zsophi */
+            [],
+            /* 68 BO_kage2 */
+            [],
+            /* 69 BO_devilonx */
+            [],
+            /* 70 BO_moodyb */
+            [],
+            /* 71 BO_harisc */
+            [],
+            /* 72 BO_bentrye */
+            [],
+            /* 73 BO_mummy2c */
+            [],
+            /* 74 BO_gilmoad */
+            [],
+            /* 75 BO_hiru_b */
+            [],
+            /* 76 BO_boss4 */
+            [],
+            /* 77 BO_harisd */
+            [],
+            /* 78 BO_kyurianb */
+            [],
+            /* 79 BO_dkiller_jp */
+            [],
+            /* 80 BO_dkiller_bl_jp */
+            [],
+            /* 81 BO_dkillerb_jp */
+            [],
+            /* 82 BO_taalu */
+            [],
+            /* 83 BO_taalub */
+            [],
+            /* 84 BO_burner */
+            [],
+            /* 85 BO_burnerb */
+            [],
+            /* 86 BO_mummyc */
+            [],
+            /* 87 BO_kage2b */
+            [],
+            /* 88 BO_moodyc */
+            [],
+            /* 89 BO_bentryf */
+            [],
+            /* 90 BO_tarabab */
+            [],
+            /* 91 BO_gfrog */
+            [],
+            /* 92 BO_moodybb */
+            [],
+            /* 93 BO_moodycc */
+            [],
+        ],
+        bodyMotionsLabel: 'Played by its routine in the prototype',
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
@@ -1343,6 +1794,8 @@ const hotd = {
          * tables are the same names in the same order, and only the tables'
          * addresses moved. */
         callback: hotdo.rig.callback,
+        bodyMotions: hotdo.rig.bodyMotions,
+        bodyMotionsLabel: hotdo.rig.bodyMotionsLabel,
     },
 };
 
@@ -1544,8 +1997,11 @@ function daytonaBuild(spec) {
     return {
         id: spec.id,
         name: spec.name,
-        /* This build's own program pair, which no other Daytona set carries. */
+        /* This build's own program pair, which no other Daytona set carries,
+         * and their checksums, for a zip that spells the labels otherwise
+         * (`daytonas.zip` drops the `ic` from both). */
         identify: [spec.program[1], spec.program[3]],
+        identifyCrc: [spec.program[2], spec.program[4]],
         regions: {
             /* Two 128KB EPROMs, and the board maps the second half twice: at
              * 0x20000 like any other and again at 0x00220000, which is the
@@ -1575,6 +2031,16 @@ function daytonaBuild(spec) {
             textures: {
                 size: 0x1000000,
                 parts: [DAYTONA_TEX0, spec.tex8 ?? DAYTONA_TEX8],
+            },
+            /* The TGP's data ROM, one float a word, the same chips in every
+             * build: the collision polygons get_y_position asks it about, for
+             * the road under the pylons and horses (courseGround in
+             * js/daytona.js). Optional: without it they keep their records'
+             * heights. */
+            copro: {
+                size: 0x400000,
+                optional: true,
+                parts: [[0x000000, 'mpr-16537.ic28', 0x36b7c35a, 'mpr-16536.ic29', 0x6d6afed9]],
             },
         },
         /* An entry is the four words the draw routine reads — oba, tpa, tha and
@@ -1675,6 +2141,14 @@ function daytonaBuild(spec) {
         /* What stands along the courses — see DAYTONA_OBJECTS_A. */
         objects: spec.objects ?? null,
         /*
+         * The tables set_area_block cuts the 5x5 round the camera by:
+         * `heading`, the four record pointers its heading cut picks between
+         * by quarter turn, `clip`, extra_clip's range table per course, and
+         * `order`, the order it walks the cells in, which picks the near set.
+         * See courseArea in js/daytona.js.
+         */
+        area: spec.area ?? null,
+        /*
          * The sky, which is not geometry but the tile layer's panorama: 256
          * tiles round the full turn, eight patterns of 32, streamed into the
          * tilemap as the car turns (js/scroll.js, buildCourseSky). `table` is
@@ -1696,15 +2170,8 @@ function daytonaBuild(spec) {
          * steps each face back by its own depth, so plates in one plane part
          * by how they were cut and the parting moves with the camera. Nothing
          * here is modelled behind a surface it shows through, which is what a
-         * recede is for.
-         *
-         * `copies`: the flags draw their emblem as a second copy of each
-         * cloth triangle, and a wave frame tilts the copy off the cloth — see
-         * js/layers.js. Only this game asks, because a triangle with a near
-         * copy is common in Sonic The Fighters, whose ranking is graded
-         * against MAME without the rule.
-         */
-        depth: { recede: 0, nearMin: 0.02, layers: true, layerRules: { copies: true } },
+         * recede is for. */
+        depth: { recede: 0, nearMin: 0.02, layers: true },
         /* The music, off until switched on — see DAYTONA_SOUND. */
         sound: spec.sound === undefined ? DAYTONA_SOUND : spec.sound,
         /* Stages, but no rig: this game has no motion tables of any kind. */
@@ -1723,8 +2190,16 @@ function daytonaBuild(spec) {
  *
  * Revision A and the five sets built on it share one layout; the Special
  * Edition moved its tables and put back the second crowd the 1993 version
- * had. The 1993 version writes several routines its own way — see
- * DAYTONA_OBJECTS_93.
+ * had, and the Saturn advertisements set is the Special Edition's code with
+ * its tables moved on again. The 1993 version writes several routines its own
+ * way — see DAYTONA_OBJECTS_93.
+ *
+ * `shown` names the routines that decide whether to draw other than as
+ * SHOWN in js/daytona.js has their kind: the two lights that look at fixed
+ * blocks — 0x7A or 0x6A in the area, 0x99 or 0x89 near — and the wall, drawn
+ * while the player is between points 520 and 576 (the halfwords at Rev A
+ * 0x2207C). Each crowd carries its own (`shown`): the shuttle's points
+ * 760-830, the plaza's 149-193.
  */
 const DAYTONA_KINDS_A = {
     0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
@@ -1742,27 +2217,48 @@ const DAYTONA_OBJECTS_A = {
     rankBoard: 0x23607c, rankCars: 0x2360b8,
     windmill: { sails: 0x2361b0, still: [0x2843e6c, 0x2843e80] },
     birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
-    crowds: [{ list: 0x236e38, count: 12 }],
+    crowds: [{ list: 0x236e38, count: 12, shown: { road: [0x2f8, 0x33e] } }],
     pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+    shown: { 0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x22018: { road: [0x208, 0x240] } },
+};
+const DAYTONA_KINDS_SE = {
+    0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
+    0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
+    0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
+    0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
+    0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
+    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+    0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
+    0x226d4: 'horse', 0x22aec: 'curtainCall',
+};
+const DAYTONA_SHOWN_SE = {
+    0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x220e4: { road: [0x208, 0x240] },
 };
 const DAYTONA_OBJECTS_SE = {
-    at: 0x348c8,
-    kinds: {
-        0x20118: 'static', 0x201bc: 'cycle', 0x202c4: 'ship', 0x20364: 'slot',
-        0x20698: 'light', 0x20730: 'light', 0x207c8: 'spinZ', 0x20898: 'spinY',
-        0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
-        0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
-        0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
-        0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
-        0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
-        0x226d4: 'horse', 0x22aec: 'curtainCall',
-    },
+    at: 0x348c8, kinds: DAYTONA_KINDS_SE, shown: DAYTONA_SHOWN_SE,
     cycles: 0x23780c, checkpoints: 0x237a2c, spinY: -0x100,
     rankBoard: 0x236d48, rankCars: 0x236d84,
     windmill: { sails: 0x236e7c, still: [0x2843e6c, 0x2843e80] },
     birds: 0x234848, horses: 0x2347c8, jeffry: 0x28478a0,
-    crowds: [{ list: 0x237c44, count: 9 }, { list: 0x237b24, count: 12 }],
+    crowds: [
+        { list: 0x237c44, count: 9, shown: { road: [0x95, 0xc1] } },
+        { list: 0x237b24, count: 12, shown: { road: [0x2f8, 0x33e] } },
+    ],
     pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+};
+/* The Saturn advertisements set: the Special Edition's routines at the same
+ * places, its tables 0x510 on and its pylons' models 0x400 back. */
+const DAYTONA_OBJECTS_S = {
+    at: 0x34dd8, kinds: DAYTONA_KINDS_SE, shown: DAYTONA_SHOWN_SE,
+    cycles: 0x237d1c, checkpoints: 0x237f3c, spinY: -0x100,
+    rankBoard: 0x237258, rankCars: 0x237294,
+    windmill: { sails: 0x23738c, still: [0x2843e6c, 0x2843e80] },
+    birds: 0x234d58, horses: 0x234cd8, jeffry: 0x28478a0,
+    crowds: [
+        { list: 0x238154, count: 9, shown: { road: [0x95, 0xc1] } },
+        { list: 0x238034, count: 12, shown: { road: [0x2f8, 0x33e] } },
+    ],
+    pylons: { 0x21730: 0x28508e0, 0x21764: 0x28508f0, 0x21798: 0x2850900, 0x217cc: 0x28508d0 },
 };
 
 /*
@@ -1770,7 +2266,9 @@ const DAYTONA_OBJECTS_SE = {
  * is a routine of its own with its scale and list inline (`checkpointsAt`), one
  * of its two prop routines walks a list of its own (`lists`), the dice turn the
  * other way, and the crowd routine draws both crowds an instruction at a time,
- * traced by daytona-tables.mjs into `groups`.
+ * traced by daytona-tables.mjs into `groups`. Its two plain prop routines and
+ * three of its check points test the near set where Revision A's test the
+ * area (`shown`).
  */
 const DAYTONA_OBJECTS_93 = {
     at: 0x36940,
@@ -1787,6 +2285,10 @@ const DAYTONA_OBJECTS_93 = {
         0x24854: 'horse', 0x24cd0: 'curtainCall',
     },
     lists: { 0x2024c: 0x238b04 },
+    shown: {
+        0x203a4: 'near', 0x20450: 'near', 0x209e4: { area: [0x7a, 0x6a] }, 0x20a7c: { near: [0x99, 0x89] },
+        0x22030: 'near', 0x22090: 'near', 0x2214c: 'near', 0x23ce0: { road: [0x208, 0x240] },
+    },
     cycles: 0x220e7c,
     checkpointsAt: {
         0x22030: { scale: 1, list: null, world: true },
@@ -1802,8 +2304,9 @@ const DAYTONA_OBJECTS_93 = {
     windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
     birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
     crowds: [{
+        /* The plaza's, while the crowd's own block is near. */
+        shown: 'near',
         groups: [
-            /* The plaza's, while its block is in view. */
             { at: [-798, 33.58, 176.8], turns: [['y', 23301]], list: 0x238d20 },
             { at: [-813, 33.58, 187.7], turns: [['y', 21845]], list: 0x238d30 },
             { at: [-804, 33.58, 174], turns: [['y', 22573]], list: 0x238d50 },
@@ -1813,7 +2316,11 @@ const DAYTONA_OBJECTS_93 = {
             { at: [-783.5, 33.58, 162], turns: [['y', 26942]], list: 0x238d90 },
             { at: [-807, 33.58, 191], turns: [['y', 22027]], list: 0x238da0 },
             { at: [-802, 33.58, 182.5], turns: [['y', 22209]], list: 0x238db0 },
-            /* The shuttle's, while the player is on its stretch. */
+        ],
+    }, {
+        /* The shuttle's, while the player is on its stretch. */
+        shown: { road: [0x2f8, 0x33e] },
+        groups: [
             { at: [491.8, 14.5, -923], turns: [['z', -1094], ['y', -24577], ['x', -730]], list: 0x238d20 },
             { at: [390, 13.7, -970.8], turns: [['z', 0], ['y', 31675], ['x', 0]], list: 0x238d30 },
             { at: [479.5, 13.9, -935], turns: [['z', -548], ['y', -24577], ['x', -366]], list: 0x238d50 },
@@ -1850,6 +2357,7 @@ const daytona93 = daytonaBuild({
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
     objects: DAYTONA_OBJECTS_93,
+    area: { heading: 0x17658, clip: 0x17150, order: 0x17104 },
     /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
      * was worked out on do not carry; its song table is in the program ROM,
      * at 0x231E70. */
@@ -1870,6 +2378,7 @@ const DAYTONA_REV_A = {
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
+    area: { heading: 0x17908, clip: 0x175e0, order: 0x17594 },
 };
 
 const daytona = daytonaBuild({
@@ -1889,6 +2398,7 @@ const daytonase = daytonaBuild({
     cabinets: DAYTONA_CABINETS_SE,
     sky: { table: 0x47c8 },
     objects: DAYTONA_OBJECTS_SE,
+    area: { heading: 0x17d84, clip: 0x17a5c, order: 0x17a10 },
 });
 
 const daytonas = daytonaBuild({
@@ -1898,6 +2408,9 @@ const daytonas = daytonaBuild({
     program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
     bankTable: 0x15b4,
+    sky: { table: 0x4838 },
+    objects: DAYTONA_OBJECTS_S,
+    area: { heading: 0x17df4, clip: 0x17acc, order: 0x17a80 },
 });
 
 const daytonat = daytonaBuild({
@@ -1967,12 +2480,18 @@ export function detectGame(names, nested = null) {
  * @param {Set<string>|string[]} names  every member name across the zips
  * @param {Set<string>} [nested]  those of them that exist only inside a
  *   clone's directory
+ * @param {Map<number, string>} [byCrc]  a member's name by its checksum, for
+ *   a profile whose `identifyCrc` lets a chip go by another label
  * @returns {object[]} the profiles, the top-level one first
  */
-export function detectGames(names, nested = null) {
+export function detectGames(names, nested = null, byCrc = null) {
     const have = names instanceof Set ? names : new Set(names);
-    const has = (m) => have.has(m);
-    const all = GAMES.filter((g) => g.identify.every(has));
-    const top = all.filter((g) => g.identify.every((m) => !nested?.has(m)));
+    /* The labels a profile is known by, as these zips spell them; null where
+     * one is missing. */
+    const labels = (g) => g.identify.map((m, i) => (have.has(m)
+        ? m
+        : (g.identifyCrc && byCrc?.get(g.identifyCrc[i])) ?? null));
+    const all = GAMES.filter((g) => labels(g).every((m) => m !== null));
+    const top = all.filter((g) => labels(g).every((m) => !nested?.has(m)));
     return [...top, ...all.filter((g) => !top.includes(g))];
 }

@@ -35,14 +35,14 @@
  * only by drawing a different model each frame.
  *
  * What is drawn in which state. The routines test the game's mode and the
- * time-attack flag, so the explorer offers the three states that differ — a
- * race (which is also what attract mode draws), time attack and the ending —
- * see MODES. What is left out in all of them: the cones stand and are never
- * knocked flying; the Jeffry statue does not do its turn, which the board
- * saves for a player who stops beside it and presses the view button; and the
- * two windows — the grandstand's glass and the covered walkway's — show the
- * first of the 64 frames of sky the board picks between by where the car
- * stands, since the TGP functions that choose one are not ported.
+ * time-attack flag, so the explorer offers the four states that differ — a
+ * race, attract mode, time attack and the ending — see MODES. What is left
+ * out in all of them: the cones stand and are never knocked flying; the
+ * Jeffry statue does not do its turn, which the board saves for a player who
+ * stops beside it and presses the view button; and the two windows — the
+ * grandstand's glass and the covered walkway's — show the first of the 64
+ * frames of sky the board picks between by where the car stands, since the
+ * TGP functions that choose one are not ported.
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
@@ -54,16 +54,18 @@ const ANGLE_DEG = 360 / 65536;
  * The TGP's frame against the viewer's.
  *
  * The decoder negates Z, so a position (x, y, z) is (x, y, -z) here. Mirroring
- * Z reverses every rotation, and the TGP's turns are the other hand from the
- * viewer's to begin with, so the two cancel and a board turn of +a about any
- * axis is a turn of +a here — the same as The House of the Dead's placements
- * come out. The slot machine settles it: its reels are turned 0x382D, and with
- * the sign the other way they face into the rock behind the housing.
+ * Z reverses the turns about X and Y but not about Z, and the TGP's turns are
+ * the other hand from the viewer's to begin with, so a board turn of +a about
+ * X or Y is a turn of +a here — the same as The House of the Dead's placements
+ * come out — and about Z it is -a. The slot machine settles Y: its reels are
+ * turned 0x382D, and with the sign the other way they face into the rock
+ * behind the housing. Ops 0x14, 0x15 and 0x16 build their matrices with the
+ * same hand, so Z follows from the mirror alone.
  */
 const T = (x, y, z) => ['t', [x, y, -z]];
 const RX = (a) => ['rx', a * ANGLE_DEG];
 const RY = (a) => ['r', a * ANGLE_DEG];
-const RZ = (a) => ['rz', a * ANGLE_DEG];
+const RZ = (a) => ['rz', -a * ANGLE_DEG];
 const S = (x, y = x, z = x) => ['s', [x, y, z]];
 
 /* globl_timer, which every one of these indexes its tables off, is the frame. */
@@ -82,6 +84,8 @@ function view(rom, addr) {
 const u32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint32(v.off, true); };
 const f32 = (rom, addr) => { const v = view(rom, addr); return v.dv.getFloat32(v.off, true); };
 const s16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getInt16(v.off, true); };
+const u16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint16(v.off, true); };
+const u8 = (rom, addr) => { const v = view(rom, addr); return v.dv.getUint8(v.off); };
 
 /* A model record's address as a model-table index, or -1. */
 function modelOf(rom, ptr) {
@@ -257,16 +261,15 @@ const KINDS = {
 
     /*
      * The pylons: four kinds, the same routine, differing in how high the
-     * model's origin stands off the road. The record's y is not used — the
-     * board puts it on the road under x, z with get_y_position and tips it to
-     * that road's slope, turning X and then Z before the record's own Y. That
-     * height is TGP function 0x36 over collision polygons in the coprocessor's
-     * own ROM, which is not read here, so the road the course draws stands in.
+     * model's origin stands off the road. The board puts each on the road
+     * under x, z with get_y_position, the record's y the height it looks for
+     * the road nearest to, and tips it to that polygon's slope, turning X and
+     * then Z before the record's own Y — see courseGround.
      */
     pylon: (r, ctx) => {
         const { rom } = ctx;
         const lift = f32(rom, ctx.O.pylons[r.init] + 4);
-        const g = ctx.ground?.(r.pos[0], r.pos[2]);
+        const g = ctx.ground?.(r.pos[0], r.pos[2], r.pos[1]);
         const y = (g ? g.y : r.pos[1]) + lift;
         return [{ model: modelOf(rom, r.arg), ops: [T(r.pos[0], y, r.pos[2]), ...(g ? g.tilt : []), RY(r.angle)] }];
     },
@@ -280,7 +283,7 @@ const KINDS = {
      * more circle a point (5, 2) off it, on half the beat. Two more, a further
      * (-12, -1) on, are drawn only during the ending or in time attack.
      */
-    birds: (r, ctx) => gullFlock(r, ctx, { third: ctx.mode !== 'race', grows: false }),
+    birds: (r, ctx) => gullFlock(r, ctx, { third: ctx.mode === 'ending' || ctx.mode === 'timeAttack', grows: false }),
 
     /*
      * tori_syumi: six more flocks of the same gulls, which only time attack
@@ -336,23 +339,30 @@ const KINDS = {
     /*
      * ctykya: the crowds on Seaside Street Galaxy — groups of cut-out people,
      * each a place and up to three turns, and a four-model list walked every
-     * eighth frame, which is them waving. The board draws the shuttle's crowd
-     * only while the player is on the stretch of road it lines, and the
-     * plaza's while its block is in view. The 1993 build has both, written
+     * eighth frame, which is them waving. The 1993 build has both, written
      * out one instruction at a time; Revision A keeps only the shuttle's, in a
      * table of {list, x, y, z, turns}, and the Special Edition put the plaza's
-     * back as a second table.
+     * back as a second table. Each crowd has its own test (`shown`, see
+     * SHOWN) and the routine draws the first whose test passes: in the later
+     * builds a stretch of road the player is on, in 1993 the plaza's while
+     * the crowd's own block is near and the shuttle's by its stretch.
      */
     crowd: (r, { rom, O }) => {
         const out = [];
         const wave = (f) => ((f + 1) >> 3) & 3;
         const turn = { x: RX, y: RY, z: RZ };
-        for (const c of O.crowds) {
+        /* Each crowd's test, and it draws only when no crowd before it has. */
+        const tests = O.crowds.map((c) => showTest(c.shown, gridBlock(r.pos[0], r.pos[2])));
+        for (const [n, c] of O.crowds.entries()) {
+            const before = tests.slice(0, n).filter(Boolean);
+            const own = tests[n];
+            const inView = (v) => (!own || own(v)) && !before.some((t) => t(v));
             if (c.groups) {
                 for (const g of c.groups) {
                     out.push({
                         ...cycle(modelList(rom, g.list, 4), wave),
                         ops: [T(...g.at), ...g.turns.map(([axis, a]) => turn[axis](a))],
+                        inView,
                     });
                 }
                 continue;
@@ -363,6 +373,7 @@ const KINDS = {
                     ...cycle(modelList(rom, u32(rom, p), 4), wave),
                     ops: [T(f32(rom, p + 4), f32(rom, p + 8), f32(rom, p + 12)),
                         RZ(s16(rom, p + 16)), RY(s16(rom, p + 18)), RX(s16(rom, p + 20))],
+                    inView,
                 });
             }
         }
@@ -372,6 +383,57 @@ const KINDS = {
     /* The ones that draw nothing in any state the explorer shows. */
     none: () => [],
 };
+
+/*
+ * What decides whether a routine draws, when the course is drawn round the
+ * camera (courseArea). The routines test one of three things before they draw:
+ *
+ * - 'area' or 'near': the block the task stands in, which get_m_block (Rev A
+ *   0x172A0) works out from its own x and z at the start — not the block whose
+ *   list the record is kept in, which is often another — in 0x501520 or
+ *   0x501540;
+ * - `{ area: [...] }` or `{ near: [...] }`: fixed blocks instead, any one of
+ *   them, out of the routine's operands or a table beside it;
+ * - `{ road: [first, last] }`: the player's point along the road, car +0x12C
+ *   (+0x128 in 1993), between two points, both included; no block at all.
+ *
+ * 'always' draws with no test. Most routines test the same way in every build,
+ * and this is by kind; a profile's `objects.shown` names the routines that do
+ * not, by address. The numbers below are the same in every build:
+ *
+ * - ship: blocks 0x75 and 0x55, the halfwords at Rev A 0x235DD0;
+ * - flags: 0x55, 0x65 and 0x75, at Rev A 0x2366B8;
+ * - windmill (wing, Rev A 0x20D34): in a race or time attack (GAME_DSP set
+ *   in M_mode) points 250-360, otherwise — attract mode, the ending — its own
+ *   block in the area;
+ * - jeffry (Rev A 0x20E54): points 242-320; in the ending also while the
+ *   clock (0x5010A8) is 1016-1211, which the explorer, with no clock, takes
+ *   as the whole ending;
+ * - the light at Rev A 0x212A4 and the curtain call test nothing.
+ *
+ * The crowds carry their own (crowd).
+ */
+const SHOWN = {
+    static: 'area', cycle: 'near', cycle4: 'near', slot: 'area', spinZ: 'near', spinY: 'near',
+    ship: { area: [0x75, 0x55] }, flags: { near: [0x55, 0x65, 0x75] }, light: 'always',
+    world: 'area', rank: 'area', checkpoint: 'area', checkpointAt: 'area', pylon: 'area',
+    window: 'area', flock: 'area', birds: 'area', bigBird: 'area', horse: 'area',
+    windmill: (mode) => (mode === 'race' || mode === 'timeAttack' ? { road: [250, 360] } : 'area'),
+    jeffry: (mode) => (mode === 'ending' ? 'always' : { road: [242, 320] }),
+    curtainCall: 'always',
+};
+
+/* A rule of SHOWN's as a test of the view round the camera, or null for none.
+ * A course with no road passes every road test. */
+function showTest(rule, own) {
+    if (!rule || rule === 'always') return null;
+    if (rule === 'area') return (v) => v.area.has(own);
+    if (rule === 'near') return (v) => v.near.has(own);
+    if (rule.road) return (v) => v.road == null || (v.road >= rule.road[0] && v.road <= rule.road[1]);
+    const set = rule.area ? 'area' : 'near';
+    const blocks = rule[set];
+    return (v) => blocks.some((b) => v[set].has(b));
+}
 
 /* slot's three reels: where each stands — lda'd floats — and its step a frame. */
 const SLOT_REELS = [
@@ -433,15 +495,9 @@ const HORSE_SHY = 8;                   /* 0x41000000 */
 const HORSE_PACE = 1.5;                /* 0x3FC00000 */
 /* uma_nashi_int: how long a horse that has run out of sight stays gone. */
 const HORSE_AWAY = 5 << 9;
-/* The camera is not a car. It may be standing still when it reaches a horse,
- * which would leave the horse galloping on the spot, or it may have jumped, and
- * a jump measured as a speed would throw the horse out of sight in a frame. So
- * the speed it lends a horse is kept between these two, which are the
- * explorer's numbers, not the board's. */
-const HORSE_MIN_SPEED = 1.0;
-const HORSE_MAX_SPEED = 6.0;
-/* The frames a bolt is stepped through to catch up with the clock, as the
- * trails and the sway chains are; past that it is jumped. */
+/* The frames a horse is stepped through to catch up with the clock, as the
+ * trails and the sway chains are; past that it is jumped. The explorer's
+ * number, not the board's: the board steps every frame. */
 const HORSE_CATCH_UP = 120;
 
 /* Where on its ellipse a horse is after `n` steps, as uma_dsp draws it. */
@@ -455,71 +511,117 @@ function horseOffset(a) {
 }
 
 /*
- * The bolt: uma_getaway_chk, uma_getaway_int and uma_nashi_int, with the
- * camera standing in for the car.
+ * The bolt (Rev A 0x22608-0x22A20), with the camera standing in for the car.
  *
- * On its ellipse a horse checks, each frame, how far the car is from where it
- * stood the frame before; inside 8 it bolts. Bolting, it takes the car's
- * heading and half again its speed and runs straight along that heading on
- * the ground (get_y_position under it, which here is the drawn road's
- * height), and whenever the car comes within 8 again it takes them afresh.
- * TGP function 0x47 steps it: by speed along the heading, which is the
- * direction the model faces when turned by it. It runs until its block is out
- * of view — the 5x5 blocks round the car that set_area_block marks, less the
- * heading clip extra_clip takes off, which is not ported — and is then gone
- * for 2560 frames before uma_int puts it back on its ellipse.
+ * uma_int (0x22608) zeroes the step count and hands over to uma_dsp (0x22630),
+ * which does nothing at all while the horse's block is out of the area
+ * set_area_block marks (see courseArea). In it, uma_getaway_chk (0x2276C) asks
+ * TGP function 0x43 how far the car is, across the ground, from where the horse
+ * stood the frame before — the record's place plus the offset at +0x34/+0x3C —
+ * and inside 8 it bolts the next frame; either way this frame steps the count,
+ * stores the new offset and draws on the ellipse.
  *
- * The board also stops a horse's ellipse while its block is out of view. The
- * explorer draws the whole course at once, so here the ellipse always runs.
+ * Bolting (0x2283C) the horse starts from where it last stood, takes the
+ * car's heading (car +0x48) and half again its speed (car +0x34), and runs on
+ * into the step (0x228B0) the same frame. Each frame of the run first asks
+ * uma_getaway_chk2 (0x227DC) whether the car is within 8 of it, and if so it
+ * takes heading and speed afresh the next frame; then, while its own block is
+ * in the area, it puts itself on the road with get_y_position, has TGP
+ * function 0x47 step it by the speed along the heading — the direction the
+ * model faces when turned by it — and is drawn there. When its block leaves
+ * the area it is gone: uma_nashi_int (0x229E4) counts 2560 frames and goes
+ * back to uma_int. The place it ran to is left at +0x34/+0x3C, so the first
+ * check back on the ellipse is against the record's place plus that, as the
+ * board's is.
+ *
+ * Measured in MAME, car +0x34 is the car's move across the ground per frame
+ * and car +0x48 the heading it moves along, so the camera lends the same: how
+ * far it has moved across the ground per frame and which way (liveCamera in
+ * js/app.js). Standing still it lends nothing, and the horse stands too, as it
+ * does on the board for a car stopped beside it.
+ *
+ * Drawn whole ('reach'), the course has no area and the ellipse always runs,
+ * but a bolt still ends where the board's would, at the area round the camera.
  *
  * Stateful, unlike everything else here, so it is a `live` hook the app steps
- * with the camera: `live(frame, cam)` returns the ops, the model and whether
- * the draw is hidden.
+ * with the camera: `live(frame, cam)` returns the ops, the model, whether the
+ * draw is hidden and the block it stands in.
  */
-function horseRun(r, gallop, { ground }) {
-    const s = { last: -1, mode: 'ring', n: 0, prev: [0, 0, 0], pos: null, heading: 0, speed: 0, away: 0 };
-    const reset = () => Object.assign(s, { mode: 'ring', n: 0, prev: horseOffset(r.angle), pos: null, away: 0 });
+function horseRun(r, gallop, { ground, view, area }) {
+    /* uma_int's get_m_block: the block the task stands in, which is not
+     * always the block whose list the record is kept in. */
+    const home = gridBlock(r.pos[0], r.pos[2]);
+    const s = {
+        last: -1, mode: 'start', n: 0, prev: [0, 0, 0], pos: [0, 0, 0], y: 0, at: 0,
+        heading: 0, speed: 0, away: 0, drawn: null,
+    };
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const inView = (cam, x, z) => !cam
-        || (Math.abs(blockAxis(x) - blockAxis(cam.x)) <= 2 && Math.abs(blockAxis(z) - blockAxis(cam.z)) <= 2);
+    const inArea = (cam, block) => !cam || area(cam).area.has(block);
+    /* 0x228B0: uma_getaway_chk2, then a step along the heading. */
+    const run = (cam) => {
+        s.mode = near(cam, s.pos[0], s.pos[2]) ? 'take' : 'bolt';
+        s.n++;
+        s.at = gridBlock(s.pos[0], s.pos[2]);
+        if (!inArea(cam, s.at)) { s.mode = 'away'; s.away = 0; return; }
+        /* It is drawn at the height it had: the routine loads the place before
+         * get_y_position stores the new one. */
+        s.y = s.pos[1];
+        const g = ground?.(s.pos[0], s.pos[2], s.pos[1]);
+        if (g) s.pos[1] = g.y;
+        const h = (s.heading & 0xffff) * (2 * Math.PI / 65536);
+        s.pos[0] -= Math.sin(h) * s.speed;
+        s.pos[2] += Math.cos(h) * s.speed;
+        s.prev = [s.pos[0], 0, s.pos[2]];
+        s.drawn = 'bolt';
+    };
+    /* 0x2286C: the car's heading and half again its speed, then on into it. */
     const take = (cam) => {
-        s.heading = cam.heading;
-        s.speed = HORSE_PACE * Math.min(Math.max(cam.speed, HORSE_MIN_SPEED), HORSE_MAX_SPEED);
+        s.heading = cam?.course ?? 0;
+        s.speed = HORSE_PACE * (cam?.speed ?? 0);
+        run(cam);
     };
     const step = (cam) => {
-        if (s.mode === 'ring') {
-            const bolt = near(cam, r.pos[0] + s.prev[0], r.pos[2] + s.prev[2]);
+        s.drawn = null;
+        switch (s.mode) {
+        case 'start':           /* uma_int */
+            s.n = 0;
+            s.mode = 'ring';
+            return;
+        case 'ring':            /* uma_dsp */
+            if (view === 'camera' && !inArea(cam, home)) return;
+            if (near(cam, r.pos[0] + s.prev[0], r.pos[2] + s.prev[2])) s.mode = 'getaway';
             s.n++;
             s.prev = horseOffset(r.angle + (s.n << 6));
-            if (bolt) {
-                s.mode = 'bolt';
-                s.pos = [r.pos[0] + s.prev[0], r.pos[1], r.pos[2] + s.prev[2]];
-                take(cam);
-            }
+            s.drawn = 'ring';
             return;
-        }
-        if (s.mode === 'bolt') {
-            if (near(cam, s.pos[0], s.pos[2])) take(cam);
-            if (!inView(cam, s.pos[0], s.pos[2])) { s.n++; s.mode = 'away'; s.away = 0; return; }
-            const g = ground?.(s.pos[0], s.pos[2]);
-            if (g) s.pos[1] = g.y;
-            const h = (s.heading & 0xffff) * (2 * Math.PI / 65536);
-            s.pos[0] -= Math.sin(h) * s.speed;
-            s.pos[2] += Math.cos(h) * s.speed;
-            s.n++;
+        case 'getaway':         /* uma_getaway_int */
+            s.pos = [r.pos[0] + s.prev[0], r.pos[1], r.pos[2] + s.prev[2]];
+            take(cam);
             return;
+        case 'take':
+            take(cam);
+            return;
+        case 'bolt':
+            run(cam);
+            return;
+        default:                /* uma_nashi_int */
+            if (++s.away >= HORSE_AWAY) s.mode = 'start';
         }
-        if (++s.away >= HORSE_AWAY) reset();
     };
     return (frame, cam) => {
-        if (s.last < 0 || frame < s.last) { reset(); s.last = frame - 1; }
+        if (s.last < 0 || frame < s.last) {
+            Object.assign(s, { mode: 'start', prev: [0, 0, 0], away: 0, drawn: null });
+            s.last = frame - 1;
+        }
         const from = Math.max(s.last + 1, frame - HORSE_CATCH_UP + 1);
         for (let f = from; f <= frame; f++) step(cam);
         s.last = frame;
         const model = gallop[s.n & 31];
-        if (s.mode === 'ring') return { model, ops: horseRing(r, s.n || 1) };
-        if (s.mode === 'bolt') return { model, ops: [T(...s.pos), RY(s.heading)] };
-        return { model, ops: [], hidden: true };
+        if (s.drawn === 'ring') return { model, ops: horseRing(r, s.n), block: home };
+        if (s.drawn === 'bolt') {
+            return { model, ops: [T(s.pos[0], s.y, s.pos[2]), RY(s.heading)], block: s.at };
+        }
+        return { model, ops: [], hidden: true, block: home };
     };
 }
 
@@ -531,10 +633,12 @@ function horseRun(r, gallop, { ground }) {
  * entry in mode_control's table — 0x400000 GAME_DSP, 0x10000000 STAFF_DSP, the
  * ending — and 0x501a80, which gear_select sets when switch bit 4 is held at
  * the transmission select and which entry_car_event_open reads to enter no
- * rival cars: time attack. Attract mode draws what a race does.
+ * rival cars: time attack. Attract mode is ADV_DSP (8, measured in MAME), not
+ * GAME_DSP, and differs from a race only in the windmill (SHOWN).
  */
 export const MODES = [
-    ['race', 'Race (and attract)'],
+    ['race', 'Race'],
+    ['attract', 'Attract'],
     ['timeAttack', 'Time attack'],
     ['ending', 'Ending'],
 ];
@@ -544,15 +648,20 @@ export const MODES = [
 /**
  * The draws for one course's objects, in the explorer's shape.
  *
- * `ground(x, z)` answers where the road is under a point — a height and
- * the turns that tip a model to its slope — or null; the cones stand on it and
- * a bolting horse runs on it. `mode` is which of the game's states to draw the
- * course in — see MODES.
+ * `view` is which blocks are drawn: 'camera' when only the area round the
+ * camera is, as the board draws (see courseArea), and the horses then keep to
+ * that too. For it each draw carries `inView(v)`, its routine's test of the
+ * view courseArea gives (SHOWN); a draw without one is always drawn.
+ *
+ * `ground(x, z, ref)` answers where the road is under a point — a height and
+ * the turns that tip a model to its slope — see courseGround; the cones stand
+ * on it and a bolting horse runs on it. `mode` is which of the game's states
+ * to draw the course in — see MODES.
  */
-export function courseObjectDraws(rom, course, ground, mode = 'race') {
+export function courseObjectDraws(rom, course, ground, mode = 'race', view = 'reach') {
     const O = rom.game.objects;
     if (!O) return [];
-    const ctx = { rom, O, course, ground, mode };
+    const ctx = { rom, O, course, ground, mode, view, area: courseArea(rom, course) };
     const out = [];
     for (const r of readObjectRecords(rom, course)) {
         /* sub_216e4 calls whatever routine its argument names, once a frame,
@@ -562,18 +671,66 @@ export function courseObjectDraws(rom, course, ground, mode = 'race') {
         if (kind === 'runs') kind = O.kinds[r.arg & ~PROG_ALIAS] ?? 'none';
         const build = KINDS[kind];
         if (!build) continue;
+        let rule = O.shown?.[r.init] ?? SHOWN[kind];
+        if (typeof rule === 'function') rule = rule(mode);
+        const inView = showTest(rule, gridBlock(r.pos[0], r.pos[2]));
         for (const d of build(r, ctx)) {
             if (d.model < 0) continue;
-            out.push({ ...d, kind, block: r.block });
+            out.push({ inView, ...d, kind });
         }
     }
     return out;
 }
 
-/* One axis of get_m_block: which of the sixteen 128-unit bands across the
- * grid a coordinate falls in. A block is (z band << 4) | x band. */
-function blockAxis(v) {
-    return ((Math.round(v) + 1024) >> 7) & 15;
+/*
+ * Which courses' records name each model: everything courseObjectDraws draws,
+ * plus the frames it does not — a window's 63 other reflections, which the
+ * board picks by where the car stands, and the second list of a check point,
+ * the one on the lap that finishes the race. A model named by one course only
+ * is drawn on that course's bank.
+ *
+ * @returns {Map<number, Set<number>>} model -> courses
+ */
+export function courseNamedModels(rom) {
+    if (rom.courseNamed) return rom.courseNamed;
+    const O = rom.game.objects;
+    const out = new Map();
+    const add = (m, course) => {
+        if (m < 0) return;
+        if (!out.has(m)) out.set(m, new Set());
+        out.get(m).add(course);
+    };
+    const courses = O ? rom.game.texture.sets : 0;
+    for (let course = 0; course < courses; course++) {
+        for (const d of courseObjectDraws(rom, course, null, 'race', 'all')) {
+            add(d.model, course);
+            for (const m of d.anim?.frames ?? []) add(m, course);
+        }
+        for (const r of readObjectRecords(rom, course)) {
+            const kind = O.kinds[r.init];
+            if (kind === 'window') for (const m of modelList(rom, r.arg, 64)) add(m, course);
+            if (kind === 'checkpoint') {
+                for (const m of modelList(rom, u32(rom, O.checkpoints + r.id * 24 + 20), 64)) add(m, course);
+            }
+        }
+    }
+    rom.courseNamed = out;
+    return out;
+}
+
+/*
+ * The grid block a point stands in — get_m_block (Rev A 0x172a0): cvtri on x
+ * and z, add 1024, shift down 7, keep 4 bits. cvtri rounds by the AC
+ * register's mode, and the boot code's modac (0xa6c) clears it to round to
+ * nearest, ties to even — not truncation.
+ */
+const cvtri = (v) => {
+    const r = Math.round(v);
+    return r - v === 0.5 && (r & 1) ? r - 1 : r;
+};
+const blockOf = (v) => ((cvtri(v) + 1024) >> 7) & 15;
+export function gridBlock(x, z) {
+    return (blockOf(z) << 4) | blockOf(x);
 }
 
 /*
@@ -581,8 +738,9 @@ function blockAxis(v) {
  *
  * It never draws a course whole. set_area_block takes the camera's block and
  * marks the 5x5 round it, and where that runs off the grid it masks the
- * columns and rows that would — the grid does not wrap; extra_clip then takes
- * off more by where on the road the car is. So a block is drawn only if a car
+ * columns and rows that would — the grid does not wrap; it then takes off more
+ * by where on the road the car is and which way the camera faces (courseArea).
+ * So a block is drawn only if a car
  * can stand within two blocks of it, and the road is in the ROM: the row
  * change_course_bank reads per course (the sky's `table`) names, at +0x10, the
  * car lines — eight lanes, each a pointer and a count of 28-byte points with x
@@ -599,7 +757,7 @@ function blockAxis(v) {
 export function courseReach(rom, course) {
     const lanes = carLanes(rom, course);
     if (!lanes) return null;
-    const on = new Set(lanes.map(([x, , z]) => boardBlock(x, z)));
+    const on = new Set(lanes.map(([x, , z]) => gridBlock(x, z)));
     const reach = new Set();
     for (const b of on) {
         for (let dz = -AREA_REACH; dz <= AREA_REACH; dz++) {
@@ -614,8 +772,187 @@ export function courseReach(rom, course) {
 const CAR_LANES = 8;
 const AREA_REACH = 2;
 
-/* Every point on a course's eight car lanes as [x, y, z] — the height is at +4,
- * between the two the grid reads — or null where the row names no lanes. */
+/*
+ * The blocks set_area_block (Rev A 0x172E8) marks in view, at 0x501520 — the
+ * set every course block and every object task tests — for a camera at x, z
+ * facing `heading`, the board angle 0x5014A8 holds.
+ *
+ * It starts from the 5x5 round the block the point stands in (get_m_block),
+ * a bit a cell, (dz + 2) * 5 + (dx + 2), and takes off three things:
+ *
+ * - the cells off the grid's edge, which does not wrap;
+ * - extra_clip's (0x17688): by where on the road the player's car is, its
+ *   point along the car lines (car +0x12C, see courseRoad), a table per
+ *   course names ranges of points and for each a row of bits per grid row,
+ *   the cells to leave out — five rows, shifted to the column. Only Dinosaur
+ *   Canyon has any ranges (points 190-351 and 376-432); the other courses'
+ *   entry is the sentinel alone;
+ * - the heading cut (0x1770C, unnamed): of four 160-byte records in the data
+ *   ROM, one per quarter turn of the heading, two halves of six corner
+ *   points, each an offset from the block's corner and a mask of the cells
+ *   that corner opens. A corner is ahead when it is in the quarter that opens
+ *   45 degrees either side of the heading — both of its coordinates, turned
+ *   by -heading - 0x2000, not negative (0x17918). Each half opens the
+ *   first of its first two corners that is ahead; failing those, both of the
+ *   next two that are; failing any, the first of the last two. The centre is
+ *   always open.
+ *
+ * Checked against 0x501520 in MAME over 5,700 attract-mode frames on three
+ * courses: the same set on all but 23 — single cells whose corner stands
+ * within a unit and a half of the quarter's edge, where the TGP's sine and
+ * the explorer's differ, and the frames of a camera cut, where the board
+ * read the heading the frame before.
+ *
+ * The same walk marks a second, smaller set, at 0x501540, which some object
+ * routines test instead: it goes through the cells in an order of the ROM's
+ * (0x17594), the centre first and then outwards, and of the first ten in that
+ * order marks the ones the full set has. That is the 3x3 round the camera and
+ * the cell two on in z, or, on Dinosaur Canyon (sel_course 2) with the
+ * camera in block 72 or 88, the walk takes the order after it, which swaps
+ * that cell for the one two on in z and one on in x.
+ *
+ * `rom.game.area` is where the build keeps the three tables: `heading`, the
+ * four record pointers, `clip`, extra_clip's pointer per course, and `order`,
+ * the walk's order, the other 25 bytes on. Without them this is the 5x5 with
+ * the edge alone.
+ *
+ * `courseArea(rom, course)` gives `area({ x, y, z, heading })`, the view round
+ * that camera: `area` and `near`, Sets of block numbers, and `road`, the
+ * car's point along the road (courseRoad), null where the course has none.
+ * Asked again for the same camera it answers the same view.
+ */
+export function courseArea(rom, course) {
+    const A = rom.game.area;
+    const road = A ? courseRoad(rom, course) : null;
+    let key = null, last = null;
+    return (cam) => {
+        const k = `${cam.x},${cam.y},${cam.z},${cam.heading}`;
+        if (k === key) return last;
+        const block = gridBlock(cam.x, cam.z);
+        const at = road ? road(cam) : null;
+        let open = AREA_ALL;
+        if (A) {
+            open = headingCut(rom, A.heading, cam.x, cam.z, cam.heading);
+            if (road) open &= ~roadCut(rom, A.clip, course, block, at);
+        }
+        const cell = (i) => {
+            const dx = (i % 5) - AREA_REACH, dz = Math.floor(i / 5) - AREA_REACH;
+            const x = (block & 15) + dx, z = (block >> 4) + dz;
+            return (open >> i) & 1 && x >= 0 && x < 16 && z >= 0 && z < 16 ? (z << 4) | x : -1;
+        };
+        const area = new Set(), near = new Set();
+        for (let i = 0; i < 25; i++) if (cell(i) >= 0) area.add(cell(i));
+        if (A?.order != null) {
+            const order = A.order + (course === 2 && AREA_SWAP.includes(block) ? 25 : 0);
+            for (let n = 0; n < AREA_NEAR; n++) {
+                const b = cell(u8(rom, order + n));
+                if (b >= 0) near.add(b);
+            }
+        }
+        key = k;
+        last = { area, near: A?.order != null ? near : area, road: at };
+        return last;
+    };
+}
+const AREA_ALL = (1 << 25) - 1;
+/* The first ten of the walk are the near set; and the blocks it walks the
+ * other order from. */
+const AREA_NEAR = 10;
+const AREA_SWAP = [72, 88];
+
+/* The heading cut, 0x1770C: the cells open ahead of `heading`. */
+function headingCut(rom, table, x, z, heading) {
+    const rec = u32(rom, table + (((heading + 0x2000) >> 14) & 3) * 4);
+    const cx = cvtri(x) & ~127, cz = cvtri(z) & ~127;
+    const t = ((-heading - 0x2000) & 0xffff) * (2 * Math.PI / 65536);
+    const c = Math.cos(t), s = Math.sin(t);
+    /* The sign bit, so -0 is behind as on the board. */
+    const behind = (v) => v < 0 || Object.is(v, -0);
+    const ahead = (off) => {
+        const dx = cx + f32(rom, rec + off) - x, dz = cz + f32(rom, rec + off + 4) - z;
+        return !behind(c * dx - s * dz) && !behind(s * dx + c * dz);
+    };
+    const opens = (off) => u32(rom, rec + off + 8);
+    let open = 0;
+    for (const b of [0, 0x50]) {
+        if (ahead(b)) { open |= opens(b); continue; }
+        if (ahead(b + 0x0c)) { open |= opens(b + 0x0c); continue; }
+        if (ahead(b + 0x18)) open |= opens(b + 0x18);
+        if (ahead(b + 0x24)) open |= opens(b + 0x24);
+        if (open) continue;
+        if (ahead(b + 0x30)) open |= opens(b + 0x30);
+        else if (ahead(b + 0x3c)) open |= opens(b + 0x3c);
+    }
+    return open | (1 << 12);
+}
+
+/* extra_clip, 0x17688: the cells left out at point `road` of the car lines.
+ * A range is 36 bytes, the first and last point and sixteen rows of bits. */
+function roadCut(rom, table, course, block, road) {
+    let rec = u32(rom, table + course * 4);
+    for (let i = 0; i < 64 && road > u16(rom, rec + 2); i++) rec += 36;
+    if (road < u16(rom, rec)) return 0;
+    const col = block & 15, row = block >> 4;
+    let cut = 0;
+    for (let k = 0; k < 5; k++) {
+        const bits = u16(rom, rec + 4 + ((row - AREA_REACH + k) & 15) * 2);
+        cut |= (((bits << 2) >> col) & 31) << (5 * k);
+    }
+    return cut;
+}
+
+/*
+ * Where along the road a camera is, as car +0x12C has it for the player's car
+ * (0x10F30): the point of the car lines that the road polygon under the car
+ * names. get_y_position (0x11C28) answers the polygon under a point as well as
+ * the height, and the car keeps it at +0x30 only when the byte the row's +0x0C
+ * names per polygon has 1 in its low four bits — a polygon of the road, so off
+ * it the car keeps the last; the row's +4 names a table, past an eight-byte
+ * head, of four bytes a polygon whose first half is that polygon's point.
+ * Measured in MAME, +0x12C is that point on every frame of a race, and
+ * courseGround at the car's logged place finds the car's polygon on 92% of
+ * them and the one before it on the rest. The computer's cars keep +0x30 from
+ * the lane point they are on instead, whose 28 bytes carry the polygon at
+ * +0x1A.
+ *
+ * Without the coprocessor ROM there is no ground to ask, and the nearest lane
+ * point stands in: the car's point on four frames in five, and otherwise
+ * mostly the one before it.
+ */
+function courseRoad(rom, course) {
+    const ground = courseGround(rom, course);
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
+    if (ground) {
+        const row = u32(rom, rom.game.sky.table + course * 4);
+        const points = u32(rom, row + 4), kinds = u32(rom, row + 12);
+        if (inData(points, 8) && inData(kinds, 4) && inData(u32(rom, kinds), 1)) {
+            const kind = u32(rom, kinds);
+            let poly = -1;
+            return (cam) => {
+                const p = ground(cam.x, cam.z, cam.y).poly;
+                if (p != null && (u8(rom, kind + p) & 15) === 1) poly = p;
+                const at = points + 8 + poly * 4;
+                return poly < 0 || !inData(at, 2) ? 0 : u16(rom, at);
+            };
+        }
+    }
+    const lanes = carLanes(rom, course);
+    return lanes ? (cam) => nearestPoint(lanes, cam) : null;
+}
+
+/* Which point along its lane the lane point nearest the camera is. */
+function nearestPoint(lanes, cam) {
+    let best = Infinity, at = 0;
+    for (const [x, y, z, i] of lanes) {
+        const d = (x - cam.x) ** 2 + (y - cam.y) ** 2 + (z - cam.z) ** 2;
+        if (d < best) { best = d; at = i; }
+    }
+    return at;
+}
+
+/* Every point on a course's eight car lanes as [x, y, z, i] — the height is at
+ * +4, between the two the grid reads, and `i` is where along its lane the point
+ * is — or null where the row names no lanes. */
 export function carLanes(rom, course) {
     const table = rom.game.sky?.table;
     if (table == null) return null;
@@ -632,88 +969,141 @@ export function carLanes(rom, course) {
             const q = p + i * 28;
             const x = f32(rom, q), y = f32(rom, q + 4), z = f32(rom, q + 8);
             if (!(Math.abs(x) < 1024 && Math.abs(z) < 1024)) return null;
-            out.push([x, y, z]);
+            out.push([x, y, z, i]);
         }
     }
     return out;
 }
-/* get_m_block as the board computes it, cvtri truncating toward zero. */
-const boardBlock = (x, z) => ((((Math.trunc(z) + 1024) >> 7) & 15) << 4) | (((Math.trunc(x) + 1024) >> 7) & 15);
 
 /*
- * The road under a point, for the pylons: the course's own geometry standing
- * in for the collision polygons the board asks the TGP about.
+ * The road under a point: get_y_position (Rev A 0x11C28) and the TGP function
+ * it asks, 0x36, over the collision polygons in the coprocessor's data ROM.
  *
- * Only the block the point is in and the eight round it are looked at, which
- * is a few thousand triangles rather than the course's fifty thousand, and
- * each is decoded once. More than one face that faces up can be under a point:
- * a pylon set against a wall has the wall's flat top over the road, and Seaside
- * Street Galaxy's barriers stood on it, 9 up (#13). What is taken is the face
- * nearest the height of the closest car-lane point, since the lanes run on the
- * road — under every pylon of every course the road is within a tenth of that
- * height and the wall top 9 above it. With no lanes, the highest face.
- * Its normal gives the tip — the board turns X and then Z to stand the model
- * on the slope, and the two angles that carry +Y onto the normal in that order
- * are these.
+ * The data. TGP function 0x0D, which set_course_parms sends with the course,
+ * reads two words of that ROM at 0x10 + course and 0x20 + course: where the
+ * course's polygon lists start and where its polygons do. A polygon is 16
+ * words, four corners (x, y, z) and four the routine does not read. The row
+ * change_course_bank reads per course (the sky's `table`) names, at +8, a
+ * pointer to a 128x128 grid of u16 cells, 16 units across, over the same
+ * ground as the 16x16 block grid; a cell is a list offset, and the list is a
+ * count and that many polygon numbers.
+ *
+ * The query. get_y_position takes x, z and a reference height, picks the cell
+ * as get_m_block does (cvtri, add 1024) but four bits finer, and hands the
+ * TGP the cell's list. For each polygon the TGP tests the point against the
+ * four edges in x, z — a cross product per edge, inside where none is
+ * negative — and for each it is inside, takes the height there: the quad is
+ * cut along v0-v2, the half the point is in found by its barycentric weights
+ * in v0 v1 v2, and the height read off that triangle's plane. Of all the
+ * polygons under the point it keeps the one whose |height| is nearest the
+ * reference, a later one winning a tie. Nothing under the point, or a height
+ * of exactly +0, and get_y_position answers -0.1 with no polygon.
+ *
+ * All of it is single-precision in the TGP's own order, so near an edge the
+ * same polygon is in or out as it is on the board: against an emulation of
+ * the TGP running the game's own microcode, on 4000 points over the four
+ * courses, this picks the same polygon every time, and the height is within
+ * a few units in the last place (the TGP divides through a reciprocal table).
+ *
+ * The tilt is the pylon routine's (0x21C88): it fetches the polygon's corners
+ * with TGP function 0x18, crosses v0-v2 with v1-v2 — the first half, whichever
+ * the point is in — and turns X by -atan2(nz, ny) and then Z by
+ * atan2(nx, ny), TGP function 0x0A being atan2 in the board's 16-bit angle.
+ *
+ * `ground(x, z, ref)` gives { y, tilt, poly }, `poly` the polygon's number
+ * where there is one — or null for a set without the
+ * coprocessor ROM, which leaves the callers on the record's own height.
  */
-export function courseGround(blockModel, lanes = null) {
-    const cache = new Map();
-    const tris = (b) => {
-        if (!cache.has(b)) cache.set(b, blockModel(b)?.positions ?? null);
-        return cache.get(b);
+const fr = Math.fround;
+const NO_GROUND = fr(-0.1);       /* 0xBDCCCCCD */
+const GROUND_CELLS = 0x7f;
+export function courseGround(rom, course) {
+    const cv = rom.coproView;
+    const table = rom.game.sky?.table;
+    if (!cv || table == null) return null;
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
+    const row = u32(rom, table + course * 4);
+    if (!inData(row, 12) || !inData(u32(rom, row + 8), 4)) return null;
+    const cells = u32(rom, u32(rom, row + 8));
+    if (!inData(cells, 128 * 128 * 2)) return null;
+    const words = cv.byteLength >> 2;
+    const word = (i) => (i < words ? cv.getUint32(i * 4, true) : 0);
+    const float = (i) => (i < words ? cv.getFloat32(i * 4, true) : 0);
+    const lists = word(0x10 + course), polys = word(0x20 + course);
+    const corners = (p) => {
+        const out = new Array(12);
+        for (let i = 0; i < 12; i++) out[i] = float(polys + p * 16 + i);
+        return out;
     };
-    return (x, z) => {
-        /* The decoder has negated Z, so the point is (x, -z) in its frame. */
-        const px = x, pz = -z;
-        const bx = blockAxis(x), bz = blockAxis(z);
-        let road = null;
-        if (lanes?.length) {
-            let near = Infinity;
-            for (const [lx, ly, lz] of lanes) {
-                const d = (lx - x) ** 2 + (lz - z) ** 2;
-                if (d < near) { near = d; road = ly; }
-            }
-        }
-        const better = (hit, best) => (road == null
-            ? hit.y > best.y
-            : Math.abs(hit.y - road) < Math.abs(best.y - road));
+    return (x, z, ref) => {
+        x = fr(x); z = fr(z); ref = fr(ref);
+        const cell = ((((cvtri(z) + 1024) >> 4) & GROUND_CELLS) << 7) | (((cvtri(x) + 1024) >> 4) & GROUND_CELLS);
+        const list = lists + u16(rom, cells + cell * 2);
         let best = null;
-        for (let dz = -1; dz <= 1; dz++) {
-            for (let dx = -1; dx <= 1; dx++) {
-                const cx = bx + dx, cz = bz + dz;
-                if (cx < 0 || cx > 15 || cz < 0 || cz > 15) continue;
-                const p = tris((cz << 4) | cx);
-                if (!p) continue;
-                for (let i = 0; i + 9 <= p.length; i += 9) {
-                    const hit = underPoint(p, i, px, pz);
-                    if (hit && (!best || better(hit, best))) best = hit;
-                }
-            }
+        for (let k = 0, n = word(list); k < n; k++) {
+            const p = word(list + 1 + k);
+            const v = corners(p);
+            if (!insideQuad(v, x, z)) continue;
+            const y = quadHeight(v, x, z);
+            const m = fr(Math.abs(fr(ref - Math.abs(y))));
+            if (!best || m <= best.m) best = { m, y, p };
         }
-        if (!best) return null;
-        const [nx, ny, nz] = best.n;
-        const ax = Math.atan2(nz, ny), az = -Math.asin(Math.max(-1, Math.min(1, nx)));
-        return { y: best.y, tilt: [['rx', (ax * 180) / Math.PI], ['rz', (az * 180) / Math.PI]] };
+        if (!best || Object.is(best.y, 0)) return { y: NO_GROUND, tilt: [] };
+        return { y: best.y, tilt: quadTilt(corners(best.p)), poly: best.p };
     };
 }
 
-/* Where a triangle is under (x, z) in the decoder's frame, if it is and it
- * faces up: the height there and its unit normal, turned up. */
-function underPoint(p, i, x, z) {
-    const ax = p[i], ay = p[i + 1], az = p[i + 2];
-    const bx = p[i + 3], by = p[i + 4], bz = p[i + 5];
-    const cx = p[i + 6], cy = p[i + 7], cz = p[i + 8];
-    const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-    if (Math.abs(d) < 1e-9) return null;
-    const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d;
-    const v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d;
-    if (u < 0 || v < 0 || u + v > 1) return null;
-    let nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
-    let ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
-    let nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-    const len = Math.hypot(nx, ny, nz);
-    if (!len) return null;
-    if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-    if (ny / len < 0.7) return null;
-    return { y: u * ay + v * by + (1 - u - v) * cy, n: [nx / len, ny / len, nz / len] };
+/* The TGP's edge test: for each edge i -> i+1 of the quad, the cross product
+ * of the edge with the point, in its order of operations. -0 is inside. */
+function insideQuad(v, x, z) {
+    for (let i = 0; i < 4; i++) {
+        const xi = v[i * 3], zi = v[i * 3 + 2];
+        const j = ((i + 1) & 3) * 3, xn = v[j], zn = v[j + 2];
+        let d = fr(fr(z * xi) - fr(x * zi));
+        d = fr(d - fr(z * xn));
+        d = fr(d + fr(x * zn));
+        d = fr(d - fr(zn * xi));
+        d = fr(d + fr(xn * zi));
+        if (d < 0) return false;
+    }
+    return true;
+}
+
+/* The TGP's height routine (0x684): which half of the quad, then the plane. */
+function quadHeight(v, x, z) {
+    const [x0, y0, z0] = v;
+    const x12 = fr(v[3] - v[6]), z12 = fr(v[5] - v[8]);
+    const x02 = fr(x0 - v[6]), z02 = fr(z0 - v[8]);
+    const xp = fr(x - v[6]), zp = fr(z - v[8]);
+    /* The weights of v1 and v0; only their signs are used. */
+    const w1 = z02 !== 0
+        ? fr(fr(fr(z02 * xp) - fr(zp * x02)) * fr(1 / fr(fr(z02 * x12) - fr(z12 * x02))))
+        : fr(zp * fr(1 / z12));
+    const w0 = x02 !== 0
+        ? fr(fr(xp - fr(x12 * w1)) * fr(1 / x02))
+        : fr(fr(fr(zp * x12) - fr(xp * z12)) * fr(1 / fr(z02 * x12)));
+    const neg = (w) => w < 0 || Object.is(w, -0);
+    const b = neg(w1) || neg(w0) ? 6 : 3, c = b + 3;
+    const [x1, y1, z1] = [v[b], v[b + 1], v[b + 2]];
+    const [x2, y2, z2] = [v[c], v[c + 1], v[c + 2]];
+    const nx = fr(fr(fr(y1 - y0) * fr(z2 - z0)) - fr(fr(z1 - z0) * fr(y2 - y0)));
+    const ny = fr(fr(fr(z1 - z0) * fr(x2 - x0)) - fr(fr(x1 - x0) * fr(z2 - z0)));
+    const nz = fr(fr(fr(x1 - x0) * fr(y2 - y0)) - fr(fr(y1 - y0) * fr(x2 - x0)));
+    if (ny === 0) return NO_GROUND;
+    let t = fr(fr(nx * x) + fr(nz * z));
+    t = fr(t - fr(nx * x0));
+    t = fr(t - fr(ny * y0));
+    t = fr(t - fr(nz * z0));
+    return -fr(t * fr(1 / ny));
+}
+
+/* The pylon routine's tip (0x21C88), as the X and then Z turn it draws with. */
+function quadTilt(v) {
+    const e0 = [v[0] - v[6], v[1] - v[7], v[2] - v[8]];
+    const e1 = [v[3] - v[6], v[4] - v[7], v[5] - v[8]];
+    const nx = e0[1] * e1[2] - e0[2] * e1[1];
+    const ny = e0[2] * e1[0] - e0[0] * e1[2];
+    const nz = e0[0] * e1[1] - e0[1] * e1[0];
+    const angle = (a) => Math.round((a * 0x8000) / Math.PI);
+    return [RX(-angle(Math.atan2(nz, ny))), RZ(angle(Math.atan2(nx, ny)))];
 }
