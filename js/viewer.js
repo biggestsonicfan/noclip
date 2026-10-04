@@ -1406,11 +1406,16 @@ export class Viewer {
          * haze -- which every later window paints over at any depth: a cloud
          * sheet beyond the hull is still drawn over it. The other windows
          * stay in, so a room's wall keeps hiding the dish outside it, which
-         * the board only gets away with by never looking from there. */
+         * the board only gets away with by never looking from there.
+         *
+         * The clear is "no surface here" (a view z under -1e8), and its alpha
+         * is 1 because three.js premultiplies the clear colour by its alpha:
+         * at 0 the clear came out all zeros, a surface at the eye that faces
+         * nothing. */
         this.scene.background = null;
         r.autoClear = false;
         r.setRenderTarget(this.keyTarget);
-        r.setClearColor(new THREE.Color(-1e9, -1e9, 0), 0);
+        r.setClearColor(new THREE.Color(-1e9, -1e9, 0), 1);
         r.clear(true, true, true);
         only(solid.filter((o) => o.userData.zWindow !== 1), 1);
 
@@ -1429,6 +1434,14 @@ export class Viewer {
         r.setRenderTarget(this.plateTarget);
         r.setClearColor(new THREE.Color(0, 0, 0), 0);
         r.clear(true, true, true);
+        /* The key texture is bound only for this pass, and the placeholder put
+         * back after it. Left bound, the next frame's pass 1 draws into the
+         * texture its own program samples, which WebGL refuses as a feedback
+         * loop, every draw of it: the key texture held only its clear, and no
+         * face was held to the reach. That let the palms outside Tails' lab,
+         * a window later than the room, come through its wall at the
+         * world-map poster. */
+        const idle = u.uKeyTex.value;
         u.uKeyTex.value = this.keyTarget.texture;
         r.setOpaqueSort((a, b) => a.id - b.id);
         for (const w of order) {
@@ -1436,6 +1449,7 @@ export class Viewer {
             only(windows.get(w), 2);
         }
         r.setOpaqueSort(null);
+        u.uKeyTex.value = idle;
 
         /* 4: the keyed picture over it, and what is not keyed. */
         r.setRenderTarget(target);
