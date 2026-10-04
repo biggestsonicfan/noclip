@@ -249,7 +249,7 @@ export function readModelName(rom, index) {
     const dv = rom.mainDataView;
     const at = n.ptrs + (n.skip + (index % n.count)) * 4;
     if (at + 4 > rom.mainData.length) return null;
-    const off = dv.getUint32(at, true) - 0x02000000;
+    const off = dv.getUint32(at, true) - MAIN_DATA_BASE;
     if (off < 0 || off >= rom.mainData.length) return null;
     let end = off;
     while (end < rom.mainData.length && end - off < 64 && rom.mainData[end] !== 0) end++;
@@ -331,6 +331,10 @@ export function meshOffsetOf(rom, entry) {
  * the window the same way — Fighting Vipers' program ROM has it as the
  * XTRADATABASE segment over the same range. */
 export const XTRA_DATA_BASE = 0x06000000;
+
+/* main_data as the i960 sees it: every pointer into the data ROMs is this
+ * plus the offset into the assembled region. */
+export const MAIN_DATA_BASE = 0x02000000;
 
 export function xtraToMainData(addr) {
     return 0x01000000 + ((addr - XTRA_DATA_BASE) & 0x000fffff);

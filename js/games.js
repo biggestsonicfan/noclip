@@ -115,8 +115,6 @@ const sfight = {
             block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
         },
     },
-    /* Stage records here are read by js/stages.js out of the program ROM, and
-     * carry the draw list too, so there is no separate scene table. */
     /* Where the stage records are and how they are shaped. This game keeps
      * them in the program ROM at a fixed address and the material tables
      * beside them; the field offsets inside a record are the same for both
@@ -339,20 +337,6 @@ const fvipers = {
         },
     },
     /*
-     * The scene records, which carry everything about a scene except its draw
-     * list. change_scene indexes them with `shlo 8, r12, r4` off stage_num, so
-     * the stride is 0x100 like the other game's, and the fields below are the
-     * ones it and stage_disp read out: the brightness and the two rotations
-     * that build the light vector, the pair of texture numbers it hands
-     * send_tex_stage, and the three bytes stage_disp copies to 0x5000E0 as the
-     * per-channel trim. The material table is a second array indexed the same
-     * way — sub_24878 walks 32 slots out of `off_6CE33A4[stage_num*4]`.
-     *
-     * Sixteen records read as real scenes. This is not stage support: what a
-     * stage is made of is a draw list, and that has not been located. It is
-     * enough to light and colour a model the way a scene would.
-     */
-    /*
      * The stage records, which are the other game's record exactly.
      *
      * `stage_data` is a label in this program ROM, at 0x06CE1048 in the second
@@ -372,6 +356,8 @@ const fvipers = {
     stageTable: {
         source: 'xtra', at: 0x06ce1048, stride: 256, count: 16,
         lists: { upper: [0x24, 32], ground: [0x64, 16], cage: [0x84, 24] },
+        /* A second array indexed the same way: sub_24878 walks 32 slots out
+         * of `off_6CE33A4[stage_num*4]`. */
         materials: { source: 'xtra', ptrs: 0x06ce33a4 },
         /* change_scene hands both numbers to send_tex_stage. */
         texPair: 'literal',
@@ -887,14 +873,9 @@ const hotdo = {
                 [0x0000000, 'mpr-19704.11', 0xaa80dbb0, 'mpr-19705.12', 0xf906843b],
                 [0x0800000, 'mpr-19702.9', 0xfc8aa3b7, 'mpr-19703.10', 0x208d993d],
                 [0x1000000, 'mpr-19700.7', 0x0558cfd3, 'mpr-19701.8', 0x224a8929],
-                [0x1800000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1900000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1a00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1b00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1c00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1d00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1e00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
-                [0x1f00000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9],
+                /* The 1MB EPROM pair, once per megabyte to the end. */
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x1800000 + i * 0x100000, 'epr-19698.5', 0xe7a7b6ea, 'epr-19699.6', 0x8160b3d9]),
             ],
         },
         polygons: {
@@ -1340,11 +1321,11 @@ const hotd = {
         },
     },
     sky: { ...hotdo.sky, models: 0xac1f0, heights: 0xac1f4, spins: 0xac1f8 },
-    /* The props' table moved with everything else. It is worth saying that the
-     * reader failed safe when it had not: at 0xAC314 this build reads PN_space
+    /* The props' table moved with everything else, and the handler further
+     * than the tables did — the tables are 0x10 on and the routine is at
+     * 0x3B160 rather than 0x3A220. It is worth saying that the reader failed
+     * safe when the table had not moved: at 0xAC314 this build reads PN_space
      * for every type, so every prop was dropped rather than drawn wrong. */
-    /* The handler moved further than the tables did — the tables are 0x10 on
-     * and the routine is at 0x3B160 rather than 0x3A220. */
     objects: {
         ...hotdo.objects,
         table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160,
@@ -1470,15 +1451,6 @@ const DAYTONA_PATCHES = [
 ];
 
 /*
- * One build.
- *
- * `program` and `data8` are the pair that is this build's own; everything else
- * defaults to the chips above. The table block is what daytona-tables.mjs found
- * in that program ROM, and the fields that do not vary — the mesh-pointer
- * arithmetic, the record layout, the sheet layout — are the board's and are set
- * here once.
- */
-/*
  * colorxlat's four constants, which are two sets rather than one.
  *
  * The routine that computes the table (0xA74 in every build) tests the test
@@ -1559,6 +1531,15 @@ const DAYTONA_SOUND = {
     },
 };
 
+/*
+ * One build.
+ *
+ * `program` and `data8` are the pair that is this build's own; everything else
+ * defaults to the chips above. The table block is what daytona-tables.mjs found
+ * in that program ROM, and the fields that do not vary — the mesh-pointer
+ * arithmetic, the record layout, the sheet layout — are the board's and are set
+ * here once.
+ */
 function daytonaBuild(spec) {
     return {
         id: spec.id,
@@ -1875,10 +1856,9 @@ const daytona93 = daytonaBuild({
     sound: null,
 });
 
-const daytona = daytonaBuild({
-    id: 'daytona',
-    name: 'Daytona USA (Revision A)',
-    program: [0x00000, 'epr-16722a.12', 0x48b94318, 'epr-16723a.13', 0x8af8b32d],
+/* What the Revision A program and every build made from it share: the data
+ * ROM pair the tables sit in, and the tables. A build lists what it changes. */
+const DAYTONA_REV_A = {
     data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
     modelTable: { offset: 0x83fbb4, count: 3190 },
     paletteOffset: 0x84f4ec, paletteCount: 1007,
@@ -1890,108 +1870,62 @@ const daytona = daytonaBuild({
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
     objects: DAYTONA_OBJECTS_A,
+};
+
+const daytona = daytonaBuild({
+    ...DAYTONA_REV_A,
+    id: 'daytona',
+    name: 'Daytona USA (Revision A)',
+    program: [0x00000, 'epr-16722a.12', 0x48b94318, 'epr-16723a.13', 0x8af8b32d],
 });
 
 const daytonase = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonase',
     name: 'Daytona USA Special Edition (Revision A)',
     program: [0x00000, 'epr-17369a.12', 0x3bc6ca62, 'epr-17370a.13', 0x5d1c74e4],
     data8: [0x800000, 'epr-17371.6', 0x7478f0d2, 'epr-17372.7', 0x308a06a9],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
+    bankTable: 0x15b4,
     cabinets: DAYTONA_CABINETS_SE,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x47c8 },
     objects: DAYTONA_OBJECTS_SE,
 });
 
 const daytonas = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonas',
     name: 'Daytona USA (with Saturn advertisements)',
     program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15b4, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    cabinets: DAYTONA_CABINETS,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
-    sky: { table: 0x4770 },
-    objects: DAYTONA_OBJECTS_A,
+    bankTable: 0x15b4,
 });
 
 const daytonat = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonat',
     name: 'Daytona USA (Turbo hack, set 1)',
     program: [0x00000, 'turbo1.12', 0x4b41a341, 'turbo2.13', 0x6ca580fa],
-    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    cabinets: DAYTONA_CABINETS,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
-    sky: { table: 0x4770 },
-    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonata = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonata',
     name: 'Daytona USA (Turbo hack, set 2)',
     program: [0x00000, 'dayturbo.12', 0xaec6857a, 'dayturbo.13', 0xcb657edc],
-    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    cabinets: DAYTONA_CABINETS,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
-    sky: { table: 0x4770 },
-    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonam = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonam',
     name: 'Daytona USA (To The MAXX)',
     program: [0x00000, 'maxx.12', 0x604ef2d9, 'maxx.13', 0x7d319970],
-    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    cabinets: DAYTONA_CABINETS,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
-    sky: { table: 0x4770 },
-    objects: DAYTONA_OBJECTS_A,
 });
 
 const daytonagtx = daytonaBuild({
+    ...DAYTONA_REV_A,
     id: 'daytonagtx',
     name: 'Daytona USA (GTX 2004 Edition)',
     program: [0x00000, 'gtx.12', 0x08283a6f, 'gtx.13', 0xf9b356ae],
-    data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
-    paletteOffset: 0x84f4ec, paletteCount: 1007,
-    bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
-    luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
-    cabinets: DAYTONA_CABINETS,
-    materials: { source: 'mainData', at: 0x805128, count: 32, stride: 4 },
-    light: [-0.45, -0.89, 0.45],
-    courses: { source: 'mainData', at: 0x805298 },
-    sky: { table: 0x4770 },
-    objects: DAYTONA_OBJECTS_A,
 });
 
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
