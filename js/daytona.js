@@ -45,6 +45,8 @@
  * stands, since the TGP functions that choose one are not ported.
  */
 
+import { MAIN_DATA_BASE } from './romset.js';
+
 /* The board's 16-bit angle, and the conversion. */
 const ANGLE_DEG = 360 / 65536;
 
@@ -68,13 +70,12 @@ const S = (x, y = x, z = x) => ['s', [x, y, z]];
 
 /* ---- reading the ROM ------------------------------------------------------- */
 
-const DATA_BASE = 0x02000000;
 /* The program ROM's second half is mapped twice, at 0x20000 and again at
  * 0x00220000, and the program's own pointers use the alias. */
 const PROG_ALIAS = 0x00200000;
 
 function view(rom, addr) {
-    if (addr >= DATA_BASE) return { dv: rom.mainDataView, off: addr - DATA_BASE, len: rom.mainData.length };
+    if (addr >= MAIN_DATA_BASE) return { dv: rom.mainDataView, off: addr - MAIN_DATA_BASE, len: rom.mainData.length };
     const off = addr >= PROG_ALIAS ? addr - PROG_ALIAS : addr;
     return { dv: rom.mainCpuView, off, len: rom.maincpu.length };
 }
@@ -85,7 +86,7 @@ const s16 = (rom, addr) => { const v = view(rom, addr); return v.dv.getInt16(v.o
 /* A model record's address as a model-table index, or -1. */
 function modelOf(rom, ptr) {
     const t = rom.game.modelTable;
-    const i = (ptr - DATA_BASE - t.offset) / t.stride;
+    const i = (ptr - MAIN_DATA_BASE - t.offset) / t.stride;
     return Number.isInteger(i) && i >= 0 && i < t.count ? i : -1;
 }
 /* A run of `n` model-record pointers. */
@@ -479,9 +480,8 @@ function horseRun(r, gallop, { ground }) {
     const s = { last: -1, mode: 'ring', n: 0, prev: [0, 0, 0], pos: null, heading: 0, speed: 0, away: 0 };
     const reset = () => Object.assign(s, { mode: 'ring', n: 0, prev: horseOffset(r.angle), pos: null, away: 0 });
     const near = (cam, x, z) => cam && Math.hypot(x - cam.x, z - cam.z) < HORSE_SHY;
-    const block = (v) => ((Math.round(v) + 1024) >> 7) & 15;
     const inView = (cam, x, z) => !cam
-        || (Math.abs(block(x) - block(cam.x)) <= 2 && Math.abs(block(z) - block(cam.z)) <= 2);
+        || (Math.abs(blockAxis(x) - blockAxis(cam.x)) <= 2 && Math.abs(blockAxis(z) - blockAxis(cam.z)) <= 2);
     const take = (cam) => {
         s.heading = cam.heading;
         s.speed = HORSE_PACE * Math.min(Math.max(cam.speed, HORSE_MIN_SPEED), HORSE_MAX_SPEED);
@@ -570,10 +570,10 @@ export function courseObjectDraws(rom, course, ground, mode = 'race') {
     return out;
 }
 
-/** The grid block a point stands in — get_m_block. */
-export function gridBlock(x, z) {
-    const c = (v) => ((Math.round(v) + 1024) >> 7) & 15;
-    return (c(z) << 4) | c(x);
+/* One axis of get_m_block: which of the sixteen 128-unit bands across the
+ * grid a coordinate falls in. A block is (z band << 4) | x band. */
+function blockAxis(v) {
+    return ((Math.round(v) + 1024) >> 7) & 15;
 }
 
 /*
@@ -619,7 +619,7 @@ const AREA_REACH = 2;
 export function carLanes(rom, course) {
     const table = rom.game.sky?.table;
     if (table == null) return null;
-    const inData = (a, len) => a >= DATA_BASE && a - DATA_BASE + len <= rom.mainData.length;
+    const inData = (a, len) => a >= MAIN_DATA_BASE && a - MAIN_DATA_BASE + len <= rom.mainData.length;
     const row = u32(rom, table + course * 4);
     if (!inData(row, 20)) return null;
     const lines = u32(rom, row + 16);
@@ -665,7 +665,7 @@ export function courseGround(blockModel, lanes = null) {
     return (x, z) => {
         /* The decoder has negated Z, so the point is (x, -z) in its frame. */
         const px = x, pz = -z;
-        const bx = ((Math.round(x) + 1024) >> 7) & 15, bz = ((Math.round(z) + 1024) >> 7) & 15;
+        const bx = blockAxis(x), bz = blockAxis(z);
         let road = null;
         if (lanes?.length) {
             let near = Infinity;

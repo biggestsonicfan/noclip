@@ -276,7 +276,6 @@ const FRAG_SHADER = /* glsl */`
     uniform float uBright;
     uniform int uShadeMode;     // 0 = lit palette, 1 = flat palette, 2 = normals, 3 = tile id
     uniform sampler2D uAtlas;
-    uniform vec2 uAtlasSize;
     uniform float uUseAtlas;
     uniform sampler2D uLuma;
     uniform sampler2D uCxlat;
@@ -552,8 +551,7 @@ const FRAG_SHADER = /* glsl */`
         if (planeDen != 0.0) {
             float planeZ = ray.z * vPlane.w / planeDen;
             if (planeZ < 0.0) {
-                layerDepth = 0.5 * (projectionMatrix[2][2] * planeZ + projectionMatrix[3][2])
-                    / (projectionMatrix[2][3] * planeZ + projectionMatrix[3][3]) + 0.5;
+                layerDepth = viewDepth(planeZ);
                 layerSlope = 0.0;
                 layerZ = planeZ;
             }
@@ -753,7 +751,6 @@ export function createModelMaterial() {
             uBright: { value: 1 },
             uShadeMode: { value: 0 },
             uAtlas: { value: placeholderTexture() },
-            uAtlasSize: { value: new THREE.Vector2(2048, 2048) },
             uUseAtlas: { value: 0 },
             uLuma: { value: placeholderTexture() },
             uCxlat: { value: placeholderTexture() },
@@ -1051,9 +1048,8 @@ export class Viewer {
          * both — the board's front/back test included, which is a uniform for
          * exactly that reason.
          */
-        this.backdropMaterial = createModelMaterial();
-        this.backdropMaterial.uniforms = this.material.uniforms;
-        this.backdropMaterial.depthTest = false;
+        this.variantMaterials = [];
+        this.backdropMaterial = this.variantMaterial({ depthTest: false });
         /*
          * And the same material again for camera_init's floor plate, which
          * concedes every tie it is in.
@@ -1102,12 +1098,10 @@ export class Viewer {
          * the same reason the water does; the depth unit stays on top of it to
          * part the floor from the sea, which concedes the same amount.
          */
-        this.floorMaterial = createModelMaterial();
-        this.floorMaterial.uniforms = this.material.uniforms;
-        this.floorMaterial.polygonOffset = true;
-        this.floorMaterial.polygonOffsetFactor = 1;
-        this.floorMaterial.polygonOffsetUnits = 1;
-        this.floorMaterial.defines = { ZSORT_CONCEDE: '1' };
+        this.floorMaterial = this.variantMaterial({
+            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+            defines: { ZSORT_CONCEDE: '1' },
+        });
         /*
          * And the same material again for the open water, which takes the
          * board's sort in full instead of being left out of it.
@@ -1139,9 +1133,7 @@ export class Viewer {
          * stages at six cameras each the change is 5,234 pixels, all of it
          * water meeting something standing in it.
          */
-        this.waterMaterial = createModelMaterial();
-        this.waterMaterial.uniforms = this.material.uniforms;
-        this.waterMaterial.defines = { ZSORT_CONCEDE: '1' };
+        this.waterMaterial = this.variantMaterial({ defines: { ZSORT_CONCEDE: '1' } });
         /*
          * And the other side of that bargain, for a floor that cannot make it.
          *
@@ -1165,9 +1157,7 @@ export class Viewer {
          * buffer resolves on its own, and where the board's order is what
          * counts -- the solid over the ice -- the true depth gives the same.
          */
-        this.standingMaterial = createModelMaterial();
-        this.standingMaterial.uniforms = this.material.uniforms;
-        this.standingMaterial.defines = { ZSORT_KEEP: '1' };
+        this.standingMaterial = this.variantMaterial({ defines: { ZSORT_KEEP: '1' } });
         /*
          * And the water's concession again, taken a pixel at a time, for a
          * plate the camera can stand over.
@@ -1182,9 +1172,9 @@ export class Viewer {
          * under it. Stepping back from the view position the fragment already
          * has is the same concession with no vertex to lose. See sphynxDisp.
          */
-        this.concedeMaterial = createModelMaterial();
-        this.concedeMaterial.uniforms = this.material.uniforms;
-        this.concedeMaterial.defines = { ZSORT_CONCEDE: '1', ZSORT_CONCEDE_PIXEL: '1' };
+        this.concedeMaterial = this.variantMaterial({
+            defines: { ZSORT_CONCEDE: '1', ZSORT_CONCEDE_PIXEL: '1' },
+        });
         /*
          * Depth bias for surfaces that share a plane exactly.
          *
@@ -1201,15 +1191,8 @@ export class Viewer {
          * kept in front, higher indices submitted earlier and pushed behind.
          * A unit is a depth-buffer step, so this settles ties and nothing more.
          */
-        this.planeMaterials = [0, 1, 2, 3].map((n) => {
-            if (n === 0) return this.material;
-            const m = createModelMaterial();
-            m.uniforms = this.material.uniforms;
-            m.polygonOffset = true;
-            m.polygonOffsetFactor = n;
-            m.polygonOffsetUnits = n;
-            return m;
-        });
+        this.planeMaterials = [0, 1, 2, 3].map((n) => (n === 0 ? this.material
+            : this.variantMaterial({ polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n })));
         /* One more copy per texture set, for a stage that spans several — see
          * setMaterial. */
         this.setMaterials = new Map();
@@ -1244,8 +1227,7 @@ export class Viewer {
             }
         });
         document.addEventListener('pointerlockchange', () => {
-            this._pointerLocked = document.pointerLockElement === canvas;
-            if (this.onPointerLockChange) this.onPointerLockChange(this._pointerLocked);
+            if (this.onPointerLockChange) this.onPointerLockChange(document.pointerLockElement === canvas);
         });
 
         this.mode = 'orbit';
@@ -1280,6 +1262,18 @@ export class Viewer {
      *  translucent smear (not the board; see uSmoothHoles). */
     smoothHoles(on) {
         this.material.uniforms.uSmoothHoles.value = on ? 1 : 0;
+    }
+
+    /*
+     * The model material again with some settings of its own, on the same
+     * uniforms object rather than a clone of it, so every per-stage uniform
+     * the panel and the colour pipeline write lands on it too.
+     */
+    variantMaterial(props) {
+        const m = Object.assign(createModelMaterial(), props);
+        m.uniforms = this.material.uniforms;
+        this.variantMaterials.push(m);
+        return m;
     }
 
     /*
@@ -1335,9 +1329,7 @@ export class Viewer {
         this.nearMin = nearMin;
         /* Only a game whose draws carry layers pays for writing the depth from
          * the fragment shader, which turns off the early depth test. */
-        for (const m of [this.material, this.backdropMaterial, this.floorMaterial,
-            this.waterMaterial, this.standingMaterial, this.concedeMaterial, ...this.planeMaterials,
-            ...this.setMaterials.values()]) {
+        for (const m of [this.material, ...this.variantMaterials, ...this.setMaterials.values()]) {
             const has = 'FACE_LAYERS' in (m.defines ?? {});
             if (has === layers) continue;
             m.defines = { ...(m.defines ?? {}) };

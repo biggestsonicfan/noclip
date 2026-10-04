@@ -51,7 +51,7 @@
  */
 
 import { coproSin, coproCos } from './pose.js';
-import { xtraResolve } from './romset.js';
+import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
 
 /* A C string out of the program ROM. */
 function cString(rom, at) {
@@ -143,7 +143,7 @@ function readHitMotions(rom, body) {
     if (!at) return [];
     const md = rom.mainDataView;
     const p = md.getUint32(at + body * 4, true);
-    const off = p - 0x02000000;
+    const off = p - MAIN_DATA_BASE;
     if (!p || off < 0 || off + 80 > rom.mainData.length) return [];
     const out = new Set();
     for (let k = 0; k < 20; k++) {

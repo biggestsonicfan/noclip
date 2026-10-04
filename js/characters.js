@@ -67,6 +67,10 @@ function skeletonPtr(rom, charIndex, type) {
  * zero there. */
 const FACE_TABLE_ADDR = 0x000c533c;
 const MODEL_COUNT = 5103;
+/* A model id out of a face record, or 0. Super Sonic's entries carry 0x8000
+ * rather than a model index, so anything outside the model table is "no
+ * object" rather than a lookup. */
+const faceModel = (id) => (id > 0 && id < MODEL_COUNT ? id : 0);
 
 /*
  * The record does not stop at the model ids: `+0x10` and `+0x14` are texture-
@@ -96,12 +100,9 @@ function readFace(rom, charIndex) {
     const dv = rom.mainCpuView;
     const rec = dv.getUint32(FACE_TABLE_ADDR + charIndex * 4, true);
     if (!rec || rec + 0x0c > rom.maincpu.length) return { eyes: [], heads: [], eyePoints: [] };
-    /* Super Sonic's entries carry 0x8000 rather than a model index, so anything
-     * outside the model table is "no object" rather than a lookup. */
-    const ok = (id) => (id > 0 && id < MODEL_COUNT ? id : 0);
     const pair = (off) => {
         const w = dv.getUint32(rec + off, true);
-        return [ok(w & 0xffff), ok((w >>> 16) & 0xffff)];
+        return [faceModel(w & 0xffff), faceModel(w >>> 16)];
     };
 
     /* Kept index for index with `eyes`, so a fighter whose record names one eye
@@ -163,13 +164,12 @@ export function faceVariantOwners(rom) {
             if (!table || table + FACE_TABLE_ENTRIES * 4 > rom.maincpu.length) continue;
             const rec = dv.getUint32(table + c * 4, true);
             if (!rec || rec + 0x0c > rom.maincpu.length) continue;
-            /* Same two pairs readFace takes, and the same guard: Super Sonic's
-             * head field carries 0x8000 rather than a model index. */
+            /* Same two pairs readFace takes, through the same guard. */
             for (const off of [0x04, 0x08]) {
                 const w = dv.getUint32(rec + off, true);
-                const a = w & 0xffff, b = (w >>> 16) & 0xffff;
-                if (a > 0 && a < MODEL_COUNT && !out.has(a)) out.set(a, c);
-                if (b > 0 && b < MODEL_COUNT && !out.has(b)) out.set(b, c);
+                for (const id of [faceModel(w & 0xffff), faceModel(w >>> 16)]) {
+                    if (id && !out.has(id)) out.set(id, c);
+                }
             }
         }
     }

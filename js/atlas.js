@@ -100,16 +100,17 @@ export function classifyDump(files) {
  * @returns {[number, number, number]} components in 0..1
  */
 export function palette555ToRGB(cxlat, bgr555) {
-    const c5 = [bgr555 & 0x1f, (bgr555 >> 5) & 0x1f, (bgr555 >> 10) & 0x1f];
-    if (!cxlat || cxlat.length < 0xc000) return c5.map((v) => v / 31);
-
-    /* Channel bases are 0x0000 / 0x4000 / 0x8000 in bytes; the index within a
-     * channel is (c5 << 8) + luma, in 16-bit units. */
-    return c5.map((v, ch) => {
-        const raw = cxlat[ch * 0x4000 + (((v << 8) + 0x40) * 2)];
-        return Math.max(raw - 64, 0) * (255 / 191) / 255;
-    });
+    const c5 = split555(bgr555);
+    if (!hasCxlat(cxlat)) return c5.map((v) => v / 31);
+    return c5.map((v, ch) => Math.max(cxlatAt(cxlat, ch, v) - 64, 0) * (255 / 191) / 255);
 }
+
+const split555 = (bgr555) => [bgr555 & 0x1f, (bgr555 >> 5) & 0x1f, (bgr555 >> 10) & 0x1f];
+const hasCxlat = (cxlat) => cxlat && cxlat.length >= 0xc000;
+/* Channel bases are 0x0000 / 0x4000 / 0x8000 in bytes; the index within a
+ * channel is (c5 << 8) + luma, in 16-bit units, and a palette colour reads
+ * luma 0x40. */
+const cxlatAt = (cxlat, ch, c5) => cxlat[ch * 0x4000 + (((c5 << 8) + 0x40) * 2)];
 
 /* The same, as the bytes MAME's pen gets: its gamma table is u8, so the value
  * is floored rather than rounded. For an image built pixel by pixel out of
@@ -119,10 +120,7 @@ export function palette555ToRGB(cxlat, bgr555) {
  * @returns {[number, number, number]} components in 0..255
  */
 export function palette555ToBytes(cxlat, bgr555) {
-    const c5 = [bgr555 & 0x1f, (bgr555 >> 5) & 0x1f, (bgr555 >> 10) & 0x1f];
-    if (!cxlat || cxlat.length < 0xc000) return c5.map((v) => Math.round(v * 255 / 31));
-    return c5.map((v, ch) => {
-        const raw = cxlat[ch * 0x4000 + (((v << 8) + 0x40) * 2)];
-        return Math.floor(Math.max(raw - 64, 0) * 255 / 191);
-    });
+    const c5 = split555(bgr555);
+    if (!hasCxlat(cxlat)) return c5.map((v) => Math.round(v * 255 / 31));
+    return c5.map((v, ch) => Math.floor(Math.max(cxlatAt(cxlat, ch, v) - 64, 0) * 255 / 191));
 }
