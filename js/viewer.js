@@ -858,7 +858,9 @@ export function buildEdgeGeometry(decoded) {
 
 /**
  * Fly camera: WASD to move, mouse to look under pointer lock, Q/E for down/up,
- * shift to sprint, ctrl to crawl. On a touchscreen the same rig is driven by
+ * shift to sprint, ctrl to crawl, the wheel (or - and =) to set the pace.
+ * Movement ramps: a tap creeps, so a close look does not overshoot, and a
+ * held key gathers speed for crossing the arena. On a touchscreen the same rig is driven by
  * `pad` — an analog stick and a lift that js/mobile.js wires up — and a
  * one-finger drag on the view turns the camera. Speed is exposed so the stage
  * view can scale it to the arena.
@@ -869,6 +871,14 @@ class FlyControls {
         this.dom = domElement;
         this.enabled = false;
         this.speed = 40;
+        /* The pace the wheel sets, a multiple of `speed`. `speed` is the
+         * arena's and is reset whenever the view is framed; this is the
+         * user's, and stays. */
+        this.speedScale = 1;
+        /* Hold-to-accelerate; `onSpeedChange` hears of wheel turns. */
+        this.ramp = true;
+        this.onSpeedChange = null;
+        this._held = 0;
         this.yaw = 0;
         this.pitch = 0;
         this.keys = new Set();
@@ -888,11 +898,19 @@ class FlyControls {
         this._onKeyDown = (e) => {
             if (!this.enabled) return;
             this.keys.add(e.code);
+            if (e.ctrlKey || e.metaKey || e.target.matches?.('input, select, textarea')) return;
+            if (e.code === 'Equal' || e.code === 'NumpadAdd') this.stepSpeed(1);
+            if (e.code === 'Minus' || e.code === 'NumpadSubtract') this.stepSpeed(-1);
             if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space'].includes(e.code)) {
                 e.preventDefault();
             }
         };
         this._onKeyUp = (e) => this.keys.delete(e.code);
+        this._onWheel = (e) => {
+            if (!this.enabled || e.deltaY === 0) return;
+            e.preventDefault();
+            this.stepSpeed(e.deltaY < 0 ? 1 : -1);
+        };
         this._onBlur = () => this.keys.clear();
 
         /* The look drag. A mouse is the pointer-lock path above; a finger or
@@ -920,6 +938,7 @@ class FlyControls {
         document.addEventListener('keydown', this._onKeyDown);
         document.addEventListener('keyup', this._onKeyUp);
         window.addEventListener('blur', this._onBlur);
+        domElement.addEventListener('wheel', this._onWheel, { passive: false });
         domElement.addEventListener('pointerdown', this._onPointerDown);
         domElement.addEventListener('pointermove', this._onPointerMove);
         domElement.addEventListener('pointerup', this._onPointerUp);
@@ -956,6 +975,23 @@ class FlyControls {
 
     lock() { this.dom.requestPointerLock(); }
 
+    /** Step the pace up or down a notch: four notches double it. */
+    stepSpeed(dir) {
+        const s = this.speedScale * Math.pow(2, dir / 4);
+        /* Snapped so that four notches back land on exactly where they began. */
+        this.speedScale = Math.min(32, Math.max(1 / 64, Math.pow(2, Math.round(Math.log2(s) * 4) / 4)));
+        this.onSpeedChange?.(this.speedScale);
+    }
+
+    /**
+     * What holding a direction for so long multiplies the pace by: half at
+     * the press, so a tap only nudges the camera; the full pace after a
+     * second; then doubling each second to four times it.
+     */
+    rampFactor(held) {
+        return this.ramp ? Math.min(4, 0.5 * Math.pow(2, held)) : 1;
+    }
+
     update(dt) {
         if (!this.enabled) return;
         const k = this.keys, p = this.pad;
@@ -972,10 +1008,12 @@ class FlyControls {
         u += p.up;
         if (f === 0 && r === 0 && u === 0) {
             this._velocity.multiplyScalar(Math.exp(-dt * 14));
+            this._held = 0;
         } else {
-            let mult = 1;
-            if (k.has('ShiftLeft') || k.has('ShiftRight')) mult = 4;
-            if (k.has('ControlLeft') || k.has('ControlRight')) mult = 0.25;
+            this._held += dt;
+            let mult = this.speedScale * this.rampFactor(this._held);
+            if (k.has('ShiftLeft') || k.has('ShiftRight')) mult *= 4;
+            if (k.has('ControlLeft') || k.has('ControlRight')) mult *= 0.25;
             const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
             const target = new THREE.Vector3()
@@ -998,6 +1036,7 @@ class FlyControls {
         document.removeEventListener('keydown', this._onKeyDown);
         document.removeEventListener('keyup', this._onKeyUp);
         window.removeEventListener('blur', this._onBlur);
+        this.dom.removeEventListener('wheel', this._onWheel);
         this.dom.removeEventListener('pointerdown', this._onPointerDown);
         this.dom.removeEventListener('pointermove', this._onPointerMove);
         this.dom.removeEventListener('pointerup', this._onPointerUp);
