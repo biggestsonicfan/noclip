@@ -142,7 +142,7 @@ export function viewLink(state) {
     p.set('pos', triple(v.camera.position));
     p.set('target', triple(v.orbit.target));
     p.set('look', `${num(v.fly.yaw, 4)},${num(v.fly.pitch, 4)}`);
-    p.set('speed', num(v.fly.speed, 2));
+    p.set('speed', num(v.fly.speed * v.fly.speedScale, 2));
 
     url.hash = p.toString();
     return url.href;

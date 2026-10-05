@@ -3560,7 +3560,9 @@ function updateHud() {
                 + (m.chain.links.length > 1 ? ` (${m.link + 1} of ${m.chain.links.length})` : '')
                 : m.decoded ? m.decoded.name || `motion ${m.decoded.id}` : 'no motion');
     }
-    $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? 'noclip' : 'orbit'} camera`
+    /* The pace shows only once it has been turned away from the arena's. */
+    const pace = v.fly.speedScale === 1 ? '' : ` · speed ×${+v.fly.speedScale.toFixed(3)}`;
+    $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? `noclip camera${pace}` : 'orbit camera'}`
         + (v.mode === 'orbit' ? ` · ${isMobile() ? 'tap' : 'click'} a part to identify it` : '');
 }
 
@@ -3814,6 +3816,7 @@ function wireOptions() {
         $('#tex-luma-val').textContent = (+e.target.value).toFixed(2);
     });
 
+    v.fly.onSpeedChange = () => updateHud();
     v.onPointerLockChange = (locked) => { $('#fly-hint').hidden = locked || v.mode !== 'fly'; };
 
     /* Between the sidebar and the sheet, in place: the ROM stays loaded and
@@ -4187,7 +4190,11 @@ function restoreLinkedView() {
         v.fly.syncFromCamera();
         v.orbit.update();
     }
-    if (link.speed) v.fly.speed = link.speed;
+    /* A link carries the pace it was taken at, the wheel's part included. */
+    if (link.speed) {
+        v.fly.speed = link.speed;
+        v.fly.speedScale = 1;
+    }
     v.frameFar();
     updateHud();
 }
