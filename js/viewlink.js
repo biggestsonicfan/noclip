@@ -66,6 +66,10 @@ const CONTROLS = {
         { key: 'travel', sel: '#char-travel' },
         { key: 'vent', sel: '#exhaust-open' },
     ],
+    cell: [
+        { key: 'q', sel: '#cell-search' },
+        { key: 'fit', sel: '#cell-fit' },
+    ],
 };
 
 const controlsFor = (tab) => [...CONTROLS.all, ...(CONTROLS[tab] ?? [])];
@@ -109,6 +113,10 @@ export function viewLink(state) {
         }
     } else if (state.tab === 'model') {
         p.set('model', state.modelIndex);
+    } else if (state.tab === 'cell') {
+        p.set('cell', state.cell.index);
+        if (state.cell.cg >= 0) p.set('cg', state.cell.cg);
+        if (state.cell.under >= 0) p.set('under', state.cell.under);
     } else if (state.tab === 'anim') {
         const m = state.motion;
         p.set('char', state.charIndex);
@@ -162,9 +170,12 @@ export function readViewLink(hash = location.hash) {
     const int = (s) => (s !== null && /^-?\d+$/.test(s) ? Number(s) : null);
     return {
         game: p.get('game'),
-        tab: ['stage', 'model', 'anim'].includes(p.get('tab')) ? p.get('tab') : null,
+        tab: ['stage', 'model', 'anim', 'cell'].includes(p.get('tab')) ? p.get('tab') : null,
         stage: int(p.get('stage')),
         model: int(p.get('model')),
+        cell: int(p.get('cell')),
+        cg: int(p.get('cg')),
+        under: int(p.get('under')),
         char: int(p.get('char')),
         slot: int(p.get('slot')),
         motion: int(p.get('motion')),
@@ -210,6 +221,7 @@ export function describeViewLink(link) {
         stage: link.stage !== null ? `stage ${link.stage}` : 'the Stages tab',
         model: link.model !== null ? `model ${link.model}` : 'the Models tab',
         anim: 'the Animation tab',
+        cell: link.cell !== null ? `cell ${link.cell}` : 'the Cells tab',
     }[link.tab] ?? 'a view';
     const cam = link.cam === 'fly' ? 'noclip' : 'orbit';
     if (!g) {

@@ -305,6 +305,15 @@ label.check input { accent-color: var(--accent); }
 
 main { position: relative; flex: 1; min-width: 0; }
 #view { display: block; width: 100%; height: 100%; }
+/* A cell at its own pixels, scaled without smoothing, over a checkerboard where
+ * pen 0 leaves it transparent. */
+#cell-view {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; image-rendering: pixelated;
+    background: #10131a repeating-conic-gradient(#181c26 0 25%, #10131a 0 50%) 0 0 / 16px 16px;
+}
+#cell-view.whole { object-fit: none; }
+main:has(#cell-view:not([hidden])) :is(#fly-hint, #touch-fly) { display: none; }
 
 #hud {
     position: absolute; top: 10px; left: 12px;

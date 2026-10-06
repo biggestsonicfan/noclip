@@ -83,6 +83,9 @@ function ptrOk(rom, addr) {
     return o >= 0 && o < rom.mainData.length;
 }
 
+/* For js/cells.js, which reads the same tables. */
+export { at as scrollAt, ptrOk as scrollPtrOk, CHAR_MASK, TILE_BYTES };
+
 /**
  * Decode the sky panorama for one stage.
  *
@@ -176,21 +179,19 @@ const DAYTONA_PATTERNS = 8;
 /* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
 const DAYTONA_CHAR_BYTES = 0x80000;
 
-/*
- * The panorama from a CG list, a palette list and the patterns laid side by
- * side, each 32 tiles across.
+/**
+ * What _ScrollCG_Initialize and _ScrollColor_Initialize leave in the tile
+ * chip's character RAM and palette, starting from both clear.
  *
- * The tile chip does not show its palette entries as they are. palette_w
- * (MAME model2.cpp) puts each through colorxlat at luma 0x40 and the gamma
- * table, the same path a textured face takes at full brightness, so the sky's
- * colours are the scene's colour tables as much as its own. Shown raw,
- * Seaside Street Galaxy's sky is (0,74,165) where the board's is (0,108,181);
- * through the tables every sky pixel the overlay and the 3D leave uncovered in
- * a MAME snapshot of the attract race matches exactly.
+ * @returns {{chars: Uint8Array, pal: Uint16Array, written: number,
+ *            charRuns: Array<[number, number]>, palRuns: Array<[number, number]>}}
+ *   `charRuns` are the characters each source wrote, `palRuns` the palette
+ *   entries, both as [first, count]; `written` is the palette entries in all.
  */
-function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
+export function loadScrollCG(rom, cgList, palList, charBytes) {
     /* ---- the tile pixels ---- */
     const chars = new Uint8Array(charBytes);
+    const charRuns = [];
     {
         let a = cgList, guard = 0;
         while (ptrOk(rom, a) && guard++ < 32) {
@@ -204,6 +205,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
             const n = tiles * TILE_BYTES;
             if (base >= 0 && base + n <= chars.length && Sr.off + 4 + n <= Sr.u8.length) {
                 chars.set(Sr.u8.subarray(Sr.off + 4, Sr.off + 4 + n), base);
+                charRuns.push([base / TILE_BYTES, tiles]);
             }
             a += 8;
         }
@@ -211,6 +213,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
 
     /* ---- the palette ---- */
     const pal = new Uint16Array(0x8000);
+    const palRuns = [];
     let written = 0;
     {
         let a = palList, guard = 0;
@@ -222,6 +225,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
             const words = e.view.getUint32(e.off + 4, true) >> 1;
             const first = (dest - PAL_BASE) >> 1;
             written += words;
+            palRuns.push([first, words * 2]);
             for (let i = 0; i < words * 2; i++) {
                 const d = first + i;
                 if (d >= 0 && d < pal.length) pal[d] = e.view.getUint16(e.off + 8 + i * 2, true);
@@ -229,6 +233,23 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
             a += 8 + words * 4;
         }
     }
+    return { chars, pal, written, charRuns, palRuns };
+}
+
+/*
+ * The panorama from a CG list, a palette list and the patterns laid side by
+ * side, each 32 tiles across.
+ *
+ * The tile chip does not show its palette entries as they are. palette_w
+ * (MAME model2.cpp) puts each through colorxlat at luma 0x40 and the gamma
+ * table, the same path a textured face takes at full brightness, so the sky's
+ * colours are the scene's colour tables as much as its own. Shown raw,
+ * Seaside Street Galaxy's sky is (0,74,165) where the board's is (0,108,181);
+ * through the tables every sky pixel the overlay and the 3D leave uncovered in
+ * a MAME snapshot of the attract race matches exactly.
+ */
+function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
+    const { chars, pal, written } = loadScrollCG(rom, cgList, palList, charBytes);
     if (!written) return null;
 
     /* Each palette entry's colour, worked out the first time a pixel uses it. */

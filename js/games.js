@@ -178,10 +178,15 @@ const sfight = {
         ],
         stageMusic: 0x000dbfdc,
     },
+    /* The 2D cells and the CGs that colour them (js/cells.js): the pointer
+     * arrays _ScrollCG_Initialize (cg_offsets) and dsp_pattern_new
+     * (texture_palette_offsets) index, in the XTRA_DATA window. The character
+     * RAM is 0x1080000-0x10FFFFF, room for every 14-bit character. */
+    cells: { cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000 },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
-    features: { stages: true, characters: true, motions: true },
+    features: { stages: true, characters: true, motions: true, cells: true },
 };
 
 /* ---- Fighting Vipers ----------------------------------------------------- */
