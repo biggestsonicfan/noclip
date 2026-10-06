@@ -97,6 +97,9 @@ export function collectDiagnostics(state) {
     } else if (rom && state?.tab === 'model') {
         d.view.model = state.modelIndex;
         d.view.texSetChoice = state.texSetChoice === null ? 'from the model (auto)' : state.texSetChoice;
+    } else if (rom && state?.tab === 'cell') {
+        d.view.cell = state.cell.index;
+        d.view.cg = state.cell.under >= 0 ? `${state.cell.under} then ${state.cell.cg}` : state.cell.cg;
     } else if (rom && state?.tab === 'anim') {
         d.view.character = state.charIndex;
         d.view.motion = `${state.motion?.id} frame ${state.motion?.frame}`;
@@ -248,6 +251,10 @@ function screenshotName(state) {
     const parts = ['noclip', state?.rom?.game?.id];
     if (state?.tab === 'stage') parts.push(`stage${state.stageIndex}`);
     else if (state?.tab === 'model') parts.push(`model${state.modelIndex}`);
+    else if (state?.tab === 'cell') {
+        const { index, cg, under } = state.cell;
+        parts.push(`cell${index}`, `cg${under >= 0 ? `${under}+` : ''}${cg >= 0 ? cg : 'none'}`);
+    }
     else if (state?.tab === 'anim') parts.push(`char${state.charIndex}`, state.motion?.id);
     const t = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -257,7 +264,9 @@ function screenshotName(state) {
 }
 
 /**
- * Save the view as a PNG, at the canvas's own resolution.
+ * Save the view as a PNG, at the canvas's own resolution. On the Cells tab that
+ * is the cell itself, a pixel to a pixel and transparent where pen 0 is, rather
+ * than the view it is scaled into.
  *
  * The renderer is made without preserveDrawingBuffer, so once a frame has been
  * handed to the compositor the buffer reads back blank. Drawing a frame here and
@@ -268,9 +277,10 @@ function screenshotName(state) {
 export function saveScreenshot(state, button) {
     const viewer = state?.viewer;
     if (!viewer) return;
-    viewer.render();
+    const cell = state.tab === 'cell' ? document.getElementById('cell-view') : null;
+    if (!cell) viewer.render();
     const name = screenshotName(state);
-    viewer.canvas.toBlob((blob) => {
+    (cell ?? viewer.canvas).toBlob((blob) => {
         if (!blob) return;
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);

@@ -13,6 +13,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
+import { cellCount, cgCount, readCell, rankCGs, renderCell } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -78,6 +79,9 @@ const state = {
      * was last told to play — see playStageMusic. */
     music: { on: false, board: null, playing: null },
     modelIndex: 517,
+    /* The Cells tab: which cell, the CG drawn with it and the one loaded
+     * first (-1 for none), and each cell's CGs, ranked once a set is up. */
+    cell: { index: 1, cg: -1, under: -1, ranks: null },
     charIndex: 0,
     character: null,
     /* A game whose enemies are jointed bodies rather than a fighter roster —
@@ -343,6 +347,7 @@ function resetRomState() {
     state.texSetChoice = null;
     state.stageIndex = 0;
     state.charIndex = 0;
+    state.cell = { index: 1, cg: -1, under: -1, ranks: null };
     state.anim.frame = -1;
     state.anim.entries = [];
     state.anim.phases = [];
@@ -3763,6 +3768,106 @@ function updateMotionFrameReadout() {
     if (scrub && document.activeElement !== scrub) scrub.value = String(scrubValue(m));
 }
 
+/* ---- Cells ---------------------------------------------------------------- */
+
+/* Every cell's CGs, best first (js/cells.js rankCGs), worked out the first
+ * time the tab is opened on a set. */
+function cellRanks() {
+    if (!state.cell.ranks) {
+        const n = cellCount(state.rom);
+        state.cell.ranks = Array.from({ length: n }, (_, i) => rankCGs(state.rom, i));
+    }
+    return state.cell.ranks;
+}
+
+function renderCellList() {
+    const list = $('#cell-list');
+    const q = $('#cell-search').value.trim();
+    const n = cellCount(state.rom);
+    let lo = 0, hi = n - 1;
+    const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
+    const single = q.match(/^(\d+)$/);
+    if (range) { lo = +range[1]; hi = +range[2]; }
+    else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
+    lo = Math.max(0, lo); hi = Math.min(n - 1, hi);
+
+    const ranks = cellRanks();
+    list.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    let shown = 0;
+    for (let i = lo; i <= hi; i++) {
+        const c = readCell(state.rom, i);
+        if (!c) continue;
+        const best = ranks[i][0];
+        const info = `${c.cols * 8}&times;${c.rows * 8} · `
+            + (best?.cover === 1 ? `CG ${best.cg}` : best ? `CG ${best.cg}, part` : 'no CG');
+        const row = el('div', 'row-item' + (i === state.cell.index ? ' sel' : ''),
+            `<span class="id">${i}</span><span class="info">${info}</span>`);
+        row.dataset.index = String(i);
+        row.addEventListener('click', () => selectCell(i));
+        frag.appendChild(row);
+        shown++;
+    }
+    list.appendChild(frag);
+    $('#cell-count').textContent = `${shown} shown of ${n} cells`;
+    if (single && +single[1] <= hi) selectCell(+single[1]);
+}
+
+/*
+ * Show a cell. The CG is the one asked for, or else the best for this cell:
+ * one that draws all of it if there is one.
+ */
+function selectCell(idx, { cg = -1 } = {}) {
+    const c = state.cell;
+    c.index = idx;
+    const ranks = cellRanks()[idx] ?? [];
+    c.cg = cg >= 0 ? cg : ranks[0]?.cg ?? -1;
+    for (const row of $('#cell-list').children) row.classList.toggle('sel', +row.dataset.index === idx);
+
+    /* The CGs that draw some of this cell first, then the rest. */
+    const sel = $('#cell-cg');
+    sel.innerHTML = '';
+    const draws = document.createElement('optgroup');
+    draws.label = 'Draw this cell';
+    for (const r of ranks) {
+        draws.appendChild(new Option(r.cover === 1 ? `CG ${r.cg}` : `CG ${r.cg} (${Math.round(r.cover * 100)}%)`, r.cg));
+    }
+    const rest = document.createElement('optgroup');
+    rest.label = 'Others';
+    for (let g = 0; g < cgCount(state.rom); g++) {
+        if (!ranks.some((r) => r.cg === g)) rest.appendChild(new Option(`CG ${g}`, g));
+    }
+    if (draws.children.length) sel.appendChild(draws);
+    sel.appendChild(rest);
+    if (c.cg < 0) sel.insertBefore(new Option('none', -1), sel.firstChild);
+    sel.value = String(c.cg);
+    drawCell();
+}
+
+function drawCell() {
+    const c = state.cell;
+    const canvas = $('#cell-view');
+    const cgs = [c.under, c.cg].filter((g) => g >= 0);
+    const pic = renderCell(state.rom, c.index, cgs);
+    const info = $('#cell-info');
+    if (!pic) {
+        canvas.width = canvas.height = 1;
+        info.textContent = `cell ${c.index} has no tiles`;
+        updateHud();
+        return;
+    }
+    canvas.width = pic.width;
+    canvas.height = pic.height;
+    canvas.getContext('2d').putImageData(new ImageData(pic.rgba, pic.width, pic.height), 0, 0);
+    canvas.classList.toggle('whole', !$('#cell-fit').checked);
+    const best = (cellRanks()[c.index] ?? [])[0];
+    info.innerHTML = `<b>cell ${c.index}</b> — ${pic.width}&times;${pic.height}, `
+        + `${pic.width / 8}&times;${pic.height / 8} tiles`
+        + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
+            + ` the game puts the rest in the tile chip some other way.`);
+    updateHud();
+}
+
 /* ---- HUD / options ------------------------------------------------------- */
 
 function updateHud() {
@@ -3773,6 +3878,12 @@ function updateHud() {
         label = `<b>${st?.name ?? ''}</b> · stage slot ${state.stageIndex}`;
     } else if (state.tab === 'model') {
         label = `<b>model ${state.modelIndex}</b>`;
+    } else if (state.tab === 'cell') {
+        /* No camera: the picture is flat. */
+        const c = state.cell;
+        $('#hud').innerHTML = `<b>cell ${c.index}</b>`
+            + (c.cg >= 0 ? ` · CG ${c.under >= 0 ? `${c.under} then ` : ''}${c.cg}` : ' · no CG');
+        return;
     } else {
         const m = state.motion;
         const link = m.chain?.links[m.link];
@@ -3848,6 +3959,7 @@ function wirePicking() {
 function reloadView({ keepCamera }) {
     if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera });
     else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera });
+    else if (state.tab === 'cell') drawCell();
     else rebuildRig({ keepCamera });
 }
 
@@ -3855,8 +3967,10 @@ function switchTab(tab) {
     state.tab = tab;
     for (const b of $('#tabs').children) b.classList.toggle('active', b.dataset.tab === tab);
     for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.tab !== tab;
+    $('#cell-view').hidden = tab !== 'cell';
     if (tab === 'stage') loadStage(state.stageIndex);
     else if (tab === 'model') loadModel(state.modelIndex);
+    else if (tab === 'cell') selectCell(state.cell.index, { cg: state.cell.cg });
     else loadCharacter(state.charIndex, { keepMotion: true });
     updateHud();
 }
@@ -3880,6 +3994,10 @@ function wireOptions() {
     });
 
     $('#stage-select').addEventListener('change', (e) => loadStage(+e.target.value));
+    $('#cell-search').addEventListener('input', () => renderCellList());
+    $('#cell-cg').addEventListener('change', (e) => { state.cell.cg = +e.target.value; drawCell(); });
+    $('#cell-under').addEventListener('change', (e) => { state.cell.under = +e.target.value; drawCell(); });
+    $('#cell-fit').addEventListener('change', () => drawCell());
     $('#opt-music').addEventListener('change', (e) => setMusic(e.target.checked));
     $('#music-volume').addEventListener('input', (e) => state.music.board?.setVolume(+e.target.value));
     $('#music-song').addEventListener('change', () => playStageMusic());
@@ -4061,6 +4179,8 @@ function wireOptions() {
         if (e.target.matches('input, select, textarea')) return;
         if (state.tab === 'model' && e.code === 'BracketRight') selectModel(Math.min(modelCount() - 1, state.modelIndex + 1));
         if (state.tab === 'model' && e.code === 'BracketLeft') selectModel(Math.max(0, state.modelIndex - 1));
+        if (state.tab === 'cell' && e.code === 'BracketRight') selectCell(Math.min(cellCount(state.rom) - 1, state.cell.index + 1));
+        if (state.tab === 'cell' && e.code === 'BracketLeft') selectCell(Math.max(0, state.cell.index - 1));
         if (e.code === 'KeyF') reloadView({ keepCamera: false });
     });
 }
@@ -4220,7 +4340,8 @@ function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
     document.title = `${state.rom.game.name} — 3D Explorer`;
-    const on = { stage: f.stages, model: true, anim: (f.characters && f.motions) || Boolean(f.bodies) };
+    const on = { stage: f.stages, model: true, anim: (f.characters && f.motions) || Boolean(f.bodies),
+        cell: Boolean(f.cells) };
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
@@ -4308,6 +4429,12 @@ function loadGameContent() {
         if (link.model !== null && link.model >= 0 && link.model < modelCount()) state.modelIndex = link.model;
         const roster = state.bodies ?? CHARACTERS;
         if (link.char !== null && roster.some((c) => c.index === link.char)) state.charIndex = link.char;
+        if (on.cell && link.cell !== null && link.cell >= 0 && link.cell < cellCount(state.rom)) {
+            state.cell.index = link.cell;
+            const cgOk = (g) => g !== null && g >= 0 && g < cgCount(state.rom);
+            if (cgOk(link.cg)) state.cell.cg = link.cg;
+            if (cgOk(link.under)) state.cell.under = link.under;
+        }
         for (const k of link.off) if (k in state.layerOn) state.layerOn[k] = false;
     }
     $('#loader').hidden = true;
@@ -4318,6 +4445,14 @@ function loadGameContent() {
     if (modelsPickTextures()) renderTextureSetPicker();
     if (state.rom.game.modelNames) $('#model-search').placeholder = 'Model index, range (500-520) or name';
     if (on.anim) renderCharacterSelect();
+    if (on.cell) {
+        const under = $('#cell-under');
+        under.innerHTML = '';
+        under.add(new Option('nothing', -1));
+        for (let g = 0; g < cgCount(state.rom); g++) under.add(new Option(`CG ${g}`, g));
+        under.value = String(state.cell.under);
+        renderCellList();
+    }
     renderBuildPicker();
     renderModelList();
     switchTab(tab);
@@ -4464,7 +4599,8 @@ function start() {
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
         if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); renderEggLabFootage(); }
-        state.viewer.render();
+        /* The Cells tab's picture covers the view, and is drawn when it changes. */
+        if (state.tab !== 'cell') state.viewer.render();
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;

@@ -126,6 +126,9 @@ function ptrOk(rom, addr) {
     return o >= 0 && o < rom.mainData.length;
 }
 
+/* For js/cells.js, which reads the same tables. */
+export { at as scrollAt, ptrOk as scrollPtrOk, CHAR_MASK, TILE_BYTES };
+
 /**
  * Decode the sky panorama for one stage.
  *
@@ -246,6 +249,66 @@ const DAYTONA_SKY_DISTANCE = 2048;
 const DAYTONA_PATTERNS = 8;
 /* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
 const DAYTONA_CHAR_BYTES = 0x80000;
+/* Both lists end with a zero; this only stops a walk that misses it. Sonic
+ * The Fighters' CG 0 has 35 tile entries, so it is not small. */
+const MAX_LIST_ENTRIES = 256;
+
+/**
+ * What _ScrollCG_Initialize and _ScrollColor_Initialize leave in the tile
+ * chip's character RAM and palette, starting from both clear.
+ *
+ * @returns {{chars: Uint8Array, pal: Uint16Array, written: number,
+ *            charRuns: Array<[number, number]>, palRuns: Array<[number, number]>}}
+ *   `charRuns` are the characters each source wrote, `palRuns` the palette
+ *   entries, both as [first, count]; `written` is the palette entries in all.
+ */
+export function loadScrollCG(rom, cgList, palList, charBytes) {
+    /* ---- the tile pixels ---- */
+    const chars = new Uint8Array(charBytes);
+    const charRuns = [];
+    {
+        let a = cgList, guard = 0;
+        while (ptrOk(rom, a) && guard++ < MAX_LIST_ENTRIES) {
+            const e = at(rom, a);
+            const src = e.view.getUint32(e.off, true);
+            if (!src || !ptrOk(rom, src)) break;
+            const dst = e.view.getUint32(e.off + 4, true);
+            const Sr = at(rom, src);
+            const tiles = Sr.view.getUint32(Sr.off, true);
+            const base = dst - CHAR_BASE;
+            const n = tiles * TILE_BYTES;
+            if (base >= 0 && base + n <= chars.length && Sr.off + 4 + n <= Sr.u8.length) {
+                chars.set(Sr.u8.subarray(Sr.off + 4, Sr.off + 4 + n), base);
+                charRuns.push([base / TILE_BYTES, tiles]);
+            }
+            a += 8;
+        }
+    }
+
+    /* ---- the palette ---- */
+    const pal = new Uint16Array(0x8000);
+    const palRuns = [];
+    let written = 0;
+    {
+        let a = palList, guard = 0;
+        while (ptrOk(rom, a) && guard++ < MAX_LIST_ENTRIES) {
+            const e = at(rom, a);
+            const dest = e.view.getUint32(e.off, true);
+            if (!dest) break;
+            /* The count is halved into a dword count, so it is halfwords. */
+            const words = e.view.getUint32(e.off + 4, true) >> 1;
+            const first = (dest - PAL_BASE) >> 1;
+            written += words;
+            palRuns.push([first, words * 2]);
+            for (let i = 0; i < words * 2; i++) {
+                const d = first + i;
+                if (d >= 0 && d < pal.length) pal[d] = e.view.getUint16(e.off + 8 + i * 2, true);
+            }
+            a += 8 + words * 4;
+        }
+    }
+    return { chars, pal, written, charRuns, palRuns };
+}
 
 /*
  * The panorama from a CG list, a palette list and the patterns laid side by
@@ -260,46 +323,7 @@ const DAYTONA_CHAR_BYTES = 0x80000;
  * a MAME snapshot of the attract race matches exactly.
  */
 function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
-    /* ---- the tile pixels ---- */
-    const chars = new Uint8Array(charBytes);
-    {
-        let a = cgList, guard = 0;
-        while (ptrOk(rom, a) && guard++ < 32) {
-            const e = at(rom, a);
-            const src = e.view.getUint32(e.off, true);
-            if (!src || !ptrOk(rom, src)) break;
-            const dst = e.view.getUint32(e.off + 4, true);
-            const Sr = at(rom, src);
-            const tiles = Sr.view.getUint32(Sr.off, true);
-            const base = dst - CHAR_BASE;
-            const n = tiles * TILE_BYTES;
-            if (base >= 0 && base + n <= chars.length && Sr.off + 4 + n <= Sr.u8.length) {
-                chars.set(Sr.u8.subarray(Sr.off + 4, Sr.off + 4 + n), base);
-            }
-            a += 8;
-        }
-    }
-
-    /* ---- the palette ---- */
-    const pal = new Uint16Array(0x8000);
-    let written = 0;
-    {
-        let a = palList, guard = 0;
-        while (ptrOk(rom, a) && guard++ < 32) {
-            const e = at(rom, a);
-            const dest = e.view.getUint32(e.off, true);
-            if (!dest) break;
-            /* The count is halved into a dword count, so it is halfwords. */
-            const words = e.view.getUint32(e.off + 4, true) >> 1;
-            const first = (dest - PAL_BASE) >> 1;
-            written += words;
-            for (let i = 0; i < words * 2; i++) {
-                const d = first + i;
-                if (d >= 0 && d < pal.length) pal[d] = e.view.getUint16(e.off + 8 + i * 2, true);
-            }
-            a += 8 + words * 4;
-        }
-    }
+    const { chars, pal, written } = loadScrollCG(rom, cgList, palList, charBytes);
     if (!written) return null;
 
     /* Each palette entry's colour, worked out the first time a pixel uses it. */

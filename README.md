@@ -12,7 +12,7 @@ the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa).
 
-Three views:
+Three views, and a fourth for the 2D art:
 
 - **Stages** — every arena from the game's own `stage_data` table, assembled
   from its ground chunks, floor, platform, cage and sky shells, with per-layer
@@ -78,6 +78,14 @@ Three views:
   animations](TECHNICAL.md#the-egg-robots-timed-animations-jseggrobojs) and
   [Afterimages](TECHNICAL.md#afterimages-jszanzoujs) and [Moves and
   strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
+- **Cells** — the game's 2D pictures, the title screens, portraits, name
+  plates and fonts it lays out on the tile chip: all 535 of the cells
+  `dsp_pattern_new` draws, each with the CG (`_Scroll_Initialize`'s tile pixels
+  and colours) that writes every tile it names picked for it — 530 of them have
+  one — and any other CG, or a second one loaded under it, to choose. The
+  camera button saves the cell itself at its own size, transparent where pen 0
+  is, as `noclip-sfight-cell<N>-cg<M>-<time>.png`. See
+  [`js/cells.js`](js/cells.js).
 
 And the stages have their music: tick **music** on the Stages tab and each
 arena plays the song the game plays on it, on the game's own sound board — its

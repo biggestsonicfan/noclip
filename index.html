@@ -272,6 +272,7 @@
         <button data-tab="stage" class="active">Stages</button>
         <button data-tab="model">Models</button>
         <button data-tab="anim">Animation</button>
+        <button data-tab="cell">Cells</button>
       </nav>
     </header>
 
@@ -342,6 +343,27 @@
       <div id="model-count" class="dim"></div>
       <div id="model-list" class="modellist"></div>
       <div id="model-info" class="meta-block"></div>
+    </section>
+
+    <!-- The game's 2D pictures, laid out on the tile chip: js/cells.js. -->
+    <section class="tabpanel" data-tab="cell" hidden>
+      <div class="field">
+        <input type="search" id="cell-search" placeholder="Cell number or range (e.g. 500-520)">
+      </div>
+      <div class="field">
+        <label for="cell-cg" title="The CG loaded with the cell: the tile pixels and the colours its entries name. The ones that draw all of it come first">CG</label>
+        <select id="cell-cg"></select>
+      </div>
+      <div class="field">
+        <label for="cell-under" title="A CG loaded before the one above, as the game does when a screen needs two: what the second writes goes over the first">Loaded first</label>
+        <select id="cell-under"></select>
+      </div>
+      <div class="field row">
+        <label class="check" title="Scale the cell to fill the view; off, it is drawn a pixel to a pixel"><input type="checkbox" id="cell-fit" checked> fit to view</label>
+      </div>
+      <div id="cell-count" class="dim"></div>
+      <div id="cell-list" class="modellist"></div>
+      <div id="cell-info" class="meta-block"></div>
     </section>
 
     <section class="tabpanel" data-tab="anim" hidden>
@@ -486,6 +508,8 @@
 
   <main>
     <canvas id="view"></canvas>
+    <!-- The Cells tab's picture, over the 3D view while that tab is up. -->
+    <canvas id="cell-view" hidden></canvas>
     <div id="hud"></div>
     <div id="fly-hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Wheel</b> or <b>&minus;/=</b> speed &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
     <!-- The noclip rig on a touchscreen: shown by app.js on the phone site in
