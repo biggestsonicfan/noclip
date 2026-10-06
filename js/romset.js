@@ -57,17 +57,10 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         }
     }
 
-    const variants = detectGames(names, nested);
-    const game = (opts.game && variants.find((g) => g.id === opts.game)) || variants[0];
-    if (!game) throw new Error('unrecognised ROM set — no supported game found in these zips');
-
-    const warnings = [];
-    const cache = new Map();
-
     /*
      * Every member the zips hold, keyed by the checksum their directory records
-     * for it — which is how a chip is found when the label a recipe names is not
-     * the label this set spells it with.
+     * for it — which is how a chip is found, and its game told, when the label
+     * a recipe names is not the label this set spells it with.
      *
      * MAME renames chips between releases and the bytes do not change with the
      * name: Daytona USA's `mpr-16526.8` was `epr-16526.8` in older sets, and its
@@ -80,6 +73,14 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
     for (const s of sources) {
         for (const [n, e] of s.dir) if (!byCrc.has(e.crc)) byCrc.set(e.crc, n);
     }
+
+    const variants = detectGames(names, nested, byCrc);
+    const game = (opts.game && variants.find((g) => g.id === opts.game)) || variants[0];
+    if (!game) throw new Error('unrecognised ROM set — no supported game found in these zips');
+
+    const warnings = [];
+    const cache = new Map();
+
     /* The name a member really goes by in these zips, or null if nothing here
      * is it. */
     const resolve = (name, expectCrc) => {

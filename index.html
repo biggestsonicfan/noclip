@@ -294,6 +294,10 @@
         <label for="music-song" title="The song the race starts with. The game plays the course's own unless a VR button is held as the race starts, which picks one itself — this is that choice">Song</label>
         <select id="music-song"></select>
       </div>
+      <div class="field" id="view-field" hidden>
+        <label for="view-select" id="view-label">Zone</label>
+        <select id="view-select"></select>
+      </div>
       <div class="field" id="mode-field" hidden>
         <label for="mode-select">Game state</label>
         <select id="mode-select"></select>
@@ -507,7 +511,7 @@
     <!-- The Cells tab's picture, over the 3D view while that tab is up. -->
     <canvas id="cell-view" hidden></canvas>
     <div id="hud"></div>
-    <div id="fly-hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
+    <div id="fly-hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Wheel</b> or <b>&minus;/=</b> speed &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
     <!-- The noclip rig on a touchscreen: shown by app.js on the phone site in
          fly mode, wired in js/mobile.js, and standing clear of the sheet by
          the --peek height the sheet publishes. -->

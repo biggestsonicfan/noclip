@@ -299,16 +299,12 @@ const LAB_OUTSIDE = [
     3490, 3491,                     /* "Tails lab hangar door" */
 ];
 /*
- * The ground the hangar stands on, which concedes the whole bound a pixel at a
- * time (see concedeMaterial in js/viewer.js). The launch rail in front of the
- * hangar is part of the hangar's model 3489: two blue decks in the ground's
- * plane, the rocket's track 0.5 below it between them, and the turning pad at
- * the far end. The board sorts all of it by far corner, and the ground's faces
- * are a hundred units across, so the rail is drawn over them from anywhere.
- * Here the decks tied with the sand at the same depth and fought it, the track
- * and the pad were buried under it, and where the sand rises 0.29 over the
- * deck it took that too (issue 44). Nothing is modelled under the ground
- * within the bound but the rail and the room, which is inside the walls.
+ * The ground the hangar stands on. The launch rail in front of the hangar is
+ * part of the hangar's model 3489: two blue decks in the ground's plane, the
+ * rocket's track 0.5 below it between them, and the turning pad at the far
+ * end. A depth test ties the decks with the sand and buries the track and the
+ * pad (issue 44); the board files the ground in window 2 and the hangar in 4,
+ * so the rail is drawn over the sand from anywhere.
  */
 const LAB_GROUND = 78;
 /* The Tornado, parked a quarter turn round beside the hangar. */
@@ -320,17 +316,12 @@ const LAB_DISH_AT = [-14, 71.8, 17.18];
 const LAB_DISH_STEP = 256 * 360 / 65536;
 const LAB_INSIDE_DROP = -2.0;       /* 0xC0000000 */
 /*
- * The room, sorted by the surfaces its faces make up (see surfaceCorners in
- * js/layers.js). Its wall round the doorway is five pieces in the plane
- * x = -40: two panels, two slivers that take the wall up to the roof beside
- * the opening, and the striped strip over it, 2.5 tall. The doors stand behind
- * that wall at x = -41.5, one of the copies drawn with the room, and they are
- * deep enough to keep their own depth. The strip and the slivers were shallow,
- * stepped back to their far corners and lost to the door wherever that put
- * them more than 1.5 back: the stripes cut off on a slant and the door's grey
- * where the slivers should be (issue 46). The board sorts the strip by a
- * corner far in front of the door's. As pieces of the wall they keep the
- * depth the wall keeps.
+ * The room. Its wall round the doorway is five pieces in the plane x = -40:
+ * two panels, two slivers that take the wall up to the roof beside the
+ * opening, and the striped strip over it, 2.5 tall. The doors stand behind
+ * that wall at x = -41.5, one of the copies drawn with the room, in the same
+ * window, and the board sorts the strip by a corner far in front of the
+ * door's: so the stripes run the whole width of the opening (issue 46).
  */
 const LAB_ROOM = 3473;
 const LAB_INSIDE = [
@@ -339,6 +330,16 @@ const LAB_INSIDE = [
     3482,                           /* "Tails Lab control panel with monitor" */
     3481,                           /* "Chaos Emerald Machine" */
 ];
+/*
+ * The windows adv_movie_snc_disp and adv_movie_snc_disp2 file each draw in,
+ * through the slots at 0x54FB8 on: the sea and the land round the lab behind
+ * everything, the ground under the hangar over them, the room and its doors
+ * over that, and the hangar, the things in the room and the things outside
+ * it on top. See OBJECT_WINDOWS for what the windows are.
+ */
+const LAB_OUTSIDE_WINDOWS = new Map([[224, 1], [LAB_GROUND, 2]]);
+const LAB_INSIDE_WINDOWS = new Map([[LAB_ROOM, 3], [3490, 3], [3491, 3], [227, 3]]);
+const LAB_WINDOW = 4;
 /* The lunar rocket, and its dome one more translate on — no push between, so
  * the dome's offset is from the rocket's, not from the room's. */
 const LAB_ROCKET = 230;
@@ -880,6 +881,7 @@ function pinballDisp({ push, pushAnim, fs }) {
             ['s', [1.6, 1.6, 1.6]],
         ]);
     }
+    /* A scale and then a translate, 0x7442c-0x74488. */
     push(CASINO_LEVER, [['s', [1.6, 1.6, 1.6]], ['t', [20, 7, -48]]]);
     push(CASINO_FLOOR, [['s', [fs, fs, fs]]]);
 }
@@ -1000,7 +1002,7 @@ function readIcePillars(rom) {
     });
 }
 
-function auroraDisp({ push, pushStanding, pushTpd, fs, frames }) {
+function auroraDisp({ push, pushTpd, fs, frames }) {
     const scroll = { ...AURORA_SCROLL, points: frames?.auroraPoints ?? null };
     pushTpd(AURORA_BOREALIS, scroll, []);
     push(AURORA_SKY, []);
@@ -1021,10 +1023,10 @@ function auroraDisp({ push, pushStanding, pushTpd, fs, frames }) {
      * against the board's own camera, and this viewer's can be anywhere, so it
      * is left out here the same way the ice pillars' is below.
      *
-     * The standing pair and the pillars are drawn as standing on the ice, so
-     * they keep their own depth rather than sinking through it.
+     * The standing pair and the pillars go in the window over the ice's, so
+     * they stand on it rather than sinking through — see OBJECT_WINDOWS.
      */
-    pushStanding(AURORA_WALRUSES, []);
+    push(AURORA_WALRUSES, []);
     push(AURORA_WALRUSES_REFLECTED, [MIRROR_Y]);
     push(AURORA_FLOOR, [['s', [fs, 1.6, fs]]]);
     pushTpd(AURORA_BOREALIS, scroll, [MIRROR_Y]);
@@ -1033,7 +1035,7 @@ function auroraDisp({ push, pushStanding, pushTpd, fs, frames }) {
      * leaves the screen; a camera that can go anywhere wants all eight. */
     for (const p of frames?.pillars ?? []) {
         const stand = [['t', [p.x, 0, -p.z]], ['r', p.angle * ANGLE_DEG]];
-        pushStanding(p.pillar, [...stand, ['s', p.scale]]);
+        push(p.pillar, [...stand, ['s', p.scale]]);
         const top = [...stand, ['t', [0, p.height, 0]]];
         push(p.dark, [...top, ['s', [2, 2, 2]]]);
         push(p.light, (f) => [...top, ['r', f * ICE_DIAMOND_SPIN * ANGLE_DEG],
@@ -1057,6 +1059,7 @@ const DYNAMITE_GEARS = [
 /* The swinging pair: one rides the value up and the other rides 5.4 minus it
  * down, and each turns 16384 angle units per unit of height. */
 const DYNAMITE_SWING = { speed: 0.05, limit: 5.4, turn: 16384 };
+/* x and z of each, from dynamite_disp's immediates at 0x75bf4 and 0x75d18. */
 const DYNAMITE_SWING_AT = [[23.1, -1.7], [26.3, 1.6]];
 
 /*
@@ -1142,13 +1145,15 @@ const GIANT_WING_ENGINE = 259;
 const GIANT_WING_SPINNER = [3888, 3889];
 /* The blade is PROPELLER_BLADE, swapped for an invisible square on every other
  * frame — one frame on and one frame gone, which is the blur. */
-const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];
+const GIANT_WING_BLADE_AT = [35.34, 8.2, 10.55];   /* immediates at 0x771f8 */
 const GIANT_WING_BLADE_SPIN = 0x1b << 7;
 /* Two sine terms: a rate in 16-bit angle units per frame, an amplitude in the
  * same units, and a phase. */
 const GIANT_WING_ROLL = [[128, 411.0, 0], [192, 133.0, 0x1234]];
 /* Six cloud draws, each a Z that walks toward the plane and starts over at the
- * far limit. The continuation steps two more of these that nothing draws. */
+ * far limit. The continuation steps two more of these that nothing draws. The
+ * starts are giant_wing_init's stores at 0x76b04-0x76b6c, the steps and limits
+ * the continuation's at 0x76c30 and 0x76ca4, the side clouds' x at 0x77110. */
 const GIANT_WING_CLOUDS = [
     { model: 3086, x: 0, start: 6000, step: 12.5, limit: 6000 },
     { model: 3087, x: 0, start: 3000, step: 12.5, limit: 6000 },
@@ -1573,20 +1578,15 @@ function canyonDisp({ pushAnim, sx, cageY }) {
  * all, the whole canyon is here — so it comes out on the ground and water
  * layers rather than in with the objects, and the camera frames on it.
  *
- * The river concedes a pixel at a time, not a vertex at a time as the open sea
- * does. The board's camera rides the boat, so it always hangs over one of these
- * plates, and a plate the eye is over has corners behind the lens, which keep
- * the depth the projection gave them. The river's surface is 0.03 over the top
- * of the deck, so wherever those corners carried the water's depth in, it came
- * up through the deck — most of it, from the board's camera, further down the
- * run. The board sorts the plates by a corner hundreds of units out and never
- * shows any of it. See concedeMaterial in js/viewer.js.
+ * The river is 0.03 under the top of the deck in places, and the board never
+ * shows it through: the deck is in stage_dsp's window and the river in the
+ * ground's, under it whatever their keys.
  */
 function canyonEnvDisp({ pushWorld, frames }) {
     const canyon = frames?.canyon;
     if (!canyon) return;
     for (const o of canyon.scenery) pushWorld(o.model, 'ground', canyonPlace(o.at));
-    for (const o of CANYON_WATER) pushWorld(o.model, 'water', canyonPlace(o.at), SEA_BAND, true);
+    for (const o of CANYON_WATER) pushWorld(o.model, 'water', canyonPlace(o.at), SEA_BAND);
 }
 
 /* ---- boss_disp: the Death Egg's hangar ----
@@ -1671,25 +1671,19 @@ function bossDisp({ push, pushBackdrop, pushTpd, sx, frames }) {
 /* ---- draw_sphynx_head: the Flying Carpet's second object ----
  * See the note above SPHYNX_HEAD for where the head belongs, and why it alone
  * of these three carries the arena's frame. */
-function sphynxDisp({ push, pushConceding, sx, fs }) {
+function sphynxDisp({ push, sx, fs }) {
     push(SPHYNX_HEAD, (f) => sphynxOps(carpetAt(f)));
     for (let i = 0; i < 4; i++) {
         push(SPHYNX_CORNER, [['s', [sx, sx, sx]], ['r', i * 90]]);
     }
     /* The plate is one flat quad at y = 0, as wide as the rug, and the rug's
-     * floor ripples a tenth of a unit either side of that plane. The board
-     * never compares the two a pixel at a time: the plate and every strip of
-     * the rug each take one z, their farthest corner, and the plate's is the
-     * rug's far edge, so every strip is in front of it. MAME never shows it.
-     *
-     * The bounded recede does not get there. The plate is some fourteen units
-     * deep along the board's own camera, so it keeps the depth the projection
-     * gives it, while the strips are shallow and step back to their far
-     * corners -- and the troughs of the ripple step back behind the plate,
-     * which paints the rug its own ground colour, flat, with the pattern gone
-     * (noclip issue 23). Conceding the bound puts the plate back where the
-     * board has it: behind the lot. */
-    pushConceding(SPHYNX_PLATE, [['s', [fs, fs, fs]]]);
+     * floor ripples a tenth of a unit either side of that plane, so a depth
+     * test hands the troughs to the plate, which paints the rug its own ground
+     * colour, flat, with the pattern gone (noclip issue 23). MAME never shows
+     * it, and the keys are not why: the plate goes in window 3 and the rug in
+     * stage_dsp's 4, so the rug covers it wherever both are drawn — see
+     * OBJECT_WINDOWS. */
+    push(SPHYNX_PLATE, [['s', [fs, fs, fs]]]);
 }
 
 /*
@@ -1701,19 +1695,19 @@ function sphynxDisp({ push, pushConceding, sx, fs }) {
  * a single instruction. Every other address in the table has one.
  */
 const OBJECT_ROUTINES = new Map([
-    [0x00072160, sphynxDisp],       /* draw_sphynx_head */
-    [0x00072904, null],             /* flying_carpet_disp — ret */
-    [0x00072a64, bossDisp],
-    [0x00073f30, pinballDisp],
-    [0x00074758, mushroomDisp],
-    [0x00074e58, auroraDisp],
-    [0x00075618, null],             /* aurora_nothing — ret */
-    [0x00075a24, dynamiteDisp],
-    [0x000763c8, canyonDisp],
-    [0x00076758, canyonEnvDisp],
-    [0x00076d30, giantWingDisp],
-    [0x000771a4, propellerDsp],
-    [0x000774c4, null],             /* post_metal_stage_init — ret */
+    [0x00072160, [sphynxDisp, 2]],      /* draw_sphynx_head */
+    [0x00072904, null],                 /* flying_carpet_disp — ret */
+    [0x00072a64, [bossDisp, 3]],
+    [0x00073f30, [pinballDisp, 2]],
+    [0x00074758, [mushroomDisp, 2]],
+    [0x00074e58, [auroraDisp, 2]],
+    [0x00075618, null],                 /* aurora_nothing — ret */
+    [0x00075a24, [dynamiteDisp, 2]],
+    [0x000763c8, [canyonDisp, 5]],
+    [0x00076758, [canyonEnvDisp, 2]],
+    [0x00076d30, [giantWingDisp, 1]],
+    [0x000771a4, [propellerDsp, 3]],
+    [0x000774c4, null],                 /* post_metal_stage_init — ret */
 ]);
 
 /*
@@ -1845,6 +1839,50 @@ export function buildFlatDisplayList(stage) {
     return out;
 }
 
+/*
+ * The geometry processor's windows, which are how the board layers a stage.
+ *
+ * The i960 opens the frame's display list eight times over, one pass per call
+ * of set_window (0x5564, from 0x1FB8C, 0x1FD7C, 0x1FF68, 0x20060, 0x201C4,
+ * 0x204F0, 0x208D4 and 0x20A48), and the rasterizer fills the windows last to
+ * first with the fill that writes a pixel only once. So a draw in a later
+ * window covers one in an earlier window whatever their keys, and only inside
+ * a window does the z-sort key decide. Each entry's `window` is the window the
+ * board files it in, and js/viewer.js sorts window by window — see drawScene.
+ *
+ *   1  camera_init's floor, then doom_cnt's backdrop ring
+ *   2  ground_disp: the ground chunks and the sea it hands set_obj_thd
+ *   3  cage_sub_disp, on the one stage whose table word sets bit 23 (Aurora)
+ *   4  stage_dsp: the platform and its extras; ground_disp again on Aurora
+ *   5  cage_sub_disp, the cage and the poles; then fighter 1
+ *   6  fighter 2
+ *   7  object_control
+ *
+ * Almost nothing object_control draws goes in its own pass's window. A routine
+ * that wants a draw sorted with the arena links it into an earlier window's
+ * list through that window's slot, the record at 0x50183C + 8·(w-1), and every
+ * routine but the empty ones does so: OBJECT_ROUTINES gives each the window
+ * most of its draws take, and this the models it files elsewhere. Both are
+ * read off the slot each routine loads before it draws, and checked against
+ * the board's own lists in m2-hle2 match replays and the attract.
+ */
+const OBJECT_WINDOWS = new Map([
+    /* sphynx_disp: the rug in a window of its own between the ground and the
+     * platform, and the corner pieces over the fighters. */
+    [SPHYNX_PLATE, 3], [SPHYNX_CORNER, 6],
+    /* aurora_disp: the walruses stand one window over the ice, and so does the
+     * attract's crowd. */
+    [AURORA_WALRUSES, 4], ...Array.from({ length: 16 }, (_, i) => [4248 + 2 * i, 4]),
+    /* mushroom_disp: the canopy behind everything, the rings with the cage. */
+    [MUSHROOM_CANOPY, 1], ...MUSHROOM_RINGS.map((m) => [m, 5]),
+    /* giant_wing_disp: the deck with the platform, the clouds between. */
+    [GIANT_WING_FLOOR, 4], [3086, 3], [3087, 3], [3673, 3],
+    /* propeller_dsp: the engine with the cage. */
+    [GIANT_WING_ENGINE, 5],
+    /* boss_disp: the Earth with the ground. */
+    [1124, 2],
+]);
+
 /**
  * Build the draw list for one stage.
  * @param {object} stage  from readStageTable()
@@ -1869,39 +1907,28 @@ export function buildStageDisplayList(stage, frames = null) {
             ? (f) => [...stageWorldFrame(stage, f, frames), ...ops(f)]
             : (f) => [...stageWorldFrame(stage, f, frames), ...ops]);
 
+    /* The window the pass being built draws into: see OBJECT_WINDOWS. */
+    let win = 1;
     const push = (model, layer, ops) => {
-        if (model) out.push({ model, layer, ops });
+        if (model) out.push({ model, layer, window: win, ops });
     };
     /* An animated draw is pushed under the model it shows at rest. It needs
      * the frame tables, so a stage built without them leaves it out. */
     const pushAnim = (table, shift, phase, layer, ops) => {
         if (!frames) return;
         const anim = { frames: frames[table], shift, phase };
-        out.push({ model: frameModel(anim, 0), anim, layer, ops });
+        out.push({ model: frameModel(anim, 0), anim, layer, window: win, ops });
     };
 
-    /* ---- camera_init: the ground plate, at a flat 1.6 scale ----
-     *
-     * This draw, and only this draw, carries `groundPlate`. The concession
-     * js/viewer.js hands it — the whole z-sort bound, whether its faces are
-     * shallow or not — is an argument about `stage_floor` in particular: one
-     * plate hundreds of units across, sorted by its own farthest corner, that
-     * camera_init lays down before every other pass so that everything standing
-     * in it wins outright. It is not an argument about the layer, which is a
-     * grouping for the sidebar's checkboxes and collects one draw that is no
-     * such plate — see the Final Eggman Boss below. */
+    /* ---- camera_init: the ground plate, at a flat 1.6 scale ---- */
     if (!(flags & (1 << 2))) {
-        for (const m of stage.layers.floor) {
-            if (m) {
-                out.push({
-                    model: m, layer: 'floor', groundPlate: true,
-                    ops: inWorld([['s', [1.6, 1.6, 1.6]]]),
-                });
-            }
-        }
+        for (const m of stage.layers.floor) push(m, 'floor', inWorld([['s', [1.6, 1.6, 1.6]]]));
     }
 
-    /* ---- ground_disp / area_clip: scenery chunks, pre-placed in world space ---- */
+    /* ---- ground_disp / area_clip: scenery chunks, pre-placed in world space ----
+     * In window 2, except on Aurora Icefield, which takes the pass after
+     * stage_dsp's for it and leaves its own window to aurora_disp. */
+    win = slot === AURORA_ICEFIELD_SLOT ? 4 : 2;
     if (!(flags & (1 << 0xd))) {
         for (const m of stage.layers.ground) push(m, 'ground', inWorld([['s', [1.6, 1.6, 1.6]]]));
     }
@@ -1921,7 +1948,7 @@ export function buildStageDisplayList(stage, frames = null) {
      * camera never goes. */
     if (southIsland) {
         out.push({
-            model: SOUTH_ISLAND_WATER, layer: 'water', band: SEA_BAND,
+            model: SOUTH_ISLAND_WATER, layer: 'water', band: SEA_BAND, window: 2,
             ops: inWorld([['s', [1.6, 1.6, 1.6]]]),
         });
     }
@@ -1948,6 +1975,7 @@ export function buildStageDisplayList(stage, frames = null) {
      * its transition rather than on the slot, so it keeps the one it starts
      * with. */
     const backdrop = slot !== MUSHROOM_HILL_SLOT && slot !== FINAL_EGGMAN_SLOT;
+    win = 1;
     if (backdrop && stage.sky.length) {
         const drifts = (flags >>> SKY_DRIFT_BIT) & 1;
         for (let i = 0; i < SKY_SEGMENTS; i++) {
@@ -1963,6 +1991,7 @@ export function buildStageDisplayList(stage, frames = null) {
     }
 
     /* ---- stage_dsp ---- */
+    win = 4;
     if (southIsland) {
         /* sub_26604 */
         push(SOUTH_ISLAND_CAGE_SHADOW, 'extra', [['s', [sx, 1.6, sx]]]);
@@ -2001,13 +2030,14 @@ export function buildStageDisplayList(stage, frames = null) {
          */
         /*
          * The message panel, and the one draw on the `floor` layer that is not
-         * camera_init's ground plate: slot 10's `stage_floor` is zero, so
-         * camera_init lays down nothing here and this is sub_2731C's own draw,
-         * grouped with the floor because that is what it reads as. It carries
-         * no `groundPlate`, so it keeps its own depth rather than conceding the
-         * z-sort bound — the concession is the ground plate's, and taking it
-         * sank this panel through the drum it is lying inside, which stood the
-         * arch of 1122's inner wall up through the lettering.
+         * camera_init's: slot 10's `stage_floor` is zero, so camera_init lays
+         * down nothing here and this is sub_2731C's own draw, grouped with the
+         * floor because that is what it reads as.
+         *
+         * The routine runs in stage_dsp's pass, and files the hangar in the
+         * three windows under it: the walls and the doors behind everything in
+         * window 1, the tubes and the door surrounds over them in 2, and the
+         * floor, ceiling, bridges and iris with the platform in 4.
          */
         push(EGGMAN_FLOOR, 'floor', [['s', [fs, 1.0, fs]]]);
         /* The frame the rest of it is drawn in. Anything repeated takes its
@@ -2018,16 +2048,21 @@ export function buildStageDisplayList(stage, frames = null) {
             ...(turn === undefined ? [] : [['r', turn]]),
         ];
         push(EGGMAN_CEILING, 'ground', inHangar());
+        win = 1;
         for (const turn of EGGMAN_HANGAR_TURNS) push(EGGMAN_HANGAR, 'ground', inHangar(turn));
         for (const door of EGGMAN_DOORS) push(door, 'ground', inHangar());
+        win = 2;
         push(EGGMAN_TUBES, 'ground', inHangar());
         for (let i = 0; i < 4; i++) push(EGGMAN_DOOR_SURROUND, 'ground', inHangar(i * 90));
+        win = 4;
         for (let i = 0; i < 4; i++) push(EGGMAN_BRIDGE, 'ground', inHangar(i * 90));
         /* The iris in the ceiling, and the one part of the hangar that moves.
          * Its table is a run out and the same run back, walked a frame at a
          * time, so the door opens and shuts once every 128 frames. */
         pushAnim('hangarIris', 0, 0, 'ground', inHangar());
     }
+    /* stage_dsp (0x26530) scales the platform by the floor scale every way on
+     * the Giant Wing, and by 1.6 in Y everywhere else. */
     const platformScale = slot === GIANT_WING_SLOT ? [fs, fs, fs] : [fs, 1.6, fs];
     if (slot === AURORA_ICEFIELD_SLOT) {
         /* stage_dsp compares the slot against 2 on its second instruction and
@@ -2048,7 +2083,10 @@ export function buildStageDisplayList(stage, frames = null) {
         for (const m of stage.layers.platform) push(m, 'platform', [['s', platformScale]]);
     }
 
-    /* ---- cage_sub_disp ---- */
+    /* ---- cage_sub_disp ----
+     * In the cage's window, but for Aurora Icefield's, which the board draws in
+     * a pass of its own between the ground and stage_dsp. */
+    win = slot === AURORA_ICEFIELD_SLOT ? 3 : 5;
     if (flags & (1 << 0xe)) {
         if (southIsland) {
             /* loc_250D4: one ramp off the -X side of the ring, not a ring of
@@ -2067,6 +2105,8 @@ export function buildStageDisplayList(stage, frames = null) {
             }
         }
     }
+
+    win = 5;
 
     /* ---- cage_display: four walls, each a quarter turn on from the last ----
      *
@@ -2153,53 +2193,43 @@ export function buildStageDisplayList(stage, frames = null) {
      * giant_wing_disp ask for the world's instead, by loading a matrix
      * camera_init saved there — pushWorld. */
     for (const object of stage.objects ?? []) {
-        const routine = OBJECT_ROUTINES.get(object.disp);
+        const [routine, routineWindow] = OBJECT_ROUTINES.get(object.disp) ?? [];
         if (!routine) continue;
+        const at = (model) => OBJECT_WINDOWS.get(model) ?? routineWindow;
         routine({
             stage,
             frames,
             sx,
             fs,
             cageY,
-            push: (model, ops) => push(model, OBJECT_LAYER, ops),
-            /* A solid standing on a floor that keeps its own depth, which must
-             * keep its own too or it sinks through — see standingMaterial in
-             * js/viewer.js. */
-            pushStanding: (model, ops) => {
-                if (model) out.push({ model, layer: OBJECT_LAYER, standing: true, ops });
-            },
-            /* A plate that everything lying on it beats outright on the board,
-             * which stands the whole z-sort bound back the way the open water
-             * does — see concedeMaterial in js/viewer.js. */
-            pushConceding: (model, ops) => {
-                if (model) out.push({ model, layer: OBJECT_LAYER, concede: true, ops });
+            push: (model, ops) => {
+                if (model) out.push({ model, layer: OBJECT_LAYER, window: at(model), ops });
             },
             /* A draw the routine makes with the matrix reset to the identity
              * rather than built on the camera's, which is the board's way of
              * saying background rather than scenery: it goes behind the horizon
              * shells, whatever distance it names. */
             pushBackdrop: (model, ops) => {
-                if (model) out.push({ model, layer: OBJECT_LAYER, backdrop: true, ops });
+                if (model) out.push({ model, layer: OBJECT_LAYER, window: at(model), backdrop: true, ops });
             },
             pushAnim: (table, anim, ops) => {
                 if (!frames) return;
                 const a = { frames: frames[table], shift: 0, phase: 0, ...anim };
-                out.push({ model: frameModel(a, 0), anim: a, layer: OBJECT_LAYER, ops });
+                const model = frameModel(a, 0);
+                out.push({ model, anim: a, layer: OBJECT_LAYER, window: at(model), ops });
             },
             /* A draw whose texture points are rebuilt every frame. At frame 0
              * the offset is zero, so a stage built at rest is unchanged. */
             pushTpd: (model, scroll, ops) => {
-                if (model) out.push({ model, layer: OBJECT_LAYER, scroll, ops });
+                if (model) out.push({ model, layer: OBJECT_LAYER, window: at(model), scroll, ops });
             },
             /* A draw the routine makes in the world's frame rather than the
              * arena's, on a layer of its own choosing — and optionally through
-             * a texture header rebuilt every frame, as the river is, and
-             * conceding a pixel at a time, as the river must. */
-            pushWorld: (model, layer, ops, band = null, concede = false) => {
+             * a texture header rebuilt every frame, as the river is. */
+            pushWorld: (model, layer, ops, band = null) => {
                 if (!model) return;
-                const entry = { model, layer, ops: inWorld(ops) };
+                const entry = { model, layer, window: at(model), ops: inWorld(ops) };
                 if (band) entry.band = band;
-                if (concede) entry.concede = true;
                 out.push(entry);
             },
         });
@@ -2212,15 +2242,11 @@ export function buildStageDisplayList(stage, frames = null) {
         /* adv_movie_snc_disp. The sea goes through set_obj_thd with the header
          * send_st15_sea_thd rebuilt this frame — nine quads for the model's nine
          * faces, each its own header but for the lumabase, walked 7..70 at half
-         * the frame rate exactly as South Island's is.
-         * It is drawn first and under everything: the board sorts the plate by
-         * a corner hundreds of units out, so the ground's shallows always come
-         * over it. Since the ground concedes the bound too (see LAB_GROUND),
-         * the water's per-vertex concession took the shallows instead. */
-        out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, backdrop: true, ops: [] });
+         * the frame rate exactly as South Island's is. */
+        win = LAB_WINDOW;
+        out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, window: 1, ops: [] });
         for (const m of LAB_OUTSIDE) {
-            if (m === LAB_GROUND) out.push({ model: m, layer: 'outside', ops: [], concede: true });
-            else push(m, 'outside', []);
+            out.push({ model: m, layer: 'outside', window: LAB_OUTSIDE_WINDOWS.get(m) ?? win, ops: [] });
         }
         push(LAB_PLANE, 'outside', LAB_PLANE_AT);
         push(LAB_DISH, 'outside', (f) => [['t', LAB_DISH_AT], ['r', f * LAB_DISH_STEP]]);
@@ -2229,12 +2255,11 @@ export function buildStageDisplayList(stage, frames = null) {
          * on top of it. */
         const room = [['t', [0, LAB_INSIDE_DROP, 0]]];
         for (const m of LAB_INSIDE) {
-            if (m === LAB_ROOM) out.push({ model: m, layer: 'inside', ops: room, surfaces: true });
-            else push(m, 'inside', room);
+            out.push({ model: m, layer: 'inside', window: LAB_INSIDE_WINDOWS.get(m) ?? win, ops: room });
         }
         if (frames) {
             const anim = { frames: frames.labScreen, shift: 0, phase: 0 };
-            out.push({ model: frameModel(anim, 0), anim, layer: 'inside', ops: room });
+            out.push({ model: frameModel(anim, 0), anim, layer: 'inside', window: win, ops: room });
         }
         const rocket = [...room, ['t', LAB_ROCKET_AT]];
         push(LAB_ROCKET, 'inside', rocket);

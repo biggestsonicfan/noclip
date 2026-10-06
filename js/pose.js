@@ -139,12 +139,6 @@ export const SLOT_COUNT = 16;
  * slots of their own. */
 export const HEAD_SLOT = 2;
 
-/* The turn that squares a chest-angled head up with the way the body faces.
- * Object 6 stands the head off the spine but leaves it looking along the
- * chest's own lateral, which reads as facing right; this brings it round to
- * forward. Only reached when the head is not aimed -- see buildPose. */
-export const HEAD_FACE = 0xc000;
-
 /* Per-chain slots and the objects that drive them: left arm, right arm, left
  * leg, right leg. `pivotSlot` is where the chain hangs, `baseAngle` the motion
  * object holding its root euler, `target` the float object it reaches for, and
@@ -210,6 +204,36 @@ function aim(m, t, tgt) {
     const dTot = Math.sqrt(dxy2 + d2 * d2);
     if (dxy > 1e-9) rotZ(m, clip(d0 / dxy), clip(-d1 / dxy));
     if (dTot > 1e-9) rotY(m, clip(dxy / dTot), clip(d2 / dTot));
+}
+
+/* The head's pitch limit: `0x312A8` clamps the head's ang_y to +-0x2000. */
+const HEAD_PITCH_LIMIT = 0x2000;
+
+const toBrad = (rad) => Math.round((rad * 0x10000) / (2 * Math.PI));
+
+/*
+ * The head's aim, as the head block of `0x30FE8` makes it (g1 == 2). It is
+ * `aim` with two limits the chest does not get:
+ *
+ *   - a target on the head's -Y side is taken as on its X axis (`0x311A4`
+ *     zeroes the local y), so the head turns to 0 or 0x8000 and no further;
+ *   - the pitch is clamped to +-HEAD_PITCH_LIMIT (`0x312A8`).
+ *
+ * The board also steps both angles a limited amount a frame from the last
+ * frame's (`0x31220`, `0x3128C`), and holds the old turn when a -Y target sits
+ * within 0.5 of the head. A pose solved on its own has no last frame, so this
+ * is where those steps settle.
+ */
+function aimHead(m, t, tgt) {
+    const dx = tgt[0] - t[0], dy = tgt[1] - t[1], dz = tgt[2] - t[2];
+    const d0 = dx * m[0] + dy * m[1] + dz * m[2];
+    const d1 = Math.max(0, dx * m[3] + dy * m[4] + dz * m[5]);
+    const d2 = dx * m[6] + dy * m[7] + dz * m[8];
+    const az = toBrad(-Math.atan2(d1, d0));
+    const ay = Math.max(-HEAD_PITCH_LIMIT, Math.min(HEAD_PITCH_LIMIT,
+        toBrad(Math.atan2(d2, Math.hypot(d0, d1)))));
+    rotZ(m, cosA(az), sinA(az));
+    rotY(m, cosA(ay), sinA(ay));
 }
 
 /*
@@ -280,7 +304,7 @@ function solveIK(pR, pT, pivot, ang, tgt, lower, upper, flip, out) {
  *   (ry, rx, rz) — the arena's, which a fighter on its own does not have.
  * @returns {Array<{r:number[], t:number[]}>} column-major 3x3 and translation
  */
-export function buildPose(skel, sample, { world = [0, 0, 0], headAim = true } = {}) {
+export function buildPose(skel, sample, { world = [0, 0, 0] } = {}) {
     const { angles, targets } = sample;
     const A = (obj, axis) => angles[obj * 3 + axis];
     const T = (obj) => [targets[obj * 3], targets[obj * 3 + 1], targets[obj * 3 + 2]];
@@ -300,16 +324,11 @@ export function buildPose(skel, sample, { world = [0, 0, 0], headAim = true } = 
 
     /* Slot 2: a step up the chest's +X, object 6's euler, and a look at the
      * face target -- float object 14, which every one of the 518 motions keys
-     * with real curve data.
-     *
-     * `headAim` false drops that last part, and then object 6 alone is left:
-     * the rotation that turns the head model off the spine and forward, so the
-     * face points the way the chest does. That is for the four roster entries
-     * that borrow another fighter's action table -- the Final Eggman Boss, the
-     * Egg UFO, the Egg Minion and Rocket Metal. Every motion has head data, but
-     * none of it was authored for them, and their heads sit far enough up the
-     * spine (1.466 and 1.316, against Sonic's 0.361) that a target meant for a
-     * shorter fighter lands below the head and the aim turns it face-down. */
+     * with real curve data. Every fighter is aimed, the four that borrow Bean's
+     * action table (the Final Eggman Boss, the Egg UFO, the Egg Minion, Rocket
+     * Metal) too: the board's head block has no case for them. Bean's target
+     * lands below their taller heads, and the pitch limit in aimHead is what
+     * keeps them from looking straight down. */
     const s1 = skel.spine;
     const headT = [
         P[0][0] + chest[0] * s1[0] + chest[3] * s1[1] + chest[6] * s1[2],
@@ -318,8 +337,7 @@ export function buildPose(skel, sample, { world = [0, 0, 0], headAim = true } = 
     ];
     const head = chest.slice();
     eulerZYX(head, A(6, 0), A(6, 1), A(6, 2));
-    if (headAim) aim(head, headT, T(2));
-    else rotZ(head, cosA(HEAD_FACE), sinA(HEAD_FACE));
+    aimHead(head, headT, T(2));
     R[2] = head; P[2] = headT;
 
     /* Slot 9: the pelvis, turned by object 9 and rolled a quarter turn. */
