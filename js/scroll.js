@@ -178,6 +178,9 @@ const DAYTONA_HORIZON_ROW = 144;
 const DAYTONA_PATTERNS = 8;
 /* The tile chip's character RAM, 0x1080000 to 0x10FFFFF. */
 const DAYTONA_CHAR_BYTES = 0x80000;
+/* Both lists end with a zero; this only stops a walk that misses it. Sonic
+ * The Fighters' CG 0 has 35 tile entries, so it is not small. */
+const MAX_LIST_ENTRIES = 256;
 
 /**
  * What _ScrollCG_Initialize and _ScrollColor_Initialize leave in the tile
@@ -194,7 +197,7 @@ export function loadScrollCG(rom, cgList, palList, charBytes) {
     const charRuns = [];
     {
         let a = cgList, guard = 0;
-        while (ptrOk(rom, a) && guard++ < 32) {
+        while (ptrOk(rom, a) && guard++ < MAX_LIST_ENTRIES) {
             const e = at(rom, a);
             const src = e.view.getUint32(e.off, true);
             if (!src || !ptrOk(rom, src)) break;
@@ -217,7 +220,7 @@ export function loadScrollCG(rom, cgList, palList, charBytes) {
     let written = 0;
     {
         let a = palList, guard = 0;
-        while (ptrOk(rom, a) && guard++ < 32) {
+        while (ptrOk(rom, a) && guard++ < MAX_LIST_ENTRIES) {
             const e = at(rom, a);
             const dest = e.view.getUint32(e.off, true);
             if (!dest) break;
