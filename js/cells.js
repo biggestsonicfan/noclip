@@ -107,11 +107,35 @@ function cgCover(rom) {
 
 const inRuns = (runs, i) => runs.some(([first, n]) => i >= first && i < first + n);
 
+/* The CG the game itself draws each character card with, from the card
+ * tables (js/games.js cells.cards). A colour card and its greyscale twin are
+ * the same tiles, so both CGs fit either one, and only the tables tell them
+ * apart. Each table names a player's small card; the big one is the cell
+ * before it (129 and 130, 245 and 246) and takes the same CG. The first table
+ * to name a cell wins. */
+const cardCache = new WeakMap();
+function cardCGs(rom) {
+    let map = cardCache.get(rom);
+    if (map) return map;
+    map = new Map();
+    const K = rom.game.cells.cards;
+    for (const [cells, cgs] of K?.tables ?? []) {
+        for (let i = 0; i < K.count; i++) {
+            const cell = rom.mainCpuView.getUint16(cells + i * 2, true);
+            const cg = rom.mainCpuView.getUint16(cgs + i * 2, true) >> 1;
+            for (const c of [cell, cell - 1]) if (!map.has(c)) map.set(c, cg);
+        }
+    }
+    cardCache.set(rom, map);
+    return map;
+}
+
 /**
  * How much of a cell each CG draws on its own, best first: the share of the
  * cell's tiles whose character and colours that CG writes. A cell's blank
  * tiles are character 0, which no CG writes, so they are not counted. A CG at
- * 1 fits the cell; one that draws none of it is left out.
+ * 1 fits the cell; one that draws none of it is left out. Among CGs that draw
+ * equally much, the one the game uses for a character card comes first.
  *
  * @returns {Array<{cg:number, cover:number}>}
  */
@@ -136,7 +160,9 @@ export function rankCGs(rom, cell) {
         }
         if (hit) out.push({ cg, cover: hit / total });
     }
-    return out.sort((a, b) => b.cover - a.cover || a.cg - b.cg);
+    const game = cardCGs(rom).get(cell);
+    const own = (r) => (r.cg === game ? 0 : 1);
+    return out.sort((a, b) => b.cover - a.cover || own(a) - own(b) || a.cg - b.cg);
 }
 
 /**
