@@ -107,12 +107,12 @@ function cgCover(rom) {
 
 const inRuns = (runs, i) => runs.some(([first, n]) => i >= first && i < first + n);
 
-/* The CG the game itself draws each character card with, from the card
- * tables (js/games.js cells.cards). A colour card and its greyscale twin are
- * the same tiles, so both CGs fit either one, and only the tables tell them
- * apart. Each table names a player's small card; the big one is the cell
- * before it (129 and 130, 245 and 246) and takes the same CG. The first table
- * to name a cell wins. */
+/* The CG the game itself draws each character card and portrait with, from
+ * its tables (js/games.js cells.cards and cells.portraits). A colour card and
+ * its greyscale twin are the same tiles, so both CGs fit either one, and only
+ * the tables tell them apart. Each card table names a player's small card;
+ * the big one is the cell before it (129 and 130, 245 and 246) and takes the
+ * same CG. The first table to name a cell wins. */
 const cardCache = new WeakMap();
 function cardCGs(rom) {
     let map = cardCache.get(rom);
@@ -124,6 +124,14 @@ function cardCGs(rom) {
             const cell = rom.mainCpuView.getUint16(cells + i * 2, true);
             const cg = rom.mainCpuView.getUint16(cgs + i * 2, true) >> 1;
             for (const c of [cell, cell - 1]) if (!map.has(c)) map.set(c, cg);
+        }
+    }
+    const P = rom.game.cells.portraits;
+    for (let i = 0; i < (P?.count ?? 0); i++) {
+        const frames = rom.mainCpuView.getUint32(P.list + i * 4, true);
+        for (let f = 0; f < P.frames; f++) {
+            const cell = rom.mainCpuView.getUint16(frames + f * 2, true);
+            if (!map.has(cell)) map.set(cell, P.cg);
         }
     }
     cardCache.set(rom, map);

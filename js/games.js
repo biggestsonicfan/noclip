@@ -183,7 +183,11 @@ const sfight = {
      * P1_CHAR_CARDS with CG_PLAYER_CARDS and P2_CHAR_CARDS with
      * CG_PLAYER2_CARDS: the colour cards 129-152 on CGs 10-21. The table after
      * each holds the greyscale cards 229-252 on CGs 36-47, the same tiles in
-     * other colours. */
+     * other colours.
+     *
+     * `portraits` is CHAR_SELECT_PORTRAITS, which sel_mini_face_disp reads:
+     * a pointer per select-screen slot to that fighter's animated face, seven
+     * cells. sel_disp_init loads CG 7 (_Scroll_Initialize(14)) for them. */
     cells: {
         cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
         cards: {
@@ -193,6 +197,7 @@ const sfight = {
                 [0x0007d9e8, 0x0007dab8], [0x0007da50, 0x0007db20],
             ],
         },
+        portraits: { list: 0x000daf3c, count: 12, frames: 7, cg: 7 },
     },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
