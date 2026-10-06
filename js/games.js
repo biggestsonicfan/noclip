@@ -204,7 +204,8 @@ const sfight = {
      * (CG 7), name_entry (2), prep_adv_movie and adv_movie_cont (71, 5, 87, 88,
      * 89), bossm_init (86), MES_ROUND_INT and sub_7B380 (35),
      * MES_CONTINUE_INT (83), the versus screen's results (24) and the logos
-     * before the attract (3, 25). */
+     * before the attract (3, 25). 59, 125-128 and 201 are from the owner's
+     * check against the game (1, 9, 22). */
     cells: {
         cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
         cards: {
@@ -228,6 +229,7 @@ const sfight = {
             { cg: 83, cells: [437, 439, 440, 441, 496] },
             { cg: 24, cells: [154, 155, 156, 168, 169, 171, 172, 174] },
             { cg: 3, cells: [88] }, { cg: 25, cells: [175] },
+            { cg: 1, cells: [59] }, { cg: 9, cells: [125, 126, 127, 128] }, { cg: 22, cells: [201] },
         ],
     },
     /* What the viewer knows how to do with this game beyond drawing a model.
