@@ -175,8 +175,25 @@ const sfight = {
     /* The 2D cells and the CGs that colour them (js/cells.js): the pointer
      * arrays _ScrollCG_Initialize (cg_offsets) and dsp_pattern_new
      * (texture_palette_offsets) index, in the XTRA_DATA window. The character
-     * RAM is 0x1080000-0x10FFFFF, room for every 14-bit character. */
-    cells: { cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000 },
+     * RAM is 0x1080000-0x10FFFFF, room for every 14-bit character.
+     *
+     * `cards` are the character cards' tables in the program ROM, one entry
+     * per character: a cell table and the _Scroll_Initialize argument (2x the
+     * CG) that goes with it. The VS screen (round_mask_routines) reads
+     * P1_CHAR_CARDS with CG_PLAYER_CARDS and P2_CHAR_CARDS with
+     * CG_PLAYER2_CARDS: the colour cards 129-152 on CGs 10-21. The table after
+     * each holds the greyscale cards 229-252 on CGs 36-47, the same tiles in
+     * other colours. */
+    cells: {
+        cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
+        cards: {
+            count: 26,
+            tables: [
+                [0x0007d9b4, 0x0007da84], [0x0007da1c, 0x0007daec],
+                [0x0007d9e8, 0x0007dab8], [0x0007da50, 0x0007db20],
+            ],
+        },
+    },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
