@@ -187,7 +187,12 @@ const sfight = {
      *
      * `portraits` is CHAR_SELECT_PORTRAITS, which sel_mini_face_disp reads:
      * a pointer per select-screen slot to that fighter's animated face, seven
-     * cells. sel_disp_init loads CG 7 (_Scroll_Initialize(14)) for them. */
+     * cells. sel_disp_init loads CG 7 (_Scroll_Initialize(14)) for them.
+     *
+     * `tips` are the continue screen's tip cards: the cell tables
+     * conti_mes_select picks from, continue_tips_japan through dword_AEE88,
+     * one after another. MES_CONTINUE_INT loads CG 83
+     * (_Scroll_Initialize(166)) for them. */
     cells: {
         cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
         cards: {
@@ -198,6 +203,7 @@ const sfight = {
             ],
         },
         portraits: { list: 0x000daf3c, count: 12, frames: 7, cg: 7 },
+        tips: { list: 0x000aec78, count: 156, cg: 83 },
     },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only

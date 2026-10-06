@@ -107,8 +107,8 @@ function cgCover(rom) {
 
 const inRuns = (runs, i) => runs.some(([first, n]) => i >= first && i < first + n);
 
-/* The CG the game itself draws each character card and portrait with, from
- * its tables (js/games.js cells.cards and cells.portraits). A colour card and
+/* The CG the game itself draws each character card, portrait and tip card
+ * with, from its tables (js/games.js cells.cards, .portraits and .tips). A colour card and
  * its greyscale twin are the same tiles, so both CGs fit either one, and only
  * the tables tell them apart. Each card table names a player's small card;
  * the big one is the cell before it (129 and 130, 245 and 246) and takes the
@@ -133,6 +133,11 @@ function cardCGs(rom) {
             const cell = rom.mainCpuView.getUint16(frames + f * 2, true);
             if (!map.has(cell)) map.set(cell, P.cg);
         }
+    }
+    const T = rom.game.cells.tips;
+    for (let i = 0; i < (T?.count ?? 0); i++) {
+        const cell = rom.mainCpuView.getUint32(T.list + i * 4, true);
+        if (!map.has(cell)) map.set(cell, T.cg);
     }
     cardCache.set(rom, map);
     return map;
