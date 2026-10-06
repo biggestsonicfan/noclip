@@ -175,8 +175,63 @@ const sfight = {
     /* The 2D cells and the CGs that colour them (js/cells.js): the pointer
      * arrays _ScrollCG_Initialize (cg_offsets) and dsp_pattern_new
      * (texture_palette_offsets) index, in the XTRA_DATA window. The character
-     * RAM is 0x1080000-0x10FFFFF, room for every 14-bit character. */
-    cells: { cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000 },
+     * RAM is 0x1080000-0x10FFFFF, room for every 14-bit character.
+     *
+     * `cards` are the character cards' tables in the program ROM, one entry
+     * per character: a cell table and the _Scroll_Initialize argument (2x the
+     * CG) that goes with it. The VS screen (round_mask_routines) reads
+     * P1_CHAR_CARDS with CG_PLAYER_CARDS and P2_CHAR_CARDS with
+     * CG_PLAYER2_CARDS: the colour cards 129-152 on CGs 10-21. The table after
+     * each holds the greyscale cards 229-252 on CGs 36-47, the same tiles in
+     * other colours.
+     *
+     * `portraits` is CHAR_SELECT_PORTRAITS, which sel_mini_face_disp reads:
+     * a pointer per select-screen slot to that fighter's animated face, seven
+     * cells. sel_disp_init loads CG 7 (_Scroll_Initialize(14)) for them.
+     *
+     * `tips` are the continue screen's tip cards: the cell tables
+     * conti_mes_select picks from, continue_tips_japan through dword_AEE88,
+     * one after another. MES_CONTINUE_INT loads CG 83
+     * (_Scroll_Initialize(166)) for them.
+     *
+     * `names` are NAME_CELL_AND_CG_JPN and _USA, the name plates sel_disp_init
+     * and the versus screen draw: a record of 8 bytes, 2x the CG for
+     * _Scroll_Initialize2 and then the cell. The cell after each one is its
+     * greyscale twin, on the CG after.
+     *
+     * `screens` are cells the game draws right after the screen loads a CG,
+     * read off the calls: sel_disp_init and select_init
+     * (CG 7), name_entry (2), prep_adv_movie and adv_movie_cont (71, 5, 87, 88,
+     * 89), bossm_init (86), MES_ROUND_INT and sub_7B380 (35),
+     * MES_CONTINUE_INT (83), the versus screen's results (24) and the logos
+     * before the attract (3, 25). 59, 125-128 and 201 are from the owner's
+     * check against the game (1, 9, 22). */
+    cells: {
+        cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
+        cards: {
+            count: 26,
+            tables: [
+                [0x0007d9b4, 0x0007da84], [0x0007da1c, 0x0007daec],
+                [0x0007d9e8, 0x0007dab8], [0x0007da50, 0x0007db20],
+            ],
+        },
+        portraits: { list: 0x000daf3c, count: 12, frames: 7, cg: 7 },
+        tips: { list: 0x000aec78, count: 156, cg: 83 },
+        names: { tables: [0x000f1e34, 0x000f1fd4], count: 30 },
+        screens: [
+            { cg: 7, cells: [113, 114, 115, 116, 309, 310, 311, 312, 313, 314, 315, 316, 318, 332, 352] },
+            { cg: 2, cells: [77] },
+            { cg: 71, cells: [390, 405] },
+            { cg: 5, cells: [353, 354, 355, 357, 358, 359, 360, 361, 367, 368, 370, 371, 372, 373, 386, 387] },
+            { cg: 87, cells: [513] }, { cg: 88, cells: [517, 518] }, { cg: 89, cells: [525] },
+            { cg: 86, cells: [501, 502, 515] },
+            { cg: 35, cells: [220, 342, 382] },
+            { cg: 83, cells: [437, 439, 440, 441, 496] },
+            { cg: 24, cells: [154, 155, 156, 168, 169, 171, 172, 174] },
+            { cg: 3, cells: [88] }, { cg: 25, cells: [175] },
+            { cg: 1, cells: [59] }, { cg: 9, cells: [125, 126, 127, 128] }, { cg: 22, cells: [201] },
+        ],
+    },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
