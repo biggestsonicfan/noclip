@@ -34,6 +34,7 @@
 
 import { MAIN_DATA_BASE } from './romset.js';
 import { gameLighting } from './stages.js';
+import { buildVcopSky } from './vcopsky.js';
 
 const RECORD_BYTES = 24;
 const END = 0xffffffff;
@@ -116,6 +117,8 @@ function stageOf(rom, lit, n, segs) {
         draws,
         objects: [],
         sky: null,
+        /* The tile layer's, not geometry (js/vcopsky.js). */
+        panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
         zones,
         views: [['all', 'Every segment at once'], ...zones.map((z, i) => [`zone:${i}`, z.label])],
         view: 'all',
