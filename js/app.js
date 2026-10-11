@@ -1312,6 +1312,7 @@ function addSkyPanorama(slot) {
                 centre: pano.centre,
                 width: pano.width,
                 topColor: pano.topColor.map((c) => c / 255),
+                footColor: pano.footColor?.map((c) => c / 255),
             };
         }
         state.skyPanoramas.set(slot, sky);
@@ -1338,9 +1339,28 @@ function addSkyPanorama(slot) {
      * board centres at Yang 0 lies down the board's +Z, the explorer's -Z. */
     mesh.scale.z = -1;
     mesh.rotation.y = (2 * Math.PI * sky.centre) / sky.width;
+    if (sky.footColor) mesh.add(skyFloor(sky.footColor, height));
     v.root.add(mesh);
     state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance };
     stepSky();
+}
+
+/* What a camera looking down past the strip's foot sees: the foot's colour
+ * rather than the backdrop's, which is the top's. Virtua Cop's sea ends 32
+ * tile rows under the eye line, as far as the board ever scrolls it, and an
+ * orbit camera above the stage looks well below that. */
+function skyFloor(rgb, height) {
+    const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setRGB(...rgb, THREE.SRGBColorSpace),
+        side: THREE.DoubleSide, depthWrite: false, depthTest: false, fog: false,
+    });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(SKY_RADIUS, 64), mat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -height / 2;
+    floor.renderOrder = BACKDROP_ORDER;
+    floor.userData.layer = 'sky';
+    floor.frustumCulled = false;
+    return floor;
 }
 
 /* Throw the decoded skies away, with their textures. */

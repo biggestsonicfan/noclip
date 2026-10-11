@@ -132,12 +132,27 @@ const GLINTS = new Set([0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x4f, 0x50, 0x51, 0x
  * are the pieces they fly into, which the routine hides until then. A drum is
  * its body and its shadow (a MAME run's mask, 3, 18 parts). */
 const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x29, 10]]);
+/* The scripts: a record that stands for an event — the helicopter that comes
+ * over (0x38F10 spawns it at 0x4F060) — and draws none of its parts, two models
+ * of 0xA9 seventy-six units off, in mid-air, in MAME's draws of all three
+ * stages. */
+const SCRIPTS = new Set([0x4d]);
+/* The objects whose parts' offsets are where they stand in the world, not on
+ * the record: stage 3's roof, whose 0x2DE and 0x396 MAME draws at 3,90,-49.5,
+ * their offsets, with the record at 0,87.8,-40 turned half round. */
+const IN_WORLD = new Set([0x26, 0x27]);
+/* And the ones that come to rest elsewhere as soon as the rail nears: the crate
+ * on stage 1's crane, which 0x37500 lowers from 14.45 to 6.45 once the rail
+ * passes 0x4E6, where MAME draws it the rest of the stage. */
+const REST_Y = new Map([[0x16, 6.45]]);
 
 function readObjectRecord(rom, addr) {
     const dv = rom.mainDataView, off = addr - MAIN_DATA_BASE;
+    const type = dv.getUint32(off, true);
     return {
-        type: dv.getUint32(off, true),
-        x: dv.getFloat32(off + 4, true), y: dv.getFloat32(off + 8, true), z: dv.getFloat32(off + 12, true),
+        type,
+        x: dv.getFloat32(off + 4, true), y: REST_Y.get(type) ?? dv.getFloat32(off + 8, true),
+        z: dv.getFloat32(off + 12, true),
         ax: dv.getInt32(off + 16, true), ay: dv.getInt32(off + 20, true), az: dv.getInt32(off + 24, true),
         parent: dv.getInt32(off + 32, true),
     };
@@ -191,8 +206,8 @@ function stageObjects(rom, n, set, segments) {
         if (!p || p < MAIN_DATA_BASE) continue;
         const list = readObjectList(rom, p);
         list.forEach((r, k) => {
-            if (GLINTS.has(r.type)) return;
-            const ops = objectOps(list, k);
+            if (GLINTS.has(r.type) || SCRIPTS.has(r.type)) return;
+            const ops = IN_WORLD.has(r.type) ? [] : objectOps(list, k);
             for (const part of typeParts(rom, r.type)) {
                 if (part.model >= count) continue;
                 const partOps = [...ops, ...recordOps(part)];
@@ -205,6 +220,39 @@ function stageObjects(rom, n, set, segments) {
     return [...byKey.values()];
 }
 
+/* ---- the clouds -------------------------------------------------------------
+ *
+ * The sky behind is the tile chip's (js/vcopsky.js); the clouds in front of it
+ * are geometry. At the stage start 0xB760 copies 24 records of five floats from
+ * 0x2833AB0 — the model (0x7E or 0x7F), x, y, z and a turn about Y, 0x10000 to
+ * the circle — and every frame 0xB8E0 draws each one translated, turned and
+ * scaled by 2 (TGP 0x12, 0x15, 0x13), whatever the stage. The same ring for
+ * all three, around the origin; only the high-rise (stage 3) drops it from its
+ * third segment on, where the rail climbs above them.
+ */
+const CLOUD_TABLE = 0x2833ab0;
+const CLOUD_COUNT = 24;
+const CLOUD_BYTES = 20;
+const CLOUD_SCALE = 2;
+const CLOUDLESS_STAGE = 2;
+const CLOUDLESS_FROM = 2;
+
+function stageClouds(rom, n, set, segments) {
+    const dv = rom.mainDataView;
+    const zones = new Set([...Array(segments).keys()]
+        .filter((s) => n !== CLOUDLESS_STAGE || s < CLOUDLESS_FROM));
+    const out = [];
+    for (let i = 0; i < CLOUD_COUNT; i++) {
+        const off = CLOUD_TABLE - MAIN_DATA_BASE + i * CLOUD_BYTES;
+        const [model, x, y, z, turn] = [0, 4, 8, 12, 16].map((o) => dv.getFloat32(off + o, true));
+        out.push({
+            model, pos: [x, y, z], set, zones, layer: 'sky',
+            ops: [['t', [x, y, -z]], ['r', turn * ANGLE_DEG], ['s', [CLOUD_SCALE, CLOUD_SCALE, CLOUD_SCALE]]],
+        });
+    }
+    return out;
+}
+
 function stageOf(rom, lit, n, segs) {
     const t = rom.game.modelTable;
     const set = n % rom.game.texture.sets;
@@ -212,6 +260,7 @@ function stageOf(rom, lit, n, segs) {
         model: r.model, pos: [r.x, r.y, r.z], set, zones: r.zones, ops: recordOps(r),
     }));
     const objects = stageObjects(rom, n, set, segs.length);
+    const clouds = stageClouds(rom, n, set, segs.length);
     const zones = segs.map((recs, s) => ({ zone: s, set, label: `segment ${s + 1} · ${recs.length} pieces` }));
     return {
         slot: n,
@@ -221,7 +270,7 @@ function stageOf(rom, lit, n, segs) {
         name: STAGE_NAMES[n] ?? `Stage ${n + 1}`,
         chapter: n,
         draws,
-        objects,
+        objects: [...clouds, ...objects],
         sky: null,
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),

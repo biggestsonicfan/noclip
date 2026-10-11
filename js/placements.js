@@ -738,7 +738,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
     const objects = (stage.objects ?? [])
         .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).map((o) => ({
         model: o.model,
-        layer: 'objects',
+        /* Virtua Cop's clouds are objects of the sky's (js/vcop.js). */
+        layer: o.layer ?? 'objects',
         set: o.set,
         /* One that carries its own transform keeps it: a part of one of
          * Virtua Cop's objects, under its parents' (js/vcop.js). */
