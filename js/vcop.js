@@ -100,12 +100,118 @@ function mergeSegments(segs, modelCount) {
     return [...byKey.values()];
 }
 
+/* ---- the objects ------------------------------------------------------------
+ *
+ * What stands in a stage besides its pieces — the cars, drums, crates and
+ * glass — is a second list per segment, `0x286E100[stage][segment]`, which the
+ * board walks (0x9BC0, 0x15424) when the segment comes up, a slot each from
+ * 0x559840 on. A 52-byte record, -1 ending the list:
+ *
+ *     +0x00  u32   type
+ *     +0x04  f32   x, y, z
+ *     +0x10  s32   turns about X, Y and Z, 0x10000 to the circle
+ *     +0x20  s32   the record it stands on, by its place in the list; -1 none
+ *     +0x30  u32   the routine that runs it
+ *
+ * The type is a 32-byte entry of 0x2868620, whose first three words point at
+ * the object's parts: their models up to a -1, each part's offset (three
+ * floats), each part's turns (three s32). The slot's draw (0x326D0) gives every
+ * part its own matrix and draws it with 0xBA70 if its bit of the slot's mask
+ * is set. A part stands at its offset under its object's matrix, and an object
+ * on another at its place under that one's: a lorry's windows ride on it.
+ */
+const OBJECT_TABLE = 0x286e100;
+const OBJECT_BYTES = 52;
+const TYPE_TABLE = 0x2868620;
+const TYPE_BYTES = 32;
+const MAX_PARTS = 32;
+/* The glints on a car's glass: whose routines (0x407F0 on) place them by the
+ * camera's turns at 0x50F450 each frame, nothing that stands anywhere. */
+const GLINTS = new Set([0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54]);
+/* The objects that break, and how many of their parts stand whole: the rest
+ * are the pieces they fly into, which the routine hides until then. A drum is
+ * its body and its shadow (a MAME run's mask, 3, 18 parts). */
+const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x29, 10]]);
+
+function readObjectRecord(rom, addr) {
+    const dv = rom.mainDataView, off = addr - MAIN_DATA_BASE;
+    return {
+        type: dv.getUint32(off, true),
+        x: dv.getFloat32(off + 4, true), y: dv.getFloat32(off + 8, true), z: dv.getFloat32(off + 12, true),
+        ax: dv.getInt32(off + 16, true), ay: dv.getInt32(off + 20, true), az: dv.getInt32(off + 24, true),
+        parent: dv.getInt32(off + 32, true),
+    };
+}
+
+/* One segment's object records, up to the -1. */
+function readObjectList(rom, addr) {
+    const out = [];
+    for (let a = addr; out.length < MAX_RECORDS; a += OBJECT_BYTES) {
+        const t = dataU32(rom, a);
+        if (t === null || t === END) break;
+        out.push(readObjectRecord(rom, a));
+    }
+    return out;
+}
+
+/* A type's parts, as records of their own: model, offset and turns. */
+function typeParts(rom, type) {
+    const at = TYPE_TABLE + type * TYPE_BYTES;
+    const models = dataU32(rom, at), offs = dataU32(rom, at + 4), turns = dataU32(rom, at + 8);
+    const dv = rom.mainDataView;
+    const out = [];
+    for (let i = 0; i < (INTACT.get(type) ?? MAX_PARTS); i++) {
+        const model = dataU32(rom, models + i * 4);
+        if (model === null || model === END) break;
+        const o = offs - MAIN_DATA_BASE + i * 12, t = turns - MAIN_DATA_BASE + i * 12;
+        out.push({
+            model,
+            x: dv.getFloat32(o, true), y: dv.getFloat32(o + 4, true), z: dv.getFloat32(o + 8, true),
+            ax: dv.getInt32(t, true), ay: dv.getInt32(t + 4, true), az: dv.getInt32(t + 8, true),
+        });
+    }
+    return out;
+}
+
+/* A record's matrix, its parent's first. */
+function objectOps(list, k, depth = 0) {
+    const r = list[k];
+    const up = r.parent >= 0 && r.parent < list.length && depth < 8 ? objectOps(list, r.parent, depth + 1) : [];
+    return [...up, ...recordOps(r)];
+}
+
+/* Every part of every object of the stage once, with the segments that list it. */
+function stageObjects(rom, n, set, segments) {
+    const arr = dataU32(rom, OBJECT_TABLE + n * 4);
+    const count = rom.game.modelTable.count;
+    const byKey = new Map();
+    for (let s = 0; arr && s < segments; s++) {
+        /* A segment that brings nothing new has a null. */
+        const p = dataU32(rom, arr + s * 4);
+        if (!p || p < MAIN_DATA_BASE) continue;
+        const list = readObjectList(rom, p);
+        list.forEach((r, k) => {
+            if (GLINTS.has(r.type)) return;
+            const ops = objectOps(list, k);
+            for (const part of typeParts(rom, r.type)) {
+                if (part.model >= count) continue;
+                const partOps = [...ops, ...recordOps(part)];
+                const key = JSON.stringify([part.model, partOps]);
+                if (!byKey.has(key)) byKey.set(key, { model: part.model, pos: [r.x, r.y, r.z], set, ops: partOps, zones: new Set() });
+                byKey.get(key).zones.add(s);
+            }
+        });
+    }
+    return [...byKey.values()];
+}
+
 function stageOf(rom, lit, n, segs) {
     const t = rom.game.modelTable;
     const set = n % rom.game.texture.sets;
     const draws = mergeSegments(segs, t.count).map((r) => ({
         model: r.model, pos: [r.x, r.y, r.z], set, zones: r.zones, ops: recordOps(r),
     }));
+    const objects = stageObjects(rom, n, set, segs.length);
     const zones = segs.map((recs, s) => ({ zone: s, set, label: `segment ${s + 1} · ${recs.length} pieces` }));
     return {
         slot: n,
@@ -115,7 +221,7 @@ function stageOf(rom, lit, n, segs) {
         name: STAGE_NAMES[n] ?? `Stage ${n + 1}`,
         chapter: n,
         draws,
-        objects: [],
+        objects,
         sky: null,
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
@@ -132,7 +238,7 @@ function stageOf(rom, lit, n, segs) {
         colorCycles: [],
         flags: 0,
         floorSize: 0,
-        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length]],
+        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length], ['object parts', objects.length]],
     };
 }
 

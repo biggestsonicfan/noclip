@@ -413,9 +413,20 @@ high-rise — read from the table the board draws them from
 placed models; the board draws one segment at a time and steps to the next as
 the rail camera passes a mark, and neighbouring segments repeat most of their
 pieces. The **Zone** list shows one segment or all of them at once. Each stage
-is drawn under its own texture set, the one the board loads for it. Not read
-yet: the enemies, the cars and the other objects the game moves itself, the
-sky, and the light, which is a placeholder.
+is drawn under its own texture set, the one the board loads for it.
+
+The sky is the tile chip's layer, not geometry: the stage's sky and sea images
+and its colours, as the stage start lays them down ([`js/vcopsky.js`](js/vcopsky.js)).
+The objects layer holds what stands in a stage besides its pieces — cars, vans,
+drums, crates, glass — from a second per-segment table, each object built from
+its type's parts at their offsets, and objects that ride on others under them.
+Breakables stand whole; the glints on car glass, which follow the camera, are
+left out. The boot sets ten palette entries by hand after loading the table —
+the drums' teal among them — and the explorer does the same.
+
+Not read yet: the enemies (they come from another system than the objects), the
+models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
+effects), and the light, which is still Daytona USA's.
 
 ## Running it
 
