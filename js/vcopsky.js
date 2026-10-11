@@ -62,6 +62,10 @@ const SEA_ROWS = 32;
 const TURN_LAYERS = 6;
 const VIEW_CENTRE_COL = 248;
 const CHAR_MASK = 0x3fff;
+/* The 3D's focal in lines, which is the 384-line picture over an 18.5 degree
+ * field of view: measured, a MAME frame against the explorer from the same
+ * camera (0x50F460). */
+const BOARD_FOCAL = 1180;
 
 function u16(rom, addr) {
     const o = addr - MAIN_DATA_BASE;
@@ -144,6 +148,13 @@ function paintLayer(rom, out, map, rows, y0, colour) {
     }
 }
 
+/* The mean colour of a run of pixels. */
+function meanColour(px) {
+    const sum = [0, 0, 0];
+    for (let i = 0; i < px.length; i += 4) for (let k = 0; k < 3; k++) sum[k] += px[i + k];
+    return sum.map((v) => Math.round((v * 4) / px.length));
+}
+
 /**
  * The sky panorama of one stage: layer 1s over the first rows of 1w, one turn
  * across.
@@ -169,10 +180,13 @@ export function buildVcopSky(rom, stage, cxlat = null) {
     return {
         width, height, rgba,
         horizon: LAYER_TILES * 8,
-        /* Up at the drawing camera's focal, as Daytona USA's: the board's own
-         * changes as the camera zooms. */
-        lensFocal: true,
+        /* Up at the board's focal: the layer is in screen space, a line a
+         * row, with the eye line where the 3D's is, and Virtua Cop's lens
+         * never zooms. */
+        focal: BOARD_FOCAL,
         centre: VIEW_CENTRE_COL,
         topColor: Array.from(rgba.subarray(0, 3)),
+        /* What the sea's last tile row comes to, for below it. */
+        footColor: meanColour(rgba.subarray((height - 8) * width * 4)),
     };
 }
