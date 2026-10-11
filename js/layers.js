@@ -189,8 +189,8 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
     const CELL = 32;
     const cells = new Map();
     faces.forEach((f, i) => {
-        const c0 = f.lo.map((v) => Math.floor((v - gap) / CELL));
-        const c1 = f.hi.map((v) => Math.floor((v + gap) / CELL));
+        const c0 = f.c0 = f.lo.map((v) => Math.floor((v - gap) / CELL));
+        const c1 = f.c1 = f.hi.map((v) => Math.floor((v + gap) / CELL));
         for (let x = c0[0]; x <= c1[0]; x++) {
             for (let y = c0[1]; y <= c1[1]; y++) {
                 for (let z = c0[2]; z <= c1[2]; z++) {
@@ -260,18 +260,37 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
         return close >= 2 ? pair : null;
     };
 
+    /* A pair is taken in the first cell, in the order the cells were made, of
+     * those its two faces share: once, without a set of every pair seen, which
+     * a stage dense with small faces (Virtua Cop's high-rise) runs past the
+     * 2^24 a Set can hold. */
+    const order = new Map([...cells.keys()].map((k, n) => [k, n]));
+    const takenHere = (f, g, cell) => {
+        const x0 = Math.max(f.c0[0], g.c0[0]), x1 = Math.min(f.c1[0], g.c1[0]);
+        const y0 = Math.max(f.c0[1], g.c0[1]), y1 = Math.min(f.c1[1], g.c1[1]);
+        const z0 = Math.max(f.c0[2], g.c0[2]), z1 = Math.min(f.c1[2], g.c1[2]);
+        /* One cell shared: this one. */
+        if (x0 === x1 && y0 === y1 && z0 === z1) return true;
+        let first = Infinity;
+        for (let x = x0; x <= x1; x++) {
+            for (let y = y0; y <= y1; y++) {
+                for (let z = z0; z <= z1; z++) first = Math.min(first, order.get(`${x},${y},${z}`));
+            }
+        }
+        return first === cell;
+    };
+
     /* The pairs, i before j in the game's order; a copy's is marked, since
      * its copy is put over it whatever the corners say. */
     const pairs = [];
-    const seen = new Set();
+    let cell = -1;
     for (const list of cells.values()) {
+        cell++;
         for (let a = 0; a < list.length; a++) {
             for (let b = a + 1; b < list.length; b++) {
                 const i = Math.min(list[a], list[b]), j = Math.max(list[a], list[b]);
-                const key = i * faces.length + j;
-                if (seen.has(key)) continue;
-                seen.add(key);
                 const f = faces[i], g = faces[j];
+                if (!takenHere(f, g, cell)) continue;
                 const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
                 const copy = cos > 0 ? twins(f, g) : null;
                 if (cos < cosine && !copy) continue;
