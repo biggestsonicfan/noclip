@@ -286,6 +286,8 @@ export function facePalette(rom) {
             if (o + 2 > md.length) break;
             out[i] = md[o] | (md[o + 1] << 8);
         }
+        /* Entries the boot sets by hand once the table is in. */
+        for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
     } else {
         const cv = rom.mainCpuView;
         const table = (s, first) => {

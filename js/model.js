@@ -72,7 +72,8 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     /* Material stream: one 8-byte record per EMITTED face at matPtr*2.
      * UV stream: nv (pv,pu) 16-bit pairs per face-loop ITERATION at uvPtr*2. */
     const matBase = entry.matPtr * 2;
-    const haveMat = entry.matPtr !== 0;
+    /* A table whose first records sit at 0 says so: Virtua Cop's model 0. */
+    const haveMat = entry.matPtr !== 0 || (!mesh && rom.game.modelTable?.matAtZero === true);
     let uvWord = entry.uvPtr;
     const haveUv = entry.uvPtr !== 0 || points !== null;
 

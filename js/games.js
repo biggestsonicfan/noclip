@@ -2487,6 +2487,12 @@ const vcop = {
         courses: {},
         sound: null,
     }),
+    /* Straight after the table, the boot (0x38B58) stores these by hand: the
+     * drums' teal over the table's red, and a duller tan. */
+    paletteFixes: [
+        [0xe1, 0xb245], [0xe2, 0xb245], [0xe3, 0xb245], [0xe4, 0xb245], [0xe5, 0xb245],
+        [0x173, 0xa1b2], [0x174, 0xba96], [0x175, 0xba96], [0x176, 0xba96], [0x177, 0xa1d2],
+    ],
     regions: {
         /* Two pairs, 512KB; the second half of the first is the one the board
          * also maps at 0x00220000, as on Daytona. */
@@ -2517,8 +2523,9 @@ const vcop = {
         },
     },
     /* Four words and no terminator: {oba, tpa, tha, count}, written to the
-     * engine as tpa, tha, oba, count like Daytona's. */
-    modelTable: { offset: 0x4c8000, count: 0x4d2, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 } },
+     * engine as tpa, tha, oba, count like Daytona's. Model 0, the van, has its
+     * texture records at the very start, so a tha of 0 is one. */
+    modelTable: { offset: 0x4c8000, count: 0x4d2, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true },
     colors: { luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true },
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
