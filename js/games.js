@@ -2501,8 +2501,95 @@ const daytonagtx = daytonaBuild({
     program: [0x00000, 'gtx.12', 0x08283a6f, 'gtx.13', 0xf9b356ae],
 });
 
+/* ---- Virtua Cop ----------------------------------------------------------- */
+
+/*
+ * Virtua Cop (Revision B), the second game on the original Model 2 board and
+ * AM2's, a year after Daytona USA. It is Daytona's library: the texture bank
+ * upload, the colorxlat build, the luma upload and the material upload are the
+ * same routines instruction for instruction, with their tables moved into the
+ * data ROM. So the profile is Daytona's with this game's numbers, every one of
+ * them read off the instruction that uses it:
+ *
+ *   0x23F70   the bank upload, Daytona's 0x146C; its mip run lengths are the
+ *             table at data 0x8190C0 rather than in the program ROM, and its
+ *             callers are 0x23E44 (`ld 0x28190E8[r5*4], g5`, the bank table)
+ *             and 0x23E5C (`lda 0x2300000, g5`, the bank every scene keeps)
+ *   0x23CD0   colorxlat. Daytona's routine without the cabinet test: the one
+ *             set of constants, which are Daytona's DELUXE ones
+ *   0x24070   luma RAM, 0x28190F8 bands of 128 bytes from 0x28190FC
+ *   0x2A28    the boot palette: 1024 colours from data 0x4C0000 into palette
+ *             RAM, each channel scaled by a brightness on the way
+ *   0x51E50   one of the draw routines, and the reason the model table is
+ *             found from the program rather than the other way round: this
+ *             game names a model by number. `lda 0x24C8000[g0*16]` for up to
+ *             0x4D1 and `lda 0x28693F0[g0*16]` past it, the second table
+ *             starting where the first stops counting (see `extra`).
+ */
+const vcop = {
+    ...daytonaBuild({
+        id: 'vcop',
+        name: 'Virtua Cop (Revision B)',
+        program: [0x00000, 'epr-17166b.12', 0xa5647c59, 'epr-17167b.13', 0xf5dde26a],
+        data8: [0x800000, 'epr-17168a.6', 0x59091a37, 'epr-17169a.7', 0x0495808d],
+        modelTable: { offset: 0x4c8000, count: 0x4d2 },
+        paletteOffset: 0x4c0000, paletteCount: 1024,
+        bankTable: 0x28190e8, bootBank: 0x2300000, texSets: 3,
+        luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc },
+        cabinets: DAYTONA_CABINETS,
+        materials: { source: 'mainData', at: 0x81b294, count: 32, stride: 4 },
+        light: [-0.45, -0.89, 0.45],
+        courses: {},
+        sound: null,
+    }),
+    /* Straight after the table, the boot (0x38B58) stores these by hand: the
+     * drums' teal over the table's red, and a duller tan. */
+    paletteFixes: [
+        [0xe1, 0xb245], [0xe2, 0xb245], [0xe3, 0xb245], [0xe4, 0xb245], [0xe5, 0xb245],
+        [0x173, 0xa1b2], [0x174, 0xba96], [0x175, 0xba96], [0x176, 0xba96], [0x177, 0xa1d2],
+    ],
+    regions: {
+        /* Two pairs, 512KB; the second half of the first is the one the board
+         * also maps at 0x00220000, as on Daytona. */
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x00000, 'epr-17166b.12', 0xa5647c59, 'epr-17167b.13', 0xf5dde26a],
+                [0x40000, 'epr-17160a.14', 0x267f3242, 'epr-17161a.15', 0xf7126876],
+            ],
+        },
+        /* The model table and the palette are in the second pair, the banks in
+         * the first and second, the tables the program reads in the third. */
+        mainData: {
+            size: 0x900000,
+            parts: [
+                [0x000000, 'mpr-17164.10', 0xac5fc501, 'mpr-17165.11', 0x82296d00],
+                [0x400000, 'mpr-17162.8', 0x60ddd41e, 'mpr-17163.9', 0x8c1f9dc8],
+                [0x800000, 'epr-17168a.6', 0x59091a37, 'epr-17169a.7', 0x0495808d],
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-17159.16', 0xe218727d, 'mpr-17156.20', 0xc4f4aabf]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-17158.25', 0x1108d1ec, 'mpr-17157.24', 0xcf31e33d]],
+        },
+    },
+    /* Four words and no terminator: {oba, tpa, tha, count}, written to the
+     * engine as tpa, tha, oba, count like Daytona's. Model 0, the van, has its
+     * texture records at the very start, so a tha of 0 is one. */
+    modelTable: { offset: 0x4c8000, count: 0x4d2, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true },
+    colors: { luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true },
+    patches: [],
+    /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
+    stageTable: { flat: true, segments: { at: 0x28390d0, count: 4 } },
+    features: { stages: true, characters: false, motions: false, bodies: false },
+};
+
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop];
 
 /**
  * Pick the profile a set of zip member names belongs to.

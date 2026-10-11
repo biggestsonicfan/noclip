@@ -740,7 +740,9 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         model: o.model,
         layer: 'objects',
         set: o.set,
-        ops: [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
+        /* One that carries its own transform keeps it: a part of one of
+         * Virtua Cop's objects, under its parents' (js/vcop.js). */
+        ops: o.ops ?? [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
             ...propTurn(o.turn),
             ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])],
     }));
@@ -760,7 +762,9 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
          * several — see the all-placements stage in readPlacementStages. */
         set: zone ? zone.set : d.set,
         ...(d.block != null ? { block: d.block } : {}),
-        ops: [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
+        /* A draw that carries its own transform keeps it — Virtua Cop's,
+         * three turns each (js/vcop.js). */
+        ops: d.ops ?? [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
             ...(d.turn ? [['r', (d.turn * 360) / 0x10000]] : [])],
     })));
 }

@@ -10,6 +10,7 @@ import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, B
 import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
+import { readSegmentStages } from './vcop.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -4394,10 +4395,12 @@ function loadGameContent() {
     const on = applyGameFeatures();
     resetMusic();
     if (on.stage) {
-        /* Three shapes of stage data: a record per arena, a placement
-         * table per chapter, and Daytona USA's grid of blocks. */
+        /* Four shapes of stage data: a record per arena, a placement
+         * table per chapter, Daytona USA's grid of blocks and Virtua Cop's
+         * segments. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
+        else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
