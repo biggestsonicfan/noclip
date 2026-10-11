@@ -796,7 +796,11 @@ function buildDaytonaTexram(rom, texSets) {
     const set = sets.length ? sets[sets.length - 1] : null;
     let pages = 1;
     if (set !== null) {
-        const bank = cv.getUint32(raw.bankTable + set * 4, true);
+        /* Daytona keeps the table in the program ROM; Virtua Cop names it by
+         * its data ROM address. */
+        const bank = raw.bankTable >= MAIN_DATA_BASE
+            ? rom.mainDataView.getUint32(off(raw.bankTable) + set * 4, true)
+            : cv.getUint32(raw.bankTable + set * 4, true);
         if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
             uploadDaytonaBank(md, off(bank), tex, false);
             pages++;

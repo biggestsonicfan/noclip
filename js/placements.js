@@ -760,7 +760,9 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
          * several — see the all-placements stage in readPlacementStages. */
         set: zone ? zone.set : d.set,
         ...(d.block != null ? { block: d.block } : {}),
-        ops: [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
+        /* A draw that carries its own transform keeps it — Virtua Cop's,
+         * three turns each (js/vcop.js). */
+        ops: d.ops ?? [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
             ...(d.turn ? [['r', (d.turn * 360) / 0x10000]] : [])],
     })));
 }

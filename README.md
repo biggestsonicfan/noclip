@@ -10,7 +10,8 @@ views below are its. *Fighting Vipers* has stages and models — see
 [Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
-[Daytona USA](#daytona-usa).
+[Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
+stages and its models — see [Virtua Cop](#virtua-cop).
 
 Three views, and a fourth for the 2D art:
 
@@ -396,6 +397,25 @@ copies from program ROM `0xCCC` lands byte for byte at palram 0 *and* at palram
 on the instructions the addresses were read out of, on the 2817 meshes that
 decode, and on the highest colorbase in the game being 1006 against a palette
 upload of 1007.
+
+## Virtua Cop
+
+`vcop.zip` (Revision B) loads with both tabs. Virtua Cop is Daytona USA's
+library a year on — the texture-bank upload, the colorxlat and luma builds and
+the material upload are Daytona's routines instruction for instruction, with
+their tables moved into the data ROM — so it is a Daytona profile with its own
+numbers ([`js/games.js`](js/games.js)). The model table has 1234 entries, every
+one with geometry.
+
+The Stages tab has the three stages — the harbour, the construction site and the
+high-rise — read from the table the board draws them from
+([`js/vcop.js`](js/vcop.js)). A stage is a run of segments, each a list of
+placed models; the board draws one segment at a time and steps to the next as
+the rail camera passes a mark, and neighbouring segments repeat most of their
+pieces. The **Zone** list shows one segment or all of them at once. Each stage
+is drawn under its own texture set, the one the board loads for it. Not read
+yet: the enemies, the cars and the other objects the game moves itself, the
+sky, and the light, which is a placeholder.
 
 ## Running it
 
