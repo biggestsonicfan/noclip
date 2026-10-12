@@ -562,6 +562,15 @@ const FRAG_SHADER = /* glsl */`
             vec2 ndc = (gl_FragCoord.xy - uViewport.xy) / uViewport.zw * 2.0 - 1.0;
             ray = vec3((ndc.x + projectionMatrix[2][0]) / projectionMatrix[0][0],
                        (ndc.y + projectionMatrix[2][1]) / projectionMatrix[1][1], -1.0);
+            // A face with no plane is lifted a slope a layer, and the slope of
+            // a face seen edge on is the depth of a long stretch of it: the top
+            // of a computer case on Virtua Cop's stage 3 desks, layer 7 seen
+            // from eye height, came 0.6 forward through the screen of the
+            // monitor in front of it as a line (issue 80). So the slope taken
+            // is no more than that of a face seen about 70 degrees off square
+            // on, whose depth runs three pixels' width over each pixel.
+            float pixel = -2.0 * layerZ / (projectionMatrix[1][1] * uViewport.w);
+            layerSlope = min(layerSlope, viewDepth(layerZ) - viewDepth(layerZ + 3.0 * pixel));
         }
         float planeDen = dot(vPlane.xyz, ray);
         if (planeDen != 0.0) {
