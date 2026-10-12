@@ -826,7 +826,17 @@ byte is 7). Two corner objects, `0x2FD78` and `0x2FF74`, each called only when
 flags are fighter places in the fight. So they are left out rather than
 simulated, like the billboards.
 
-Not drawn yet: the stones' standing stone (`0x31040`, model `0xEE1`).
+- The stones (kind 5): `0x31040` draws the u16 at `0x70CBC`, model `0xEE1`,
+  translated to the stage state's `+0x54`. The stage set-up (`0x2EC0C`) clears
+  `+0x40` and `0x31004` puts `+0x54` at (6, 4.7, 18.5): the stone at rest, which
+  the explorer draws. Once the fight sets bit 1 of `+0x40` (the round's end at
+  `0xF700`, or all of `0x171730` in `0x500700` at `0x313FC`), `0x311B8` pushes
+  the stone by a fighter's place and `0x31188` draws `0x70CBC[0x500020 & 31]`,
+  the power-on frame counter, turned by `+0x70`/`+0x72`. That is fight state
+  and the counter, so it is left out. One MAME dump (vf2, attract forced to
+  stage 7, frames 1500, 1597 and 1694, `+0x40` = 0) draws `0xEE1` once, with
+  the stage origin's rotation and the origin moved by (6, 4.7, 18.5); the
+  largest translation error is 7.1e-7.
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 

@@ -151,6 +151,18 @@ const KIND_TOURIN = 12;
 const WIND = { at: 0x70fbc, count: 256, shift: 1 };
 
 /*
+ * The stones' standing stone (kind 5). The kind's hook 0x31040 draws the u16
+ * at 0x70CBC, model 0xEE1, translated to the stage state's +0x54, which the
+ * stage set-up (0x2EC0C, 0x31004) puts at (6, 4.7, 18.5) after clearing +0x40.
+ * That is the stone at rest. Once the fight sets bit 1 of +0x40 (the round's
+ * end at 0xF700, or the 0x500700 bits at 0x313FC), 0x311B8 pushes it about
+ * by a fighter's place and 0x31188 runs 0x70CBC[0x500020 & 31], the power-on
+ * frame counter; both are fight state, left out.
+ */
+const KIND_STONES = 5;
+const STONE = { at: 0x70cbc, pos: [6, 4.7, 18.5] };
+
+/*
  * The Colosseum's lightning. Its sky's per-frame routine, 0x2468C, takes the
  * low byte of the random number at 0x94D0 every frame, and if it is 0 to 3
  * and that channel is idle (0xFF at 0x503040 + n), starts the channel; it
@@ -301,6 +313,10 @@ function stormPieces(rom, base, ringSize, storm) {
 
 /* The kind's own draws after the fighters, as [model, layer, ops, anim]. */
 function kindPieces(rom, kind) {
+    if (kind === KIND_STONES) {
+        const [x, y, z] = STONE.pos;
+        return [[u16(rom, STONE.at), 'scenery', [['t', [x, y, -z]]]]];
+    }
     if (kind !== KIND_TOURIN) return [];
     const frames = modelList(rom, WIND.at, WIND.count).map((m) => (m === EMPTY ? 0 : m));
     return [[frames.find((m) => m), 'scenery', undefined, { frames, shift: WIND.shift, phase: 0 }]];
