@@ -99,6 +99,43 @@ function intersect(subject, clipper) {
     return out.length >= 3 ? out : [];
 }
 
+/*
+ * How far a face apart from another, per unit apart, may lie beside it and
+ * still be drawn over it: tan 80 degrees. A face of a group is drawn at the
+ * depth of the group's plane, as much as the gap behind or in front of where
+ * it is (see the note at the top), and seen at a slant that depth is the
+ * depth of what lies in the plane beside it, as far off as the gap times the
+ * tangent of the slant. Unpaired, the two are at one depth with no order, and
+ * the depth buffer splits the pixels between them. Virtua Cop's third stage
+ * has that (issue 69): two pieces of an office wall drawn together, one half
+ * a unit in front of the other, its faces taken back onto the other's plane
+ * where they met the end of a counter they never overlap square on. So two
+ * faces apart are paired as far as they overlap seen within 80 degrees of
+ * square on; beyond that the slant is a sliver.
+ */
+const ASKEW = Math.tan((80 * Math.PI) / 180);
+
+/* Whether two faces' boxes, each grown by `grow`, overlap. */
+function boxesMeet(f, g, grow) {
+    return [0, 1, 2].every((a) => f.lo[a] <= g.hi[a] + grow && g.lo[a] <= f.hi[a] + grow);
+}
+
+/* The axis a normal lies most along. */
+function mainAxis(n) {
+    const x = Math.abs(n[0]), y = Math.abs(n[1]), z = Math.abs(n[2]);
+    return x >= y && x >= z ? 0 : y >= z ? 1 : 2;
+}
+
+/* A convex polygon grown by r all round, near enough: the hull of its
+ * corners moved r each way of eight. */
+function grown(poly, r) {
+    const pts = [];
+    for (const [x, y] of poly) {
+        for (let k = 0; k < 8; k++) pts.push([x + r * Math.cos(k * Math.PI / 4), y + r * Math.sin(k * Math.PI / 4)]);
+    }
+    return hull(pts);
+}
+
 /* The two axes left when `ax` is dropped. */
 const OTHER = [[1, 2], [0, 2], [0, 1]];
 
@@ -113,30 +150,10 @@ function bucket(z) {
     return (zword[0] + 0x400) >> 11;
 }
 
-/**
- * The faces lying on each other, and a depth plane for every vertex of every
- * draw; the layers themselves come from `rankLayers` for each camera.
- *
- * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[]}[]}
- *   draws in the order the game submits them; `matrix` is the draw's
- *   column-major 4x4, and `zCorners` stands in for the decode's own
- * @param {{gap?: number, cosine?: number}} [opts] how far apart two faces may
- *   stand and still be ordered, and the least cosine between their normals
- * @returns {{layer: Float32Array, plane: Float32Array, snap: number[]}[]} per
- *   draw, one layer per vertex (0 until ranked) and four numbers per vertex:
- *   the plane its face takes its depth from, n.p = d in the draw's own space,
- *   or zeros for a face that keeps its own depth; and pairs of vertex indices
- *   (copy, original) for a copy to be drawn on the corners of the triangle it
- *   copies. The array carries `ranking`, what rankLayers needs, or null when
- *   no two faces lie on each other.
- */
-export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null } = {}) {
+/* Every face of every draw, in world space, with its box, normal, area,
+ * zmode and the corners the board sorts it by. */
+function facesOf(draws) {
     const faces = [];
-    const out = draws.map(({ decoded }) => {
-        const count = decoded ? decoded.positions.length / 3 : 0;
-        return { layer: new Float32Array(count), plane: new Float32Array(count * 4), snap: [] };
-    });
-
     draws.forEach(({ decoded, matrix: M, zCorners = decoded?.zCorners }, di) => {
         if (!decoded?.faces) return;
         const P = decoded.positions;
@@ -184,9 +201,12 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
             t = u + 1;
         }
     });
+    return faces;
+}
 
-    /* Candidate pairs: faces whose boxes, grown by the gap, share a cell. */
-    const CELL = 32;
+/* Candidate pairs: faces whose boxes, grown by the gap, share a cell. */
+const CELL = 32;
+function cellsOf(faces, gap) {
     const cells = new Map();
     faces.forEach((f, i) => {
         const c0 = f.c0 = f.lo.map((v) => Math.floor((v - gap) / CELL));
@@ -201,142 +221,137 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
             }
         }
     });
+    return cells;
+}
 
-    const flatHull = (f, ax) => {
-        if (!f.hulls[ax]) {
-            const [p, q] = OTHER[ax];
-            f.hulls[ax] = hull(f.pts.map((v) => [v[p], v[q]]));
-        }
-        return f.hulls[ax];
-    };
-    /* The point of a face's plane over (u, v) in the plane of the other two axes. */
-    const lift = (f, ax, uv) => {
+function flatHull(f, ax) {
+    if (!f.hulls[ax]) {
         const [p, q] = OTHER[ax];
-        const o = f.pts[0];
-        const w = o[ax] - (f.n[p] * (uv[0] - o[p]) + f.n[q] * (uv[1] - o[q])) / f.n[ax];
-        const out = [0, 0, 0];
-        out[p] = uv[0]; out[q] = uv[1]; out[ax] = w;
-        return out;
-    };
+        f.hulls[ax] = hull(f.pts.map((v) => [v[p], v[q]]));
+    }
+    return f.hulls[ax];
+}
+/* The point of a face's plane over (u, v) in the plane of the other two axes. */
+function lift(f, ax, uv) {
+    const [p, q] = OTHER[ax];
+    const o = f.pts[0];
+    const w = o[ax] - (f.n[p] * (uv[0] - o[p]) + f.n[q] * (uv[1] - o[q])) / f.n[ax];
+    const out = [0, 0, 0];
+    out[p] = uv[0]; out[q] = uv[1]; out[ax] = w;
+    return out;
+}
 
-    /* One triangle drawn twice, the second a copy laid on the first — corners
-     * that pair up, each within the gap, all but one of them within a quarter
-     * of the first's shortest side. Daytona's flags draw their emblem that way,
-     * a cut-out triangle over each triangle of the cloth, and every frame of
-     * the wave but the first moves a corner of some copies a little differently
-     * from the cloth's: up to a third of a unit, tilting a pair as much as 24
-     * degrees apart. Left to the tests below, such a pair is not ordered,
-     * crosses, and the depth buffer shows each over part of the other — the
-     * emblem smeared across the cloth on six frames of the 32, which is the
-     * flicker (issue 38). A copy is the same polygon, so it is taken as the tie
-     * the first frame is, which the later polygon wins. The quarter is of the
-     * triangle's own size, so the small parallel faces of a fighter's glove, a
-     * tenth apart and a few tenths across, are not taken for copies.
-     *
-     * Ordered, the copy still does not cover its original where a corner of it
-     * has moved inward: a sliver of cloth is left out, and it lies under the
-     * next copy along, which is another pair and is not ordered against it.
-     * At a fold that sliver comes out in front — a white streak down the flag.
-     * So the copy is also drawn on its original's corners (`snap`), which
-     * moves its picture by no more than the corner moved, a third of a unit.
-     *
-     * Returns, for each corner of g, the corner of f it pairs with, or null. */
-    const twins = (f, g) => {
-        if (f.pts.length !== 3 || g.pts.length !== 3) return null;
-        const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-        const near = 0.25 * Math.min(dist(f.pts[0], f.pts[1]), dist(f.pts[1], f.pts[2]), dist(f.pts[2], f.pts[0]));
-        const free = [0, 1, 2];
-        const pair = [];
-        let close = 0;
-        for (const p of g.pts) {
-            let best = -1;
-            for (const k of free) if (best < 0 || dist(p, f.pts[k]) < dist(p, f.pts[best])) best = k;
-            const d = dist(p, f.pts[best]);
-            if (d > gap) return null;
-            if (d <= near) close++;
-            pair.push(best);
-            free.splice(free.indexOf(best), 1);
+/* One triangle drawn twice, the second a copy laid on the first — corners
+ * that pair up, each within the gap, all but one of them within a quarter
+ * of the first's shortest side. Daytona's flags draw their emblem that way,
+ * a cut-out triangle over each triangle of the cloth, and every frame of
+ * the wave but the first moves a corner of some copies a little differently
+ * from the cloth's: up to a third of a unit, tilting a pair as much as 24
+ * degrees apart. Left to the tests below, such a pair is not ordered,
+ * crosses, and the depth buffer shows each over part of the other — the
+ * emblem smeared across the cloth on six frames of the 32, which is the
+ * flicker (issue 38). A copy is the same polygon, so it is taken as the tie
+ * the first frame is, which the later polygon wins. The quarter is of the
+ * triangle's own size, so the small parallel faces of a fighter's glove, a
+ * tenth apart and a few tenths across, are not taken for copies.
+ *
+ * Ordered, the copy still does not cover its original where a corner of it
+ * has moved inward: a sliver of cloth is left out, and it lies under the
+ * next copy along, which is another pair and is not ordered against it.
+ * At a fold that sliver comes out in front — a white streak down the flag.
+ * So the copy is also drawn on its original's corners (`snap`), which
+ * moves its picture by no more than the corner moved, a third of a unit.
+ *
+ * Returns, for each corner of g, the corner of f it pairs with, or null. */
+function twins(f, g, gap) {
+    if (f.pts.length !== 3 || g.pts.length !== 3) return null;
+    const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const near = 0.25 * Math.min(dist(f.pts[0], f.pts[1]), dist(f.pts[1], f.pts[2]), dist(f.pts[2], f.pts[0]));
+    const free = [0, 1, 2];
+    const pair = [];
+    let close = 0;
+    for (const p of g.pts) {
+        let best = -1;
+        for (const k of free) if (best < 0 || dist(p, f.pts[k]) < dist(p, f.pts[best])) best = k;
+        const d = dist(p, f.pts[best]);
+        if (d > gap) return null;
+        if (d <= near) close++;
+        pair.push(best);
+        free.splice(free.indexOf(best), 1);
+    }
+    return close >= 2 ? pair : null;
+}
+
+/* A pair is taken in the first cell, in the order the cells were made, of
+ * those its two faces share: once, without a set of every pair seen, which
+ * a stage dense with small faces (Virtua Cop's high-rise) runs past the
+ * 2^24 a Set can hold. */
+function takenHere(f, g, cell, order) {
+    const x0 = Math.max(f.c0[0], g.c0[0]), x1 = Math.min(f.c1[0], g.c1[0]);
+    const y0 = Math.max(f.c0[1], g.c0[1]), y1 = Math.min(f.c1[1], g.c1[1]);
+    const z0 = Math.max(f.c0[2], g.c0[2]), z1 = Math.min(f.c1[2], g.c1[2]);
+    /* One cell shared: this one. */
+    if (x0 === x1 && y0 === y1 && z0 === z1) return true;
+    let first = Infinity;
+    for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+            for (let z = z0; z <= z1; z++) first = Math.min(first, order.get(`${x},${y},${z}`));
         }
-        return close >= 2 ? pair : null;
-    };
+    }
+    return first === cell;
+}
 
-    /* A pair is taken in the first cell, in the order the cells were made, of
-     * those its two faces share: once, without a set of every pair seen, which
-     * a stage dense with small faces (Virtua Cop's high-rise) runs past the
-     * 2^24 a Set can hold. */
+/* The pairs, i before j in the game's order, three numbers each; a copy's is
+ * marked, since its copy is put over it whatever the corners say. */
+function pairsOf(faces, out, gap, cosine) {
+    const cells = cellsOf(faces, gap);
     const order = new Map([...cells.keys()].map((k, n) => [k, n]));
-    const takenHere = (f, g, cell) => {
-        const x0 = Math.max(f.c0[0], g.c0[0]), x1 = Math.min(f.c1[0], g.c1[0]);
-        const y0 = Math.max(f.c0[1], g.c0[1]), y1 = Math.min(f.c1[1], g.c1[1]);
-        const z0 = Math.max(f.c0[2], g.c0[2]), z1 = Math.min(f.c1[2], g.c1[2]);
-        /* One cell shared: this one. */
-        if (x0 === x1 && y0 === y1 && z0 === z1) return true;
-        let first = Infinity;
-        for (let x = x0; x <= x1; x++) {
-            for (let y = y0; y <= y1; y++) {
-                for (let z = z0; z <= z1; z++) first = Math.min(first, order.get(`${x},${y},${z}`));
-            }
-        }
-        return first === cell;
-    };
-
-    /* The pairs, i before j in the game's order; a copy's is marked, since
-     * its copy is put over it whatever the corners say. */
     const pairs = [];
+    const consider = (i, j) => {
+        const f = faces[i], g = faces[j];
+        const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
+        const copy = cos > 0 ? twins(f, g, gap) : null;
+        if (cos < cosine && !copy) return;
+        if (!boxesMeet(f, g, gap)) return;
+        const ax = mainAxis(f.n);
+        /* Seen at a slant, faces apart overlap further than they do square
+         * on; see ASKEW. */
+        const reach = ASKEW * Math.abs(f.n[0] * (g.pts[0][0] - f.pts[0][0])
+            + f.n[1] * (g.pts[0][1] - f.pts[0][1]) + f.n[2] * (g.pts[0][2] - f.pts[0][2]));
+        const fh = flatHull(f, ax);
+        const common = intersect(reach > 1e-3 ? grown(fh, reach) : fh, flatHull(g, ax));
+        if (!common.length || polygonArea(common) <= Math.max(1e-3, 0.01 * Math.min(f.area, g.area))) return;
+
+        /* How far g stands from f across the overlap. */
+        let most = 0;
+        for (const uv of common) {
+            const pf = lift(f, ax, uv), pg = lift(g, ax, uv);
+            const s = f.n[0] * (pg[0] - pf[0]) + f.n[1] * (pg[1] - pf[1]) + f.n[2] * (pg[2] - pf[2]);
+            most = Math.max(most, Math.abs(s));
+        }
+        if (most > gap) return;
+        if (copy && f.draw === g.draw) {
+            for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
+        }
+        pairs.push(i, j, copy ? 1 : 0);
+    };
     let cell = -1;
     for (const list of cells.values()) {
         cell++;
         for (let a = 0; a < list.length; a++) {
             for (let b = a + 1; b < list.length; b++) {
                 const i = Math.min(list[a], list[b]), j = Math.max(list[a], list[b]);
-                const f = faces[i], g = faces[j];
-                if (!takenHere(f, g, cell)) continue;
-                const cos = f.n[0] * g.n[0] + f.n[1] * g.n[1] + f.n[2] * g.n[2];
-                const copy = cos > 0 ? twins(f, g) : null;
-                if (cos < cosine && !copy) continue;
-                if (f.lo[0] > g.hi[0] + gap || g.lo[0] > f.hi[0] + gap
-                    || f.lo[1] > g.hi[1] + gap || g.lo[1] > f.hi[1] + gap
-                    || f.lo[2] > g.hi[2] + gap || g.lo[2] > f.hi[2] + gap) continue;
-                const ax = Math.abs(f.n[0]) >= Math.abs(f.n[1]) && Math.abs(f.n[0]) >= Math.abs(f.n[2]) ? 0
-                    : Math.abs(f.n[1]) >= Math.abs(f.n[2]) ? 1 : 2;
-                const common = intersect(flatHull(f, ax), flatHull(g, ax));
-                if (!common.length || polygonArea(common) <= Math.max(1e-3, 0.01 * Math.min(f.area, g.area))) continue;
-
-                /* How far g stands from f across the overlap. */
-                let most = 0;
-                for (const uv of common) {
-                    const pf = lift(f, ax, uv), pg = lift(g, ax, uv);
-                    const s = f.n[0] * (pg[0] - pf[0]) + f.n[1] * (pg[1] - pf[1]) + f.n[2] * (pg[2] - pf[2]);
-                    most = Math.max(most, Math.abs(s));
-                }
-                if (most > gap) continue;
-                if (copy && f.draw === g.draw) {
-                    for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
-                }
-                pairs.push(i, j, copy ? 1 : 0);
+                if (takenHere(faces[i], faces[j], cell, order)) consider(i, j);
             }
         }
     }
+    return pairs;
+}
 
-    /* The groups: faces joined by any pair, each taking the plane of its
-     * largest face. */
-    const root = faces.map((_, i) => i);
-    const find = (i) => {
-        while (root[i] !== i) i = root[i] = root[root[i]];
-        return i;
-    };
-    const paired = new Uint8Array(faces.length);
-    for (let k = 0; k < pairs.length; k += 3) {
-        paired[pairs[k]] = paired[pairs[k + 1]] = 1;
-        root[find(pairs[k])] = find(pairs[k + 1]);
-    }
-    const largest = new Map();
-    faces.forEach((f, i) => {
-        if (!paired[i]) return;
-        const r = find(i), best = largest.get(r);
-        if (best === undefined || f.area > faces[best].area) largest.set(r, i);
-    });
-
+/* Each paired face given the plane of its group's largest face, unless a
+ * corner of it lies further than the gap from that plane; returns how many. */
+function setPlanes(draws, faces, out, group, gap) {
+    const { paired, find, largest } = group;
     let planes = 0;
     faces.forEach((f, i) => {
         if (!paired[i]) return;
@@ -356,9 +371,34 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
         for (let k = f.t0 * 3; k < (f.t1 + 1) * 3; k++) o.plane.set(plane, k * 4);
         planes++;
     });
+    return planes;
+}
 
-    /* What rankLayers needs: the paired faces alone, renumbered, with their
-     * sort corners flattened. */
+/* The groups: faces joined by any pair, each taking the plane of its
+ * largest face. */
+function groupsOf(faces, pairs) {
+    const root = faces.map((_, i) => i);
+    const find = (i) => {
+        while (root[i] !== i) i = root[i] = root[root[i]];
+        return i;
+    };
+    const paired = new Uint8Array(faces.length);
+    for (let k = 0; k < pairs.length; k += 3) {
+        paired[pairs[k]] = paired[pairs[k + 1]] = 1;
+        root[find(pairs[k])] = find(pairs[k + 1]);
+    }
+    const largest = new Map();
+    faces.forEach((f, i) => {
+        if (!paired[i]) return;
+        const r = find(i), best = largest.get(r);
+        if (best === undefined || f.area > faces[best].area) largest.set(r, i);
+    });
+    return { paired, find, largest };
+}
+
+/* What rankLayers needs: the paired faces alone, renumbered, with their
+ * sort corners flattened. */
+function rankingOf(faces, pairs, paired, out) {
     const index = new Int32Array(faces.length).fill(-1);
     const kept = [];
     faces.forEach((f, i) => { if (paired[i]) index[i] = kept.push(f) - 1; });
@@ -370,7 +410,7 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
         edges[k + 1] = index[pairs[k + 1]];
         edges[k + 2] = pairs[k + 2];
     }
-    out.ranking = kept.length ? {
+    return kept.length ? {
         out, edges, corners,
         zmode: Uint8Array.from(kept, (f) => f.zmode),
         draw: Int32Array.from(kept, (f) => f.draw),
@@ -380,9 +420,38 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
         layer: new Int32Array(kept.length),
         below: new Int32Array(kept.length),
     } : null;
+}
+
+/**
+ * The faces lying on each other, and a depth plane for every vertex of every
+ * draw; the layers themselves come from `rankLayers` for each camera.
+ *
+ * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[]}[]}
+ *   draws in the order the game submits them; `matrix` is the draw's
+ *   column-major 4x4, and `zCorners` stands in for the decode's own
+ * @param {{gap?: number, cosine?: number}} [opts] how far apart two faces may
+ *   stand and still be ordered, and the least cosine between their normals
+ * @returns {{layer: Float32Array, plane: Float32Array, snap: number[]}[]} per
+ *   draw, one layer per vertex (0 until ranked) and four numbers per vertex:
+ *   the plane its face takes its depth from, n.p = d in the draw's own space,
+ *   or zeros for a face that keeps its own depth; and pairs of vertex indices
+ *   (copy, original) for a copy to be drawn on the corners of the triangle it
+ *   copies. The array carries `ranking`, what rankLayers needs, or null when
+ *   no two faces lie on each other.
+ */
+export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null } = {}) {
+    const faces = facesOf(draws);
+    const out = draws.map(({ decoded }) => {
+        const count = decoded ? decoded.positions.length / 3 : 0;
+        return { layer: new Float32Array(count), plane: new Float32Array(count * 4), snap: [] };
+    });
+    const pairs = pairsOf(faces, out, gap, cosine);
+    const group = groupsOf(faces, pairs);
+    const planes = setPlanes(draws, faces, out, group, gap);
+    out.ranking = rankingOf(faces, pairs, group.paired, out);
     if (stats) {
         stats.faces = faces.length;
-        stats.paired = kept.length;
+        stats.paired = group.paired.reduce((s, v) => s + v, 0);
         stats.edges = pairs.length / 3;
         stats.planes = planes;
     }
