@@ -748,9 +748,16 @@ Character set-up (`0x13F08`) reads the record `ld 0x200620C[char*4]`: the
 sixteen part models at `+0x00`, the skeleton at `+0x04` (fifteen offsets,
 entry j slot j+1's place in its parent's frame), the texture set at `+0x30`
 (the request at `0x4B838`, which loads it and the next) and thirty-two hand
-models at `+0x3C` (`0x19E34` picks from them). There are fourteen records:
-10 to 12 are the same Lion, and 13 is Akira in the white gi on Akira's sets.
-The names were put to them by drawing each.
+models at `+0x3C` (`0x19E34` picks from them). There are fourteen records.
+
+The names are the game's own. The pointer tables at `0x2980C` and `0x509E8`
+name records 0 to 10, AKIRA to LION in record order, and drawing each record on
+its own texture sets agrees. The tables at `0x5CB28` (eight-byte names) and
+`0x46298` (the debug menu's, with the development names SUI, ACHO and TOU for
+Shun, Dural and Lion) go on to MUE and KOJACKY for 11 and 12. The record table
+holds the same pointer, `0x20032A8`, at 10, 11 and 12: the game stores Lion's
+record three times over, so the two named slots draw Lion. No table names 13,
+which is Akira in the white gi on Akira's sets.
 
 The motions are Sonic the Fighters' keyframe blocks (`js/motion.js`). A motion
 id indexes the pointer table at `0x2120004` directly (`0x1A21C`, `0x27B5C`);

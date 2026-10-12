@@ -19,8 +19,10 @@
  *   +0x3C  thirty-two hand models to the slot (0x19E34 picks the fists and open
  *          hands from it); the part list's own are the ones a motion starts on
  *
- * Fourteen records; 10, 11 and 12 are the same one (Lion), and 13 is the first
- * fighter's again with other parts.
+ * Fourteen records. Entries 10, 11 and 12 are the one pointer, Lion's record;
+ * the name tables call 11 and 12 MUE and KOJACKY, slots the record table fills
+ * with Lion. 13 is the first fighter's again with other parts, and no name
+ * table reaches it.
  *
  * The motions. A motion id indexes the pointer table at data 0x2120004
  * (`ld 0x2120004[g0*4]` in set-up, 0x1A21C, and in the curve walk, 0x27B5C).

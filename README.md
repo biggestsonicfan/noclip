@@ -458,10 +458,10 @@ left out: the game does it when a fighter nears the edge, so it belongs to the
 fight.
 
 The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
-Jeffry, Pai, Wolf, Shun, Dural, Lion, and Akira in the white gi — each on its
-own texture sets, and every one of the 1359 motions in the game's table plays
-on any of them ([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are
-Sonic the Fighters' keyframe format a year early, and the pose is solved as
+Jeffry, Pai, Wolf, Shun, Dural, Lion, and Akira in the white gi, named from
+the game's own tables — each on its own texture sets, and every one of the
+1359 motions in the game's table plays on any of them
+([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. What the fight adds on top — the lean, the crouch, the
 hands and feet turned to the ground — is left out.

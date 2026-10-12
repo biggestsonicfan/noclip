@@ -2612,12 +2612,16 @@ const vcop = {
  *             blocks of 0x2A0 (0x7FC), where Fighting Vipers takes fourteen in
  *             blocks of 0x540
  */
-/* The roster in record order, put to names by drawing each with its own
- * texture sets. Records 10 to 12 are one and the same Lion; 13 is Akira in the
- * white gi, on Akira's sets. */
+/* The roster in record order, as the game's own name tables give it: the
+ * pointer tables at 0x2980C and 0x509E8 name 0-10, and the ones at 0x5CB28
+ * and 0x46298 (the debug menu's, with the development names SUI, ACHO and TOU
+ * for Shun, Dural and Lion) go on to MUE and KOJACKY for 11 and 12. The record
+ * table holds the one pointer 0x20032A8, Lion's, at 10, 11 and 12, so those
+ * two slots draw Lion. No table names 13, which is Akira in the white gi on
+ * Akira's sets. */
 const VF2_NAMES = [
     'Akira', 'Jacky', 'Sarah', 'Kage', 'Lau', 'Jeffry', 'Pai', 'Wolf', 'Shun', 'Dural',
-    'Lion', 'Lion (11)', 'Lion (12)', 'Akira (white gi)',
+    'Lion', "Mue (Lion's record)", "Kojacky (Lion's record)", 'Akira (white gi)',
 ];
 
 const vf2 = {
