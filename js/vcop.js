@@ -113,34 +113,40 @@ function mergeSegments(segs, modelCount) {
  *     +0x20  s32   the record it stands on, by its place in the list; -1 none
  *     +0x30  u32   the routine that runs it
  *
- * The type is a 32-byte entry of 0x2868620, whose first three words point at
- * the object's parts: their models up to a -1, each part's offset (three
- * floats), each part's turns (three s32). The slot's draw (0x326D0) gives every
- * part its own matrix and draws it with 0xBA70 if its bit of the slot's mask
- * is set. A part stands at its offset under its object's matrix, and an object
- * on another at its place under that one's: a lorry's windows ride on it.
+ * The type picks an entry by the pointer table at 0x28690E0 — the spawn
+ * (0x318A0) keeps `0x28690E0[type]` in the slot — whose first three words
+ * point at the object's parts: their models up to a -1, each part's offset
+ * (three floats), each part's turns (three s32), copied into the slot by
+ * 0x31F18, 0x31E98 and 0x31E18. The entries sit in a run at 0x2868620 but not in type
+ * order from 0x18 on: read as a 32-byte array, the small thing on a desk
+ * (0x3D) came out as a door. The slot's draw (0x326D0) gives every part its
+ * own matrix and draws it with 0xBA70 if its bit of the slot's mask is set.
+ * A part stands at its offset under its object's matrix, and an object on
+ * another at its place under that one's: a lorry's windows ride on it.
  */
 const OBJECT_TABLE = 0x286e100;
 const OBJECT_BYTES = 52;
-const TYPE_TABLE = 0x2868620;
-const TYPE_BYTES = 32;
+const TYPE_TABLE = 0x28690e0;
 const MAX_PARTS = 32;
 /* The glints on a car's glass: whose routines (0x407F0 on) place them by the
  * camera's turns at 0x50F450 each frame, nothing that stands anywhere. */
 const GLINTS = new Set([0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54]);
 /* The objects that break, and how many of their parts stand whole: the rest
  * are the pieces they fly into, which the routine hides until then. A drum is
- * its body and its shadow (a MAME run's mask, 3, 18 parts). */
-const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x29, 10]]);
+ * its body and its shadow (a MAME run's mask, 3, 18 parts); the slab on stage
+ * 3's roof (0x26) its first part, the 24 bits of it hidden (0x44D40's mask,
+ * 1); and 0x27 up there its first ten (0x453C0's mask once it comes, 0x3FF). */
+const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x26, 1], [0x27, 10]]);
 /* The scripts: a record that stands for an event — the helicopter that comes
- * over (0x38F10 spawns it at 0x4F060) — and draws none of its parts, two models
- * of 0xA9 seventy-six units off, in mid-air, in MAME's draws of all three
- * stages. */
+ * over (0x38F10 spawns it at 0x4F060) — and draws none of its own parts where
+ * it stands, in mid-air, in MAME's draws of all three stages. */
 const SCRIPTS = new Set([0x4d]);
 /* The objects whose parts' offsets are where they stand in the world, not on
- * the record: stage 3's roof, whose 0x2DE and 0x396 MAME draws at 3,90,-49.5,
- * their offsets, with the record at 0,87.8,-40 turned half round. */
-const IN_WORLD = new Set([0x26, 0x27]);
+ * the record: the double doors, each leaf its own spot, the first the
+ * record's. Stage 3's (0x25), whose 0x2DE and 0x396 MAME draws at 3,90,-49.5,
+ * their offsets; stage 2's (0x4B, two 0xA9 at -8.37,0,-76.29 and
+ * -10.57,0,-74.45); and 0x24, a pair no list places. */
+const IN_WORLD = new Set([0x24, 0x25, 0x4b]);
 /* And the ones that come to rest elsewhere as soon as the rail nears: the crate
  * on stage 1's crane, which 0x37500 lowers from 14.45 to 6.45 once the rail
  * passes 0x4E6, where MAME draws it the rest of the stage. */
@@ -171,7 +177,8 @@ function readObjectList(rom, addr) {
 
 /* A type's parts, as records of their own: model, offset and turns. */
 function typeParts(rom, type) {
-    const at = TYPE_TABLE + type * TYPE_BYTES;
+    const at = dataU32(rom, TYPE_TABLE + type * 4);
+    if (!at) return [];
     const models = dataU32(rom, at), offs = dataU32(rom, at + 4), turns = dataU32(rom, at + 8);
     const dv = rom.mainDataView;
     const out = [];
