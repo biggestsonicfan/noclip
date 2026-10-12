@@ -53,12 +53,12 @@
  * What the fight adds, played frame after frame:
  *
  *   - The blend (set up at 0x27630): at a motion switch, each angle object's
- *     residual E(new)^T E(old) B, as Y, X, Z angles, shifted right by three,
- *     goes to player +0xBE8; the draw turns by it times (8 - frame), so it is
- *     gone by frame 8. The hand and foot targets blend the same way (0x27730),
- *     x and z measured from the body position. Which switches blend, and for
- *     how long, is the caller's choice: some take four frames, two or none.
- *     The explorer blends every switch over eight.
+ *     residual E(new)^T E(old) B, as Y, X, Z angles, is shifted down to a
+ *     step at player +0xBE8; the draw turns by it times (N - frame). N comes
+ *     from the new motion's length, 8 frames for one longer than 16. The hand
+ *     and foot targets blend the same way (0x27730), x and z measured from
+ *     the body position. A loop blends into itself. Whether a switch blends
+ *     at all, and the blend out some moves end with, are the fight's.
  *   - The head (0x2922C) turns toward the face target at most 0x800 a frame
  *     in yaw and 0x400 in pitch, the pitch held to +-0x2000.
  *   - The crouch (0x29414): characters 6 and 10 draw their body at 0.97 of
@@ -230,11 +230,18 @@ const CROUCH = { 6: 0.97, 8: 0.92, 10: 0.97 };
  * attract mode, the steps are the residual shifted right three, exactly. The
  * eight points blend the same way, an eighth of old less new a step, with
  * each point's x and z measured from the body's (0x272A4), so the body keeps
- * its place on the floor and only its height blends. A move can ask for four
- * frames or two, or none; the explorer's links don't say, so they take eight.
+ * its place on the floor and only its height blends.
+ *
+ * How long is the new motion's to say: set-up (0x27130) takes its frame count
+ * (+0x800) and blends 8 frames into one longer than 16, 4 into one of 9 to
+ * 16, 2 into 5 to 8, 1 into 3 or 4, and none into a shorter one; the step is
+ * the residual shifted by 3, 2 or 1 (0x2760C). Whether a switch blends at all
+ * is the fight's (move flags at +0x1A4, +0xC30 and +0x814), as is the blend
+ * out toward a stance pose some moves end with; the explorer blends every
+ * switch in and none out.
  */
-const BLEND_SHIFT = 3;
-const BLEND_FRAMES = 1 << BLEND_SHIFT;
+const blendLength = (frames) => (frames > 16 ? 8 : frames > 8 ? 4 : frames > 4 ? 2 : frames > 2 ? 1 : 0);
+const blendShift = (n) => (n === 8 ? 3 : n === 4 ? 2 : 1);
 
 const rad = (a) => (a * Math.PI) / 0x8000;
 const brad = (r) => Math.round((r * 0x8000) / Math.PI);
@@ -256,19 +263,19 @@ function yxzOf(m) {
 const tripleAt = (angles, obj) => [0, 1, 2].map((k) => (angles[obj * 3 + k] << 16) >> 16);
 
 /* Per object, the step that walks from the last pose drawn to the new one. */
-function blendSteps(fromAngles, fromBlend, toAngles) {
+function blendSteps(fromAngles, fromBlend, toAngles, shift) {
     return Array.from({ length: 12 }, (_, obj) => {
         const was = mul3(eulerOf(tripleAt(fromAngles, obj)), blendOf(fromBlend[obj]));
         const now = eulerOf(tripleAt(toAngles, obj));
         const back = mul3(now.map((_, i) => now.map((row) => row[i])), was);
-        return yxzOf(back).map((v) => v >> BLEND_SHIFT);
+        return yxzOf(back).map((v) => v >> shift);
     });
 }
 
 /* The same for the points, x and z taken from the body's. */
-function pointSteps(from, to) {
+function pointSteps(from, to, shift) {
     const rel = (t, i) => t[i] - (i % 3 === 1 ? 0 : t[i % 3]);
-    return Array.from(from, (_, i) => (rel(from, i) - rel(to, i)) / BLEND_FRAMES);
+    return Array.from(from, (_, i) => (rel(from, i) - rel(to, i)) / (1 << shift));
 }
 
 /*
@@ -303,7 +310,7 @@ const ZERO_BLEND = Array.from({ length: 12 }, () => [0, 0, 0]);
 function liveFor(body) {
     let live = LIVE.get(body);
     if (!live) {
-        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, look: [0, 0] };
+        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0] };
         LIVE.set(body, live);
     }
     return live;
@@ -312,15 +319,23 @@ function liveFor(body) {
 /* The blend for this frame, added to the sample's points in place: a new
  * motion takes its steps from the last frame drawn; they run out on the
  * eighth frame or when the motion loops. */
+function startBlend(live, rom, motion) {
+    live.length = motion ? blendLength(motion.frames) : 0;
+    const first = live.last && live.length ? sampleMotion(rom, motion, 1) : null;
+    const shift = blendShift(live.length);
+    live.steps = first && blendSteps(live.last.angles, live.blend, first.angles, shift);
+    live.points = first && pointSteps(live.last.targets, first.targets, shift);
+}
+
 function blendFor(live, rom, motion, frame, sample) {
-    if (motion !== live.motion) {
-        const first = live.last && motion ? sampleMotion(rom, motion, 1) : null;
-        live.steps = first && blendSteps(live.last.angles, live.blend, first.angles);
-        live.points = first && pointSteps(live.last.targets, first.targets);
+    /* A motion that loops, back to its first frame from its last, blends into
+     * itself as into a new one; one cut short and started again does not. */
+    if (motion !== live.motion || (frame === 1 && motion && live.frame === motion.frames)) {
+        startBlend(live, rom, motion);
     } else if (frame < live.frame) {
         live.steps = live.points = null;
     }
-    const left = BLEND_FRAMES - frame;
+    const left = live.length - frame;
     const blending = live.steps && left > 0;
     // The next switch blends out of the targets as drawn, this blend included.
     if (blending) live.points.forEach((v, i) => { sample.targets[i] += v * left; });
@@ -339,9 +354,12 @@ function blendFor(live, rom, motion, frame, sample) {
  * is no opponent, so the head follows the motion's own target and the chest
  * does not twist.
  *
+ * @param {{faceTarget?: number[]}} [opts]  `faceTarget` takes the place of
+ *   the motion's (float object 2, in the targets' space), as the fight writes
+ *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][]}}
  */
-export function poseFighter(rom, body, motion, frame) {
+export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
     const live = liveFor(body);
     const sample = motion ? sampleMotion(rom, motion, frame) : REST;
@@ -354,6 +372,7 @@ export function poseFighter(rom, body, motion, frame) {
         look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped)) : live.look),
     };
     live.motion = motion; live.frame = frame;
+    if (faceTarget && motion) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });
     const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { levelFeet: true, fight }), body.offsets);
     const crouch = CROUCH[body.index];
     if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);

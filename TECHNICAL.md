@@ -788,13 +788,26 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   rest. Each is applied after its object's euler as rotY, rotX, rotZ. At a
   switch, `0x27630` computes the residual with op `0x2A005454`:
   `E(new)^T E(old) B(current blend)` as Y, X, Z angles, with E the ZYX euler,
-  and stores it shifted right by three; on frame f the turn is that times
-  (8 - f), gone by frame 8. The hand and foot targets blend the same way
-  (`0x27730`): (old - new) / 8 per float, x and z measured from the body
-  position, old being the targets as last drawn. The mirror flags (`+0xC30`
-  bit 6, `+0x1A4` bit 20) zero objects 0-4. How long a switch blends is the
-  caller's: some take four frames, some two, some none (`r3 == 2`). The
-  explorer can't tell which, so it blends every switch over eight.
+  and stores it as a step; on frame f the turn is the step times (N - f),
+  gone by frame N. The hand and foot targets blend the same way (`0x27730`):
+  (old - new) / 2^shift per float, x and z measured from the body position,
+  old being the targets as last drawn.
+- **Blend length.** It comes from the new motion. Set-up (`0x27130`) reads
+  its frame count (`+0x800`): N is 8 for a motion longer than 16 frames, 4
+  for 9-16, 2 for 5-8, 1 for 3-4, and none for a shorter one. The shift is
+  3, 2 or 1 (`0x2760C`, the same for the points at `0x27708`). Checked
+  against all 162 switches captured: `+0x800` is always the motion's frame
+  count. A motion that loops from its last frame back to its first blends
+  into itself (16 of 17 loops captured); one cut short and restarted
+  doesn't.
+- **The fight's blend choices**, left out. The blend mode at `+0xBDD` is set
+  from fight flags: none (`+0` bit 26 clear, `+0xC30` bit 23, `+0x814` = 4
+  and others), blend-in (bit 0) and blend-out (bit 1, `+0x1A4` bit 17 for
+  out only). The blend-out starts at frame `len - N` (`+0xBE0`) and fades
+  toward one of five stance poses picked by `+0x814` (`0x2776C`, the
+  character's set at `+0xBD8` + `0x1E0`...`0x5A0`). The mirror flags
+  (`+0xC30` bit 6, `+0x1A4` bit 20) zero objects 0-4. The explorer blends
+  every switch in and none out.
 - **Head** (`0x2922C`). With the face target in the chest frame as (d0, d1,
   d2): a target behind (d1 < 0) is brought to d1 = 0, and the old yaw is kept
   if it already faces that way within half a unit; yaw = -atan2(d1, d0),
@@ -829,9 +842,21 @@ twist and head angles, all 656 fighter poses and every character match in all
 sixteen slots, Shun's right hand included: at most 0.037 degrees in turn and
 0.0002 in place (the solve's rounding times the bone length). The head rule
 gives the board's angles to within 2 units in 7061 of 7192 frames, the twist
-rule in 4219 of 4228. Played through `poseFighter` from a switch on, as the
-explorer plays it, 458 of 539 frames match with the head left out; the misses
-are switches the game blended shorter or not at all.
+rule in 4219 of 4228.
+
+The explorer's own playback was checked the same way: `poseFighter` given
+only the motion id and frame of each captured frame, sampled from ROM, no
+board state, over the 40 frames before each display list. On frames where
+the fight made no blend choice and the face target is the motion's own, the
+waist (pelvis) is exact for Akira (47 frames), Kage (15), Jeffry (36) and
+Wolf (9), and the head is within 0.008 degrees and 0.00011 in place. So the
+pelvis's 1 degree and the head's turn left from the first comparison are gone.
+The head's remaining error comes from the opponent. Akira's 7.5 degrees in
+motion 1285, and Kage's 3.9 degrees sixteen frames after his face target was
+last on the other fighter, go to within 0.025 degrees once the board's face
+target (`+0xB0C`) is passed in through `poseFighter`'s `faceTarget`. Across
+all sixteen slots, 470 of 539 replayed frames match; the misses are the
+fight's blend choices above.
 
 ### Polygon decoding (`js/model.js`)
 
