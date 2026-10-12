@@ -61,6 +61,8 @@
  *     at all, and the blend out some moves end with, are the fight's.
  *   - The head (0x2922C) turns toward the face target at most 0x800 a frame
  *     in yaw and 0x400 in pitch, the pitch held to +-0x2000.
+ *   - The chest (0x2912C) twists toward the same target, 0x100 a frame, on
+ *     the frames the move record's flags allow (twistGate).
  *   - The crouch (0x29414): characters 6 and 10 draw their body at 0.97 of
  *     its height, 8 at 0.92 (player +0xC50).
  *
@@ -73,7 +75,8 @@
  *
  * Left out: when the fight lets the head look at the other fighter (0x500034,
  * +0 and +0x1A4's move flags), as the explorer's opponent is always looked
- * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
+ * at; and whatever else the fight does to +0x1A4 besides what the move
+ * record sets.
  */
 
 import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
@@ -310,15 +313,107 @@ export function headStep([ay, az], [d0, d1, d2], free = false) {
     return [Math.max(-LOOK_PITCH_LIMIT, Math.min(LOOK_PITCH_LIMIT, y)), z];
 }
 
+/*
+ * The chest's twist (0x2912C, player +0xBE6): a turn about the spine toward
+ * the face target, drawn on top of the chest's aim. The move flags (+0x1A4)
+ * gate it: none of 0x16000 and one of 0x20C, or it is put straight back to 0.
+ * Those bits come from the move record the motion id also indexes
+ * (0x200D34C, read by set-up at 0x1A214), so the explorer has them:
+ *
+ *   - the record's first word is +0x1A4 at the start, bit 21 cleared and bit
+ *     15 moved to 16 when bit 8 is set too (0x1A318);
+ *   - its set-up op 2 gives two frames (+0x808, +0x80A): from the first, bit
+ *     16 goes again (0x1AC14); from the second, 0x10010100 goes and bit 2
+ *     comes on (0x1AC40), the move's active part;
+ *   - its script, run against the frame (0x1AD5C), sets, clears or flips a
+ *     bit named by ops 5, 6 and 7 (0x1AF88-0x1AFB8).
+ *
+ * Checked against MAME's attract mode, this gives the board's gate on all
+ * 7194 player frames captured. What the fight does to +0x1A4 besides (a hit,
+ * a throw, the snapshot 0x3AC10 restores) is fight state, left out like the
+ * fight's blend choices.
+ *
+ * The turn: a = atan2(d2, d0) of the target in the chest's frame; half of it
+ * up to 0x2000, 0x1000 up to 0x6000, the last turn kept past that, none for a
+ * negative a. The twist walks there 0x100 a frame, within 0..0x1000.
+ */
+const SETUP_OP_LENGTH = [0, 3, 7, 14, 17, 10, 7, 3, 1, 15, 6, 11, 3, 3, 15, 3, 0, 7];
+const SCRIPT_OP_LENGTH = [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 7, 4, 5, 6];
+const SET_BIT = 5, CLEAR_BIT = 6, FLIP_BIT = 7;
+const TIMES_OP = 2, TABLE_OP = 16, END_OP = 0, LAST_OP = 8;
+
+/* The set-up ops: where the script starts, and op 2's two frames. */
+function readSetup(dv, at) {
+    let times = null;
+    for (let op = dv.getUint8(at); op !== END_OP; op = dv.getUint8(at)) {
+        if (op === LAST_OP) return { at: at + 1, times };
+        if (op === TIMES_OP) times = [dv.getUint16(at + 1, true), dv.getUint16(at + 3, true)];
+        if (op >= SETUP_OP_LENGTH.length) return null;
+        at += op === TABLE_OP ? 2 + 2 * dv.getUint8(at + 1) : SETUP_OP_LENGTH[op];
+    }
+    return { at, times };
+}
+
+/* The script's bit ops, each (frame, op, bit). */
+function readBitOps(dv, at) {
+    const ops = [];
+    for (let op = dv.getUint8(at); op !== END_OP; op = dv.getUint8(at)) {
+        if (op >= SCRIPT_OP_LENGTH.length) break;
+        if (op >= SET_BIT && op <= FLIP_BIT) ops.push({ frame: dv.getUint16(at + 1, true), op, bit: dv.getUint8(at + 3) });
+        at += SCRIPT_OP_LENGTH[op];
+    }
+    return ops;
+}
+
+/** A motion's move record: its first flag word, op 2's frames, the bit ops. */
+export function readMoveFlags(rom, id) {
+    const table = dataView(rom, rom.game.rig.moves + id * 4);
+    const rec = table < 0 ? -1 : dataView(rom, rom.mainDataView.getUint32(table, true));
+    const setup = rec < 0 ? null : readSetup(rom.mainDataView, rec + 8);
+    if (!setup) return null;
+    return { flags: rom.mainDataView.getUint32(rec, true), times: setup.times, ops: readBitOps(rom.mainDataView, setup.at) };
+}
+
+const RAISED = 0x100 | 0x8000;
+/** +0x1A4 on a frame of the move, as far as the record says. */
+export function moveFlagsAt({ flags, times, ops }, frame) {
+    const raised = (flags & RAISED) === RAISED;
+    let w = flags & ~(1 << 21);
+    if (raised) w = (w & ~0x8000) | 0x10000;
+    if (times) {
+        w |= 2;
+        if (frame >= times[0]) w &= ~(raised ? 0x10002 : 2);
+        if (frame >= times[0] && frame >= times[1]) w = (w & ~0x10010100) | 4;
+    }
+    for (const { frame: at, op, bit } of ops) {
+        if (frame < at) continue;
+        w = op === SET_BIT ? w | (1 << bit) : op === CLEAR_BIT ? w & ~(1 << bit) : w ^ (1 << bit);
+    }
+    return w >>> 0;
+}
+
+const TWIST_OFF = 0x16000, TWIST_ON = 0x20c;
+export const twistGate = (flags) => !(flags & TWIST_OFF) && !!(flags & TWIST_ON);
+
+const TWIST_STEP = 0x100, TWIST_MAX = 0x1000, TWIST_HALF_UP_TO = 0x2000, TWIST_UP_TO = 0x6000;
+export function twistStep(was, [d0, , d2], free = false) {
+    const a = brad(Math.atan2(d2, d0));
+    if (a > TWIST_UP_TO) return was;
+    const to = a < 0 ? 0 : a <= TWIST_HALF_UP_TO ? a >> 1 : TWIST_MAX;
+    if (free || Math.abs(to - was) <= TWIST_STEP) return to;
+    return to > was ? Math.min(was + TWIST_STEP, TWIST_MAX) : Math.max(was - TWIST_STEP, 0);
+}
+
 /* What each fighter carries from one frame to the next under playback: the
- * last frame's sample, the blend then and its steps, and the head's look. */
+ * last frame's sample, the blend then and its steps, the head's look and the
+ * chest's twist. */
 const LIVE = new WeakMap();
 const ZERO_BLEND = Array.from({ length: 12 }, () => [0, 0, 0]);
 
 function liveFor(body) {
     let live = LIVE.get(body);
     if (!live) {
-        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0] };
+        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0], twist: 0 };
         LIVE.set(body, live);
     }
     return live;
@@ -351,6 +446,19 @@ function blendFor(live, rom, motion, frame, sample) {
     return (live.blend = blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND);
 }
 
+/* The move record's flags, read once per motion. */
+const NO_MOVE = { flags: 0, times: null, ops: [] };
+function movesOf(rom, motion) {
+    return (motion.moveFlags ??= readMoveFlags(rom, motion.index) ?? NO_MOVE);
+}
+
+/* The twist this frame: back to 0 with the gate off; with the chest held as
+ * angles the board skips it (0x29118), so it stays as it was. */
+function twistFor(was, local, on, held, stepped) {
+    if (!on) return 0;
+    return held ? was : twistStep(was, local, !stepped);
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
@@ -360,7 +468,8 @@ function blendFor(live, rom, motion, frame, sample) {
  * Played frame after frame, the fighter blends into each new motion and its
  * head turns toward the face target a step at a time, as on the board. On its
  * own the head follows the motion's own target; poseBout gives it an opponent
- * to look at. The chest does not twist.
+ * to look at. Where the move record allows, the chest twists toward the same
+ * target.
  *
  * @param {{faceTarget?: number[]}} [opts]  `faceTarget` takes the place of
  *   the motion's (float object 2, in the targets' space), as the fight writes
@@ -374,10 +483,15 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     /* Playback moves on a frame, or starts the next motion or loop at 1. */
     const stepped = live.motion !== null && (frame === live.frame + 1 || frame === 1);
     const fresh = motion !== live.motion || frame !== live.frame;
+    const held = motion ? heldAngles(rom, motion) : {};
+    /* The frame's pose (0x1ABF4) comes before its flag updates (0x1ABF8), so
+     * the twist sees the flags as the last frame left them. */
+    const twistOn = !!motion && twistGate(moveFlagsAt(movesOf(rom, motion), frame - 1));
     const fight = {
-        held: motion ? heldAngles(rom, motion) : {},
+        held,
         blend: blendFor(live, rom, motion, frame, sample),
         look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped)) : live.look),
+        twist: (local) => (fresh ? (live.twist = twistFor(live.twist, local, twistOn, held[1], stepped)) : live.twist),
     };
     live.motion = motion; live.frame = frame;
     if (faceTarget && motion) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });

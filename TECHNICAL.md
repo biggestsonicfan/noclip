@@ -815,8 +815,9 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   by 0x400 and held to +-0x2000 (`headStep`).
 - **Twist** (`+0xBE6`, `0x2912C`): the chest turns about its spine toward the
   target, a = atan2(d2, d0); half of a up to 0x2000, 0x1000 up to 0x6000,
-  stepped 0x100 a frame within 0..0x1000. Gated by move flags (`+0x1A4`),
-  so it is off in the explorer.
+  the last twist kept past that, 0 for a negative a; stepped 0x100 a frame
+  within 0..0x1000. Gated by the move flags (`+0x1A4`), which come from the
+  move record: see When the chest twists below.
 - **Crouch** (`0x29414`, `+0xC50`): characters 6 and 10 draw their body at
   0.97 of its height, 8 at 0.92.
 - **Hands** (`0x19E34`): the left hand is entry 0-31 of the table at `+0x67C`,
@@ -858,7 +859,51 @@ target through it.
 So the explorer does not decide when to look. Its opponent, behind a checkbox
 that is off by default, is looked at on every frame. Where the game keeps the
 motion's own target, that is wrong, by up to 134 degrees in attract mode.
-Also left out: the chest's twist toward the opponent, which the move sets.
+**When the chest twists.** The gate is at `0x29130`: with `+0x1A4 & 0x16000`
+set, or none of `+0x1A4 & 0x20C`, the twist is put back to 0 (`stis` at
+`0x29150`); otherwise it steps toward the target (`stis` at `0x29210`). With
+the chest held as angles (`+0xBDC` bit 1, `0x2911C`) the whole block is
+skipped and the twist stays.
+
+Unlike the head's gate, these bits come from a record the motion id also
+indexes: the move record at `0x200D34C[id]`, which set-up reads at `0x1A214`
+(it is not the motion table at `0x2120004`). Its first word, bit 21 cleared
+and bit 15 moved to 16 when bit 8 is set too, is `+0x1A4` when the move starts
+(`0x1A318`). Then set-up ops follow (lengths 3, 7, 14, 17, 10, 7, 3, -, 15, 6,
+11, 3, 3, 15, 3, 2 + 2n, 7 for ops 1-17; 0 and 8 end them). Op 2 gives two
+frames, `+0x808` and `+0x80A`. From the first, bit 16 goes (`0x1AC14`). From
+the second, `0x10010100` goes and bit 2, the move's active part, comes on
+(`0x1AC40`). After the ops comes the move's script (`0x1AD5C`, op table
+`0x1B910`): each op runs once the frame reaches its own. Ops 5, 6 and 7 set,
+clear and flip the `+0x1A4` bit named by their operand (12 motions touch the
+gate's bits that way). The frame's pose (`0x1ABF4`) runs before its flag
+updates (`0x1ABF8`), so the twist on frame f sees the flags of frame f - 1.
+
+Checked against a MAME attract capture of both player records each frame: the
+gate worked out from the record alone matches the board's `+0x1A4` on all 7194
+player frames, and op 2's second frame is `+0x80A` on all 1973 that have one.
+The fight changes `+0x1A4` in other places too (a hit, a throw, the snapshot
+`0x3AC10` restores). That is fight state and is left out, like the blend
+choices.
+
+The explorer's playback, given only the motion id and frame (40 frames before
+each display list), against the chest (slot 1) as drawn:
+
+| Chest, clean frames | Before | After |
+|---|---|---|
+| 10 frames the board twists (Shun 646, 665, 677; Lion 439, 873; Akira 108) | 0.658-20.181 degrees | 0.003-0.009 degrees |
+| 262 frames it doesn't | at most 0.007 degrees | unchanged |
+
+Before, each twisted chest was off by the board's own twist (3674 units,
+20.18 degrees, at Shun 5300). Of the frames the fight made a choice on, six
+moved. Three are Shun's motion 649 (4890-4910): there the board looks at the
+other fighter, whose head sits where the twist works out to 0, while the
+explorer twists toward the motion's own target (0.002 to 17.7 degrees; the
+head is already 46-58 degrees off on those frames). Fed the board's own
+target where it looks, they come back to 0.006 degrees. The other three are
+a no-blend switch, a blend-out and a mirrored move. A fight that holds a motion's last frame
+(Lau's 346 at frame 96 for seven frames) steps the twist on through the hold,
+which playback, moving a frame at a time, doesn't do.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
