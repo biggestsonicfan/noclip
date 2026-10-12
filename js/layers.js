@@ -366,6 +366,34 @@ function laterZone(f, g) {
     return Math.min(...f.zones) > Math.min(...g.zones) ? I_FRONT : J_FRONT;
 }
 
+/*
+ * Of two faces in one plane from pieces shown in different (if overlapping)
+ * runs of segments, both sorted by the far corner, the smaller on top. A
+ * face lying inside a larger one sorts nearer from any slant anyway; what
+ * this changes is two faces that only partly overlap, where the far corners
+ * order them one way from one side and the other way from another, and the
+ * board cuts one into the other in triangles. Virtua Cop's third stage lays
+ * its courtyard's gravel, quads of a few hundred square units, on the
+ * road's of 900 and 1500, and from above the road came through it so (issue
+ * 83). The game's camera passes low and far off; the smaller piece is the
+ * one laid on the other. Pieces shown in the same segments keep the sort:
+ * the game draws them together, and the sort is its picture (issue 71's
+ * desks).
+ */
+const SMALLER = 0.9;
+function sameZones(f, g) {
+    if (!f.zones?.size || !g.zones?.size) return true;
+    if (f.zones.size !== g.zones.size) return false;
+    for (const z of f.zones) if (!g.zones.has(z)) return false;
+    return true;
+}
+function smallerOnTop(f, g, lo, hi) {
+    if (f.zmode !== 2 || g.zmode !== 2 || sameZones(f, g)) return 0;
+    if (Math.max(hi, -lo) >= SMALL_APART) return 0;
+    if (f.area < SMALLER * g.area) return I_FRONT;
+    return g.area < SMALLER * f.area ? J_FRONT : 0;
+}
+
 /* The pairs, i before j in the game's order, three numbers each; a copy's is
  * marked, since its copy is put over it whatever the corners say, and so is
  * a pair standing apart (see inFront), its face in front put over the other. */
@@ -393,7 +421,7 @@ function pairsOf(faces, out, gap, cosine) {
         if (copy && f.draw === g.draw) {
             for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
         }
-        pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area) || laterZone(f, g));
+        pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area) || laterZone(f, g) || smallerOnTop(f, g, lo, hi));
     };
     let cell = -1;
     for (const list of cells.values()) {
@@ -619,10 +647,9 @@ function layersFrom(r, ups) {
     const next = new Int32Array(n);
     /* 0 waiting, 1 in the queue, 2 done. */
     const state = new Uint8Array(n);
-    const queue = [];
-    for (let k = 0; k < n; k++) if (!below[k]) { queue.push(k); state[k] = 1; }
+    const { queue, free } = startOf(below, forced, state);
     for (let h = 0; h < n; h++) {
-        if (h === queue.length && !letGo(below, forced, state, queue)) break;
+        if (h === queue.length && !letGo(free, state, queue)) break;
         const u = queue[h];
         state[u] = 2;
         for (let p = ups.start[u]; p < ups.start[u + 1]; p++) {
@@ -630,8 +657,8 @@ function layersFrom(r, ups) {
             const v = topOf(r, e);
             if (v === u || state[v] === 2) continue;
             if (next[u] + 1 > next[v]) next[v] = next[u] + 1;
-            if (edges[e + 2]) forced[v]--;
             if (--below[v] === 0 && state[v] === 0) { queue.push(v); state[v] = 1; }
+            else if (edges[e + 2] && --forced[v] === 0 && state[v] === 0) free.list.push(v);
         }
     }
     return next;
@@ -650,15 +677,25 @@ function countBelow(r) {
     return { below, forced };
 }
 
-/* Of the faces still waiting, the one with nothing laid against the key and
- * the fewest of the sort's pairs under it, queued; false if there is none. */
-function letGo(below, forced, state, queue) {
-    let best = -1;
+/* The faces nothing lies under, queued, and those waiting on the sort's
+ * pairs alone, which a circle may let go. */
+function startOf(below, forced, state) {
+    const queue = [], free = { list: [], at: 0 };
     for (let k = 0; k < below.length; k++) {
-        if (state[k] === 0 && !forced[k] && (best < 0 || below[k] < below[best])) best = k;
+        if (!below[k]) { queue.push(k); state[k] = 1; } else if (!forced[k]) free.list.push(k);
     }
-    if (best < 0) return false;
-    queue.push(best);
-    state[best] = 1;
-    return true;
+    return { queue, free };
+}
+
+/* A face waiting on the sort's pairs alone, the first to come to that,
+ * queued; false if there is none. */
+function letGo(free, state, queue) {
+    while (free.at < free.list.length) {
+        const k = free.list[free.at++];
+        if (state[k] !== 0) continue;
+        queue.push(k);
+        state[k] = 1;
+        return true;
+    }
+    return false;
 }
