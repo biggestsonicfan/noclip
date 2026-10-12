@@ -295,22 +295,49 @@ function solveIK(pR, pT, pivot, ang, tgt, lower, upper, flip, out) {
     return out;
 }
 
+/* The floor under a fighter: its facing, turned the way setBody turns the
+ * body by it, with nothing of the pose. */
+function groundFrame(world) {
+    const m = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    rotY(m, cosA(world[0]), sinA(world[0]));
+    rotX(m, cosA(world[1]), sinA(world[1]));
+    rotZ(m, cosA(world[2]), sinA(world[2]));
+    return m;
+}
+
 /**
  * Solve one sampled frame into sixteen world transforms.
  *
  * @param {object} skel     from readSkeleton()
  * @param {object} sample   from sampleMotion()
- * @param {{world?:number[]}} [opts]  the fighter's facing in binary radians,
- *   (ry, rx, rz) — the arena's, which a fighter on its own does not have.
+ * @param {{world?:number[], pelvisAim?:boolean, levelFeet?:boolean}} [opts]
+ *   `world` is the fighter's facing in binary radians, (ry, rx, rz) — the
+ *   arena's, which a fighter on its own does not have. The other two are for
+ *   Virtua Fighter 2, whose pose routine (0x27CE0) is this one but for where
+ *   the pelvis and the feet take their turn from; see js/vf2fighters.js.
  * @returns {Array<{r:number[], t:number[]}>} column-major 3x3 and translation
  */
-export function buildPose(skel, sample, { world = [0, 0, 0] } = {}) {
+export function buildPose(skel, sample, { world = [0, 0, 0], pelvisAim = false, levelFeet = false } = {}) {
     const { angles, targets } = sample;
     const A = (obj, axis) => angles[obj * 3 + axis];
     const T = (obj) => [targets[obj * 3], targets[obj * 3 + 1], targets[obj * 3 + 2]];
 
     const R = new Array(SLOT_COUNT);
     const P = new Array(SLOT_COUNT);
+
+    /* One limb. Arms hang off the chest, legs off the pelvis, and both measure
+     * their pivot from the waist; a hand carries on from the forearm. */
+    const out = {};
+    const solveLimb = (c, k, parent, footBase) => {
+        const base = [A(c.baseAngle, 0), A(c.baseAngle, 1), A(c.baseAngle, 2)];
+        solveIK(parent, P[0], skel.pivot[k], base, T(c.target),
+                skel.lower[k], skel.upper[k], c.flip, out);
+        R[c.upperSlot] = out.upperR; P[c.upperSlot] = out.upperT;
+        R[c.lowerSlot] = out.lowerR; P[c.lowerSlot] = out.lowerT;
+        R[c.endSlot] = (c.arm ? out.lowerR : footBase).slice();
+        eulerZYX(R[c.endSlot], A(c.endAngle, 0), A(c.endAngle, 1), A(c.endAngle, 2));
+        P[c.endSlot] = out.endT;
+    };
 
     /* Slot 0: the waist, placed by float object 12 and turned by object 4. */
     R[0] = new Array(9).fill(0); P[0] = [0, 0, 0];
@@ -340,28 +367,20 @@ export function buildPose(skel, sample, { world = [0, 0, 0] } = {}) {
     aimHead(head, headT, T(2));
     R[2] = head; P[2] = headT;
 
-    /* Slot 9: the pelvis, turned by object 9 and rolled a quarter turn. */
+    /* Slot 9: the pelvis, turned by object 9 and then rolled a quarter turn,
+     * or in Virtua Fighter 2 aimed at the pelvis target (float object 17) the
+     * way the chest is at its own. */
     const pelvis = R[0].slice();
     eulerZYX(pelvis, A(9, 0), A(9, 1), A(9, 2));
-    rotZ(pelvis, 0, 1);
+    if (pelvisAim) aim(pelvis, P[0], T(5));
+    else rotZ(pelvis, 0, 1);
     R[9] = pelvis.slice(); P[9] = [P[0][0], P[0][1], P[0][2]];
 
-    /* The four limbs. Arms hang off the chest, legs off the pelvis, and both
-     * measure their pivot from the waist. */
-    const out = {};
-    for (let k = 0; k < CHAINS.length; k++) {
-        const c = CHAINS[k];
-        const parent = k < 2 ? chest : pelvis;
-        const base = [A(c.baseAngle, 0), A(c.baseAngle, 1), A(c.baseAngle, 2)];
-        solveIK(parent, P[0], skel.pivot[k], base, T(c.target),
-                skel.lower[k], skel.upper[k], c.flip, out);
-        R[c.upperSlot] = out.upperR; P[c.upperSlot] = out.upperT;
-        R[c.lowerSlot] = out.lowerR; P[c.lowerSlot] = out.lowerT;
-        /* A hand carries on from the forearm; a foot stays level with the body. */
-        R[c.endSlot] = (c.arm ? out.lowerR : R[0]).slice();
-        eulerZYX(R[c.endSlot], A(c.endAngle, 0), A(c.endAngle, 1), A(c.endAngle, 2));
-        P[c.endSlot] = out.endT;
-    }
+    /* A foot stays level with the body, or in Virtua Fighter 2 with the floor:
+     * the fighter's facing and nothing of the pose. */
+    const footBase = levelFeet ? groundFrame(world) : R[0];
+    const parents = [chest, chest, pelvis, pelvis];
+    for (const [k, c] of CHAINS.entries()) solveLimb(c, k, parents[k], footBase);
 
     /* Facing: a quarter turn about Y on every slot, which is where the fighter
      * ends up pointing once the parts are drawn. */

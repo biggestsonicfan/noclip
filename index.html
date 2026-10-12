@@ -443,6 +443,14 @@
         draws a motion on the spot and moves the enemy along its path
         separately; <em>root travel</em> shows that path.
       </div>
+      <div class="note" id="anim-note-vf2" hidden>
+        A fighter is the record at <code>0x200620C</code>: sixteen part
+        models and the skeleton they hang on. A motion id indexes the table
+        at <code>0x2120004</code>, keyframes in the format Sonic The Fighters
+        kept. The pose is solved on one standard rig for everyone
+        (<code>0x296A0</code>) and the parts are then placed along the
+        fighter's own skeleton, as the board draws them.
+      </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects

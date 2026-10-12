@@ -725,6 +725,55 @@ The names are the debug menu's (`0x71AF4`, thirteen-byte strings, pointers at
 repeat earlier ones in everything drawn and are listed once; record 15 draws
 model `0x8FF` alone (flag bit 12) and is left out.
 
+The sky is the tile chip's layer (`buildVf2Sky` in `js/scroll.js`). `0x24314`
+indexes a 32-byte record at `0x2502C` by `stage_num << 5`: the CG list at
+`+0x08`, the palette list at `+0x0C` and the pattern list at `+0x10`, a
+halfword row count, the vertical offset's byte and eighteen pointers straight
+at pattern rows. The per-frame routine (`0x24534`) is Fighting Vipers'
+`0x29A40` without the arena turn; the vertical scroll is
+`8 * list[2] - (pitch - 0x2E0) / 16`.
+
+The raft moves under two flags. Bit 3: `0x1D530` takes 0.037 off `0x50A014`
+every frame, and the stage draw pushes the negated vector before the scenery,
+so the bank slides along +X. Bit 4: `0x1D550` counts frames at `0x50A026` and
+sets the roll at `0x50A024` to `411 sin(128 t) + 133 sin(192 t + 0x1234)`, and
+`0x1DD8C` rolls the view by its negation under the raft, the ring floor and the
+fighters. The counts start again with the stage (`0x1FE78`); the explorer
+starts them again every thirty seconds. The logs drifting apart (`0x1D6D0`,
+`0x1D824`) follow the fighters and are left out.
+
+### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
+
+Character set-up (`0x13F08`) reads the record `ld 0x200620C[char*4]`: the
+sixteen part models at `+0x00`, the skeleton at `+0x04` (fifteen offsets,
+entry j slot j+1's place in its parent's frame), the texture set at `+0x30`
+(the request at `0x4B838`, which loads it and the next) and thirty-two hand
+models at `+0x3C` (`0x19E34` picks from them). There are fourteen records:
+10 to 12 are the same Lion, and 13 is Akira in the white gi on Akira's sets.
+The names were put to them by drawing each.
+
+The motions are Sonic the Fighters' keyframe blocks (`js/motion.js`). A motion
+id indexes the pointer table at `0x2120004` directly (`0x1A21C`, `0x27B5C`);
+entry 0 points at the table's own end, so it holds 1360.
+
+The pose routine (`0x27CE0`) is `calc_rob_angle_cont` nearly op for op, and
+`buildPose` in `js/pose.js` takes the three differences as options:
+
+- Everyone is solved on one standard rig, the table at program ROM `0x296A0`:
+  the chest and head offsets, then per limb its pivot and the two bone lengths.
+- The pelvis is aimed at float object 17 as the chest is at its own (`0x2901C`
+  with g1 = 3), where Sonic the Fighters rolls it a quarter turn
+  (`pelvisAim`).
+- A foot turns from the floor: `0x171B0` starts from the matrix saved at
+  `0x501024`, the fighter's place and facing before any of the pose
+  (`levelFeet`).
+
+The draw (`0x16504`-`0x176A0`) then places each slot at its parent's place plus
+its parent's matrix times the record's offset, with the solved rotation. Left
+out, being the fight's: the lean at player `+0xBE6`, the additive eulers at
+`+0xBA8`, the hand and foot turns at `+0x15A` and `+0x17C`, the crouch at
+`+0xC50`.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

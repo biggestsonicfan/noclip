@@ -2612,6 +2612,14 @@ const vcop = {
  *             blocks of 0x2A0 (0x7FC), where Fighting Vipers takes fourteen in
  *             blocks of 0x540
  */
+/* The roster in record order, put to names by drawing each with its own
+ * texture sets. Records 10 to 12 are one and the same Lion; 13 is Akira in the
+ * white gi, on Akira's sets. */
+const VF2_NAMES = [
+    'Akira', 'Jacky', 'Sarah', 'Kage', 'Lau', 'Jeffry', 'Pai', 'Wolf', 'Shun', 'Dural',
+    'Lion', 'Lion (11)', 'Lion (12)', 'Akira (white gi)',
+];
+
 const vf2 = {
     id: 'vf2',
     name: 'Virtua Fighter 2 (Version 2.1)',
@@ -2659,6 +2667,10 @@ const vf2 = {
         header: 0x300000, pageTable: 0x4c120, sets: 0x57,
         residentSet: null,
         bootSet: 40,
+        /* The fighters' sets: character set-up reads the record
+         * `ld 0x200620C[char*4]` and hands its +0x30 to the request at
+         * 0x4B838 (0x10720, 0x39F4C). See js/vf2fighters.js. */
+        fighters: { records: 0x200620c, count: 14, parts: 0x00, partCount: 16, set: 0x30 },
     },
     /* Fighting Vipers' tables and settings: the program reads its settings
      * out of the same backup RAM bytes (0x3356..0x335C) into the same
@@ -2708,7 +2720,16 @@ const vf2 = {
     },
     depth: { recede: 0, nearMin: 0.1 },
     scenes: null,
-    features: { stages: true, characters: false, motions: false },
+    /* The fighters, posed out of Sonic The Fighters' motion format on a rig of
+     * this game's own; js/vf2fighters.js. `standardRig` is the table every
+     * fighter is solved on, `fighters` the roster's records. */
+    motionTable: { list: 0x2120004, count: 1360 },
+    rig: {
+        kind: 'vf2',
+        standardRig: 0x296a0,
+        fighters: { records: 0x200620c, count: 14, names: VF2_NAMES },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,

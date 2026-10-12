@@ -46,6 +46,7 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
+import { readFighters, readFighterMotions, fighterMotionList, poseFighter } from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -1024,13 +1025,21 @@ function modelsInDisplayList(list) {
  * it can be shaded, and the roster answers that for 210 of the models the
  * scan finds with such a face.
  */
+/* Virtua Fighter 2's roster, each record's sixteen parts; nothing for a game
+ * with no fighters read. */
+function fighterRigModels(add, out) {
+    if (state.rom.game.rig?.kind !== 'vf2') return out;
+    for (const f of readFighters(state.rom)) for (const p of f.parts) add(p.model, f.index);
+    return out;
+}
+
 function rigModels() {
     const out = new Map();
     /* The roster and every table it leads to are one game's. Read against
      * another's ROMs the pointers land wherever they land, so a game without
      * them has no rig models rather than a mapful of wrong ones. */
-    if (!state.rom.game.features.characters) return out;
     const add = (m, index) => { if (m && !out.has(m)) out.set(m, index); };
+    if (!state.rom.game.features.characters) return fighterRigModels(add, out);
     for (const { index } of CHARACTERS) {
         const c = readCharacter(state.rom, index);
         if (!c) continue;
@@ -2938,12 +2947,30 @@ function faceCamera() {
 
 /* ---- Jointed bodies ------------------------------------------------------ */
 
+/*
+ * The readers behind the body panel. The House of the Dead's bodies are baked
+ * trees; Virtua Fighter 2's fighters are solved out of keyframes, but on the
+ * panel they are the same thing: a list of parts, a list of motions, and a
+ * matrix per part for a frame.
+ */
+const BODY_RIGS = {
+    hotd: {
+        read: readBodies, motions: readMotions, list: bodyMotionList,
+        pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
+    },
+    vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
+};
+
+function bodyRig() {
+    return BODY_RIGS[state.rom.game.rig.kind ?? 'hotd'];
+}
+
 /* The motions a body can play: those written for its joint count, the ones
  * its routines play leading. A motion names no body, so any body with the
  * same count plays it, every angle landing on the joint it was written for. */
 function bodyMotions(body) {
     state.motionRanks ??= new Map();
-    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, bodyMotionList(state.rom, body, state.motion.list));
+    if (!state.motionRanks.has(body.index)) state.motionRanks.set(body.index, bodyRig().list(state.rom, body, state.motion.list));
     return state.motionRanks.get(body.index);
 }
 
@@ -2969,6 +2996,12 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     updateHud();
 }
 
+function bodySceneModel(body) {
+    const models = body.parts.map((p) => p.model).filter(Boolean);
+    if (body.texSet === undefined) return models[0];
+    return models.find((id) => modelTextureGuess(id).how === 'fighter') ?? models[0];
+}
+
 function rebuildBody({ keepCamera = true } = {}) {
     const v = state.viewer;
     const body = state.character;
@@ -2977,8 +3010,10 @@ function rebuildBody({ keepCamera = true } = {}) {
     v.clear();
     /* The sheets, palette, colour tables and light the Models tab shows the
      * body's models under. A body's parts are all in one bank, so its first
-     * part answers for the rest. */
-    const first = body.parts.find((p) => p.model)?.model;
+     * part answers for the rest. A fighter's first part can be one with no
+     * texture, which loads no sheets, so it is the first that is the
+     * fighter's own. */
+    const first = bodySceneModel(body);
     if (first != null) useModelScene(first);
 
     const m = state.motion;
@@ -3049,7 +3084,7 @@ function poseBodyRig() {
     const m = state.motion;
     if (!body) return;
     const v = state.viewer;
-    const { matrices, origins } = poseBody(body, m.decoded, m.frame, { travel: state.travel });
+    const { matrices, origins } = bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
     const draws = partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     for (const p of m.parts) {
         const models = draws[p.part];
@@ -3466,9 +3501,12 @@ function renderBodyPanel() {
     const body = state.character;
     if (!body) return;
     const drawn = body.parts.filter((p) => p.model).length;
+    const fighter = body.texSet !== undefined;
+    const sets = fighter ? '<span>texture sets</span><b>' + body.texSet + ', ' + (body.texSet + 1) + '</b>' : '';
     $('#char-meta').innerHTML = `
-        <span>body</span><b>${body.index}</b>
-        <span>root part</span><b>0x${body.root.toString(16)}</b>
+        <span>${fighter ? 'character' : 'body'}</span><b>${body.index}</b>
+        <span>${fighter ? 'record' : 'root part'}</span><b>0x${body.root.toString(16)}</b>
+        ${sets}
         <span>joints</span><b>${body.joints}</b>
         <span>parts</span><b>${body.parts.length}, ${drawn} with a model</b>
         <span>scale</span><b>${body.scale.toFixed(3)}</b>
@@ -3482,7 +3520,8 @@ function renderBodyPanel() {
         const name = p.model ? readModelName(state.rom, p.model) : '';
         const label = p.model ? `model ${p.model}${name ? ` · ${name}` : ''}` : 'no mesh';
         const off = p.offset.map((x) => x.toFixed(2)).join(', ');
-        row.innerHTML = `<div class="joint-head"><b>${'\u2003'.repeat(p.depth)}joint ${p.joint}</b>
+        const what = fighter ? SLOT_NAMES[p.index] : `joint ${p.joint}`;
+        row.innerHTML = `<div class="joint-head"><b>${'\u2003'.repeat(p.depth)}${what}</b>
             <span class="dim">${label} · ${off}</span></div>`;
         if (p.model) {
             row.querySelector('.joint-head').addEventListener('click', () => {
@@ -3502,7 +3541,7 @@ function renderBodyMotionPanel() {
     if (!body) return;
     const sel = $('#motion-select');
     sel.innerHTML = '';
-    const { fits, lead, label } = bodyMotions(body);
+    const { fits, lead, label, every } = bodyMotions(body);
     const group = (label, list) => {
         if (!list.length) return;
         const g = el('optgroup');
@@ -3516,16 +3555,20 @@ function renderBodyMotionPanel() {
         sel.appendChild(g);
     };
     group(`${label} (${lead.length})`, lead);
+    const rest = every ?? `Motions for ${body.joints} joints`;
     group(lead.length ? `Every other motion for ${body.joints} joints (${fits.length - lead.length})`
-        : `Motions for ${body.joints} joints (${fits.length})`, fits.filter((x) => !lead.includes(x)));
+        : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
     if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
     const d = m.decoded;
+    /* A keyframed motion is a block of keys; a baked one is frames of a size. */
+    const size = !d ? '' : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
+        : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
-        <span>frame size</span><b>${frameBytes(d.joints)} bytes</b>
+        ${size}
     ` : '<span>motion</span><b>none fits this body</b>';
 
     const scrub = $('#motion-frame');
@@ -4391,11 +4434,13 @@ function applyGameFeatures() {
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
-    $('#char-label').textContent = bodies ? 'Body' : 'Fighter';
+    const solved = state.rom.game.rig?.kind === 'vf2';
+    $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
     $('#char-squish-field').hidden = bodies;
-    $('#char-travel-field').hidden = !bodies;
+    $('#char-travel-field').hidden = !bodies || solved;
     $('#anim-note').hidden = bodies;
-    $('#anim-note-bodies').hidden = !bodies;
+    $('#anim-note-bodies').hidden = !bodies || solved;
+    $('#anim-note-vf2').hidden = !solved;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
@@ -4452,8 +4497,8 @@ function loadGameContent() {
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
     if (on.anim && state.rom.game.rig) {
-        state.bodies = readBodies(state.rom);
-        state.motion.list = readMotions(state.rom, state.bodies);
+        state.bodies = bodyRig().read(state.rom);
+        state.motion.list = bodyRig().motions(state.rom, state.bodies);
     }
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
