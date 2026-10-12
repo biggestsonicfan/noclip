@@ -718,7 +718,7 @@ of 1.6 down, and the last 0.2 back; `0x202E8` walks ten planks from
 `0x1D824` fill both lists whole while the fighters are clear of the edge, and
 those are the lists drawn. Flag bit 6 swaps every list for the ones at
 `0x6FE38` while byte `0xDF` of the stage state says so: the Colosseum's second
-look.
+look, its lightning (below).
 
 The names are the debug menu's (`0x71AF4`, thirteen-byte strings, pointers at
 `0x46108`), indexed by the colour block plus one. Records 10 and 11, 13 and 14
@@ -741,6 +741,43 @@ sets the roll at `0x50A024` to `411 sin(128 t) + 133 sin(192 t + 0x1234)`, and
 fighters. The counts start again with the stage (`0x1FE78`); the explorer
 starts them again every thirty seconds. The logs drifting apart (`0x1D6D0`,
 `0x1D824`) follow the fighters and are left out.
+
+Record `+0x80`..`+0x82` scales red, green and blue (0x80 is one) into
+`0x5000E0` for the colour tables (`0x2C38`), as Fighting Vipers'
+`stage_RED`: the mirror stage's 50 70 80 is its water, Souseiji's and the
+stones' a warmer dusk. `+0x76` is the stage's kind, and `0x31408`, after the
+fighters, runs the kind's own effects under the camera.
+
+- Tou-rin (kind 12): `0x30E74` draws `0x70FBC[(frame >> 1) & 0xFF]` at the
+  origin, 256 models of blown leaves, each one frame of a 512-frame gust.
+  `0x30EAC` is a burst the fight sets off, left out.
+- The Colosseum: its sky's per-frame routine `0x2468C` runs four channels. A
+  frame's random byte (`0x94D0`, which sums hardware counters, so a seeded
+  generator stands in) starts channel n if it is n and the channel is idle;
+  0 and 2 never run together. Each channel steps the timeline at `0x24D70`
+  once a frame (0 on, 1 off, 0xFF stop): on for frames 0-2, 4-5, 8-10, 12-17,
+  20-22 and 24-25. Channel 0 rewrites the cloud's palette groups 59-95 from
+  `0x24C6C`; 1 lights the mountain (groups 100-117 from `0x24CB6`,
+  `0x24CF8`); 2 puts the bolt's eight 2x18-tile blocks (`0x2AA8346`, `0x8F1C`'s
+  format) over stream columns 24-31 from tile row 8. Each off write puts the
+  stage's own palette or tiles back. Channel 3 sets bit 0 of `0xDF`, which
+  swaps in the second look (its rings at `+0x64` of the list at `0x6FE38`),
+  and `0x1FC00` sets the light to 9999 at angles `0x9D00`, `0xBF00` while it
+  is on.
+- The mirror stage (kind 4): the tint above, and the sky's per-frame routine
+  `0x24DBC` turns on the line scroll and shifts line l by
+  `0x24E30[(frame + l + 0x2E) & 127]`, two ±4-pixel sines interleaved line by
+  line. The line table is indexed by screen line (`segaic24.cpp`) at
+  `g6 + l`, and V is `8 * list[2] - g6`, so line l shows panorama row
+  `8 * list[2] + l` at any pitch. `0x30CA4`'s bubbles rise from a fighter's
+  part every 64 frames, and the stage view has no fighters; they are left out.
+- Stages 7, 9 and 12-14 shimmer the sea the same way (`0x24F90`): lines
+  `[g1, 0xF0)` take `0x25024[((frame >> 2) + l - g1) & 7]`, g1 `0x96`, or 100
+  on stage 7.
+
+Not drawn yet: Budou-jou's two billboards (`0x2EC24`), the Islands' animated
+objects (`0x2EEE8`, records at `0x2F364`), Souseiji's (`0x2FCBC`) and the
+stones' standing stone (`0x31040`, model `0xEE1`).
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 

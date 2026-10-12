@@ -250,16 +250,71 @@ export function buildCourseSky(rom, course, cxlat = null) {
  * Below the strip, 0x243E0 fills the tilemap's remaining rows with the start
  * of its last row, so the ground runs on in that row's colour.
  */
-const VF2_SKY = { records: 0x2502c, stride: 32, cg: 0x08, pal: 0x0c, list: 0x10 };
+const VF2_SKY = { records: 0x2502c, stride: 32, frame: 0x04, cg: 0x08, pal: 0x0c, list: 0x10 };
 const VF2_PITCH_ROWS = 0x2e0 >> 4;
 const VF2_CHAR_BYTES = 0x80000;
+
+/*
+ * The per-frame routines that bend the sky.
+ *
+ * Three of them turn on the layer's line scroll (0x8000 to 0x100A004) and
+ * write the line table at 0x1008800, one h-scroll a screen line, the base
+ * scroll plus a shift. The table is indexed by screen line from the top
+ * (MAME's segaic24.cpp), its entry for line l at (g6 + l), and the layer's
+ * V is 8 * list[2] - g6, so line l shows the panorama's row 8 * list[2] + l
+ * whatever the pitch: the bend belongs to the picture, not the screen. The
+ * loops run l from -0x2E up.
+ *
+ *   0x24DBC (stages 10 and 11, the mirror stage) shifts every line by the
+ *     s16 at 0x24E30[(frame + l + 0x2E) & 127]: two sines of ±4 pixels
+ *     interleaved, so alternate lines sway a quarter turn apart and the whole
+ *     picture ripples as if seen through water.
+ *   0x24D8C (9, 12-14) and 0x24DA4 (7) call 0x24F90 with a band, lines
+ *     [g1, 0xF0), shifted by the s8 at 0x25024[((frame >> 2) + l - g1) & 7]
+ *     — the sea's shimmer, a few pixels, stepping every four frames.
+ */
+const VF2_WOBBLE = 0x24dbc;
+const VF2_WOBBLE_TABLE = 0x24e30;
+const VF2_WOBBLE_LEN = 128;
+const VF2_BANDS = { 0x24d8c: 0x96, 0x24da4: 100 };
+const VF2_BAND_END = 0xf0;
+const VF2_BAND_TABLE = 0x25024;
+const VF2_BAND_LEN = 8;
+const VF2_BAND_SHIFT = 2;
+const VF2_FIRST_LINE = -0x2e;
+
+/* A function of the frame giving each panorama row's shift in pixels, right
+ * positive; null for a stage whose sky holds still. */
+function vf2LineShift(cpu, routine, top, rows) {
+    const out = new Float32Array(rows);
+    if (routine === VF2_WOBBLE) {
+        const table = Array.from({ length: VF2_WOBBLE_LEN }, (_, i) => cpu.getInt16(VF2_WOBBLE_TABLE + i * 2, true));
+        return (frame) => {
+            for (let p = 0; p < rows; p++) {
+                const l = p - top;
+                out[p] = l < VF2_FIRST_LINE ? 0 : table[(frame + l - VF2_FIRST_LINE) & (VF2_WOBBLE_LEN - 1)];
+            }
+            return out;
+        };
+    }
+    const g1 = VF2_BANDS[routine];
+    if (g1 === undefined) return null;
+    const table = Array.from({ length: VF2_BAND_LEN }, (_, i) => cpu.getInt8(VF2_BAND_TABLE + i));
+    return (frame) => {
+        for (let p = 0; p < rows; p++) {
+            const l = p - top;
+            out[p] = l >= g1 && l < VF2_BAND_END ? table[((frame >> VF2_BAND_SHIFT) + l - g1) & (VF2_BAND_LEN - 1)] : 0;
+        }
+        return out;
+    };
+}
 
 /**
  * @param {object} rom   loaded ROM set
  * @param {number} num   stage_num, the stage record's index
  * @param {?Uint8Array} cxlat  as for buildSkyPanorama
  */
-export function buildVf2Sky(rom, num, cxlat = null) {
+export function buildVf2Sky(rom, num, cxlat = null, patch = null) {
     const cpu = rom.mainCpuView;
     const rec = VF2_SKY.records + num * VF2_SKY.stride;
     const list = cpu.getUint32(rec + VF2_SKY.list, true);
@@ -268,13 +323,75 @@ export function buildVf2Sky(rom, num, cxlat = null) {
     const patterns = [];
     for (let i = 0; i < TURN_PATTERNS; i++) patterns.push(cpu.getUint32(list + 4 + i * 4, true));
     const pano = decodePanorama(rom, cpu.getUint32(rec + VF2_SKY.cg, true),
-        cpu.getUint32(rec + VF2_SKY.pal, true), patterns, VF2_CHAR_BYTES, cxlat, rows);
+        cpu.getUint32(rec + VF2_SKY.pal, true), patterns, VF2_CHAR_BYTES, cxlat, rows, patch);
     if (pano) {
         pano.horizon = VIEW_CENTRE_ROW + VF2_PITCH_ROWS + 8 * cpu.getUint8(list + 2);
         pano.centre = VIEW_CENTRE_COL;
         pano.footColor = commonestColour(pano.rgba, (pano.height - 1) * pano.width, pano.width);
+        pano.lineShift = vf2LineShift(cpu, cpu.getUint32(rec + VF2_SKY.frame, true),
+            8 * cpu.getUint8(list + 2), pano.height);
     }
     return pano;
+}
+
+/*
+ * The Colosseum's storm in its sky.
+ *
+ * The stage's per-frame routine, 0x2468C, runs four channels off the
+ * timeline at 0x24D70 (js/vf2.js has the timing). Each turns a write on and
+ * off; every off write puts back what the stage's own palette list and
+ * pattern hold, so a channel's state is all there is to the picture.
+ *
+ *   0  flashes the cloud: groups 59-95 all take the sixteen colours at
+ *      0x24C6C, and entries 1-4 of groups 100-111 and 112-117 four of them.
+ *   1  lights the lower cloud: eleven entries of the same groups, from 5 and
+ *      from 6, from 0x24CB6 and 0x24CF8.
+ *   2  the bolt: eight 2x18-tile blocks (0x8F1C's format: a value added to
+ *      every entry, a mode, the rows, the width) from 0x2AA8346, 0x54 bytes
+ *      apart, over the stream's columns 24-31 from tile row 8. The routine
+ *      writes a column only while it is in the tilemap; here it is always.
+ *
+ * Channel 3 is the arena's: the light and the second look (js/vf2.js).
+ */
+const VF2_STORM_PAL = [
+    [[0x3b0, 37, 16, 0x24c6c], [0x641, 12, 4, 0x24c76], [0x701, 6, 4, 0x24c78]],
+    [[0x645, 12, 11, 0x24cb6], [0x706, 6, 11, 0x24cf8]],
+];
+const VF2_BOLT = { data: 0x2aa8346, step: 0x54, columns: 8, col: 24, row: 8 };
+
+function vf2StormPatch(rom, bits) {
+    const cpu = rom.mainCpuView;
+    const writes = VF2_STORM_PAL.flatMap((w, ch) => (bits & (1 << ch) ? w : []));
+    const tiles = new Map();
+    if (bits & 4) {
+        for (let i = 0; i < VF2_BOLT.columns; i++) {
+            const R = at(rom, VF2_BOLT.data + i * VF2_BOLT.step);
+            const add = R.view.getInt16(R.off, true);
+            const rows = R.view.getUint32(R.off + 4, true);
+            const width = R.view.getUint32(R.off + 8, true);
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < width; x++) {
+                    const v = R.view.getInt16(R.off + 12 + (y * width + x) * 2, true) + add;
+                    tiles.set(((VF2_BOLT.row + y) << 16) | ((VF2_BOLT.col + i) * 2 + x), v & 0xffff);
+                }
+            }
+        }
+    }
+    return {
+        pal: (pal) => {
+            for (const [first, groups, count, src] of writes) {
+                for (let g = 0; g < groups; g++) {
+                    for (let k = 0; k < count; k++) pal[first + g * 16 + k] = cpu.getUint16(src + k * 2, true);
+                }
+            }
+        },
+        tiles,
+    };
+}
+
+/** The Colosseum's sky with storm channels `bits` (bit n for channel n) on. */
+export function buildVf2StormSky(rom, num, cxlat, bits) {
+    return buildVf2Sky(rom, num, cxlat, vf2StormPatch(rom, bits));
 }
 
 /*
@@ -379,9 +496,11 @@ export function loadScrollCG(rom, cgList, palList, charBytes) {
  * through the tables every sky pixel the overlay and the 3D leave uncovered in
  * a MAME snapshot of the attract race matches exactly.
  */
-function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat, fixedRows = 0) {
+function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat, fixedRows = 0, patch = null) {
     const { chars, pal, written } = loadScrollCG(rom, cgList, palList, charBytes);
     if (!written) return null;
+    /* What a stage's own routine writes over the list's palette and tiles. */
+    patch?.pal?.(pal);
 
     /* Each palette entry's colour, worked out the first time a pixel uses it. */
     const rgb = new Int32Array(0x8000).fill(-1);
@@ -406,8 +525,9 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat, fix
         if (!col) continue;
         for (let ty = 0; ty < col.h; ty++) {
             for (let tx = 0; tx < PATTERN_TILES; tx++) {
-                const entry = col.R.view.getUint16(
+                const own = col.R.view.getUint16(
                     col.R.off + col.head + ty * PATTERN_STRIDE + tx * 2, true);
+                const entry = patch?.tiles?.get((ty << 16) | (c * PATTERN_TILES + tx)) ?? own;
                 const base = (entry & CHAR_MASK) * TILE_BYTES;
                 const group = (entry >> 7) & 0xff;
                 if (base + TILE_BYTES > chars.length) continue;

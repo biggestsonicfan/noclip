@@ -757,7 +757,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         : view === 'camera' || d.reach !== false));
     return sky.concat(objects, built, draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
-        anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,
+        /* Or a model a frame chosen its own way (Virtua Fighter 2's storm). */
+        anim: d.anim ?? (d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null),
         /* Virtua Fighter 2 sorts its pieces into layers of its own (js/vf2.js). */
         layer: d.layer ?? 'scenery',
         /* Which texture set the piece is drawn under, for a stage that spans

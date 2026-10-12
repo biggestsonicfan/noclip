@@ -457,6 +457,15 @@ as the stage's own per-frame routines move them. The logs drifting apart is
 left out: the game does it when a fighter nears the edge, so it belongs to the
 fight.
 
+The stages' own effects run too, from the routines the game runs every frame.
+Leaves blow across Tou-rin. Lightning strikes the Colosseum: the clouds and
+the mountain flash, a bolt splits the sky, and the arena flashes white with
+its lit second look. The game times the strikes off hardware counters, so the
+explorer keeps their odds but not their moments. Under the mirror stage's
+water the sky ripples line by line, as the sea shimmers on four others, and
+each stage takes its colour cast from its record, the mirror stage's blue-green
+the strongest. The bubbles rising from a fighter are left out with the fighters.
+
 The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
 Jeffry, Pai, Wolf, Shun, Dural, Lion, and Akira in the white gi, named from
 the game's own tables — each on its own texture sets, and every one of the

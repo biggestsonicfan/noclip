@@ -14,13 +14,20 @@
  *   +0x6C  f32      the light's brightness, and +0x70, +0x72 its two angles —
  *                   0xCE1C copies them to 0x501098 and 0x501020, as Fighting
  *                   Vipers' change_scene does from its own record
+ *   +0x76  u8       the stage's kind, which picks its effects (0x31408)
  *   +0x78  u32      texture set, and +0x7C its colour block (0xCE38 -> 0x4B410)
+ *   +0x80  u8[3]    red, green and blue scales, 0x80 for one, which go to
+ *                   0x5000E0 for the colour tables (0x2C38), as Fighting
+ *                   Vipers' stage_RED: the mirror stage's 50 70 80 is its
+ *                   water, Souseiji's and the stones' a warmer dusk
  *   +0x84  u16[6]   the ground round the ring, one per ring size (0x208B4)
  *
  * None of them is drawn under a matrix of its own — every piece is modelled
  * where it stands — so the whole stage is every piece at the origin. -1 is an
  * empty slot. Flag bit 6 swaps the lists for the ones at 0x6FE38, a second
- * look of the same stage, while the byte at 0xDF of the stage state says so.
+ * look of the same stage, while the byte at 0xDF of the stage state says so;
+ * its rings are at +0x64 there, not +0x84. That is the Colosseum's lightning
+ * (see stormSchedule).
  *
  * The ring is sized by the operator: 0x50A00C, the setting, is doubled and
  * rounded, and 12 and up pick entries 0..4 (capped), anything less entry 5.
@@ -51,7 +58,7 @@
  */
 
 import { gameLighting, stageLight } from './stages.js';
-import { buildVf2Sky } from './scroll.js';
+import { buildVf2Sky, buildVf2StormSky } from './scroll.js';
 
 const RECORD_BYTES = 256;
 const EMPTY = 0xffff;
@@ -66,6 +73,9 @@ const VECTER = 0x70;
 const TEX_SET = 0x78;
 const COLOR_BLOCK = 0x7c;
 const RINGS = 0x84;
+const KIND = 0x76;
+const TINT = 0x80;
+const UNIT_TINT = 0x80;
 const RING_COUNT = 6;
 const FLAG_EXTRA = 1 << 8;
 const FLAG_RING = 1 << 2;
@@ -75,6 +85,7 @@ const FLAG_MIRROR = 1 << 5;
 const FLAG_ONLY = 1 << 12;
 /* The second look's lists, which the alternate reads index without the stage. */
 const ALT_LISTS = 0x6fe38;
+const ALT_RINGS = 0x64;
 
 const NAMES = 0x46108;
 const NAME_BYTES = 13;
@@ -129,6 +140,92 @@ function raftMotion(flags, layer, ops = []) {
     return ops.length ? ops : null;
 }
 
+/*
+ * Tou-rin's wind (kind 12). After the fighters, under the camera, the kind's
+ * hook 0x30E74 draws one model at the stage's origin: the u16 at
+ * 0x70FBC[(frame >> 1) & 0xFF], 256 frames of blown leaves and dust drawn
+ * once each, so the gust takes 512 frames to come round; -1 draws nothing.
+ * The same kind's 0x30EAC is a burst the fight sets off, left out.
+ */
+const KIND_TOURIN = 12;
+const WIND = { at: 0x70fbc, count: 256, shift: 1 };
+
+/*
+ * The Colosseum's lightning. Its sky's per-frame routine, 0x2468C, takes the
+ * low byte of the random number at 0x94D0 every frame, and if it is 0 to 3
+ * and that channel is idle (0xFF at 0x503040 + n), starts the channel; it
+ * draws again rather than run 0 and 2 together. Every running channel then
+ * steps once through the timeline at 0x24D70 a frame: 0 turns its write on,
+ * 1 off, 0xFF stops, anything else waits. On the timeline a channel is on
+ * for frames 0-2, 4-5, 8-10, 12-17, 20-22 and 24-25 of its 27. Channels 0
+ * to 2 are the sky's (js/scroll.js); channel 3 sets bit 0 of the stage
+ * state's 0xDF, which turns the second look on, and 0x1FC00 sees it rise and
+ * sets the light to 9999 at angles 0x9D00 and 0xBF00 (0x501098, 0x501020-22)
+ * — every face that turns towards it full white — and sees it fall and puts
+ * the record's light back.
+ *
+ * The random number adds up hardware counters (0xF00000), so when a channel
+ * starts cannot be had from the ROM; a seeded generator stands in for it,
+ * with the board's odds of one in 256 a frame.
+ */
+const STORM_SKY = 0x2468c;
+const SKY_FRAME_ROUTINE = (n) => 0x2502c + n * 32 + 4;
+const STORM_TIMELINE = 0x24d70;
+const STORM_ON = 0, STORM_OFF = 1, STORM_END = 0xff;
+const STORM_CHANNELS = 4;
+const STORM_ARENA = 1 << 3;
+const STORM_SEED = 0x693;
+const FLASH_LIGHT = [9999, 0x9d00 - 0x10000, 0xbf00 - 0x10000];
+
+/* A small fixed generator, so the storm is the same every visit. */
+function seeded(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) & 0xff;
+    };
+}
+
+/* Which channel this frame's draw starts, or -1; 0 and 2 never run together. */
+function stormStart(at, rand) {
+    for (;;) {
+        const r = rand();
+        if (r >= STORM_CHANNELS || at[r] !== STORM_END) return -1;
+        const other = r === 0 ? 2 : r === 2 ? 0 : -1;
+        if (other < 0 || at[other] === STORM_END) return r;
+    }
+}
+
+/**
+ * The storm's channels, frame by frame: bit n is set while channel n's write
+ * is on. One round of the explorer's frames, which the caller wraps.
+ *
+ * @param {object} rom loaded ROM set
+ * @returns {Uint8Array} the bits for each frame of the round
+ */
+export function stormSchedule(rom) {
+    const step = (i) => rom.mainCpuView.getUint8(STORM_TIMELINE + i);
+    const at = new Array(STORM_CHANNELS).fill(STORM_END);
+    const rand = seeded(STORM_SEED);
+    const out = new Uint8Array(ROUND_FRAMES);
+    let bits = 0;
+    for (let f = 0; f < ROUND_FRAMES; f++) {
+        const ch = stormStart(at, rand);
+        if (ch >= 0) at[ch] = 0;
+        for (let c = 0; c < STORM_CHANNELS; c++) {
+            if (at[c] === STORM_END) continue;
+            const v = step(at[c]);
+            if (v === STORM_ON) bits |= 1 << c;
+            else if (v === STORM_OFF) bits &= ~(1 << c);
+            at[c] = v === STORM_END ? STORM_END : at[c] + 1;
+        }
+        out[f] = bits;
+    }
+    return out;
+}
+
 function u16(rom, a) { return rom.mainCpuView.getUint16(a, true); }
 function u32(rom, a) { return rom.mainCpuView.getUint32(a, true); }
 
@@ -167,7 +264,7 @@ function raftPieces(s) {
 
 /* The pieces of one look of a stage: scenery, backdrop, the extras, the ring.
  * Each is [model, layer, ops?]; without ops it stands at the origin. */
-function stagePieces(rom, base, lists, ringSize) {
+function stagePieces(rom, base, lists, ringSize, rings = base + RINGS) {
     const flags = u32(rom, base + FLAGS);
     /* Stage 15's one model has nothing to see in it; it is left out. */
     if (flags & FLAG_ONLY) return [];
@@ -180,8 +277,33 @@ function stagePieces(rom, base, lists, ringSize) {
     if (flags & FLAG_RAFT && u16(rom, lists + EXTRA) !== EMPTY) pieces.push(...raftPieces(s));
     pieces.push([u16(rom, lists + RING_FLOOR), 'floor', scaled(s)]);
     if (flags & FLAG_MIRROR) pieces.push([u16(rom, base + MIRROR_FLOOR), 'floor', scaled(s)]);
-    if (flags & FLAG_RING) pieces.push([u16(rom, base + RINGS + ringIndex(ringSize) * 2), 'ground']);
+    if (flags & FLAG_RING) pieces.push([u16(rom, rings + ringIndex(ringSize) * 2), 'ground']);
     return pieces;
+}
+
+/* One look's pieces: the stage's own lists, or the second look's. */
+function lookPieces(rom, base, ringSize, alt) {
+    return alt
+        ? stagePieces(rom, base, ALT_LISTS, ringSize, ALT_LISTS + ALT_RINGS)
+        : stagePieces(rom, base, base, ringSize);
+}
+
+/* The two looks piece by piece, each a model that swaps to its lit twin while
+ * the arena's channel is on. The lists run in step, so pieces pair by place. */
+function stormPieces(rom, base, ringSize, storm) {
+    const lit = lookPieces(rom, base, ringSize, true);
+    const index = (f) => (storm[f % ROUND_FRAMES] & STORM_ARENA ? 1 : 0);
+    return lookPieces(rom, base, ringSize, false).map(([m, layer, ops], i) => {
+        const frames = [m, lit[i][0]].map((x) => (x === EMPTY ? 0 : x));
+        return [frames.find((x) => x) ?? EMPTY, layer, ops, frames[0] === frames[1] ? null : { frames, index }];
+    });
+}
+
+/* The kind's own draws after the fighters, as [model, layer, ops, anim]. */
+function kindPieces(rom, kind) {
+    if (kind !== KIND_TOURIN) return [];
+    const frames = modelList(rom, WIND.at, WIND.count).map((m) => (m === EMPTY ? 0 : m));
+    return [[frames.find((m) => m), 'scenery', undefined, { frames, shift: WIND.shift, phase: 0 }]];
 }
 
 function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
@@ -190,13 +312,22 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
     const set = u32(rom, base + TEX_SET);
     const colors = u32(rom, base + COLOR_BLOCK);
     const t = rom.game.modelTable;
-    const pieces = stagePieces(rom, base, alt ? ALT_LISTS : base, ringSize)
-        .filter(([m]) => m !== EMPTY && m < t.count);
     const flags = u32(rom, base + FLAGS);
-    const draws = pieces.map(([model, layer, ops]) => {
+    const storm = !alt && flags & FLAG_ALT && u32(rom, SKY_FRAME_ROUTINE(n)) === STORM_SKY
+        ? stormSchedule(rom) : null;
+    const pieces = [
+        ...(storm ? stormPieces(rom, base, ringSize, storm) : lookPieces(rom, base, ringSize, alt)),
+        ...kindPieces(rom, rom.mainCpuView.getUint8(base + KIND)),
+    ].filter(([m]) => m !== EMPTY && m < t.count);
+    const draws = pieces.map(([model, layer, ops, anim]) => {
         const moved = raftMotion(flags, layer, ops);
-        return { model, pos: [0, 0, 0], set, layer, ...(moved ? { ops: moved } : {}) };
+        if (anim) anim.frames = anim.frames.map((m) => (m < t.count ? m : 0));
+        return { model, pos: [0, 0, 0], set, layer, ...(moved ? { ops: moved } : {}), ...(anim ? { anim } : {}) };
     });
+    const tint = [0, 1, 2].map((i) => rom.mainCpuView.getUint8(base + TINT + i) / UNIT_TINT);
+    const light = stageLight(rom.mainCpuView.getFloat32(base + BRIGHT, true),
+        rom.mainCpuView.getInt16(base + VECTER, true), rom.mainCpuView.getInt16(base + VECTER + 2, true));
+    const flash = alt || storm ? stageLight(...FLASH_LIGHT) : null;
     const name = stageName(rom, colors) ?? `Stage ${n}`;
     return {
         slot: n,
@@ -211,17 +342,18 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
         objects: [],
         sky: null,
         /* The tile layer's panorama (js/scroll.js). */
-        panorama: (cxlat) => buildVf2Sky(rom, n, cxlat),
+        panorama: (cxlat) => vf2Panorama(rom, n, cxlat, storm),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',
         union: 'all',
         texSets: [set],
         texSet: [set, colors],
-        tint: [1, 1, 1],
+        tint,
         bright: 1,
-        light: stageLight(rom.mainCpuView.getFloat32(base + BRIGHT, true),
-            rom.mainCpuView.getInt16(base + VECTER, true), rom.mainCpuView.getInt16(base + VECTER + 2, true)),
+        /* The second look is the flash's, so it stands in the flash's light. */
+        light: alt ? flash : light,
+        ...(storm ? { lightAt: (f) => (storm[f % ROUND_FRAMES] & STORM_ARENA ? flash : light) } : {}),
         materials: lit.materials,
         colorCycles: [],
         flags,
@@ -229,6 +361,17 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
         meta: [['stage', n], ['texture set', set], ['colour block', colors],
             ['pieces', draws.length], ['flags', `0x${flags.toString(16)}`]],
     };
+}
+
+/* A stage's sky, and on the Colosseum the storm's: the sky at each frame's
+ * channels, decoded the first time they come up. */
+function vf2Panorama(rom, n, cxlat, storm) {
+    const pano = buildVf2Sky(rom, n, cxlat);
+    if (!pano || !storm) return pano;
+    const skyBits = (STORM_ARENA - 1);
+    pano.imageAt = (f) => storm[f % ROUND_FRAMES] & skyBits;
+    pano.image = (bits) => (bits ? buildVf2StormSky(rom, n, cxlat, bits)?.rgba : pano.rgba);
+    return pano;
 }
 
 /* What a stage draws, to tell the copies (11 of 10, 13 of 9, 14 of 1) from
