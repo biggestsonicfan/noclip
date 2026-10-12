@@ -790,9 +790,26 @@ explorer's frame. Which of the two is drawn also depends on `g13 + 0x18`,
 `+0x20` and `+0x26` (tables `0x2EE40` and `0x2EE70`). So they are left out
 rather than simulated.
 
-Not drawn yet: the Islands' animated objects (`0x2EEE8`, records at
-`0x2F364`), Souseiji's (`0x2FCBC`) and the stones' standing stone (`0x31040`,
-model `0xEE1`).
+Not drawn: the Islands' animated objects (`0x2EEE8`, only when the stage-type
+byte is 1, which is the Islands). Two parts, and `c`, the power-on counter at
+`0x500020`, picks the model in both:
+- Three models from `c >> 2`: `0x2F788[(c >> 2) & 63]` at (12.5, 0, 17.6),
+  ORed with `0x2F778[g13 + 0x26 >> 13]`, then `0x2F808[((c >> 2) + 8) & 63]`
+  and `0x2F788[((c >> 2) + 16) & 63]` at (22.4, 0, -5.8), the last two only
+  while bit 15 of the yaw at `g13 + 0x26` is set.
+- 23 records at `0x2F364` (44 bytes each). Record i draws
+  `(+0x00)[(+0x24)[((c >> +0x28) + +0x23) & +0x22]]` at `+0x04` with the
+  angles at `+0x1C` and the scale at `+0x10`, but only if `+0x29` has the bit
+  of the camera's yaw octant (`0x2F35C[(g13 + 0x26 >> 13) & 7]`) and `+0x2A`
+  has the bit of the camera's 3x3 cell (`g13 + 0x18` and `+0x20`, split at
+  -10 and 10).
+
+`c` is not a stage-record field and not the explorer's frame, and which records
+are drawn also depends on `g13 + 0x18`, `+0x20` and `+0x26`. So they are left
+out rather than simulated, like the billboards.
+
+Not drawn yet: Souseiji's animated objects (`0x2FCBC`) and the stones'
+standing stone (`0x31040`, model `0xEE1`).
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 
