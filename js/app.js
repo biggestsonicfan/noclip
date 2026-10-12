@@ -46,7 +46,7 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
-import { readFighters, readFighterMotions, fighterMotionList, poseFighter } from './vf2fighters.js';
+import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -94,6 +94,10 @@ const state = {
     bodies: null,
     motionRanks: null,
     travel: false,
+    /* Virtua Fighter 2: a second fighter, the same one playing the same
+     * motion, standing where a round starts the other, for the heads to turn
+     * toward. */
+    opponent: true,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -3021,6 +3025,11 @@ function rebuildBody({ keepCamera = true } = {}) {
      * frame, so each keeps a slot per model it has drawn so far and swaps their
      * geometry — the coat alone is a hundred models. */
     m.parts = body.parts.map((p) => ({ part: p.index, slots: [] }));
+    /* The opponent is a body of its own, as the pose keeps each one's
+     * playback (its blends and its head) under it. */
+    m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })) }
+        : null;
     m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
     applyWireVisibility();
@@ -3030,7 +3039,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     poseRig();
 
     if (!keepCamera) {
-        const drawn = m.parts.flatMap((p) => p.slots.filter((x) => x.decoded)
+        const drawn = [...m.parts, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
         frameRig(drawn, 10);
     }
@@ -3079,14 +3088,10 @@ function setBodySlot(slot, model) {
     rankBodyPart(slot);
 }
 
-function poseBodyRig() {
-    const body = state.character;
-    const m = state.motion;
-    if (!body) return;
-    const v = state.viewer;
-    const { matrices, origins } = bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
-    const draws = partDraws(state.rom, body, m.decoded, m.frame, m.tick);
-    for (const p of m.parts) {
+/* Draw a body's parts for a frame: each part's models in its slots, placed by
+ * the pose's matrices. */
+function placeBodyParts(parts, draws, matrices) {
+    for (const p of parts) {
         const models = draws[p.part];
         for (let k = 0; k < Math.max(models.length, p.slots.length); k++) {
             if (k >= p.slots.length) {
@@ -3103,6 +3108,30 @@ function poseBodyRig() {
             placePartAt(x, matrices[p.part]);
         }
     }
+}
+
+/* Pose the fighter, and its opponent when there is one: the pair face each
+ * other and each head turns toward the other's. The opponent's matrices are
+ * in its own frame, so they go through where it stands. */
+function poseFighterAndRival(body, m) {
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
+    const [mine, theirs] = poseBout(state.rom, [
+        { body, motion: m.decoded, frame: m.frame },
+        { body: m.rival.body, motion: m.decoded, frame: m.frame },
+    ]);
+    const place = new THREE.Matrix4().fromArray(opponentMatrix());
+    const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
+    const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
+    placeBodyParts(m.rival.parts, draws, placed);
+    return mine;
+}
+
+function poseBodyRig() {
+    const body = state.character;
+    const m = state.motion;
+    if (!body) return;
+    const { matrices, origins } = poseFighterAndRival(body, m);
+    placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */
@@ -4110,6 +4139,10 @@ function wireOptions() {
         state.travel = e.target.checked;
         poseRig();
     });
+    $('#char-rival').addEventListener('change', (e) => {
+        state.opponent = e.target.checked;
+        rebuildBody();
+    });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
         if (state.motion.skeleton) state.motion.skeleton.visible = e.target.checked;
@@ -4438,6 +4471,7 @@ function applyGameFeatures() {
     $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
+    $('#char-rival-field').hidden = !solved;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     $('#anim-note-vf2').hidden = !solved;

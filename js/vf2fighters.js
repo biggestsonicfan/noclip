@@ -64,8 +64,16 @@
  *   - The crouch (0x29414): characters 6 and 10 draw their body at 0.97 of
  *     its height, 8 at 0.92 (player +0xC50).
  *
- * Left out, as there is no opponent: the face target the game points at the
- * other fighter, and the chest's twist toward it (+0xBE6, 0x2912C).
+ *   - The face target (0x2867C): the fight writes the other fighter's head,
+ *     where the draw left it (+0x20C, 0x168A0), over the motion's own at
+ *     +0xB0C, moved into this fighter's frame by its place (+0x18) and facing
+ *     (+0x26). Player 1 is posed and drawn first, so it looks at player 2's
+ *     head of the frame before, and player 2 at player 1's of this one. The
+ *     explorer stands an opponent where a round starts it (poseBout).
+ *
+ * Left out: when the fight lets the head look at the other fighter (0x500034,
+ * +0 and +0x1A4's move flags), as the explorer's opponent is always looked
+ * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
  */
 
 import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
@@ -350,9 +358,9 @@ function blendFor(live, rom, motion, frame, sample) {
  * where the other went.
  *
  * Played frame after frame, the fighter blends into each new motion and its
- * head turns toward the face target a step at a time, as on the board. There
- * is no opponent, so the head follows the motion's own target and the chest
- * does not twist.
+ * head turns toward the face target a step at a time, as on the board. On its
+ * own the head follows the motion's own target; poseBout gives it an opponent
+ * to look at. The chest does not twist.
  *
  * @param {{faceTarget?: number[]}} [opts]  `faceTarget` takes the place of
  *   the motion's (float object 2, in the targets' space), as the fight writes
@@ -377,5 +385,51 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const crouch = CROUCH[body.index];
     if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);
     const matrices = poseMatrices(pose);
-    return { matrices, origins: matrices.map((m) => [m[12], m[13], m[14]]) };
+    const origins = matrices.map((m) => [m[12], m[13], m[14]]);
+    live.head = origins[2];
+    return { matrices, origins };
+}
+
+/*
+ * The opponent. A round starts the fighters at x = -1 and +1 (the stores of
+ * -1.0 and 1.0 to player +0x18), facing each other, so the explorer stands one
+ * 2 ahead of the fighter, turned half round. Ahead is the motions' +z, which
+ * is the viewer's +x (js/pose.js turns the one into the other), so in the
+ * fighter's viewer frame the opponent's (x, y, z) is (2 - x, y, -z), and
+ * the other way round the same.
+ */
+export const OPPONENT_DISTANCE = 2;
+
+/** Where the opponent's parts go: its viewer frame into the fighter's. */
+export function opponentMatrix(distance = OPPONENT_DISTANCE) {
+    return [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, distance, 0, 0, 1];
+}
+
+/* The other fighter's head, as last posed, in the motions' space of the one
+ * looking at it: its viewer (x, y, z) across to the looker's, then as
+ * (z, y, x). */
+function headSeenFrom(other, distance) {
+    const h = LIVE.get(other)?.head;
+    return h && [-h[2], h[1], distance - h[0]];
+}
+
+/**
+ * Pose a fighter and an opponent facing it, each head turning toward the
+ * other's as the fight turns it: the first, player 1, looks at where the
+ * opponent's head was last drawn, and the opponent then at the first's of
+ * this frame. Each is {body, motion, frame}; the opponent's body has to be an
+ * object of its own, as it carries its own playback.
+ *
+ * Checked against MAME's attract mode with both fighters posed this way from
+ * the motion ids and frames alone, at the places and facings the board had
+ * them: the head is within 0.008 degrees wherever neither fighter's own blend
+ * or mirror choice is in the way.
+ *
+ * @returns {Array<{matrices: number[][], origins: number[][]}>} each in its
+ *   own viewer frame; opponentMatrix() places the second.
+ */
+export function poseBout(rom, [first, second], distance = OPPONENT_DISTANCE) {
+    const one = poseFighter(rom, first.body, first.motion, first.frame, { faceTarget: headSeenFrom(second.body, distance) });
+    const two = poseFighter(rom, second.body, second.motion, second.frame, { faceTarget: headSeenFrom(first.body, distance) });
+    return [one, two];
 }

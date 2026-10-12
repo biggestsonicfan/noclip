@@ -389,6 +389,7 @@
         <label class="check"><input type="checkbox" id="char-skel" checked> skeleton</label>
         <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> hammer squished</label>
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> root travel</label>
+        <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival" checked> opponent</label>
       </div>
       <div class="field">
         <label>Motion</label>
@@ -449,7 +450,10 @@
         at <code>0x2120004</code>, keyframes in the format Sonic The Fighters
         kept. The pose is solved on one standard rig for everyone
         (<code>0x296A0</code>) and the parts are then placed along the
-        fighter's own skeleton, as the board draws them.
+        fighter's own skeleton, as the board draws them. The
+        <em>opponent</em> is the same fighter on the same motion, standing
+        where a round starts the other; each head turns toward the other's,
+        as the fight turns it.
       </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at

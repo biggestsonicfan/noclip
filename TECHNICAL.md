@@ -822,8 +822,25 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
 - **Hands** (`0x19E34`): the left hand is entry 0-31 of the table at `+0x67C`,
   the right entry 96-127 (`+0x180` on); Shun's right fist is model 0x546.
 
-Left out: the opponent. The game points the face target at the other fighter
-when the fight is on, and the twist follows it.
+- **Opponent** (`0x2867C`, `poseBout`): the fight writes the other fighter's
+  head over the face target (see the head's section under Animation). The
+  head's place is the one the draw left at `+0x20C` (`0x168A0`, the head
+  slot's translation), taken into this fighter's frame by its place (`+0x18`)
+  and facing (`+0x26`): with d = head - place and c, s the facing's cosine
+  and sine (0x8000 = half a turn), the target is (c dx + s dz, dy,
+  -s dx + c dz). Player 1 is posed and drawn first, so it looks at player 2's
+  head of the frame before, and player 2 at player 1's of this one. A round
+  starts the fighters at x = -1 and +1 facing each other, so the explorer
+  stands its opponent 2 ahead, turned half round: in the fighter's viewer
+  frame the opponent's (x, y, z) is (2 - x, y, -z), and the target is the
+  opponent's head as (2 - x, y, -z) read in the motions' (z, y, x) order. The
+  opponent is the same fighter on the same motion, a body of its own so it
+  keeps its own playback.
+
+Left out: when the fight lets the head look at the other fighter
+(`0x500034` above 6, `+0` and `+0x1A4`'s move flags clear), as the explorer's
+opponent is always looked at; and the chest's twist toward it, which the move
+sets.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
@@ -851,12 +868,20 @@ the fight made no blend choice and the face target is the motion's own, the
 waist (pelvis) is exact for Akira (47 frames), Kage (15), Jeffry (36) and
 Wolf (9), and the head is within 0.008 degrees and 0.00011 in place. So the
 pelvis's 1 degree and the head's turn left from the first comparison are gone.
-The head's remaining error comes from the opponent. Akira's 7.5 degrees in
-motion 1285, and Kage's 3.9 degrees sixteen frames after his face target was
-last on the other fighter, go to within 0.025 degrees once the board's face
-target (`+0xB0C`) is passed in through `poseFighter`'s `faceTarget`. Across
-all sixteen slots, 470 of 539 replayed frames match; the misses are the
-fight's blend choices above.
+The head's remaining error came from the opponent. Replayed with both
+fighters posed in the board's order and each face target computed from the
+explorer's own pose of the other fighter (its head at the board's place and
+facing, as above; nothing read from `+0xB0C`), Akira's 7.5 degrees in motion
+1285 go to 0.007 degrees over all 18 frames whose target is the other
+fighter, 0.00003 in place. Kage's 3.9 degrees (frame 2940) do not move: the
+fight started his motion at 2925 without a blend (`+0xBDD` bit 0 clear), the
+explorer blends it, and the head, turning a step at a time, is still catching
+up. With the board's blend choice honoured that frame is 0.002 degrees. The
+other misses where the target is the other fighter are the same kind of
+thing, one fighter's own blend or mirror throwing the other's target off
+(Jeffry's 12.6 degrees at 2420 is Wolf's mirrored switch at the same
+frame). Across all sixteen slots, 470 of 539 replayed frames match; the
+misses are the fight's blend choices above.
 
 ### Polygon decoding (`js/model.js`)
 
@@ -2694,8 +2719,9 @@ unless the fighter is in one of a long list of states (`0x30820`-`0x308C4`:
 attacks, throws, falls), it sets `+0x7D3` and overwrites `+0xB0C` with the
 opponent's head (`+0x20C` of the other fighter), taken into the fighter's own
 frame by op `0x63`. So in a fight a head mostly looks at the other fighter, and
-the motion's face target only counts in those states. The explorer has no other
-fighter and always aims at object 14.
+the motion's face target only counts in those states. In the explorer the head
+aims at object 14 on its own, and at the opponent's head when there is one
+(see the Virtua Fighter 2 pose's Opponent).
 
 **The four on Bean's table.** The Final Eggman Boss, the Egg UFO, the Egg
 Minion and Rocket Metal have no action table of their own: there are thirteen

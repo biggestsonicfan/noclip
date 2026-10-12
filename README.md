@@ -465,8 +465,10 @@ the game's own tables — each on its own texture sets, and every one of the
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
-crouches as the game crouches it, all checked against the board. With no
-opponent, the head doesn't follow one and the chest doesn't twist toward it.
+crouches as the game crouches it, all checked against the board. An opponent,
+the same fighter on the same motion, stands where a round starts the other,
+and each head turns toward the other's as the fight turns it; the chest's
+twist toward it is the move's, and is left out.
 
 ## Running it
 
