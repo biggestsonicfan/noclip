@@ -750,7 +750,13 @@ fighters, runs the kind's own effects under the camera.
 
 - Tou-rin (kind 12): `0x30E74` draws `0x70FBC[(frame >> 1) & 0xFF]` at the
   origin, 256 models of blown leaves, each one frame of a 512-frame gust.
-  `0x30EAC` is a burst the fight sets off, left out.
+  `0x30EAC` is a burst the fight sets off, left out. The frame is
+  `0x500020`, the main loop's counter (zeroed at boot, `0x99E8`; stepped at
+  `0xA028`), so the board's gust is the explorer's shifted by the time since
+  power-on. A MAME display list (stage forced to 0) agrees at counters 1412,
+  1509 and 1606: one wind draw a frame, models `0x1369`, `0x1399` and `0xE71`,
+  each the explorer's model at that frame, under the same matrix as the
+  stage's pieces (difference 0).
 - The Colosseum: its sky's per-frame routine `0x2468C` runs four channels. A
   frame's random byte (`0x94D0`, which sums hardware counters, so a seeded
   generator stands in) starts channel n if it is n and the channel is idle;
