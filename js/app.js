@@ -1462,7 +1462,7 @@ function loadStage(slot, { keepCamera = false } = {}) {
             if (!d) continue;
             composeOps(m, opsAt(entry, 0));
             const mesh = addStageDraw(entry, d, m, { shellFirst, windowed, material: partMaterial });
-            layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry });
+            layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry, zones: entry.zones });
             counts[entry.layer]++;
             const box = transformedBounds(d, m);
             drawn.push(box);
