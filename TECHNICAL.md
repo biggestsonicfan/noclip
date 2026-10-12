@@ -780,9 +780,19 @@ fighters, runs the kind's own effects under the camera.
   `[g1, 0xF0)` take `0x25024[((frame >> 2) + l - g1) & 7]`, g1 `0x96`, or 100
   on stage 7.
 
-Not drawn yet: Budou-jou's two billboards (`0x2EC24`), the Islands' animated
-objects (`0x2EEE8`, records at `0x2F364`), Souseiji's (`0x2FCBC`) and the
-stones' standing stone (`0x31040`, model `0xEE1`).
+Not drawn: Budou-jou's two billboards (`0x2EC24`, only when the stage-type byte
+`0x6EEAE[stage << 8]` is 11). Each is one frame of a 16-model animation,
+`0x2EE90[c & 15]` and `0x2EE90[(c + 8) & 15]` (models `0xF58`-`0xF67`), placed
+at (12, 1.19, 12) and (-12, 1.19, 12) and turned to the yaw at `g13 + 0x26`
+flipped by 0x8000. `c` is the power-on frame counter at `0x500020`, the same
+one that picks the Tou-rin leaf: not a stage-record field and not the
+explorer's frame. Which of the two is drawn also depends on `g13 + 0x18`,
+`+0x20` and `+0x26` (tables `0x2EE40` and `0x2EE70`). So they are left out
+rather than simulated.
+
+Not drawn yet: the Islands' animated objects (`0x2EEE8`, records at
+`0x2F364`), Souseiji's (`0x2FCBC`) and the stones' standing stone (`0x31040`,
+model `0xEE1`).
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 
