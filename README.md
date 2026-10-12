@@ -469,9 +469,9 @@ crouches as the game crouches it, all checked against the board. An opponent
 (off by default) can stand where a round starts the other fighter: the same
 fighter on the same motion, with each head turning toward the other's on every
 frame. The game turns the head only when fight state allows, which the explorer
-does not track, so with the opponent on, a head can be wrong. The chest
-twists toward the same target on the frames the move's own record allows,
-read from ROM like the motion.
+does not track, so with the opponent on, a head can be wrong. The chest's
+twist toward the opponent is left out: the move record says when it may run,
+but how far it turns depends on where the opponent is.
 
 ## Running it
 

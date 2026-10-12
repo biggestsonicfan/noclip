@@ -2726,13 +2726,11 @@ const vf2 = {
     scenes: null,
     /* The fighters, posed out of Sonic The Fighters' motion format on a rig of
      * this game's own; js/vf2fighters.js. `standardRig` is the table every
-     * fighter is solved on, `moves` the move records (by motion id), `fighters`
-     * the roster's records. */
+     * fighter is solved on, `fighters` the roster's records. */
     motionTable: { list: 0x2120004, count: 1360 },
     rig: {
         kind: 'vf2',
         standardRig: 0x296a0,
-        moves: 0x200d34c,
         fighters: { records: 0x200620c, count: 14, names: VF2_NAMES },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
