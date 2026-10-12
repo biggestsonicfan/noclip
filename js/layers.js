@@ -316,6 +316,16 @@ function takenHere(f, g, cell, order) {
  * is left to the faces closer than that, which only the sort can order.
  */
 const APART = 0.25;
+/*
+ * A smaller face is put on top from nearer than that: a picture laid on a
+ * larger one, in front of it, belongs over it however the larger is keyed.
+ * Another bookcase in that office has its books 0.11 in front of the wall
+ * (issue 73), and the wall, one quad sorted by its near corner, took them
+ * over wherever the camera came near that corner. A smaller face behind a
+ * larger one is still left to the sort: that is a decal or a pane the board
+ * shows through the face it lies under, from the angles the game looks at it.
+ */
+const SMALL_APART = 0.05;
 /* What the third number of a pair says: by the sort, a copy over its
  * original, or the face in front on top. */
 const COPY = 1, J_FRONT = 2, I_FRONT = 3;
@@ -331,9 +341,17 @@ function behind(f, g, ax, common) {
     return [lo, hi];
 }
 
+/* Which of a pair, f before g, goes on top whatever the sort says, from how
+ * far g stands behind f, least and most, and the faces' areas; 0 for neither. */
+function inFront(lo, hi, fArea, gArea) {
+    if (lo >= APART || (lo >= SMALL_APART && fArea < gArea)) return I_FRONT;
+    if (hi <= -APART || (hi <= -SMALL_APART && gArea < fArea)) return J_FRONT;
+    return 0;
+}
+
 /* The pairs, i before j in the game's order, three numbers each; a copy's is
  * marked, since its copy is put over it whatever the corners say, and so is
- * a pair standing APART, its face in front put over the other. */
+ * a pair standing apart (see inFront), its face in front put over the other. */
 function pairsOf(faces, out, gap, cosine) {
     const cells = cellsOf(faces, gap);
     const order = new Map([...cells.keys()].map((k, n) => [k, n]));
@@ -358,7 +376,7 @@ function pairsOf(faces, out, gap, cosine) {
         if (copy && f.draw === g.draw) {
             for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
         }
-        pairs.push(i, j, copy ? COPY : lo >= APART ? I_FRONT : hi <= -APART ? J_FRONT : 0);
+        pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area));
     };
     let cell = -1;
     for (const list of cells.values()) {
