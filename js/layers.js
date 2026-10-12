@@ -154,7 +154,7 @@ function bucket(z) {
  * zmode and the corners the board sorts it by. */
 function facesOf(draws) {
     const faces = [];
-    draws.forEach(({ decoded, matrix: M, zCorners = decoded?.zCorners }, di) => {
+    draws.forEach(({ decoded, matrix: M, zCorners = decoded?.zCorners, zones = null }, di) => {
         if (!decoded?.faces) return;
         const P = decoded.positions;
         const tris = P.length / 9;
@@ -197,7 +197,7 @@ function facesOf(draws) {
                 const twoSided = ((decoded.flags[r / 3] >> 7) & 1) === 1;
                 /* The four corners the board sorts the face by. */
                 const zc = zCorners ? zCorners.map((a) => world(a, r)) : [...pts.slice(0, 3), pts[2]];
-                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, twoSided, zc, lo, hi, hulls: [] });
+                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, twoSided, zc, lo, hi, hulls: [], zones });
             }
             t = u + 1;
         }
@@ -350,6 +350,22 @@ function inFront(lo, hi, fArea, gArea) {
     return 0;
 }
 
+/*
+ * Which of a pair, f before g, goes on top when the game never draws the two
+ * together: the one from the later segment (or room); 0 when they share one,
+ * or either draws everywhere. Seen all at once, a stage overlays pieces the
+ * game shows one segment at a time. Virtua Cop's third stage lays the road
+ * of its first four segments on under the lobby floor of the later ones, in
+ * its plane, where the lobby isn't drawn yet; with every segment at once the
+ * sort put the road over the floor (issue 82). The later segment is where
+ * the camera stands by then, so it is that one's picture.
+ */
+function laterZone(f, g) {
+    if (!f.zones?.size || !g.zones?.size) return 0;
+    for (const z of f.zones) if (g.zones.has(z)) return 0;
+    return Math.min(...f.zones) > Math.min(...g.zones) ? I_FRONT : J_FRONT;
+}
+
 /* The pairs, i before j in the game's order, three numbers each; a copy's is
  * marked, since its copy is put over it whatever the corners say, and so is
  * a pair standing apart (see inFront), its face in front put over the other. */
@@ -377,7 +393,7 @@ function pairsOf(faces, out, gap, cosine) {
         if (copy && f.draw === g.draw) {
             for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
         }
-        pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area));
+        pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area) || laterZone(f, g));
     };
     let cell = -1;
     for (const list of cells.values()) {
@@ -482,7 +498,7 @@ function rankingOf(faces, pairs, paired, out) {
  * The faces lying on each other, and a depth plane for every vertex of every
  * draw; the layers themselves come from `rankLayers` for each camera.
  *
- * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[]}[]}
+ * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[], zones?: Set<number>}[]}
  *   draws in the order the game submits them; `matrix` is the draw's
  *   column-major 4x4, and `zCorners` stands in for the decode's own
  * @param {{gap?: number, cosine?: number}} [opts] how far apart two faces may
@@ -553,54 +569,96 @@ function sortKeys({ corners, zmode, key }, view) {
  * @returns {Set<number>} the draws whose layers changed
  */
 export function rankLayers(r, view) {
-    const { zmode, key, layer, below, edges } = r;
-    const n = zmode.length;
     sortKeys(r, view);
-    /* Each pair is i before j; j is on top unless i sorts into a nearer
-     * bucket, or stands in front. */
-    const top = (e) => {
-        const how = edges[e + 2];
-        if (how === I_FRONT) return edges[e];
-        return how || key[edges[e + 1]] <= key[edges[e]] ? edges[e + 1] : edges[e];
-    };
-    below.fill(0);
-    for (let e = 0; e < edges.length; e += 3) below[top(e)]++;
-    /* Longest path up from the faces nothing lies under. Only a copy or a
-     * face in front laid against the key can close a circle; what is left in one keeps the layer
-     * it has reached. */
-    const next = new Int32Array(n);
-    const queue = [];
-    for (let k = 0; k < n; k++) {
-        next[k] = 0;
-        if (!below[k]) queue.push(k);
-    }
-    const ups = r.ups ??= (() => {
-        /* Each face's pairs, as edge offsets. */
-        const start = new Int32Array(n + 1);
-        for (let e = 0; e < edges.length; e += 3) { start[edges[e] + 1]++; start[edges[e + 1] + 1]++; }
-        for (let k = 0; k < n; k++) start[k + 1] += start[k];
-        const list = new Int32Array(start[n]);
-        const fill = start.slice(0, n);
-        for (let e = 0; e < edges.length; e += 3) { list[fill[edges[e]]++] = e; list[fill[edges[e + 1]]++] = e; }
-        return { start, list };
-    })();
-    for (let h = 0; h < queue.length; h++) {
-        const u = queue[h];
-        for (let p = ups.start[u]; p < ups.start[u + 1]; p++) {
-            const e = ups.list[p];
-            const v = top(e);
-            if (v === u) continue;
-            if (next[u] + 1 > next[v]) next[v] = next[u] + 1;
-            if (--below[v] === 0) queue.push(v);
-        }
-    }
+    const next = layersFrom(r, upsOf(r));
     const changed = new Set();
-    for (let k = 0; k < n; k++) {
-        if (next[k] === layer[k]) continue;
-        layer[k] = next[k];
+    for (let k = 0; k < next.length; k++) {
+        if (next[k] === r.layer[k]) continue;
+        r.layer[k] = next[k];
         r.out[r.draw[k]].layer.fill(next[k], r.t0[k] * 3, (r.t1[k] + 1) * 3);
         changed.add(r.draw[k]);
     }
     return changed;
 }
 
+/* Each face's pairs, as edge offsets. */
+function upsOf(r) {
+    if (r.ups) return r.ups;
+    const { edges } = r, n = r.zmode.length;
+    const start = new Int32Array(n + 1);
+    for (let e = 0; e < edges.length; e += 3) { start[edges[e] + 1]++; start[edges[e + 1] + 1]++; }
+    for (let k = 0; k < n; k++) start[k + 1] += start[k];
+    const list = new Int32Array(start[n]);
+    const fill = start.slice(0, n);
+    for (let e = 0; e < edges.length; e += 3) { list[fill[edges[e]]++] = e; list[fill[edges[e + 1]]++] = e; }
+    return (r.ups = { start, list });
+}
+
+/* Each pair is i before j; j is on top unless i sorts into a nearer bucket,
+ * or stands in front. */
+function topOf({ edges, key }, e) {
+    const how = edges[e + 2];
+    if (how === I_FRONT) return edges[e];
+    return how || key[edges[e + 1]] <= key[edges[e]] ? edges[e + 1] : edges[e];
+}
+
+/*
+ * Longest path up from the faces nothing lies under. The sort alone orders
+ * the faces one way, so only a pair laid against the key — a copy, or a face
+ * standing in front — can close a circle, and every face on one, and every
+ * face over it, would wait on the others for ever. A face is then let go once
+ * nothing laid against the key waits under it, the sort's pairs under it
+ * still waiting given up: of the two, it is the face in front that is on top
+ * from any camera. Virtua Cop's third stage has such a circle (issue 82): the
+ * lobby carpet, half a unit over the road that runs on under the lobby floor,
+ * was left under it, and the road came through it.
+ */
+function layersFrom(r, ups) {
+    const { edges } = r, n = r.zmode.length;
+    const { below, forced } = countBelow(r);
+    const next = new Int32Array(n);
+    /* 0 waiting, 1 in the queue, 2 done. */
+    const state = new Uint8Array(n);
+    const queue = [];
+    for (let k = 0; k < n; k++) if (!below[k]) { queue.push(k); state[k] = 1; }
+    for (let h = 0; h < n; h++) {
+        if (h === queue.length && !letGo(below, forced, state, queue)) break;
+        const u = queue[h];
+        state[u] = 2;
+        for (let p = ups.start[u]; p < ups.start[u + 1]; p++) {
+            const e = ups.list[p];
+            const v = topOf(r, e);
+            if (v === u || state[v] === 2) continue;
+            if (next[u] + 1 > next[v]) next[v] = next[u] + 1;
+            if (edges[e + 2]) forced[v]--;
+            if (--below[v] === 0 && state[v] === 0) { queue.push(v); state[v] = 1; }
+        }
+    }
+    return next;
+}
+
+/* How many pairs have each face on top, and how many of those are laid
+ * against the key. */
+function countBelow(r) {
+    const { edges } = r;
+    const below = r.below.fill(0), forced = (r.forced ??= new Int32Array(below.length)).fill(0);
+    for (let e = 0; e < edges.length; e += 3) {
+        const v = topOf(r, e);
+        below[v]++;
+        if (edges[e + 2]) forced[v]++;
+    }
+    return { below, forced };
+}
+
+/* Of the faces still waiting, the one with nothing laid against the key and
+ * the fewest of the sort's pairs under it, queued; false if there is none. */
+function letGo(below, forced, state, queue) {
+    let best = -1;
+    for (let k = 0; k < below.length; k++) {
+        if (state[k] === 0 && !forced[k] && (best < 0 || below[k] < below[best])) best = k;
+    }
+    if (best < 0) return false;
+    queue.push(best);
+    state[best] = 1;
+    return true;
+}

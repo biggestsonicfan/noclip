@@ -763,6 +763,9 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         /* Which texture set the piece is drawn under, for a stage that spans
          * several — see the all-placements stage in readPlacementStages. */
         set: zone ? zone.set : d.set,
+        /* The segments or rooms that draw it, which tell pieces the game
+         * never shows together apart (see `laterZone` in js/layers.js). */
+        ...(d.zones ? { zones: d.zones } : {}),
         ...(d.block != null ? { block: d.block } : {}),
         /* A draw that carries its own transform keeps it — Virtua Cop's,
          * three turns each (js/vcop.js). */
