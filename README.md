@@ -471,7 +471,8 @@ fighter on the same motion, with each head turning toward the other's on every
 frame. The game turns the head only when fight state allows, which the explorer
 does not track, so with the opponent on, a head can be wrong. The chest's
 twist toward the opponent is left out: the move record says when it may run,
-but how far it turns depends on where the opponent is.
+but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
+to the face target `+0xB0C`, which the fight writes.
 
 ## Running it
 

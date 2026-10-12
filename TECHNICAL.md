@@ -860,14 +860,28 @@ So the explorer does not decide when to look. Its opponent, behind a checkbox
 that is off by default, is looked at on every frame. Where the game keeps the
 motion's own target, that is wrong, by up to 134 degrees in attract mode.
 
-**When the chest twists.** The twist store at `0x2912C` is skipped unless
-`+0x1A4` has no bit of 0x16000 and one of 0x20C. `+0x1A4` starts from the move
+**When the chest twists.** The check at `0x29130` reads `+0x1A4`; with a bit
+of 0x16000 set or none of 0x20C, `0x2914C` stores 0 (`stis r11, 0xbe6(g7)` at
+`0x29150`). `+0x1A4` starts from the move
 record at `0x200D34C[id]` (`0x1A214`), and the record's set-up (op 2's frames,
 phase machine `0x1AC14`) and script (`0x1AD5C`, ops 5-7) change it frame by
 frame. That much is ROM, and a ROM-only gate built from it matches the board's
 `+0x1A4` twist bits on every frame checked. It is still not drawn, because the
-gate does not decide the angle: the twist turns toward the opponent's head, and
-on frames where the gate is on, the board's `+0xBE6` can still be 0. A second
+gate is not the only thing that keeps `+0xBE6` at 0. With the gate on, the code
+sends the face target `+0xB0C` into the chest's frame (op `0x6A`) and takes
+a = atan2 of it (op `0x27`), negated when the fighter is mirrored (`+0` bit 6).
+Then, before the store at `0x29210` (`stis r11, 0xbe6(g7)`):
+
+- `0x29198` `cmpibg 0, r11`: a < 0 sets the goal to 0;
+- `0x291B0` `cmpibl 0x6000, r11`: a > 0x6000 skips the store, keeping the old
+  twist (0 if it was 0);
+- `0x291FC` `cmpible 0, r11`: a step down below 0 is held at 0.
+
+All three test where `+0xB0C` lies, and `+0xB0C` is fight state: the fight
+writes the other fighter's head over it at `0x286A0` when its own look gate
+lets it (see When the game looks, above), and the step starts from last
+frame's `+0xBE6`. With the motion's own target there, the explorer's gate-on
+chest twists, so on these frames the board was aiming at the opponent. A second
 attract capture, with the gate wired and nothing read from the board but motion,
 frame and round-start places (chest):
 
@@ -878,9 +892,10 @@ frame and round-start places (chest):
 | 4670 | Shun 684, 4 | 0x2C | 0 | on | 0.003° | 8.317° |
 
 Where the board did twist, the gate brought the chest from up to 20.181° to
-0.009°, but a chest 12° off on frames that were right is worse. What zeroes the
-twist there is where the opponent is, which is fight state, so the explorer
-leaves the twist out.
+0.009°, but a chest 12° off on frames that were right is worse. On these frames
+the twist is held at 0 by `0x29198` or `0x291B0` (the capture does not say
+which) on an angle to the fight-written `+0xB0C`, so the explorer leaves the
+twist out.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
