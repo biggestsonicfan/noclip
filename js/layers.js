@@ -301,8 +301,39 @@ function takenHere(f, g, cell, order) {
     return first === cell;
 }
 
+/*
+ * How far apart two faces of a pair must stand, everywhere across their
+ * overlap, for the one in front to be on top from any camera, whatever the
+ * board's sort says. The sort keys a whole polygon by one corner, so a large
+ * face sorted by its near corner (mode 1) beats a small one sorted by its far
+ * corner wherever the camera comes close to the large one's edge — even with
+ * the small one well in front. The game's cameras never stand there; a free
+ * camera does. Virtua Cop's third stage has it (issue 71): a bookcase 0.4 in
+ * front of the office wall, the wall's triangles sorted by their near corner,
+ * and the wall shown through the books in a triangle wherever its corner came
+ * near. A face that far in front of another is in front of it in the picture
+ * the game was made from, and a depth buffer would keep it there; the sort
+ * is left to the faces closer than that, which only the sort can order.
+ */
+const APART = 0.25;
+/* What the third number of a pair says: by the sort, a copy over its
+ * original, or the face in front on top. */
+const COPY = 1, J_FRONT = 2, I_FRONT = 3;
+
+/* How far g stands behind f across their overlap, least and most. */
+function behind(f, g, ax, common) {
+    let lo = Infinity, hi = -Infinity;
+    for (const uv of common) {
+        const pf = lift(f, ax, uv), pg = lift(g, ax, uv);
+        const s = f.n[0] * (pg[0] - pf[0]) + f.n[1] * (pg[1] - pf[1]) + f.n[2] * (pg[2] - pf[2]);
+        lo = Math.min(lo, s); hi = Math.max(hi, s);
+    }
+    return [lo, hi];
+}
+
 /* The pairs, i before j in the game's order, three numbers each; a copy's is
- * marked, since its copy is put over it whatever the corners say. */
+ * marked, since its copy is put over it whatever the corners say, and so is
+ * a pair standing APART, its face in front put over the other. */
 function pairsOf(faces, out, gap, cosine) {
     const cells = cellsOf(faces, gap);
     const order = new Map([...cells.keys()].map((k, n) => [k, n]));
@@ -322,18 +353,12 @@ function pairsOf(faces, out, gap, cosine) {
         const common = intersect(reach > 1e-3 ? grown(fh, reach) : fh, flatHull(g, ax));
         if (!common.length || polygonArea(common) <= Math.max(1e-3, 0.01 * Math.min(f.area, g.area))) return;
 
-        /* How far g stands from f across the overlap. */
-        let most = 0;
-        for (const uv of common) {
-            const pf = lift(f, ax, uv), pg = lift(g, ax, uv);
-            const s = f.n[0] * (pg[0] - pf[0]) + f.n[1] * (pg[1] - pf[1]) + f.n[2] * (pg[2] - pf[2]);
-            most = Math.max(most, Math.abs(s));
-        }
-        if (most > gap) return;
+        const [lo, hi] = behind(f, g, ax, common);
+        if (Math.max(hi, -lo) > gap) return;
         if (copy && f.draw === g.draw) {
             for (let c = 0; c < 3; c++) out[g.draw].snap.push(g.t0 * 3 + c, f.t0 * 3 + copy[c]);
         }
-        pairs.push(i, j, copy ? 1 : 0);
+        pairs.push(i, j, copy ? COPY : lo >= APART ? I_FRONT : hi <= -APART ? J_FRONT : 0);
     };
     let cell = -1;
     for (const list of cells.values()) {
@@ -458,6 +483,20 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
     return out;
 }
 
+/* The bucket the board sorts each face into from the camera `view`. */
+function sortKeys({ corners, zmode, key }, view) {
+    for (let k = 0; k < zmode.length; k++) {
+        let near = Infinity, far = -Infinity;
+        for (let c = 0; c < 4; c++) {
+            const o = k * 12 + c * 3;
+            const z = corners[o] * view[0] + corners[o + 1] * view[1] + corners[o + 2] * view[2] + view[3];
+            if (z < near) near = z;
+            if (z > far) far = z;
+        }
+        key[k] = zmode[k] === 3 ? 0x7fffffff : bucket(zmode[k] === 2 ? far : near);
+    }
+}
+
 /**
  * Rank the faces of each group as the board's sort does from one camera: each
  * face is keyed by its nearest corner or its farthest (or "very far") along
@@ -483,24 +522,20 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
  * @returns {Set<number>} the draws whose layers changed
  */
 export function rankLayers(r, view) {
-    const { corners, zmode, key, layer, below, edges } = r;
+    const { zmode, key, layer, below, edges } = r;
     const n = zmode.length;
-    for (let k = 0; k < n; k++) {
-        let near = Infinity, far = -Infinity;
-        for (let c = 0; c < 4; c++) {
-            const o = k * 12 + c * 3;
-            const z = corners[o] * view[0] + corners[o + 1] * view[1] + corners[o + 2] * view[2] + view[3];
-            if (z < near) near = z;
-            if (z > far) far = z;
-        }
-        key[k] = zmode[k] === 3 ? 0x7fffffff : bucket(zmode[k] === 2 ? far : near);
-    }
-    /* Each pair is i before j; j is on top unless i sorts into a nearer bucket. */
-    const top = (e) => (edges[e + 2] || key[edges[e + 1]] <= key[edges[e]] ? edges[e + 1] : edges[e]);
+    sortKeys(r, view);
+    /* Each pair is i before j; j is on top unless i sorts into a nearer
+     * bucket, or stands in front. */
+    const top = (e) => {
+        const how = edges[e + 2];
+        if (how === I_FRONT) return edges[e];
+        return how || key[edges[e + 1]] <= key[edges[e]] ? edges[e + 1] : edges[e];
+    };
     below.fill(0);
     for (let e = 0; e < edges.length; e += 3) below[top(e)]++;
-    /* Longest path up from the faces nothing lies under. Only a copy laid
-     * against the key can close a circle; what is left in one keeps the layer
+    /* Longest path up from the faces nothing lies under. Only a copy or a
+     * face in front laid against the key can close a circle; what is left in one keeps the layer
      * it has reached. */
     const next = new Int32Array(n);
     const queue = [];
