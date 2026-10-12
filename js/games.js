@@ -2714,6 +2714,69 @@ const vf2 = {
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
 
+/*
+ * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
+ * m2-hle2). m2-hle2 runs Sega Rally Championship (src/profiles/srallyc.h) and
+ * the viewer had no profile for it; the chips are here, in the same `regions`
+ * shape as above and with MAME's names, CRCs and offsets, so a drop of the set
+ * is named and told what is missing rather than called unrecognised. A
+ * prepared profile becomes a game by finding what `lacks` lists and moving it
+ * into GAMES.
+ *
+ * m2-hle2 keeps the same list the other way round: Virtua Cop, Daytona USA and
+ * The House of the Dead, which this viewer opens and the emulator cannot run
+ * yet, are prepared profiles there, taking their model tables from this file.
+ */
+const srallyc = {
+    id: 'srallyc',
+    name: 'Sega Rally Championship (Revision C)',
+    identify: ['epr-17888c.12', 'epr-17889c.13'],
+    identifyCrc: [0x3d6808aa, 0xf43c7802],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [[0x000000, 'epr-17888c.12', 0x3d6808aa, 'epr-17889c.13', 0xf43c7802]],
+        },
+        /* MAME's region is 0x2400000; it is cut where the chips end. */
+        mainData: {
+            size: 0xc00000,
+            parts: [
+                [0x000000, 'mpr-17746.10', 0x8fe311f4, 'mpr-17747.11', 0x543593fd],
+                [0x400000, 'mpr-17744.8', 0x71fed098, 'mpr-17745.9', 0x8ecca705],
+                [0x800000, 'mpr-17884.6', 0x4cfc95e1, 'mpr-17885.7', 0xa08d2467],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-17748.16', 0x3148a2b2, 'mpr-17750.20', 0x232aec29],
+                [0x400000, 'mpr-17749.17', 0x0838d184, 'mpr-17751.21', 0xed87ac62],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [[0x000000, 'mpr-17753.25', 0x6db0eb36, 'mpr-17752.24', 0xd6aa86ce]],
+        },
+        /* The TGP's data ROM (a Model 2A: the program is uploaded by the i960). */
+        copro: {
+            size: 0x800000,
+            optional: true,
+            parts: [[0x000000, 'mpr-17754.28', 0x81a84f67, 'mpr-17755.29', 0x2a6e7da4]],
+        },
+    },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    lacks: 'its model table, palette and texture sheets have not been found in the data ROMs yet',
+};
+
+export const PREPARED = [srallyc];
+
+/** The prepared profile these member names are, or null. */
+export function detectPrepared(names, byCrc = null) {
+    const have = names instanceof Set ? names : new Set(names);
+    return PREPARED.find((g) => g.identify.every((m, i) => have.has(m)
+        || (g.identifyCrc && byCrc?.has(g.identifyCrc[i])))) ?? null;
+}
+
 /**
  * Pick the profile a set of zip member names belongs to.
  *

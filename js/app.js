@@ -277,6 +277,10 @@ async function bootWithBuffers(buffers) {
  * be recognised; the list comes off the profiles so it cannot go stale.
  */
 function romHint(err) {
+    if (err.prepared) {
+        return `the set is the right one; the viewer has its chip list but not yet `
+            + `what it needs to draw it`;
+    }
     if (err.game) {
         return `that chip is in another zip of this set — a MAME clone carries only `
             + `the chips that are its own and keeps the rest in the parent, so drop `
