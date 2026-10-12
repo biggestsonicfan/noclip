@@ -36,6 +36,7 @@
  */
 
 import { gameLighting, stageLight } from './stages.js';
+import { buildVf2Sky } from './scroll.js';
 
 const RECORD_BYTES = 256;
 const EMPTY = 0xffff;
@@ -156,6 +157,8 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
         draws,
         objects: [],
         sky: null,
+        /* The tile layer's panorama (js/scroll.js). */
+        panorama: (cxlat) => buildVf2Sky(rom, n, cxlat),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',

@@ -221,6 +221,63 @@ export function buildCourseSky(rom, course, cxlat = null) {
 }
 
 /*
+ * Virtua Fighter 2's sky for one stage.
+ *
+ * The same tile chip and the same three formats as Fighting Vipers', a year
+ * earlier and laid out more plainly. 0x24314 indexes a 32-byte record at
+ * 0x2502C in the program ROM by stage_num << 5: +0x00 and +0x04 are the
+ * stage's own routines for stage start and every frame (palette work), +0x08
+ * the CG list, +0x0C the palette list, +0x10 the pattern list. The list is
+ * not Fighting Vipers' either: a halfword row count, the vertical offset's
+ * byte, then eighteen pointers straight at pattern rows with no header —
+ * 0x24378 copies `rows` rows of 64 bytes from each.
+ *
+ * The per-frame routine (0x24534) is Fighting Vipers' 0x29A40 without the
+ * arena turn: the same column streaming by `-Yang >> 8`, the same horizontal
+ * scroll, so a turn is sixteen patterns and the column ahead at Yang 0 is
+ * 248. Up, it takes no tangent. The vertical scroll is
+ *
+ *   V = 8 * list[2] - (pitch - 0x2E0) / 16
+ *
+ * linear in the pitch at the same sixteen units a pixel as the heading, so the
+ * strip is one turn across at square pixels — the cylinder's own scale, and
+ * no focal. The 3D's view is centred on row 192 as Fighting Vipers' is (the
+ * window table at 0x7F64), so level, the eye line shows row 238 + 8 * list[2].
+ * The 3D's focal is 600 (0x1D344) where the strip's is 652 pixels a radian,
+ * so on the board the two part a little as the camera pitches: under four
+ * rows at the fight camera's four degrees.
+ *
+ * Below the strip, 0x243E0 fills the tilemap's remaining rows with the start
+ * of its last row, so the ground runs on in that row's colour.
+ */
+const VF2_SKY = { records: 0x2502c, stride: 32, cg: 0x08, pal: 0x0c, list: 0x10 };
+const VF2_PITCH_ROWS = 0x2e0 >> 4;
+const VF2_CHAR_BYTES = 0x80000;
+
+/**
+ * @param {object} rom   loaded ROM set
+ * @param {number} num   stage_num, the stage record's index
+ * @param {?Uint8Array} cxlat  as for buildSkyPanorama
+ */
+export function buildVf2Sky(rom, num, cxlat = null) {
+    const cpu = rom.mainCpuView;
+    const rec = VF2_SKY.records + num * VF2_SKY.stride;
+    const list = cpu.getUint32(rec + VF2_SKY.list, true);
+    if (list + 4 + TURN_PATTERNS * 4 > rom.maincpu.length) return null;
+    const rows = cpu.getUint16(list, true);
+    const patterns = [];
+    for (let i = 0; i < TURN_PATTERNS; i++) patterns.push(cpu.getUint32(list + 4 + i * 4, true));
+    const pano = decodePanorama(rom, cpu.getUint32(rec + VF2_SKY.cg, true),
+        cpu.getUint32(rec + VF2_SKY.pal, true), patterns, VF2_CHAR_BYTES, cxlat, rows);
+    if (pano) {
+        pano.horizon = VIEW_CENTRE_ROW + VF2_PITCH_ROWS + 8 * cpu.getUint8(list + 2);
+        pano.centre = VIEW_CENTRE_COL;
+        pano.footColor = commonestColour(pano.rgba, (pano.height - 1) * pano.width, pano.width);
+    }
+    return pano;
+}
+
+/*
  * Where the sky stands against the eye line.
  *
  * Like Fighting Vipers' strips, these carry what lies below the horizon too —
@@ -322,7 +379,7 @@ export function loadScrollCG(rom, cgList, palList, charBytes) {
  * through the tables every sky pixel the overlay and the 3D leave uncovered in
  * a MAME snapshot of the attract race matches exactly.
  */
-function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
+function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat, fixedRows = 0) {
     const { chars, pal, written } = loadScrollCG(rom, cgList, palList, charBytes);
     if (!written) return null;
 
@@ -337,16 +394,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
     };
 
     /* ---- the patterns, side by side ---- */
-    const cols = [];
-    let rows = 0;
-    for (const pr of patternPtrs) {
-        if (!pr || !ptrOk(rom, pr)) { cols.push(null); continue; }
-        const R = at(rom, pr);
-        const h = R.view.getUint32(R.off + 4, true);
-        if (h > 128) { cols.push(null); continue; }
-        rows = Math.max(rows, h);
-        cols.push({ R, h });
-    }
+    const { cols, rows } = patternColumns(rom, patternPtrs, fixedRows);
     if (!rows) return null;
 
     const width = cols.length * PATTERN_TILES * 8;
@@ -359,7 +407,7 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
         for (let ty = 0; ty < col.h; ty++) {
             for (let tx = 0; tx < PATTERN_TILES; tx++) {
                 const entry = col.R.view.getUint16(
-                    col.R.off + 0x0c + ty * PATTERN_STRIDE + tx * 2, true);
+                    col.R.off + col.head + ty * PATTERN_STRIDE + tx * 2, true);
                 const base = (entry & CHAR_MASK) * TILE_BYTES;
                 const group = (entry >> 7) & 0xff;
                 if (base + TILE_BYTES > chars.length) continue;
@@ -388,17 +436,35 @@ function decodePanorama(rom, cgList, palList, patternPtrs, charBytes, cxlat) {
      * runs out, so that is the backdrop this stage wants — and it is per stage,
      * which the boot-time constant is not.
      */
+    return { width, height, rgba, topColor: commonestColour(rgba, 0, width) };
+}
+
+/* Each pattern's rows, or null where its pointer leads nowhere. A pattern with
+ * no header of its own (Virtua Fighter 2's) takes its row count from the list
+ * and starts at its first row. */
+function patternColumns(rom, patternPtrs, fixedRows) {
+    const cols = [];
+    let rows = 0;
+    for (const pr of patternPtrs) {
+        if (!pr || !ptrOk(rom, pr)) { cols.push(null); continue; }
+        const R = at(rom, pr);
+        const h = fixedRows || R.view.getUint32(R.off + 4, true);
+        if (h > 128) { cols.push(null); continue; }
+        rows = Math.max(rows, h);
+        cols.push({ R, h, head: fixedRows ? 0 : 0x0c });
+    }
+    return { cols, rows };
+}
+
+/* The commonest colour of `count` pixels from pixel `first`, as [r, g, b]. */
+function commonestColour(rgba, first, count) {
     const counts = new Map();
-    for (let x = 0; x < width; x++) {
+    for (let x = first; x < first + count; x++) {
         const o = x * 4;
         const key = (rgba[o] << 16) | (rgba[o + 1] << 8) | rgba[o + 2];
         counts.set(key, (counts.get(key) || 0) + 1);
     }
     let top = 0, best = -1;
     for (const [k, n] of counts) if (n > best) { best = n; top = k; }
-
-    return {
-        width, height, rgba,
-        topColor: [(top >> 16) & 255, (top >> 8) & 255, top & 255],
-    };
+    return [(top >> 16) & 255, (top >> 8) & 255, top & 255];
 }
