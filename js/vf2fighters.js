@@ -34,9 +34,11 @@
  *     0x296A0 (`g6` through 0x2901C and op 0x6B), not on the fighter's own
  *     skeleton: the chest and head offsets, then per limb its pivot and the two
  *     bone lengths op 0x6B reaches with.
- *   - The pelvis is aimed at its target, float object 17, as the chest is at
- *     its own (0x2901C with g1 = 3, the results at +0x170/+0x172), where the
- *     later game rolls it a quarter turn.
+ *   - A motion can hold a slot's look as angles instead of a point: a float
+ *     object keyed with channel type 1 (13, 14 or 17) is latched by 0x26FAC,
+ *     rounded into an angle and flagged at player +0xBDC, and the draw turns
+ *     Rz then Ry by it. All but one motion hold the pelvis (17) at
+ *     (0, 0, 0x4000) this way, a quarter roll.
  *   - A foot turns from the floor: 0x171B0 loads the matrix the draw saved at
  *     0x501024 — the fighter's place and facing, before any of the pose — and
  *     turns object 2's (or 3's) euler from there.
@@ -48,9 +50,22 @@
  * at). A fighter whose arms are longer than the standard rig's has hands a
  * little past where the solve put them, as on the board.
  *
- * Left out, all game-side and zero in a motion played on its own: the lean at
- * player +0xBE6, the additive eulers at +0xBA8, the hand and foot turns at
- * +0x15A and +0x17C, and the crouch offset at +0xC50.
+ * What the fight adds, played frame after frame:
+ *
+ *   - The blend (set up at 0x27630): at a motion switch, each angle object's
+ *     residual E(new)^T E(old) B, as Y, X, Z angles, shifted right by three,
+ *     goes to player +0xBE8; the draw turns by it times (8 - frame), so it is
+ *     gone by frame 8. The hand and foot targets blend the same way (0x27730),
+ *     x and z measured from the body position. Which switches blend, and for
+ *     how long, is the caller's choice: some take four frames, two or none.
+ *     The explorer blends every switch over eight.
+ *   - The head (0x2922C) turns toward the face target at most 0x800 a frame
+ *     in yaw and 0x400 in pitch, the pitch held to +-0x2000.
+ *   - The crouch (0x29414): characters 6 and 10 draw their body at 0.97 of
+ *     its height, 8 at 0.92 (player +0xC50).
+ *
+ * Left out, as there is no opponent: the face target the game points at the
+ * other fighter, and the chest's twist toward it (+0xBE6, 0x2912C).
  */
 
 import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
@@ -175,18 +190,173 @@ function onOwnSkeleton(pose, offsets) {
     return pose;
 }
 
+/*
+ * Float objects a motion holds as angles instead of keying as a point. The
+ * set-up at 0x26FAC takes an object whose channels are latched type 1, rounds
+ * its three floats into the player's angle table (0x29724) and sets the
+ * object's bit at +0xBDC; 0x2901C then turns the part by them, Z then Y, in
+ * place of the aim. All but one of the 1359 motions hold the pelvis, float
+ * object 17, at (0, 0, 0x4000): the quarter-turn roll of Sonic the Fighters,
+ * given as data. The chest (13) and head (14) could be held the same way.
+ */
+const HELD = [[13, 1], [14, 2], [17, 9]];
+const LATCHED_ANGLES = 1;
+
+function heldAngles(rom, motion) {
+    const held = {};
+    for (const [obj, slot] of HELD) {
+        const ch = motion.channels.slice(obj * 3, obj * 3 + 3);
+        if (ch.some((c) => c.type !== LATCHED_ANGLES)) continue;
+        const v = ch.map((c) => Math.round(rom.mainDataView.getFloat32(c.values, true)));
+        held[slot] = [v[1], v[2]];
+    }
+    return held;
+}
+
+/*
+ * The crouch (0x29414): three fighters stand lower than their motions, the
+ * body's height scaled by a constant; the draw adds the difference (+0xC50).
+ * Keyed by character, so Lion's other two slots stand at full height.
+ */
+const CROUCH = { 6: 0.97, 8: 0.92, 10: 0.97 };
+
+/*
+ * The blend between motions. When a motion takes over, the set-up at 0x27630
+ * works out, for each of the twelve angle objects, the turn that takes the
+ * new motion's first frame back to the pose last drawn (op 0x2A005454, as Y, X
+ * and Z angles), and an eighth of it is the step. The pose routine adds what
+ * is left after each object's euler (+0xBE8), seven steps on the first frame,
+ * one fewer each frame after, none from the eighth. Measured against MAME's
+ * attract mode, the steps are the residual shifted right three, exactly. The
+ * eight points blend the same way, an eighth of old less new a step, with
+ * each point's x and z measured from the body's (0x272A4), so the body keeps
+ * its place on the floor and only its height blends. A move can ask for four
+ * frames or two, or none; the explorer's links don't say, so they take eight.
+ */
+const BLEND_SHIFT = 3;
+const BLEND_FRAMES = 1 << BLEND_SHIFT;
+
+const rad = (a) => (a * Math.PI) / 0x8000;
+const brad = (r) => Math.round((r * 0x8000) / Math.PI);
+const mul3 = (A, B) => A.map((row) => [0, 1, 2].map((j) => row[0] * B[0][j] + row[1] * B[1][j] + row[2] * B[2][j]));
+function turn(axis, a) {
+    const c = Math.cos(rad(a)), s = Math.sin(rad(a));
+    if (axis === 0) return [[1, 0, 0], [0, c, -s], [0, s, c]];
+    if (axis === 1) return [[c, 0, -s], [0, 1, 0], [s, 0, c]];
+    return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+}
+const eulerOf = ([x, y, z]) => mul3(mul3(turn(2, z), turn(1, y)), turn(0, x));
+const blendOf = ([x, y, z]) => mul3(mul3(turn(1, y), turn(0, x)), turn(2, z));
+
+/* The (x, y, z) that blendOf turns back into `m`. */
+function yxzOf(m) {
+    return [brad(Math.asin(-m[1][2])), brad(Math.atan2(-m[0][2], m[2][2])), brad(Math.atan2(m[1][0], m[1][1]))];
+}
+
+const tripleAt = (angles, obj) => [0, 1, 2].map((k) => (angles[obj * 3 + k] << 16) >> 16);
+
+/* Per object, the step that walks from the last pose drawn to the new one. */
+function blendSteps(fromAngles, fromBlend, toAngles) {
+    return Array.from({ length: 12 }, (_, obj) => {
+        const was = mul3(eulerOf(tripleAt(fromAngles, obj)), blendOf(fromBlend[obj]));
+        const now = eulerOf(tripleAt(toAngles, obj));
+        const back = mul3(now.map((_, i) => now.map((row) => row[i])), was);
+        return yxzOf(back).map((v) => v >> BLEND_SHIFT);
+    });
+}
+
+/* The same for the points, x and z taken from the body's. */
+function pointSteps(from, to) {
+    const rel = (t, i) => t[i] - (i % 3 === 1 ? 0 : t[i % 3]);
+    return Array.from(from, (_, i) => (rel(from, i) - rel(to, i)) / BLEND_FRAMES);
+}
+
+/*
+ * The head's look (0x2922C): it turns toward the face target at most 0x800 a
+ * frame and pitches at most 0x400, the pitch kept within 0x2000 of level. A
+ * target behind the head's plane is brought level with it, and one just
+ * behind and to the side leaves a head turned fully one way as it is. Under
+ * playback the explorer steps; on a frame picked on its own the head is where
+ * the steps would end.
+ */
+const LOOK_TURN = 0x800, LOOK_PITCH = 0x400, LOOK_PITCH_LIMIT = 0x2000;
+const s16 = (v) => (v << 16) >> 16;
+const stepTo = (from, to, max) => from + Math.max(-max, Math.min(max, to - from));
+
+export function headStep([ay, az], [d0, d1, d2], free = false) {
+    let keep = false;
+    if (d1 < 0) {
+        d1 = 0;
+        keep = d0 >= 0 ? d0 <= 0.5 && (az & 0xffff) === 0x8000 : d0 >= -0.5 && (az & 0xffff) === 0;
+    }
+    const turnTo = -brad(Math.atan2(d1, d0)), pitchTo = brad(Math.atan2(d2, Math.hypot(d0, d1)));
+    const z = keep ? az : s16(free ? turnTo : stepTo(az, turnTo, LOOK_TURN));
+    const y = free ? pitchTo : stepTo(ay, pitchTo, LOOK_PITCH);
+    return [Math.max(-LOOK_PITCH_LIMIT, Math.min(LOOK_PITCH_LIMIT, y)), z];
+}
+
+/* What each fighter carries from one frame to the next under playback: the
+ * last frame's sample, the blend then and its steps, and the head's look. */
+const LIVE = new WeakMap();
+const ZERO_BLEND = Array.from({ length: 12 }, () => [0, 0, 0]);
+
+function liveFor(body) {
+    let live = LIVE.get(body);
+    if (!live) {
+        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, look: [0, 0] };
+        LIVE.set(body, live);
+    }
+    return live;
+}
+
+/* The blend for this frame, added to the sample's points in place: a new
+ * motion takes its steps from the last frame drawn; they run out on the
+ * eighth frame or when the motion loops. */
+function blendFor(live, rom, motion, frame, sample) {
+    if (motion !== live.motion) {
+        const first = live.last && motion ? sampleMotion(rom, motion, 1) : null;
+        live.steps = first && blendSteps(live.last.angles, live.blend, first.angles);
+        live.points = first && pointSteps(live.last.targets, first.targets);
+    } else if (frame < live.frame) {
+        live.steps = live.points = null;
+    }
+    const left = BLEND_FRAMES - frame;
+    const blending = live.steps && left > 0;
+    // The next switch blends out of the targets as drawn, this blend included.
+    if (blending) live.points.forEach((v, i) => { sample.targets[i] += v * left; });
+    if (motion !== live.motion || frame !== live.frame) live.last = { angles: sample.angles, targets: sample.targets.slice() };
+    return (live.blend = blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND);
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
  * same space, so taking the step out of one would leave the limbs reaching for
  * where the other went.
  *
+ * Played frame after frame, the fighter blends into each new motion and its
+ * head turns toward the face target a step at a time, as on the board. There
+ * is no opponent, so the head follows the motion's own target and the chest
+ * does not twist.
+ *
  * @returns {{matrices: number[][], origins: number[][]}}
  */
 export function poseFighter(rom, body, motion, frame) {
     rom.vf2Rig ??= standardRig(rom);
+    const live = liveFor(body);
     const sample = motion ? sampleMotion(rom, motion, frame) : REST;
-    const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { pelvisAim: true, levelFeet: true }), body.offsets);
+    /* Playback moves on a frame, or starts the next motion or loop at 1. */
+    const stepped = live.motion !== null && (frame === live.frame + 1 || frame === 1);
+    const fresh = motion !== live.motion || frame !== live.frame;
+    const fight = {
+        held: motion ? heldAngles(rom, motion) : {},
+        blend: blendFor(live, rom, motion, frame, sample),
+        look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped)) : live.look),
+    };
+    live.motion = motion; live.frame = frame;
+    const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { levelFeet: true, fight }), body.offsets);
+    const crouch = CROUCH[body.index];
+    if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);
     const matrices = poseMatrices(pose);
     return { matrices, origins: matrices.map((m) => [m[12], m[13], m[14]]) };
 }

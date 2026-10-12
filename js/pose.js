@@ -117,6 +117,22 @@ function eulerZYX(m, ax, ay, az) {
     rotX(m, cosA(ax), sinA(ax));
 }
 
+/* Virtua Fighter 2's extra turns, (x, y, z), which its pose routine and draw
+ * add one axis at a time and only where the angle is not zero: Y, then X, then
+ * Z (ops 0x36806D6D, 0x36006C6C, 0x37006E6E). */
+function turnYXZ(m, t) {
+    if (!t) return;
+    if (t[1]) rotY(m, cosA(t[1]), sinA(t[1]));
+    if (t[0]) rotX(m, cosA(t[0]), sinA(t[0]));
+    if (t[2]) rotZ(m, cosA(t[2]), sinA(t[2]));
+}
+
+/* A look given as angles rather than aimed: (y, z), turned Z then Y. */
+function turnLook(m, [ay, az]) {
+    if (az) rotZ(m, cosA(az), sinA(az));
+    if (ay) rotY(m, cosA(ay), sinA(ay));
+}
+
 const clip = (v) => (v > 1 ? 1 : v < -1 ? -1 : v);
 
 /* ---- the skeleton --------------------------------------------------------- */
@@ -225,15 +241,27 @@ const toBrad = (rad) => Math.round((rad * 0x10000) / (2 * Math.PI));
  * is where those steps settle.
  */
 function aimHead(m, t, tgt) {
+    turnLook(m, headLook(localPoint(m, t, tgt)));
+}
+
+/* `tgt` in the frame of `m` placed at `t` (op 0x35006A6A). */
+export function localPoint(m, t, tgt) {
     const dx = tgt[0] - t[0], dy = tgt[1] - t[1], dz = tgt[2] - t[2];
-    const d0 = dx * m[0] + dy * m[1] + dz * m[2];
-    const d1 = Math.max(0, dx * m[3] + dy * m[4] + dz * m[5]);
-    const d2 = dx * m[6] + dy * m[7] + dz * m[8];
-    const az = toBrad(-Math.atan2(d1, d0));
+    return [
+        dx * m[0] + dy * m[1] + dz * m[2],
+        dx * m[3] + dy * m[4] + dz * m[5],
+        dx * m[6] + dy * m[7] + dz * m[8],
+    ];
+}
+
+/** The head's (pitch, turn) at a target in its own frame, with no last frame
+ * to step from: where aimHead's steps settle. */
+export function headLook([d0, d1, d2]) {
+    const y = Math.max(0, d1);
+    const az = toBrad(-Math.atan2(y, d0));
     const ay = Math.max(-HEAD_PITCH_LIMIT, Math.min(HEAD_PITCH_LIMIT,
-        toBrad(Math.atan2(d2, Math.hypot(d0, d1)))));
-    rotZ(m, cosA(az), sinA(az));
-    rotY(m, cosA(ay), sinA(ay));
+        toBrad(Math.atan2(d2, Math.hypot(d0, y)))));
+    return [ay, az];
 }
 
 /*
@@ -245,7 +273,7 @@ function aimHead(m, t, tgt) {
  * sign of which is what `flip` chooses, and is why an arm and a leg bend
  * opposite ways.
  */
-function solveIK(pR, pT, pivot, ang, tgt, lower, upper, flip, out) {
+function solveIK(pR, pT, pivot, ang, tgt, lower, upper, flip, out, blend) {
     const m = pR.slice();
     const t = [pT[0], pT[1], pT[2]];
 
@@ -254,6 +282,7 @@ function solveIK(pR, pT, pivot, ang, tgt, lower, upper, flip, out) {
     t[2] += pivot[0] * m[2] + pivot[1] * m[5] + pivot[2] * m[8];
 
     eulerZYX(m, ang[0], ang[1], ang[2]);
+    turnYXZ(m, blend);
 
     const dx = tgt[0] - t[0], dy = tgt[1] - t[1], dz = tgt[2] - t[2];
     const d0 = dx * m[0] + dy * m[1] + dz * m[2];
@@ -310,17 +339,20 @@ function groundFrame(world) {
  *
  * @param {object} skel     from readSkeleton()
  * @param {object} sample   from sampleMotion()
- * @param {{world?:number[], pelvisAim?:boolean, levelFeet?:boolean}} [opts]
+ * @param {{world?:number[], levelFeet?:boolean, fight?:object}} [opts]
  *   `world` is the fighter's facing in binary radians, (ry, rx, rz) — the
  *   arena's, which a fighter on its own does not have. The other two are for
  *   Virtua Fighter 2, whose pose routine (0x27CE0) is this one but for where
- *   the pelvis and the feet take their turn from; see js/vf2fighters.js.
+ *   the feet take their turn from and what the fight adds; see NO_FIGHT below and
+ *   js/vf2fighters.js.
  * @returns {Array<{r:number[], t:number[]}>} column-major 3x3 and translation
  */
-export function buildPose(skel, sample, { world = [0, 0, 0], pelvisAim = false, levelFeet = false } = {}) {
+export function buildPose(skel, sample, { world = [0, 0, 0], levelFeet = false, fight = null } = {}) {
     const { angles, targets } = sample;
-    const A = (obj, axis) => angles[obj * 3 + axis];
+    const A = (obj) => [angles[obj * 3], angles[obj * 3 + 1], angles[obj * 3 + 2]];
     const T = (obj) => [targets[obj * 3], targets[obj * 3 + 1], targets[obj * 3 + 2]];
+    const F = fight ?? NO_FIGHT;
+    const blend = (obj) => F.blend?.[obj];
 
     const R = new Array(SLOT_COUNT);
     const P = new Array(SLOT_COUNT);
@@ -329,25 +361,33 @@ export function buildPose(skel, sample, { world = [0, 0, 0], pelvisAim = false, 
      * their pivot from the waist; a hand carries on from the forearm. */
     const out = {};
     const solveLimb = (c, k, parent, footBase) => {
-        const base = [A(c.baseAngle, 0), A(c.baseAngle, 1), A(c.baseAngle, 2)];
-        solveIK(parent, P[0], skel.pivot[k], base, T(c.target),
-                skel.lower[k], skel.upper[k], c.flip, out);
+        solveIK(parent, P[0], skel.pivot[k], A(c.baseAngle), T(c.target),
+                skel.lower[k], skel.upper[k], c.flip, out, blend(c.baseAngle));
         R[c.upperSlot] = out.upperR; P[c.upperSlot] = out.upperT;
         R[c.lowerSlot] = out.lowerR; P[c.lowerSlot] = out.lowerT;
         R[c.endSlot] = (c.arm ? out.lowerR : footBase).slice();
-        eulerZYX(R[c.endSlot], A(c.endAngle, 0), A(c.endAngle, 1), A(c.endAngle, 2));
+        eulerZYX(R[c.endSlot], ...A(c.endAngle));
+        turnYXZ(R[c.endSlot], blend(c.endAngle));
         P[c.endSlot] = out.endT;
     };
 
     /* Slot 0: the waist, placed by float object 12 and turned by object 4. */
     R[0] = new Array(9).fill(0); P[0] = [0, 0, 0];
-    setBody(R[0], P[0], T(0), A(4, 2), A(4, 1), A(4, 0), world[0], world[1], world[2]);
+    const a4 = A(4);
+    setBody(R[0], P[0], T(0), a4[2], a4[1], a4[0], world[0], world[1], world[2]);
+    turnYXZ(R[0], blend(4));
 
-    /* Slot 1: the chest looks at the neck target, and stays at the waist. */
+    /* Slot 1: the chest looks at the neck target, and stays at the waist. In
+     * Virtua Fighter 2 the twist is worked out first, from where the face
+     * target sits before the chest's own aim, and drawn on top of the aim. */
     const chest = R[0].slice();
-    eulerZYX(chest, A(5, 0), A(5, 1), A(5, 2));
-    aim(chest, P[0], T(1));
-    R[1] = chest.slice(); P[1] = [P[0][0], P[0][1], P[0][2]];
+    eulerZYX(chest, ...A(5));
+    turnYXZ(chest, blend(5));
+    const twist = F.twist ? F.twist(localPoint(chest, P[0], T(2))) : 0;
+    look(chest, P[0], T(1), F.held?.[1]);
+    const drawnChest = chest.slice();
+    if (twist) rotX(drawnChest, cosA(twist), sinA(twist));
+    R[1] = drawnChest; P[1] = [P[0][0], P[0][1], P[0][2]];
 
     /* Slot 2: a step up the chest's +X, object 6's euler, and a look at the
      * face target -- float object 14, which every one of the 518 motions keys
@@ -356,34 +396,70 @@ export function buildPose(skel, sample, { world = [0, 0, 0], pelvisAim = false, 
      * Metal) too: the board's head block has no case for them. Bean's target
      * lands below their taller heads, and the pitch limit in aimHead is what
      * keeps them from looking straight down. */
-    const s1 = skel.spine;
-    const headT = [
-        P[0][0] + chest[0] * s1[0] + chest[3] * s1[1] + chest[6] * s1[2],
-        P[0][1] + chest[1] * s1[0] + chest[4] * s1[1] + chest[7] * s1[2],
-        P[0][2] + chest[2] * s1[0] + chest[5] * s1[1] + chest[8] * s1[2],
-    ];
-    const head = chest.slice();
-    eulerZYX(head, A(6, 0), A(6, 1), A(6, 2));
-    aimHead(head, headT, T(2));
-    R[2] = head; P[2] = headT;
+    const headPose = poseHead(skel.spine, drawnChest, P[0], A(6), blend(6), T(2), F);
+    R[2] = headPose.r; P[2] = headPose.t;
 
-    /* Slot 9: the pelvis, turned by object 9 and then rolled a quarter turn,
-     * or in Virtua Fighter 2 aimed at the pelvis target (float object 17) the
-     * way the chest is at its own. */
+    /* Slot 9: the pelvis, turned by object 9 and then rolled a quarter turn.
+     * In Virtua Fighter 2 the roll is the motion's own: all but one motion
+     * hold object 17 at (0, 0, 0x4000) as angles, not as a point to aim at;
+     * a fight without held angles aims at the point, as 0x2901C does. */
     const pelvis = R[0].slice();
-    eulerZYX(pelvis, A(9, 0), A(9, 1), A(9, 2));
-    if (pelvisAim) aim(pelvis, P[0], T(5));
+    eulerZYX(pelvis, ...A(9));
+    turnYXZ(pelvis, blend(9));
+    if (F.held?.[9]) turnLook(pelvis, F.held[9]);
+    else if (fight) aim(pelvis, P[0], T(5));
     else rotZ(pelvis, 0, 1);
     R[9] = pelvis.slice(); P[9] = [P[0][0], P[0][1], P[0][2]];
 
     /* A foot stays level with the body, or in Virtua Fighter 2 with the floor:
-     * the fighter's facing and nothing of the pose. */
+     * the fighter's facing and nothing of the pose. The arms hang off the
+     * chest as solved, without the twist. */
     const footBase = levelFeet ? groundFrame(world) : R[0];
     const parents = [chest, chest, pelvis, pelvis];
     for (const [k, c] of CHAINS.entries()) solveLimb(c, k, parents[k], footBase);
 
-    /* Facing: a quarter turn about Y on every slot, which is where the fighter
-     * ends up pointing once the parts are drawn. */
+    return toFacing(R, P);
+}
+
+/* The head: a step up the chest's +X, then its euler, the blend, and its look. */
+function poseHead(s1, chest, p0, a6, blend6, tgt, F) {
+    const t = [
+        p0[0] + chest[0] * s1[0] + chest[3] * s1[1] + chest[6] * s1[2],
+        p0[1] + chest[1] * s1[0] + chest[4] * s1[1] + chest[7] * s1[2],
+        p0[2] + chest[2] * s1[0] + chest[5] * s1[1] + chest[8] * s1[2],
+    ];
+    const r = chest.slice();
+    eulerZYX(r, ...a6);
+    turnYXZ(r, blend6);
+    if (F.held?.[2]) turnLook(r, F.held[2]);
+    else if (F.look) turnLook(r, F.look(localPoint(r, t, tgt)));
+    else aimHead(r, t, tgt);
+    return { r, t };
+}
+
+/* The chest's look: the motion's held angles, or an aim at its target. */
+function look(m, t, tgt, held) {
+    if (held) turnLook(m, held);
+    else aim(m, t, tgt);
+}
+
+/*
+ * What Virtua Fighter 2's fight adds to a pose, all optional:
+ *
+ *   blend    twelve (x, y, z) turns, one per angle object, each turned Y, X,
+ *            Z after the object's own euler: what is left of the last
+ *            motion's pose as the next one takes over (player +0xBE8)
+ *   held     per slot (1, 2, 9), a (y, z) look the motion gives as angles
+ *            rather than as a point (player +0xBDC's bits)
+ *   twist    (local face target) -> the chest's turn about its spine (+0xBE6)
+ *   look     (local face target) -> the head's (y, z), stepped from the last
+ *            frame's (+0x14E)
+ */
+const NO_FIGHT = {};
+
+/* Facing: a quarter turn about Y on every slot, which is where the fighter
+ * ends up pointing once the parts are drawn. */
+function toFacing(R, P) {
     const pose = [];
     for (let b = 0; b < SLOT_COUNT; b++) {
         const r = new Array(9);

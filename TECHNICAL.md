@@ -768,18 +768,49 @@ The pose routine (`0x27CE0`) is `calc_rob_angle_cont` nearly op for op, and
 
 - Everyone is solved on one standard rig, the table at program ROM `0x296A0`:
   the chest and head offsets, then per limb its pivot and the two bone lengths.
-- The pelvis is aimed at float object 17 as the chest is at its own (`0x2901C`
-  with g1 = 3), where Sonic the Fighters rolls it a quarter turn
-  (`pelvisAim`).
+- A motion can hold a slot's look as angles rather than a point. A float
+  object keyed with channel type 1 (13, 14 or 17) is latched by `0x26FAC`:
+  its three floats are rounded (`cvtri`) into the slot's angles and a bit is
+  set at player `+0xBDC`, and the draw turns Rz then Ry by them (`held`). All
+  but one motion hold the pelvis, object 17, at (0, 0, 0x4000): the quarter
+  roll Sonic the Fighters hard-codes.
 - A foot turns from the floor: `0x171B0` starts from the matrix saved at
   `0x501024`, the fighter's place and facing before any of the pose
   (`levelFeet`).
 
 The draw (`0x16504`-`0x176A0`) then places each slot at its parent's place plus
-its parent's matrix times the record's offset, with the solved rotation. Left
-out, being the fight's: the lean at player `+0xBE6`, the additive eulers at
-`+0xBA8`, the hand and foot turns at `+0x15A` and `+0x17C`, the crouch at
-`+0xC50`.
+its parent's matrix times the record's offset, with the solved rotation.
+
+What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
+
+- **Blend.** Player `+0xBE8 + 6*obj` holds an (x, y, z) turn for each of the
+  twelve angle objects: 0-3 the hands and feet, 4 the body (`+0xC00`), 5-11 the
+  rest. Each is applied after its object's euler as rotY, rotX, rotZ. At a
+  switch, `0x27630` computes the residual with op `0x2A005454`:
+  `E(new)^T E(old) B(current blend)` as Y, X, Z angles, with E the ZYX euler,
+  and stores it shifted right by three; on frame f the turn is that times
+  (8 - f), gone by frame 8. The hand and foot targets blend the same way
+  (`0x27730`): (old - new) / 8 per float, x and z measured from the body
+  position, old being the targets as last drawn. The mirror flags (`+0xC30`
+  bit 6, `+0x1A4` bit 20) zero objects 0-4. How long a switch blends is the
+  caller's: some take four frames, some two, some none (`r3 == 2`). The
+  explorer can't tell which, so it blends every switch over eight.
+- **Head** (`0x2922C`). With the face target in the chest frame as (d0, d1,
+  d2): a target behind (d1 < 0) is brought to d1 = 0, and the old yaw is kept
+  if it already faces that way within half a unit; yaw = -atan2(d1, d0),
+  stepped by at most 0x800 a frame; pitch = atan2(d2, hypot(d0, d1)), stepped
+  by 0x400 and held to +-0x2000 (`headStep`).
+- **Twist** (`+0xBE6`, `0x2912C`): the chest turns about its spine toward the
+  target, a = atan2(d2, d0); half of a up to 0x2000, 0x1000 up to 0x6000,
+  stepped 0x100 a frame within 0..0x1000. Gated by move flags (`+0x1A4`),
+  so it is off in the explorer.
+- **Crouch** (`0x29414`, `+0xC50`): characters 6 and 10 draw their body at
+  0.97 of its height, 8 at 0.92.
+- **Hands** (`0x19E34`): the left hand is entry 0-31 of the table at `+0x67C`,
+  the right entry 96-127 (`+0x180` on); Shun's right fist is model 0x546.
+
+Left out: the opponent. The game points the face target at the other fighter
+when the fight is on, and the twist follows it.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
@@ -790,12 +821,17 @@ negated. Fitting each fighter's motions and frames to those matrices, Akira
 exact in all sixteen slots, hands included (the board draws hand models
 numbered near the `+0x3C` table's, not the part list's): 0.0001 in place,
 0.05 degrees in turn. So the euler order, the standard-rig solve and the step out along the
-fighter's own skeleton are the game's. The frames that don't fit as closely
-are the fight's own. Kage, Jeffry and Wolf in their stances have the feet and
-upper body exact and the pelvis about 1 degree off. Akira's head turns 7.5
-degrees in some frames, his head following the other fighter. The error
-changes from frame to frame within the same motion, and between moves it can
-be tens of degrees, where motions blend.
+fighter's own skeleton are the game's.
+
+The fight terms were checked against a second capture that saved the player
+records with each display list. Posing from a record's own blend, held angles,
+twist and head angles, all 656 fighter poses and every character match in all
+sixteen slots, Shun's right hand included: at most 0.037 degrees in turn and
+0.0002 in place (the solve's rounding times the bone length). The head rule
+gives the board's angles to within 2 units in 7061 of 7192 frames, the twist
+rule in 4219 of 4228. Played through `poseFighter` from a switch on, as the
+explorer plays it, 458 of 539 frames match with the head left out; the misses
+are switches the game blended shorter or not at all.
 
 ### Polygon decoding (`js/model.js`)
 

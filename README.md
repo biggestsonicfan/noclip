@@ -463,8 +463,10 @@ the game's own tables — each on its own texture sets, and every one of the
 1359 motions in the game's table plays on any of them
 ([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
-fighter's own skeleton. What the fight adds on top — the lean, the crouch, the
-hands and feet turned to the ground — is left out.
+fighter's own skeleton. Played on, a fighter blends from one motion into the
+next, turns its head toward the motion's face target a step at a time and
+crouches as the game crouches it, all checked against the board. With no
+opponent, the head doesn't follow one and the chest doesn't twist toward it.
 
 ## Running it
 
