@@ -808,8 +808,25 @@ byte is 1, which is the Islands). Two parts, and `c`, the power-on counter at
 are drawn also depends on `g13 + 0x18`, `+0x20` and `+0x26`. So they are left
 out rather than simulated, like the billboards.
 
-Not drawn yet: Souseiji's animated objects (`0x2FCBC`) and the stones'
-standing stone (`0x31040`, model `0xEE1`).
+Not drawn: Souseiji's animated objects (`0x2FCBC`, only when the stage-type
+byte is 7). Two corner objects, `0x2FD78` and `0x2FF74`, each called only when
+`0x2FD08` / `0x2FD10` has the camera's yaw octant (`g13 + 0x26 >> 13`):
+- The model is `0x7125C[(c / 3) & 15]` for the first and
+  `0x7125C[((c / 3) + 8) & 15]` for the second, `c` again the power-on
+  counter at `0x500020`; a second model from `0x7121C` / `0x7123C` with the
+  same index is drawn under it.
+- `g13 + 0x27E` / `+0x27F` choose the colour (`0x2FD18`), switch the lower
+  model to `0xE43` from 16, and drive the sink at `+0x2BC` / `+0x2C0`
+  (-0.125 a frame, up to 31) and the turns at `+0x2B0`..`+0x2BA`. `0x30168` /
+  `0x3018C` set them to 1 when either fighter (`0x500804`, `0x500808`, place
+  `+0x1F4`) stands past 8.69 / -8.69 in x and below -8.69 in z, a back corner,
+  and count them up from there.
+
+`c` is not a stage-record field and not the explorer's frame, and the corner
+flags are fighter places in the fight. So they are left out rather than
+simulated, like the billboards.
+
+Not drawn yet: the stones' standing stone (`0x31040`, model `0xEE1`).
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 
