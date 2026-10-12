@@ -619,10 +619,9 @@ function layersFrom(r, ups) {
     const next = new Int32Array(n);
     /* 0 waiting, 1 in the queue, 2 done. */
     const state = new Uint8Array(n);
-    const queue = [];
-    for (let k = 0; k < n; k++) if (!below[k]) { queue.push(k); state[k] = 1; }
+    const { queue, free } = startOf(below, forced, state);
     for (let h = 0; h < n; h++) {
-        if (h === queue.length && !letGo(below, forced, state, queue)) break;
+        if (h === queue.length && !letGo(free, state, queue)) break;
         const u = queue[h];
         state[u] = 2;
         for (let p = ups.start[u]; p < ups.start[u + 1]; p++) {
@@ -630,8 +629,8 @@ function layersFrom(r, ups) {
             const v = topOf(r, e);
             if (v === u || state[v] === 2) continue;
             if (next[u] + 1 > next[v]) next[v] = next[u] + 1;
-            if (edges[e + 2]) forced[v]--;
             if (--below[v] === 0 && state[v] === 0) { queue.push(v); state[v] = 1; }
+            else if (edges[e + 2] && --forced[v] === 0 && state[v] === 0) free.list.push(v);
         }
     }
     return next;
@@ -650,15 +649,25 @@ function countBelow(r) {
     return { below, forced };
 }
 
-/* Of the faces still waiting, the one with nothing laid against the key and
- * the fewest of the sort's pairs under it, queued; false if there is none. */
-function letGo(below, forced, state, queue) {
-    let best = -1;
+/* The faces nothing lies under, queued, and those waiting on the sort's
+ * pairs alone, which a circle may let go. */
+function startOf(below, forced, state) {
+    const queue = [], free = { list: [], at: 0 };
     for (let k = 0; k < below.length; k++) {
-        if (state[k] === 0 && !forced[k] && (best < 0 || below[k] < below[best])) best = k;
+        if (!below[k]) { queue.push(k); state[k] = 1; } else if (!forced[k]) free.list.push(k);
     }
-    if (best < 0) return false;
-    queue.push(best);
-    state[best] = 1;
-    return true;
+    return { queue, free };
+}
+
+/* A face waiting on the sort's pairs alone, the first to come to that,
+ * queued; false if there is none. */
+function letGo(free, state, queue) {
+    while (free.at < free.list.length) {
+        const k = free.list[free.at++];
+        if (state[k] !== 0) continue;
+        queue.push(k);
+        state[k] = 1;
+        return true;
+    }
+    return false;
 }
