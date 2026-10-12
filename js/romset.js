@@ -10,7 +10,7 @@
  */
 
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
-import { detectGames } from './games.js';
+import { detectGames, detectPrepared } from './games.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -76,7 +76,17 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
 
     const variants = detectGames(names, nested, byCrc);
     const game = (opts.game && variants.find((g) => g.id === opts.game)) || variants[0];
-    if (!game) throw new Error('unrecognised ROM set — no supported game found in these zips');
+    if (!game) {
+        /* A set the viewer knows but cannot open yet says so (games.js
+         * PREPARED), rather than calling itself unrecognised. */
+        const prepared = detectPrepared(names, byCrc);
+        if (prepared) {
+            const e = new Error(`${prepared.name} is recognised, but not explorable yet: ${prepared.lacks}`);
+            e.prepared = prepared;
+            throw e;
+        }
+        throw new Error('unrecognised ROM set — no supported game found in these zips');
+    }
 
     const warnings = [];
     const cache = new Map();
