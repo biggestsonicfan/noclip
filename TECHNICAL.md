@@ -838,9 +838,10 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   keeps its own playback.
 
 Left out: when the fight lets the head look at the other fighter
-(`0x500034` above 6, `+0` and `+0x1A4`'s move flags clear), as the explorer's
-opponent is always looked at; and the chest's twist toward it, which the move
-sets.
+(`0x500034` above 6, `+0` and `+0x1A4`'s move flags clear). The explorer's
+opponent is looked at on every frame, which the game does not do during
+attacks, throws and falls (see below). Also left out: the chest's twist
+toward it, which the move sets.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
@@ -868,20 +869,41 @@ the fight made no blend choice and the face target is the motion's own, the
 waist (pelvis) is exact for Akira (47 frames), Kage (15), Jeffry (36) and
 Wolf (9), and the head is within 0.008 degrees and 0.00011 in place. So the
 pelvis's 1 degree and the head's turn left from the first comparison are gone.
-The head's remaining error came from the opponent. Replayed with both
-fighters posed in the board's order and each face target computed from the
-explorer's own pose of the other fighter (its head at the board's place and
-facing, as above; nothing read from `+0xB0C`), Akira's 7.5 degrees in motion
-1285 go to 0.007 degrees over all 18 frames whose target is the other
-fighter, 0.00003 in place. Kage's 3.9 degrees (frame 2940) do not move: the
-fight started his motion at 2925 without a blend (`+0xBDD` bit 0 clear), the
-explorer blends it, and the head, turning a step at a time, is still catching
-up. With the board's blend choice honoured that frame is 0.002 degrees. The
-other misses where the target is the other fighter are the same kind of
-thing, one fighter's own blend or mirror throwing the other's target off
-(Jeffry's 12.6 degrees at 2420 is Wolf's mirrored switch at the same
-frame). Across all sixteen slots, 470 of 539 replayed frames match; the
-misses are the fight's blend choices above.
+The opponent target was replayed the same way, both fighters posed in the
+board's order at the board's places, each target computed from the explorer's
+own pose of the other fighter. On every frame where the board's `+0xB0C` is
+the other fighter's head, the computed target matches it to 0.00001 (Kage,
+2916-2924). Whether the head looks at the other fighter at all is the fight's
+gate, and the explorer has not got it:
+
+| Face target fed, Kage frame 2940 (motion 361, frame 16) | Head |
+|---|---|
+| none (the motion's own, blended by the explorer) | 3.879 degrees |
+| A: `poseBout`'s, on every frame | 21.214 degrees |
+| A, only where the board's gate is on | 3.879 degrees |
+| B: the board's `+0xB0C`, on every frame | 0.002 degrees |
+
+At 2940 the target fed is A (0.21956, 1.13813, -0.33532) and B (0.11278,
+1.22150, 0.00497). B is the motion's own target: the gate has been off since
+2925, as motion 361 sets move flags 0x40001 in `+0x1A4`. A points at the
+other fighter there, which the game does not. With the gate taken from the
+board, A comes back to 3.879. The rest, between that and B, is the face
+target's own blend. The board blends `+0xB0C` with everything else on a switch
+it blends (Akira 3629-3632 move from the old target to the new), but the
+fight started motion 361 at 2925 without a blend (`+0xBDD` bit 0 clear), so
+`+0xB0C` jumps to the new motion's target. Fed on every frame, B carries that
+choice in, so B honours the fight's no-blend through the target alone.
+
+With the board's gate, the head is within 0.008 degrees (Akira's 18 frames
+looking at the other fighter: 0.007), except where a fighter's own blend or
+mirror choice throws the other's target off. Jeffry's 12.6 degrees at 2420 is
+Wolf's mirrored switch, and Akira's 40 degrees at 3630 is Jacky's unblended
+one. Without the gate, `poseBout` looks at the opponent on every frame, and
+in attract mode the head is up to 134 degrees off where the game looks at the
+motion's own target. The gate's move flags are built bit by bit by the move
+code (stores to `+0x1A4` at `0x1ACB0`, `0x1B4C8`, `0x18184` and others), not
+read from a table per motion. Across all sixteen slots, 470 of 539 replayed
+frames match. The misses are the fight's blend choices above.
 
 ### Polygon decoding (`js/model.js`)
 

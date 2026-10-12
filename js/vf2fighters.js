@@ -420,10 +420,11 @@ function headSeenFrom(other, distance) {
  * this frame. Each is {body, motion, frame}; the opponent's body has to be an
  * object of its own, as it carries its own playback.
  *
- * Checked against MAME's attract mode with both fighters posed this way from
- * the motion ids and frames alone, at the places and facings the board had
- * them: the head is within 0.008 degrees wherever neither fighter's own blend
- * or mirror choice is in the way.
+ * Checked against MAME's attract mode at the places and facings the board had:
+ * the target matches the board's +0xB0C to 0.00001 wherever the fight looks at
+ * the other fighter. The fight does not look during attacks, throws and falls
+ * (move flags in +0x1A4), and this looks on every frame, so there the head
+ * turns where the game's doesn't.
  *
  * @returns {Array<{matrices: number[][], origins: number[][]}>} each in its
  *   own viewer frame; opponentMatrix() places the second.

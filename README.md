@@ -467,8 +467,9 @@ fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
 crouches as the game crouches it, all checked against the board. An opponent,
 the same fighter on the same motion, stands where a round starts the other,
-and each head turns toward the other's as the fight turns it; the chest's
-twist toward it is the move's, and is left out.
+and each head turns toward the other's. The game turns it only outside
+attacks, throws and falls, which the explorer doesn't tell apart yet. The
+chest's twist toward the opponent is the move's, and is left out.
 
 ## Running it
 
