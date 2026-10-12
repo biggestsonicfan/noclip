@@ -837,11 +837,28 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   opponent is the same fighter on the same motion, a body of its own so it
   keeps its own playback.
 
-Left out: when the fight lets the head look at the other fighter
-(`0x500034` above 6, `+0` and `+0x1A4`'s move flags clear). The explorer's
-opponent is looked at on every frame, which the game does not do during
-attacks, throws and falls (see below). Also left out: the chest's twist
-toward it, which the move sets.
+**When the game looks.** The store is `stt r12, 0xb0c(g7)` at `0x286A0`, after
+op `0x31806363`. Four branches to `0x286A4` skip it:
+
+- `0x28644`: `0x500034` is 6 or less (the round is not running).
+- `0x28654`: `0x500034 & 0x3F0000` is not 0.
+- `0x28664`: the fighter's status word `+0 & 0xA00000` is not 0.
+- `0x28678`: the move flags `+0x1A4 & 0x6C111` are not 0.
+
+None of these is in a motion or move record the explorer reads. `0x500034` is
+the round's state, and `+0` is the fighter's status. `+0x1A4` is built while a
+move plays: the move script interpreter at `0x1AD5C` (op table `0x1B910`,
+stepped against the motion frame `+0x1AA`) has ops that set, clear and toggle
+a `+0x1A4` bit named by the op's operand (`0x1AF90`, `0x1AFA8`, `0x1AFC0`).
+Other move code changes bits too (`0x1ACB0`, `0x1B4C8`, `0x18184`), and
+`0x3AC10` restores the word from a RAM snapshot (`0x535000`). Motion 361, for
+one, runs with `+0x1A4 = 0x40061`, so Kage's head keeps the motion's own
+target through it.
+
+So the explorer does not decide when to look. Its opponent, behind a checkbox
+that is off by default, is looked at on every frame. Where the game keeps the
+motion's own target, that is wrong, by up to 134 degrees in attract mode.
+Also left out: the chest's twist toward the opponent, which the move sets.
 
 Checked against MAME's attract mode: a tap on the geometrizer's read-start
 register (`0x803008`) saved the display list each second, and each part's
@@ -900,9 +917,8 @@ mirror choice throws the other's target off. Jeffry's 12.6 degrees at 2420 is
 Wolf's mirrored switch, and Akira's 40 degrees at 3630 is Jacky's unblended
 one. Without the gate, `poseBout` looks at the opponent on every frame, and
 in attract mode the head is up to 134 degrees off where the game looks at the
-motion's own target. The gate's move flags are built bit by bit by the move
-code (stores to `+0x1A4` at `0x1ACB0`, `0x1B4C8`, `0x18184` and others), not
-read from a table per motion. Across all sixteen slots, 470 of 539 replayed
+motion's own target. That is fight state (see When the game looks above), so
+the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
 frames match. The misses are the fight's blend choices above.
 
 ### Polygon decoding (`js/model.js`)

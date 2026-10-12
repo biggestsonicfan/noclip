@@ -422,9 +422,12 @@ function headSeenFrom(other, distance) {
  *
  * Checked against MAME's attract mode at the places and facings the board had:
  * the target matches the board's +0xB0C to 0.00001 wherever the fight looks at
- * the other fighter. The fight does not look during attacks, throws and falls
- * (move flags in +0x1A4), and this looks on every frame, so there the head
- * turns where the game's doesn't.
+ * the other fighter. When it looks is fight state, which this does not have:
+ * the store at 0x286A0 is skipped by the round state (0x500034), the
+ * fighter's status (+0 & 0xA00000) and the move flags (+0x1A4 & 0x6C111),
+ * which the move script sets as the move plays. This looks on every frame, so
+ * where the game keeps the motion's own target the head turns where the
+ * game's doesn't.
  *
  * @returns {Array<{matrices: number[][], origins: number[][]}>} each in its
  *   own viewer frame; opponentMatrix() places the second.

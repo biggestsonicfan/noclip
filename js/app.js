@@ -96,8 +96,10 @@ const state = {
     travel: false,
     /* Virtua Fighter 2: a second fighter, the same one playing the same
      * motion, standing where a round starts the other, for the heads to turn
-     * toward. */
-    opponent: true,
+     * toward. Off unless asked for: the game looks at the other fighter only
+     * when fight state allows (see poseBout), and the explorer looks on every
+     * frame, so with it on a head can turn where the game's doesn't. */
+    opponent: false,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -4141,7 +4143,8 @@ function wireOptions() {
     });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
-        rebuildBody();
+        /* Frame the pair, or the one left: the opponent stands 2 away. */
+        rebuildBody({ keepCamera: false });
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
