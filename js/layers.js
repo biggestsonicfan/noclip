@@ -194,9 +194,10 @@ function facesOf(draws) {
                 const lo = [0, 1, 2].map((a) => Math.min(...pts.map((p) => p[a])));
                 const hi = [0, 1, 2].map((a) => Math.max(...pts.map((p) => p[a])));
                 const zmode = (decoded.flags[r / 3] >> 5) & 3;
+                const twoSided = ((decoded.flags[r / 3] >> 7) & 1) === 1;
                 /* The four corners the board sorts the face by. */
                 const zc = zCorners ? zCorners.map((a) => world(a, r)) : [...pts.slice(0, 3), pts[2]];
-                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, zc, lo, hi, hulls: [] });
+                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, twoSided, zc, lo, hi, hulls: [] });
             }
             t = u + 1;
         }
@@ -392,7 +393,18 @@ function pairsOf(faces, out, gap, cosine) {
 }
 
 /* Each paired face given the plane of its group's largest face, unless a
- * corner of it lies further than the gap from that plane; returns how many. */
+ * corner of it lies further than the gap from that plane, or the whole face
+ * lies APART or more behind it; returns how many.
+ *
+ * A face that far behind is under the faces in front of it by its own depth,
+ * seen from the side it is drawn from, which for a face drawn from one side
+ * is the only side the camera sees it from,
+ * and taking the plane would only pull it forward, by as much as the gap
+ * times the tangent of the slant it is seen at. Where the ray meets the plane
+ * off the face in front, that lands it in front of whatever lies between.
+ * Virtua Cop's third stage has a hall ceiling half a unit over a lower one
+ * (issue 78): drawn at the lower one's height, it came through the office
+ * wall and the bookcase against it, seen from the office below. */
 function setPlanes(draws, faces, out, group, gap) {
     const { paired, find, largest } = group;
     let planes = 0;
@@ -401,7 +413,8 @@ function setPlanes(draws, faces, out, group, gap) {
         const ref = faces[largest.get(find(i))];
         const n = ref.n;
         const d = n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2];
-        if (f.pts.some((p) => Math.abs(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d) > gap)) return;
+        const off = f.pts.map((p) => n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d);
+        if (off.some((s) => Math.abs(s) > gap) || (!f.twoSided && Math.min(...off) >= APART)) return;
         /* Into the draw's own space: for x = A p + t, n.x = d is (A^T n).p = d - n.t. */
         const M = draws[f.draw].matrix;
         const plane = [
