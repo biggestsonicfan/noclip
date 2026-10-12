@@ -16,6 +16,8 @@
  *          j slot j+1's place in its parent's frame
  *   +0x30  the texture set, handed to the request at 0x4B838; its handler loads
  *          it and the next, as Fighting Vipers' does
+ *   +0x38  the waist skin (readFighterSkin below): rebuilt every frame at
+ *          0x16F3C and drawn at the pelvis by 0x195F8
  *   +0x3C  thirty-two hand models to the slot (0x19E34 picks the fists and open
  *          hands from it); the part list's own are the ones a motion starts on
  *
@@ -78,7 +80,7 @@
 
 import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion } from './motion.js';
-import { MAIN_DATA_BASE } from './romset.js';
+import { MAIN_DATA_BASE, readModelEntry } from './romset.js';
 
 /* The record's fields. */
 const PARTS = 0x00, SKELETON = 0x04, TEXTURE_SET = 0x30;
@@ -157,6 +159,76 @@ export function readFighters(rom) {
         });
     }
     return out;
+}
+
+/*
+ * The waist skin: record +0x38, a mesh rebuilt every frame between the chest
+ * and the pelvis. It holds the four models the draw names (pelvis, chest, this
+ * mesh, the low pelvis), sixteen points from +0x10, the mesh's record count at
+ * +0xD0, its 40-byte records from +0xD4 — attribute and normal, then two
+ * points — a closing attribute, and an index byte per point of the records.
+ *
+ * Once the pelvis is drawn, 0x16F3C turns the last eight points, given in the
+ * chest's space, through the chest's matrix (coprocessor op 0x37 on slot 1,
+ * then op 0x29) into player +0x1860, and streams the records to polygon RAM:
+ * a point whose index byte is 8 or more is replaced with the turned point it
+ * names, the rest are the records' own, in the pelvis's space. 0x195F8 draws
+ * that on the pelvis's matrix, after slot 9, with the table entry of the
+ * model the record names third. Only a record without the mesh skips either;
+ * the draw is also skipped while a global mode bit (0x500068 bit 25) is up,
+ * which only the post-fight mode 13 sets.
+ */
+const SKIN = 0x38, SKIN_POINTS = 0x10, SKIN_COUNT = 0xd0, SKIN_RECORDS = 0xd4;
+const SKIN_HIPS = 9, SKIN_CHEST = 1, SKIN_TURNED = 8;
+
+/**
+ * A fighter's waist skin, or null: its records in the layout model.js reads
+ * (two points, then the next record's attribute and normal), where its
+ * replaced points sit, and the chest-side points that go there.
+ */
+export function readFighterSkin(rom, body) {
+    const md = rom.mainDataView;
+    const rec = dataView(rom, body.root + SKIN);
+    const base = rec < 0 ? -1 : dataView(rom, md.getUint32(rec, true));
+    if (base < 0) return null;
+    const count = md.getUint32(base + SKIN_COUNT, true);
+    if (count < 1 || count > 64) return null;
+    const entry = readModelEntry(rom, md.getUint32(base + 8, true));
+    /* The stream the draw sends is the records with the first header left
+     * off, which is the polygon ROM's layout; the closing normal is zeros. */
+    const bytes = new Uint8Array(40 * count);
+    bytes.set(rom.mainData.subarray(base + SKIN_RECORDS + 16, base + SKIN_RECORDS + 40 * count + 4));
+    const index = base + SKIN_RECORDS + 4 * (10 * count + 1);
+    const slots = [];
+    for (let k = 0; k < 2 * count; k++) {
+        const i = rom.mainData[index + k];
+        if (i >= SKIN_TURNED) slots.push({ at: 40 * (k >> 1) + 12 * (k & 1), point: i - SKIN_TURNED });
+    }
+    const points = Array.from({ length: SKIN_TURNED }, (_, i) => vec(md, base + SKIN_POINTS + (SKIN_TURNED + i) * 12));
+    return { bytes, slots, points, uvPtr: entry.uvPtr, matPtr: entry.matPtr, hips: SKIN_HIPS, chest: SKIN_CHEST };
+}
+
+/**
+ * The waist skin on one pose, in the pelvis's space: the chest-side points
+ * carried there by inverse(pelvis)·chest, as model.js's bytes.
+ */
+export function fighterSkinMesh(skin, matrices) {
+    const A = matrices[skin.hips], B = matrices[skin.chest];
+    const bytes = skin.bytes.slice();
+    const view = new DataView(bytes.buffer);
+    const k2 = A[0] * A[0] + A[1] * A[1] + A[2] * A[2];
+    /* The board's z is the viewer's negated, going in and coming out. */
+    const turned = skin.points.map(([x, y, z]) => {
+        const d = [0, 1, 2].map((r) => B[r] * x + B[4 + r] * y - B[8 + r] * z + B[12 + r] - A[12 + r]);
+        return [0, 1, 2].map((c) => (A[c * 4] * d[0] + A[c * 4 + 1] * d[1] + A[c * 4 + 2] * d[2]) / k2);
+    });
+    for (const { at, point } of skin.slots) {
+        const l = turned[point];
+        view.setFloat32(at, l[0], true);
+        view.setFloat32(at + 4, l[1], true);
+        view.setFloat32(at + 8, -l[2], true);
+    }
+    return { bytes, uvPtr: skin.uvPtr, matPtr: skin.matPtr };
 }
 
 /**
