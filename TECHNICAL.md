@@ -781,6 +781,22 @@ out, being the fight's: the lean at player `+0xBE6`, the additive eulers at
 `+0xBA8`, the hand and foot turns at `+0x15A` and `+0x17C`, the crouch at
 `+0xC50`.
 
+Checked against MAME's attract mode: a tap on the geometrizer's read-start
+register (`0x803008`) saved the display list each second, and each part's
+object (its `oba` is the model's mesh pointer) gives the part's matrix as the
+board drew it. The game's matrices are the explorer's transposed, with z
+negated. Fitting each fighter's motions and frames to those matrices, Akira
+(motion 1285), Jacky (1225), Lau (1226), Pai (1227) and Lion (185) come out
+exact in all sixteen slots, hands included (the board draws hand models
+numbered near the `+0x3C` table's, not the part list's): 0.0001 in place,
+0.05 degrees in turn. So the euler order, the standard-rig solve and the step out along the
+fighter's own skeleton are the game's. The frames that don't fit as closely
+are the fight's own. Kage, Jeffry and Wolf in their stances have the feet and
+upper body exact and the pelvis about 1 degree off. Akira's head turns 7.5
+degrees in some frames, his head following the other fighter. The error
+changes from frame to frame within the same motion, and between moves it can
+be tens of degrees, where motions blend.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
