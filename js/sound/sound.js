@@ -9,7 +9,7 @@
  *
  * - 'model2', the Model 2 board: a 68000 and a Yamaha SCSP. m2-hle2 emulates
  *   it and grades it against MAME's, and board.wasm is that emulation
- *   (tools/sound/board.c). Sonic The Fighters.
+ *   (tools/sound/board.c). Sonic The Fighters and Virtua Fighter 2.
  * - 'model1', the board the original Model 2 kept from Model 1: a 68000, two
  *   MultiPCM sample chips and a YM3438. model1.wasm is MAME's own chips on
  *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA.
@@ -65,7 +65,10 @@ export function stageMusic(rom, slot, pick = -1) {
     }
     const at = spec?.stageMusic;
     if (at === undefined) return { code: 0, index: -1 };
-    return { code: rom.mainCpuView.getUint32(at + (slot & 0xF) * 4, true), index: slot & 0xF };
+    /* The program ROM's for every game but Virtua Fighter 2, whose table is
+     * in the data ROM. */
+    const view = rom[`${spec.stageMusicRegion ?? 'mainCpu'}View`];
+    return { code: view.getUint32(at + (slot & 0xF) * 4, true), index: slot & 0xF };
 }
 
 export function soundSupported(game) {

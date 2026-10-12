@@ -428,6 +428,32 @@ Not read yet: the enemies (they come from another system than the objects), the
 models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
 effects), and the light, which is still Daytona USA's.
 
+## Virtua Fighter 2
+
+`vf2.zip` (Version 2.1) loads with both tabs. Virtua Fighter 2 is AM2's library
+the year before Fighting Vipers: the model table, the face palette and the
+colour uploads are at the same addresses, and what moved is in the program ROM,
+each number read off the instruction that uses it ([`js/games.js`](js/games.js)).
+
+The Stages tab has the twelve stages the record table holds once each
+([`js/vf2.js`](js/vf2.js)), named as the game's own debug menu names them —
+Ikada, the raft; Ban-ri, the Great Wall; Yuki-yama, the snow mountain; and
+the rest — and the Colosseum's second look, which the record carries as a
+second set of lists. As in Fighting Vipers, the pieces are modelled where they
+stand, so a stage is its lists drawn at the origin; the ring floor is the one
+piece scaled, by the operator's ring size (8, the default). The raft is drawn
+whole, as it floats before a fighter nears its edge, and Dural's stage has its
+mirror floor.
+
+The **music** switch plays the stage's song on the emulated sound board, the
+same board as Sonic the Fighters'. Beside it, **stage sounds** plays what the
+stage plays by itself: the crowd in the Colosseum and the calls and cues of
+four others, ported from the game's per-frame task.
+
+Not read yet: the fighters and their motions, the sky (the tile chip's layer,
+as in Fighting Vipers), and anything that moves — the raft's bobbing and its
+logs drifting apart.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with

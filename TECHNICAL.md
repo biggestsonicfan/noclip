@@ -697,6 +697,34 @@ transforms.
 What is missing is motion. The object list at `0xB4` is what animates a stage,
 and walking it is not written, so a stage here stands still.
 
+### Virtua Fighter 2's stage records (`js/vf2.js`)
+
+Virtua Fighter 2's records are 256 bytes at `0x6EE38`, indexed by `stage_num`
+(`0x500064`) shifted left by 8, and the draw at `0x20708` reads them. They
+are not Fighting Vipers' layout: thirty-two scenery models at `+0x00`, culled
+by camera cell (`0x20AFC`), sixteen backdrop models at `+0x40` picked by view
+direction (`0x207E0`), single models at `+0x60` (flag bit 8), `+0x62` (the ring
+floor) and `+0x64` (flag bit 5, Dural's mirror floor), the flags at `+0x68`,
+the light at `+0x6C`/`+0x70`/`+0x72` (copied by `0xCE1C` as `change_scene`
+does), the texture pair at `+0x78`/`+0x7C` and six ground models at `+0x84`
+by ring size (flag bit 2). None is drawn under a matrix except the floors, which
+`0x20264` and `0x20418` scale by (size/6, 1, size/6), size the operator
+setting at `0x50A00C`.
+
+Flag bit 3 is the raft. `0x20054` walks eight logs from a list in the stage
+state (`0x100(g13)`), under the ring scale, at x = 5.4, then 1.4 and five steps
+of 1.6 down, and the last 0.2 back; `0x202E8` walks ten planks from
+`0x150(g13)` 2.2 apart from x = 9.9 and then model `0x764`. `0x1D6D0` and
+`0x1D824` fill both lists whole while the fighters are clear of the edge, and
+those are the lists drawn. Flag bit 6 swaps every list for the ones at
+`0x6FE38` while byte `0xDF` of the stage state says so: the Colosseum's second
+look.
+
+The names are the debug menu's (`0x71AF4`, thirteen-byte strings, pointers at
+`0x46108`), indexed by the colour block plus one. Records 10 and 11, 13 and 14
+repeat earlier ones in everything drawn and are listed once; record 15 draws
+model `0x8FF` alone (flag bit 12) and is left out.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
@@ -3745,6 +3773,21 @@ pointing at it). The wasm is committed because the site has no build step; a
 change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
 build is from `c4ed74f`.
+
+### Virtua Fighter 2's stage sounds (`js/sound/ambience.js`)
+
+Virtua Fighter 2 runs Sonic the Fighters' sound board, and the round start
+(`0xE418`) sends the song from sixteen codes at data `0x1E900`. Beside the song,
+a task (`0x43ABC`) plays the stage's own sounds through the same queue
+(`0x43888`): flag bits in its work ask for the scene-start, round-start and
+round-end codes (tables at data `0x1E940`, `0x1E980`, `0x1E9C0`), and bit 29,
+while a round runs, jumps through `0x44044` by stage to an ambient player. The
+five players with sounds (`0x43B50`, `0x43B80`, `0x43B98`, `0x43BFC`,
+`0x43C38`) are ported one for one: each counts frames since it last played and
+throws the game's 16-bit random number every frame, which in the page is
+`Math.random`, so the timing is the game's in kind but not frame for frame.
+The **stage sounds** switch sends the scene and round codes when a stage opens
+and runs its player at 60 Hz.
 
 ### Daytona USA's music: the Model 1 sound board
 

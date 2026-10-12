@@ -11,6 +11,7 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
+import { readVf2Stages } from './vf2.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -51,6 +52,7 @@ import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LU
 import { buildTexram, bestTextureSet, bestTextureCombo, bankTextureSet, programTextureSets, fighterSetList } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
+import { StageSounds } from './sound/ambience.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, html) => {
@@ -78,7 +80,7 @@ const state = {
     stageIndex: 0,
     /* The sound board, once the music has been switched on, and the song it
      * was last told to play — see playStageMusic. */
-    music: { on: false, board: null, playing: null },
+    music: { on: false, board: null, playing: null, sfx: null },
     modelIndex: 517,
     /* The Cells tab: which cell, the CG drawn with it and the one loaded
      * first (-1 for none), and each cell's CGs, ranked once a set is up. */
@@ -4021,6 +4023,12 @@ function wireOptions() {
     $('#cell-fit').addEventListener('change', () => drawCell());
     $('#opt-music').addEventListener('change', (e) => setMusic(e.target.checked));
     $('#music-volume').addEventListener('input', (e) => state.music.board?.setVolume(+e.target.value));
+    $('#opt-stage-sfx').addEventListener('change', () => {
+        if (!state.music.on || !state.music.board?.node) return;
+        /* Off stops the player; what it already sent rings out. */
+        const stage = state.stages[state.stageIndex];
+        playStageSounds(stage?.soundSlot ?? stage?.slot);
+    });
     $('#music-song').addEventListener('change', () => playStageMusic());
     /* Which of the game's states a Daytona course is drawn in — see MODES in
      * js/daytona.js. */
@@ -4280,6 +4288,8 @@ function renderTextureSetPicker() {
  * not read the zips again; a new build is a new board.
  */
 function resetMusic() {
+    state.music.sfx?.stop();
+    state.music.sfx = null;
     state.music.board?.close();
     state.music.board = null;
     state.music.on = false;
@@ -4296,6 +4306,7 @@ function resetMusic() {
     (choices ?? []).forEach((c, i) => pick.append(new Option(`${c.label}: ${songName(c.code)}`, String(i))));
     pick.value = '-1';
     $('#music-song-field').hidden = !choices || $('#music-field').hidden;
+    $('#stage-sfx-label').hidden = !state.rom.game.sound?.ambience || $('#music-field').hidden;
 }
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
@@ -4306,8 +4317,11 @@ function songName(code) {
 function playStageMusic() {
     if (!state.music.on || !state.music.board?.node) return;
     const stage = state.stages[state.stageIndex];
+    /* A stage list that is not one entry per stage number says which number
+     * the sound tables know it by (js/vf2.js). */
+    const slot = stage?.soundSlot ?? stage?.slot;
     const { code, index } = stage
-        ? stageMusic(state.rom, stage.slot, +$('#music-song').value)
+        ? stageMusic(state.rom, slot, +$('#music-song').value)
         : { code: 0, index: -1 };
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
@@ -4315,6 +4329,16 @@ function playStageMusic() {
     state.music.playing = code;
     state.music.board.play(code, index);
     $('#music-status').textContent = code ? songName(code) : 'no music of its own';
+    playStageSounds(slot);
+}
+
+/* The stage's own sound effects, which start with the round as its song does,
+ * on the same board. Started after the song: play() stops every sound first. */
+function playStageSounds(slot) {
+    state.music.sfx?.stop();
+    if (!state.rom.game.sound?.ambience || !$('#opt-stage-sfx').checked || slot == null) return;
+    if (state.music.sfx?.board !== state.music.board) state.music.sfx = new StageSounds(state.rom, state.music.board);
+    state.music.sfx.start(slot);
 }
 
 async function setMusic(on) {
@@ -4322,6 +4346,7 @@ async function setMusic(on) {
     state.music.playing = null;
     const status = $('#music-status');
     if (!on) {
+        state.music.sfx?.stop();
         state.music.board?.play(0);
         state.music.board?.suspend();
         status.textContent = '';
@@ -4421,6 +4446,7 @@ function loadGameContent() {
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
+        else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
