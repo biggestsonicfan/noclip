@@ -758,7 +758,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
     return sky.concat(objects, built, draws.map((d) => ({
         model: d.cycle ? d.cycle[0] : d.model,
         anim: d.cycle ? { frames: d.cycle, shift: 0, phase: 0 } : null,
-        layer: 'scenery',
+        /* Virtua Fighter 2 sorts its pieces into layers of its own (js/vf2.js). */
+        layer: d.layer ?? 'scenery',
         /* Which texture set the piece is drawn under, for a stage that spans
          * several — see the all-placements stage in readPlacementStages. */
         set: zone ? zone.set : d.set,

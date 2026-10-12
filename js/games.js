@@ -2588,8 +2588,131 @@ const vcop = {
     features: { stages: true, characters: false, motions: false, bodies: false },
 };
 
+/* ---- Virtua Fighter 2 ----------------------------------------------------- */
+
+/*
+ * Virtua Fighter 2 (Version 2.1), the `vf2` set: Model 2A, and AM2's library
+ * the year before Fighting Vipers. The model table is at the same 0x0E0004
+ * (`lda 0x20E0004[g0*16]` in the draw at 0x7CB8), the face palette at the same
+ * 0x100000, and the colour uploads name the same tables at the same data
+ * offsets: 0x109700 for the scene, 0x105800 and 0x107780 for a fighter's parts
+ * with the split at 13, and 0x101000 for skin.
+ *
+ * What moved is in the program ROM, and every number below was read off the
+ * instruction that uses it:
+ *
+ *   0x4BD70   unp_send_tex_para_sub: `ld 0x230000C` for the data header and
+ *             `ldos 0x4C120[g0*4]` for the page grid
+ *   0x4B9B8   unp_send_tex_req: `lda 0x56, r3 / cmpoble g0, r3`, so texture
+ *             numbers run 0..0x56
+ *   0x4B3E0   send_tex_default: `addo 31, 9, g0` and the request, set 40
+ *   0x1171C   essential_color_handling: luma straight out of the program ROM,
+ *             `lda 0x78D10` and `ld 0x78D0C`
+ *   0x73C     send_tex_col_stage: rows 14 on, seven of them (`mov 6, g2`) in
+ *             blocks of 0x2A0 (0x7FC), where Fighting Vipers takes fourteen in
+ *             blocks of 0x540
+ */
+const vf2 = {
+    id: 'vf2',
+    name: 'Virtua Fighter 2 (Version 2.1)',
+    identify: ['epr-18385.12', 'epr-18386.13'],
+    regions: {
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x00000, 'epr-18385.12', 0x78ed2d41, 'epr-18386.13', 0x3418f428],
+                [0x40000, 'epr-18387.14', 0x124a8453, 'epr-18388.15', 0x8d347980],
+            ],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-17560.10', 0xd1389864, 'mpr-17561.11', 0xb98d0101],
+                [0x400000, 'mpr-17558.8', 0x4b15f5a6, 'mpr-17559.9', 0xd3264de6],
+                [0x800000, 'mpr-17566.6', 0xfb41ef98, 'mpr-17567.7', 0xc3396922],
+                [0xc00000, 'mpr-17564.4', 0xd8062489, 'mpr-17565.5', 0x0517c6e9],
+            ],
+        },
+        polygons: {
+            size: 0xc00000,
+            parts: [
+                [0x000000, 'mpr-17554.16', 0x27896d82, 'mpr-17548.20', 0xc95facc2],
+                [0x400000, 'mpr-17555.17', 0x4df2810b, 'mpr-17549.21', 0xe0bce0e6],
+                [0x800000, 'mpr-17556.18', 0x41a47616, 'mpr-17550.22', 0xc36ff3f5],
+            ],
+        },
+        /* Two pairs at the same two offsets the later games use, leaving
+         * 0x400000-0x800000 empty. */
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-17553.25', 0x5da1c5d3, 'mpr-17552.24', 0xe91e7427],
+                [0x800000, 'mpr-17547.27', 0xbe940431, 'mpr-17546.26', 0x042a194b],
+            ],
+        },
+    },
+    /* The table runs to entry 5124, and a run of 0xFF at 0xF4054 ends it. */
+    modelTable: { offset: 0x000e0004, count: 5125, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: 0x00100000,
+    texture: {
+        header: 0x300000, pageTable: 0x4c120, sets: 0x57,
+        residentSet: null,
+        bootSet: 40,
+    },
+    /* Fighting Vipers' tables and settings: the program reads its settings
+     * out of the same backup RAM bytes (0x3356..0x335C) into the same
+     * 0x500234..0x50023A (0x97E4), and builds the ramp from them with the
+     * same routine. */
+    colors: {
+        luma: { source: 'maincpu', count: 0x78d0c, data: 0x78d10 },
+        add: [64, 64, 64],
+        mul: [37, 37, 37],
+        bright: 31,
+        stage: { at: 0x109700, indirect: false, row0: 14, rows: 7, block: 0x2a0, blocks: 13 },
+        fixed: [],
+        part: {
+            at: 0x105800, atHi: 0x107780, indirect: false,
+            block: 0x2a0, rows: 7, row0: [0, 7], split: 13, blocks: 13,
+        },
+        skin: {
+            at: 0x101000, indirect: false,
+            block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
+        },
+    },
+    /* js/vf2.js reads the records and draws them the way the board does. */
+    /* One material table for every stage: 0x117F8 uploads the 32 slots at
+     * 0x118F0 (the count and first slot are the two words before them). The
+     * light is per stage — see js/vf2.js. */
+    lighting: {
+        vecter: [0xe000, 0xc000],
+        materials: { at: 0x118f0, count: 32, stride: 4 },
+    },
+    stageTable: { vf2: { at: 0x6ee38, stride: 256, count: 16, ringSize: 8 }, flat: true },
+    /*
+     * The sound board is Sonic The Fighters' — the same Model 2 board, the
+     * chips laid out the same way, the same three boot commands (0x8574,
+     * 0x8B9C, 0x8BAC). The round start (0xE418) sends the stage's song out of
+     * the sixteen codes at data 0x1E900, by stage_num & 15; `ambience` is the
+     * stage's own sound effects, js/sound/ambience.js.
+     */
+    sound: {
+        program: ['epr-17574.30', 0x4d4c3a55],
+        samples: [
+            ['mpr-17573.31', 0xe43557fe], ['mpr-17572.32', 0x4febecc8],
+            ['mpr-17571.36', 0x51caa584], ['mpr-17570.37', 0xbccd324b],
+        ],
+        stageMusic: 0x1e900,
+        stageMusicRegion: 'mainData',
+        ambience: { scene: 0x1e940, round: 0x1e980, end: 0x1e9c0, players: 0x44044 },
+    },
+    depth: { recede: 0, nearMin: 0.1 },
+    scenes: null,
+    features: { stages: true, characters: false, motions: false },
+};
+
 export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
 
 /**
  * Pick the profile a set of zip member names belongs to.
