@@ -242,11 +242,22 @@ function blockOffset(addr) {
     return -1;
 }
 
+/*
+ * Where the table is and how long. Sonic The Fighters' is the default; another
+ * game in the same format names its own as `motionTable` in its profile, with
+ * the table in main data.
+ */
+function motionTable(rom) {
+    const M = rom.game.motionTable;
+    if (!M) return { at: xtraToMainData(MOTION_LIST_ADDR), count: MOTION_COUNT };
+    return { at: M.list - MAIN_DATA_BASE, count: M.count };
+}
+
 /** The raw `offset_list_motions` entry for a motion id. */
 export function motionBlockAddress(rom, motionId) {
-    if (!(motionId > 0 && motionId < MOTION_COUNT)) return 0;
-    const off = xtraToMainData(MOTION_LIST_ADDR) + motionId * 4;
-    return rom.mainDataView.getUint32(off, true);
+    const { at, count } = motionTable(rom);
+    if (!(motionId > 0 && motionId < count)) return 0;
+    return rom.mainDataView.getUint32(at + motionId * 4, true);
 }
 
 /**
@@ -310,7 +321,8 @@ export function decodeMotion(rom, motionId) {
 /** Every motion id that resolves to a real block, for browsing. */
 export function listMotions(rom) {
     const out = [];
-    for (let m = 1; m < MOTION_COUNT; m++) {
+    const { count } = motionTable(rom);
+    for (let m = 1; m < count; m++) {
         const d = decodeMotion(rom, m);
         if (d) out.push({ id: m, frames: d.frames, address: d.address });
     }

@@ -725,6 +725,239 @@ The names are the debug menu's (`0x71AF4`, thirteen-byte strings, pointers at
 repeat earlier ones in everything drawn and are listed once; record 15 draws
 model `0x8FF` alone (flag bit 12) and is left out.
 
+The sky is the tile chip's layer (`buildVf2Sky` in `js/scroll.js`). `0x24314`
+indexes a 32-byte record at `0x2502C` by `stage_num << 5`: the CG list at
+`+0x08`, the palette list at `+0x0C` and the pattern list at `+0x10`, a
+halfword row count, the vertical offset's byte and eighteen pointers straight
+at pattern rows. The per-frame routine (`0x24534`) is Fighting Vipers'
+`0x29A40` without the arena turn; the vertical scroll is
+`8 * list[2] - (pitch - 0x2E0) / 16`.
+
+The raft moves under two flags. Bit 3: `0x1D530` takes 0.037 off `0x50A014`
+every frame, and the stage draw pushes the negated vector before the scenery,
+so the bank slides along +X. Bit 4: `0x1D550` counts frames at `0x50A026` and
+sets the roll at `0x50A024` to `411 sin(128 t) + 133 sin(192 t + 0x1234)`, and
+`0x1DD8C` rolls the view by its negation under the raft, the ring floor and the
+fighters. The counts start again with the stage (`0x1FE78`); the explorer
+starts them again every thirty seconds. The logs drifting apart (`0x1D6D0`,
+`0x1D824`) follow the fighters and are left out.
+
+### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
+
+Character set-up (`0x13F08`) reads the record `ld 0x200620C[char*4]`: the
+sixteen part models at `+0x00`, the skeleton at `+0x04` (fifteen offsets,
+entry j slot j+1's place in its parent's frame), the texture set at `+0x30`
+(the request at `0x4B838`, which loads it and the next) and thirty-two hand
+models at `+0x3C` (`0x19E34` picks from them). There are fourteen records.
+
+The names are the game's own. The pointer tables at `0x2980C` and `0x509E8`
+name records 0 to 10, AKIRA to LION in record order, and drawing each record on
+its own texture sets agrees. The tables at `0x5CB28` (eight-byte names) and
+`0x46298` (the debug menu's, with the development names SUI, ACHO and TOU for
+Shun, Dural and Lion) go on to MUE and KOJACKY for 11 and 12. The record table
+holds the same pointer, `0x20032A8`, at 10, 11 and 12: the game stores Lion's
+record three times over, so the two named slots draw Lion. No table names 13,
+which is Akira in the white gi on Akira's sets.
+
+The motions are Sonic the Fighters' keyframe blocks (`js/motion.js`). A motion
+id indexes the pointer table at `0x2120004` directly (`0x1A21C`, `0x27B5C`);
+entry 0 points at the table's own end, so it holds 1360.
+
+The pose routine (`0x27CE0`) is `calc_rob_angle_cont` nearly op for op, and
+`buildPose` in `js/pose.js` takes the three differences as options:
+
+- Everyone is solved on one standard rig, the table at program ROM `0x296A0`:
+  the chest and head offsets, then per limb its pivot and the two bone lengths.
+- A motion can hold a slot's look as angles rather than a point. A float
+  object keyed with channel type 1 (13, 14 or 17) is latched by `0x26FAC`:
+  its three floats are rounded (`cvtri`) into the slot's angles and a bit is
+  set at player `+0xBDC`, and the draw turns Rz then Ry by them (`held`). All
+  but one motion hold the pelvis, object 17, at (0, 0, 0x4000): the quarter
+  roll Sonic the Fighters hard-codes.
+- A foot turns from the floor: `0x171B0` starts from the matrix saved at
+  `0x501024`, the fighter's place and facing before any of the pose
+  (`levelFeet`).
+
+The draw (`0x16504`-`0x176A0`) then places each slot at its parent's place plus
+its parent's matrix times the record's offset, with the solved rotation.
+
+What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
+
+- **Blend.** Player `+0xBE8 + 6*obj` holds an (x, y, z) turn for each of the
+  twelve angle objects: 0-3 the hands and feet, 4 the body (`+0xC00`), 5-11 the
+  rest. Each is applied after its object's euler as rotY, rotX, rotZ. At a
+  switch, `0x27630` computes the residual with op `0x2A005454`:
+  `E(new)^T E(old) B(current blend)` as Y, X, Z angles, with E the ZYX euler,
+  and stores it as a step; on frame f the turn is the step times (N - f),
+  gone by frame N. The hand and foot targets blend the same way (`0x27730`):
+  (old - new) / 2^shift per float, x and z measured from the body position,
+  old being the targets as last drawn.
+- **Blend length.** It comes from the new motion. Set-up (`0x27130`) reads
+  its frame count (`+0x800`): N is 8 for a motion longer than 16 frames, 4
+  for 9-16, 2 for 5-8, 1 for 3-4, and none for a shorter one. The shift is
+  3, 2 or 1 (`0x2760C`, the same for the points at `0x27708`). Checked
+  against all 162 switches captured: `+0x800` is always the motion's frame
+  count. A motion that loops from its last frame back to its first blends
+  into itself (16 of 17 loops captured); one cut short and restarted
+  doesn't.
+- **The fight's blend choices**, left out. The blend mode at `+0xBDD` is set
+  from fight flags: none (`+0` bit 26 clear, `+0xC30` bit 23, `+0x814` = 4
+  and others), blend-in (bit 0) and blend-out (bit 1, `+0x1A4` bit 17 for
+  out only). The blend-out starts at frame `len - N` (`+0xBE0`) and fades
+  toward one of five stance poses picked by `+0x814` (`0x2776C`, the
+  character's set at `+0xBD8` + `0x1E0`...`0x5A0`). The mirror flags
+  (`+0xC30` bit 6, `+0x1A4` bit 20) zero objects 0-4. The explorer blends
+  every switch in and none out.
+- **Head** (`0x2922C`). With the face target in the chest frame as (d0, d1,
+  d2): a target behind (d1 < 0) is brought to d1 = 0, and the old yaw is kept
+  if it already faces that way within half a unit; yaw = -atan2(d1, d0),
+  stepped by at most 0x800 a frame; pitch = atan2(d2, hypot(d0, d1)), stepped
+  by 0x400 and held to +-0x2000 (`headStep`).
+- **Twist** (`+0xBE6`, `0x2912C`): the chest turns about its spine toward the
+  target, a = atan2(d2, d0); half of a up to 0x2000, 0x1000 up to 0x6000,
+  stepped 0x100 a frame within 0..0x1000. It runs only when the move flags
+  (`+0x1A4`) have no bit of 0x16000 and one of 0x20C, and it is off in the
+  explorer (see When the chest twists, below).
+- **Crouch** (`0x29414`, `+0xC50`): characters 6 and 10 draw their body at
+  0.97 of its height, 8 at 0.92.
+- **Hands** (`0x19E34`): the left hand is entry 0-31 of the table at `+0x67C`,
+  the right entry 96-127 (`+0x180` on); Shun's right fist is model 0x546.
+
+- **Opponent** (`0x2867C`, `poseBout`): the fight writes the other fighter's
+  head over the face target (see the head's section under Animation). The
+  head's place is the one the draw left at `+0x20C` (`0x168A0`, the head
+  slot's translation), taken into this fighter's frame by its place (`+0x18`)
+  and facing (`+0x26`): with d = head - place and c, s the facing's cosine
+  and sine (0x8000 = half a turn), the target is (c dx + s dz, dy,
+  -s dx + c dz). Player 1 is posed and drawn first, so it looks at player 2's
+  head of the frame before, and player 2 at player 1's of this one. A round
+  starts the fighters at x = -1 and +1 facing each other, so the explorer
+  stands its opponent 2 ahead, turned half round: in the fighter's viewer
+  frame the opponent's (x, y, z) is (2 - x, y, -z), and the target is the
+  opponent's head as (2 - x, y, -z) read in the motions' (z, y, x) order. The
+  opponent is the same fighter on the same motion, a body of its own so it
+  keeps its own playback.
+
+**When the game looks.** The store is `stt r12, 0xb0c(g7)` at `0x286A0`, after
+op `0x31806363`. Four branches to `0x286A4` skip it:
+
+- `0x28644`: `0x500034` is 6 or less (the round is not running).
+- `0x28654`: `0x500034 & 0x3F0000` is not 0.
+- `0x28664`: the fighter's status word `+0 & 0xA00000` is not 0.
+- `0x28678`: the move flags `+0x1A4 & 0x6C111` are not 0.
+
+None of these is in a motion or move record the explorer reads. `0x500034` is
+the round's state, and `+0` is the fighter's status. `+0x1A4` is built while a
+move plays: the move script interpreter at `0x1AD5C` (op table `0x1B910`,
+stepped against the motion frame `+0x1AA`) has ops that set, clear and toggle
+a `+0x1A4` bit named by the op's operand (`0x1AF90`, `0x1AFA8`, `0x1AFC0`).
+Other move code changes bits too (`0x1ACB0`, `0x1B4C8`, `0x18184`), and
+`0x3AC10` restores the word from a RAM snapshot (`0x535000`). Motion 361, for
+one, runs with `+0x1A4 = 0x40061`, so Kage's head keeps the motion's own
+target through it.
+
+So the explorer does not decide when to look. Its opponent, behind a checkbox
+that is off by default, is looked at on every frame. Where the game keeps the
+motion's own target, that is wrong, by up to 134 degrees in attract mode.
+
+**When the chest twists.** The check at `0x29130` reads `+0x1A4`; with a bit
+of 0x16000 set or none of 0x20C, `0x2914C` stores 0 (`stis r11, 0xbe6(g7)` at
+`0x29150`). `+0x1A4` starts from the move
+record at `0x200D34C[id]` (`0x1A214`), and the record's set-up (op 2's frames,
+phase machine `0x1AC14`) and script (`0x1AD5C`, ops 5-7) change it frame by
+frame. That much is ROM, and a ROM-only gate built from it matches the board's
+`+0x1A4` twist bits on every frame checked. It is still not drawn, because the
+gate is not the only thing that keeps `+0xBE6` at 0. With the gate on, the code
+sends the face target `+0xB0C` into the chest's frame (op `0x6A`) and takes
+a = atan2 of it (op `0x27`), negated when the fighter is mirrored (`+0` bit 6).
+Then, before the store at `0x29210` (`stis r11, 0xbe6(g7)`):
+
+- `0x29198` `cmpibg 0, r11`: a < 0 sets the goal to 0;
+- `0x291B0` `cmpibl 0x6000, r11`: a > 0x6000 skips the store, keeping the old
+  twist (0 if it was 0);
+- `0x291FC` `cmpible 0, r11`: a step down below 0 is held at 0.
+
+All three test where `+0xB0C` lies, and `+0xB0C` is fight state: the fight
+writes the other fighter's head over it at `0x286A0` when its own look gate
+lets it (see When the game looks, above), and the step starts from last
+frame's `+0xBE6`. With the motion's own target there, the explorer's gate-on
+chest twists, so on these frames the board was aiming at the opponent. A second
+attract capture, with the gate wired and nothing read from the board but motion,
+frame and round-start places (chest):
+
+| Frame | Motion | Board `+0x1A4` | Board `+0xBE6` | Gate | Without | With |
+|---|---|---|---|---|---|---|
+| 4650 | Shun 646, 26 | 0x200 | 0 | on | 0.005° | 6.559° |
+| 4660 | Shun 646, 36 | 0x200 | 0 | on | 0.005° | 11.730° |
+| 4670 | Shun 684, 4 | 0x2C | 0 | on | 0.003° | 8.317° |
+
+Where the board did twist, the gate brought the chest from up to 20.181° to
+0.009°, but a chest 12° off on frames that were right is worse. On these frames
+the twist is held at 0 by `0x29198` or `0x291B0` (the capture does not say
+which) on an angle to the fight-written `+0xB0C`, so the explorer leaves the
+twist out.
+
+Checked against MAME's attract mode: a tap on the geometrizer's read-start
+register (`0x803008`) saved the display list each second, and each part's
+object (its `oba` is the model's mesh pointer) gives the part's matrix as the
+board drew it. The game's matrices are the explorer's transposed, with z
+negated. Fitting each fighter's motions and frames to those matrices, Akira
+(motion 1285), Jacky (1225), Lau (1226), Pai (1227) and Lion (185) come out
+exact in all sixteen slots, hands included (the board draws hand models
+numbered near the `+0x3C` table's, not the part list's): 0.0001 in place,
+0.05 degrees in turn. So the euler order, the standard-rig solve and the step out along the
+fighter's own skeleton are the game's.
+
+The fight terms were checked against a second capture that saved the player
+records with each display list. Posing from a record's own blend, held angles,
+twist and head angles, all 656 fighter poses and every character match in all
+sixteen slots, Shun's right hand included: at most 0.037 degrees in turn and
+0.0002 in place (the solve's rounding times the bone length). The head rule
+gives the board's angles to within 2 units in 7061 of 7192 frames, the twist
+rule in 4219 of 4228.
+
+The explorer's own playback was checked the same way: `poseFighter` given
+only the motion id and frame of each captured frame, sampled from ROM, no
+board state, over the 40 frames before each display list. On frames where
+the fight made no blend choice and the face target is the motion's own, the
+waist (pelvis) is exact for Akira (47 frames), Kage (15), Jeffry (36) and
+Wolf (9), and the head is within 0.008 degrees and 0.00011 in place. So the
+pelvis's 1 degree and the head's turn left from the first comparison are gone.
+The opponent target was replayed the same way, both fighters posed in the
+board's order at the board's places, each target computed from the explorer's
+own pose of the other fighter. On every frame where the board's `+0xB0C` is
+the other fighter's head, the computed target matches it to 0.00001 (Kage,
+2916-2924). Whether the head looks at the other fighter at all is the fight's
+gate, and the explorer has not got it:
+
+| Face target fed, Kage frame 2940 (motion 361, frame 16) | Head |
+|---|---|
+| none (the motion's own, blended by the explorer) | 3.879 degrees |
+| A: `poseBout`'s, on every frame | 21.214 degrees |
+| A, only where the board's gate is on | 3.879 degrees |
+| B: the board's `+0xB0C`, on every frame | 0.002 degrees |
+
+At 2940 the target fed is A (0.21956, 1.13813, -0.33532) and B (0.11278,
+1.22150, 0.00497). B is the motion's own target: the gate has been off since
+2925, as motion 361 sets move flags 0x40001 in `+0x1A4`. A points at the
+other fighter there, which the game does not. With the gate taken from the
+board, A comes back to 3.879. The rest, between that and B, is the face
+target's own blend. The board blends `+0xB0C` with everything else on a switch
+it blends (Akira 3629-3632 move from the old target to the new), but the
+fight started motion 361 at 2925 without a blend (`+0xBDD` bit 0 clear), so
+`+0xB0C` jumps to the new motion's target. Fed on every frame, B carries that
+choice in, so B honours the fight's no-blend through the target alone.
+
+With the board's gate, the head is within 0.008 degrees (Akira's 18 frames
+looking at the other fighter: 0.007), except where a fighter's own blend or
+mirror choice throws the other's target off. Jeffry's 12.6 degrees at 2420 is
+Wolf's mirrored switch, and Akira's 40 degrees at 3630 is Jacky's unblended
+one. Without the gate, `poseBout` looks at the opponent on every frame, and
+in attract mode the head is up to 134 degrees off where the game looks at the
+motion's own target. That is fight state (see When the game looks above), so
+the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
+frames match. The misses are the fight's blend choices above.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
@@ -2561,8 +2794,9 @@ unless the fighter is in one of a long list of states (`0x30820`-`0x308C4`:
 attacks, throws, falls), it sets `+0x7D3` and overwrites `+0xB0C` with the
 opponent's head (`+0x20C` of the other fighter), taken into the fighter's own
 frame by op `0x63`. So in a fight a head mostly looks at the other fighter, and
-the motion's face target only counts in those states. The explorer has no other
-fighter and always aims at object 14.
+the motion's face target only counts in those states. In the explorer the head
+aims at object 14 on its own, and at the opponent's head when there is one
+(see the Virtua Fighter 2 pose's Opponent).
 
 **The four on Bean's table.** The Final Eggman Boss, the Egg UFO, the Egg
 Minion and Rocket Metal have no action table of their own: there are thirteen

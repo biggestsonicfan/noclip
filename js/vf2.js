@@ -31,11 +31,27 @@
  * and ten more planks from 0x150 of the stage state (0x1D824), 2.2 apart,
  * then model 0x764. Flag bit 12 draws model 0x8FF and nothing else (stage 15).
  *
+ * The raft also moves, and the frame counts kept for it start at zero when the
+ * stage is set up (0x1FE78). Under flag bit 3 the river goes by: 0x1D530 takes
+ * 0.037 off 0x50A014 every frame, and the stage draw (0x20740) pushes the
+ * negated vector before the scenery, so the bank slides along +X past a raft
+ * that stays put. Under flag bit 4 the raft rocks: 0x1D550 counts frames at
+ * 0x50A026 and sets the roll at 0x50A024 to
+ *
+ *   411 sin(128 t) + 133 sin(192 t + 0x1234)      (angles 0x10000 to the turn)
+ *
+ * — about three degrees at most, an 8.5 and a 5.7 second swell — and after
+ * the scenery 0x1DD8C rolls the view by its negation, an ang_z (0x37006E6E,
+ * the camera's own), under everything drawn after it: the raft, the ring floor
+ * and the fighters. 0x1D4E4 keeps the camera above x sin(roll), so the roll is
+ * about the raft's centre line and lifts +X.
+ *
  * The stage's name is in the debug menu's list (0x71AF4), which the pointers
  * at 0x46108 index by the colour block plus one.
  */
 
 import { gameLighting, stageLight } from './stages.js';
+import { buildVf2Sky } from './scroll.js';
 
 const RECORD_BYTES = 256;
 const EMPTY = 0xffff;
@@ -78,6 +94,40 @@ const RAFT_PLANK_STEP = 2.2;
 const RAFT_TAIL = 0x764;
 /* The ring scale's divisor: the setting over 6.0. */
 const RING_UNIT = 6;
+
+const FLAG_ROCK = 1 << 4;
+/* What 0x1D530 adds to 0x50A014 a frame, and the two swells of the roll. */
+const RIVER_STEP = -0.037;
+const ROLL_SWELLS = [[411, 128, 0], [133, 192, 0x1234]];
+/* The counts start again with the stage, which the game sets up for every
+ * round; the explorer starts them again every round of the default thirty
+ * seconds, or the bank would slide off into the distance. */
+const ROUND_FRAMES = 30 * 60;
+const ANGLE_DEG = 360 / 0x10000;
+/* What the stage draw puts under the river's push, and what goes under the roll. */
+const WORLD_LAYERS = new Set(['scenery', 'sky', 'extra', 'ground']);
+const RAFT_LAYERS = new Set(['platform', 'floor']);
+
+const boardSin = (a) => Math.sin(((a & 0xffff) * 2 * Math.PI) / 0x10000);
+
+/* The roll at 0x50A024 on the board's frame t, in board angle units. */
+export function raftRoll(t) {
+    return Math.trunc(ROLL_SWELLS.reduce((sum, [k, step, phase]) => sum + k * boardSin(t * step + phase), 0));
+}
+
+/* A piece's ops with the raft's motion in front of them, as a function of the
+ * frame; ops unchanged where the stage does not move. The roll is an ang_z by
+ * the negated angle, which the viewer takes as it stands (see angZ in
+ * js/display.js), and the push is the negated river, along +X. */
+function raftMotion(flags, layer, ops = []) {
+    if (flags & FLAG_RAFT && WORLD_LAYERS.has(layer)) {
+        return (f) => [['t', [-RIVER_STEP * ((f % ROUND_FRAMES) + 1), 0, 0]], ...ops];
+    }
+    if (flags & FLAG_ROCK && RAFT_LAYERS.has(layer)) {
+        return (f) => [['rz', raftRoll((f % ROUND_FRAMES) + 1) * ANGLE_DEG], ...ops];
+    }
+    return ops.length ? ops : null;
+}
 
 function u16(rom, a) { return rom.mainCpuView.getUint16(a, true); }
 function u32(rom, a) { return rom.mainCpuView.getUint32(a, true); }
@@ -142,7 +192,11 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
     const t = rom.game.modelTable;
     const pieces = stagePieces(rom, base, alt ? ALT_LISTS : base, ringSize)
         .filter(([m]) => m !== EMPTY && m < t.count);
-    const draws = pieces.map(([model, layer, ops]) => ({ model, pos: [0, 0, 0], set, layer, ...(ops ? { ops } : {}) }));
+    const flags = u32(rom, base + FLAGS);
+    const draws = pieces.map(([model, layer, ops]) => {
+        const moved = raftMotion(flags, layer, ops);
+        return { model, pos: [0, 0, 0], set, layer, ...(moved ? { ops: moved } : {}) };
+    });
     const name = stageName(rom, colors) ?? `Stage ${n}`;
     return {
         slot: n,
@@ -156,6 +210,8 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
         draws,
         objects: [],
         sky: null,
+        /* The tile layer's panorama (js/scroll.js). */
+        panorama: (cxlat) => buildVf2Sky(rom, n, cxlat),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',
@@ -168,10 +224,10 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
             rom.mainCpuView.getInt16(base + VECTER, true), rom.mainCpuView.getInt16(base + VECTER + 2, true)),
         materials: lit.materials,
         colorCycles: [],
-        flags: u32(rom, base + FLAGS),
+        flags,
         floorSize: 0,
         meta: [['stage', n], ['texture set', set], ['colour block', colors],
-            ['pieces', draws.length], ['flags', `0x${u32(rom, base + FLAGS).toString(16)}`]],
+            ['pieces', draws.length], ['flags', `0x${flags.toString(16)}`]],
     };
 }
 

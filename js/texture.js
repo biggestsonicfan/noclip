@@ -891,11 +891,15 @@ export function bankTextureSet(rom, index) {
  * sixteen part models listed at its +0 into the player, and hands its +0x20 to
  * the texture request at 0x4B0FC; the handler (0x4B1C0) loads that set and the
  * next one into the player's slot. Set 0 is the untextured characters'.
+ * Virtua Fighter 2 keeps its records in the data region proper, where there is
+ * no extra window to read them through.
  */
 function fighterSets(rom) {
     if (rom.fighterSets) return rom.fighterSets;
     const F = rom.game.texture.fighters;
-    const rd = (a) => { const r = xtraResolve(rom, a); return r.view.getUint32(r.off, true); };
+    const rd = rom.game.xtra
+        ? (a) => { const r = xtraResolve(rom, a); return r.view.getUint32(r.off, true); }
+        : (a) => rom.mainDataView.getUint32(a - MAIN_DATA_BASE, true);
     const owners = new Map();
     for (let c = 0; c < F.count; c++) {
         const rec = rd(F.records + c * 4);

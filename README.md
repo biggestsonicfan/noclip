@@ -450,9 +450,29 @@ same board as Sonic the Fighters'. Beside it, **stage sounds** plays what the
 stage plays by itself: the crowd in the Colosseum and the calls and cues of
 four others, ported from the game's per-frame task.
 
-Not read yet: the fighters and their motions, the sky (the tile chip's layer,
-as in Fighting Vipers), and anything that moves — the raft's bobbing and its
-logs drifting apart.
+Each stage has its sky, the tile chip's layer as in Fighting Vipers, read out
+of the game's own per-stage record and scrolled the way the board scrolls it.
+On Ikada the raft rocks on its two swells and the river bank slides past it,
+as the stage's own per-frame routines move them. The logs drifting apart is
+left out: the game does it when a fighter nears the edge, so it belongs to the
+fight.
+
+The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
+Jeffry, Pai, Wolf, Shun, Dural, Lion, and Akira in the white gi, named from
+the game's own tables — each on its own texture sets, and every one of the
+1359 motions in the game's table plays on any of them
+([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+the game solves it: on one standard rig for everyone, then placed on the
+fighter's own skeleton. Played on, a fighter blends from one motion into the
+next, turns its head toward the motion's face target a step at a time and
+crouches as the game crouches it, all checked against the board. An opponent
+(off by default) can stand where a round starts the other fighter: the same
+fighter on the same motion, with each head turning toward the other's on every
+frame. The game turns the head only when fight state allows, which the explorer
+does not track, so with the opponent on, a head can be wrong. The chest's
+twist toward the opponent is left out: the move record says when it may run,
+but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
+to the face target `+0xB0C`, which the fight writes.
 
 ## Running it
 
