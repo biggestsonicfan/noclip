@@ -46,9 +46,7 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
-import {
-    readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix, readFighterSkin, fighterSkinMesh,
-} from './vf2fighters.js';
+import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -2965,12 +2963,8 @@ const BODY_RIGS = {
     hotd: {
         read: readBodies, motions: readMotions, list: bodyMotionList,
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
-        skin: readSkin, skinMesh,
     },
-    vf2: {
-        read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter,
-        skin: readFighterSkin, skinMesh: fighterSkinMesh,
-    },
+    vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
 };
 
 function bodyRig() {
@@ -3036,9 +3030,9 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), skinMesh: null }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })) }
         : null;
-    m.skin = bodyRig().skin(state.rom, body);
+    m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
     applyWireVisibility();
 
@@ -3118,26 +3112,6 @@ function placeBodyParts(parts, draws, matrices) {
     }
 }
 
-/* A body's skin on one pose, in the slot it was last drawn in or a new one. */
-function placeSkin(skin, matrices, slot) {
-    if (!skin) return slot;
-    const d = decodeModel(state.rom, null, null, bodyRig().skinMesh(skin, matrices));
-    if (!d) return slot;
-    d.index = null;
-    if (!slot) {
-        slot = addRigPart(d);
-    } else {
-        slot.mesh.geometry.dispose();
-        slot.mesh.geometry = buildGeometry(d);
-        if (slot.lines) {
-            slot.lines.geometry.dispose();
-            slot.lines.geometry = buildEdgeGeometry(d);
-        }
-    }
-    placePartAt(slot, matrices[skin.hips]);
-    return slot;
-}
-
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3151,7 +3125,6 @@ function poseFighterAndRival(body, m) {
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
-    m.rival.skinMesh = placeSkin(m.skin, placed, m.rival.skinMesh);
     return mine;
 }
 
@@ -3164,7 +3137,23 @@ function poseBodyRig() {
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */
-    m.skinMesh = placeSkin(m.skin, matrices, m.skinMesh);
+    if (m.skin) {
+        const d = decodeModel(state.rom, null, null, skinMesh(m.skin, matrices));
+        if (d) {
+            d.index = null;
+            if (!m.skinMesh) {
+                m.skinMesh = addRigPart(d);
+            } else {
+                m.skinMesh.mesh.geometry.dispose();
+                m.skinMesh.mesh.geometry = buildGeometry(d);
+                if (m.skinMesh.lines) {
+                    m.skinMesh.lines.geometry.dispose();
+                    m.skinMesh.lines.geometry = buildEdgeGeometry(d);
+                }
+            }
+            placePartAt(m.skinMesh, matrices[m.skin.hips]);
+        }
+    }
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
