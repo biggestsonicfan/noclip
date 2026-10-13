@@ -15,7 +15,7 @@ import { readVf2Stages } from './vf2.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
-import { cellCount, cgCount, cgLabel, readCell, rankCGs, renderCell } from './cells.js';
+import { cellCount, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -3996,6 +3996,9 @@ function renderCellList() {
     let lo = 0, hi = n - 1;
     const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
     const single = q.match(/^(\d+)$/);
+    /* "unused" lists only the cells the game never draws. */
+    const unused = unusedCells(state.rom);
+    const onlyUnused = /^unused$/i.test(q);
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
     lo = Math.max(0, lo); hi = Math.min(n - 1, hi);
@@ -4006,10 +4009,11 @@ function renderCellList() {
     let shown = 0;
     for (let i = lo; i <= hi; i++) {
         const c = readCell(state.rom, i);
-        if (!c) continue;
+        if (!c || (onlyUnused && !unused.has(i))) continue;
         const best = ranks[i][0];
         const info = `${c.cols * 8}&times;${c.rows * 8} · `
-            + (best?.cover === 1 ? cgLabel(state.rom, best.cg) : best ? `CG ${best.cg}, part` : 'no CG');
+            + (best?.cover === 1 ? cgLabel(state.rom, best.cg) : best ? `CG ${best.cg}, part` : 'no CG')
+            + (unused.has(i) ? ' · unused' : '');
         const row = el('div', 'row-item' + (i === state.cell.index ? ' sel' : ''),
             `<span class="id">${i}</span><span class="info">${info}</span>`);
         row.dataset.index = String(i);
@@ -4077,7 +4081,11 @@ function drawCell() {
     info.innerHTML = `<b>cell ${c.index}</b> — ${pic.width}&times;${pic.height}, `
         + `${pic.width / 8}&times;${pic.height / 8} tiles`
         + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
-            + ` the game puts the rest in the tile chip some other way.`);
+            + ` the game puts the rest in the tile chip some other way.`)
+        + (unusedCells(state.rom).has(c.index) ? '<br>Unused: nothing in the program or data ROM'
+            + ' names this record, so the game never draws it.' : '')
+        + (leftoverTiles(state.rom, c.index, cgs) ? '<br>With CG 0 loaded, this cell\'s map entries land on'
+            + ' the leftover DaytonaGP tiles (chars 0x1200-0x14CA / 0x1800-0x1ACA).' : '');
     updateHud();
 }
 

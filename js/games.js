@@ -2355,7 +2355,21 @@ function daytonaBuild(spec) {
  * records; they lie end to end, from the lowest one any call names to the
  * model table (`records`, a run [first, end) per run), and a cell is its
  * place in that run. Every record a call names directly lands on a record
- * start, in every build.
+ * start, in every build. A few records lie elsewhere, each a run of its own
+ * after the main one so the numbers before them stay: one or two in the
+ * program ROM, through its alias at 0x200000, and in the Saturn build the
+ * advert's.
+ *
+ * Every word of the program and data ROMs was searched for each record's
+ * address (js/cells.js unusedCells): a record no word names is one the game
+ * never draws, since every call takes its record from an `lda` or from a
+ * table of absolute pointers. A search of every halfword for a record header
+ * outside the runs finds nothing else. 18 records are unused in every build
+ * since Revision A, among them a big 0-9 that 1993 does not have, and 5 in
+ * 1993. All but one draw whole on CG 0 or 7. The odd one (64; 23 in 1993) is
+ * a 30x4 banner over characters 0xF00-0xF60, which the shipped CG 0 gives to
+ * cell 62's "Choose one!" box. Its own tiles are in no CG list and in no run
+ * of tile data the lists don't name, so the picture is lost, not swizzled.
  *
  * The CG loader (0x1DD70) takes a CG list, its partner (0x1DDE0) a palette
  * list, and the game hands them both halves of a pair it finds through one
@@ -2373,6 +2387,14 @@ function daytonaBuild(spec) {
  *
  * The tile layer's palette goes through colorxlat as Daytona's sky's does
  * (`colorxlat`), so the cells take the cabinet's colours.
+ *
+ * CG 0's list (0x2073FC4) also loads 593 leftover tiles, the DaytonaGP
+ * art (a purple-to-cyan DAYTONA, a pink streak and a flag), at 0x20A7B08, 0x20A96EC
+ * and 0x20A9BF0, to characters 0x1200-0x14CA, and a recoloured copy
+ * (0x20AC534) to 0x1800-0x1ACA (`leftover`). CG 7 writes the TRY IT AGAIN
+ * text and the DAYTONA USA logos over the same characters, so cells 13, 14
+ * and 55, and the small 15-27 (11-14 in 1993), land on these tiles when
+ * CG 0 is loaded.
  */
 /* The race start's palette cycle, laid out around a build's course picture
  * table: see flashCourse in js/cells.js. */
@@ -2384,6 +2406,7 @@ const DAYTONA_CELLS = {
     courses: { count: 4, cells: 0x002389ac, cgs: 0x0023899c, flash: courseFlash(0x002389ac) },
     charBytes: 0x80000,
     colorxlat: true,
+    leftover: { cg: 0, chars: [[0x1200, 0x14cb], [0x1800, 0x1acb]] },
 };
 
 /*
@@ -2564,7 +2587,7 @@ const daytona93 = daytonaBuild({
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
     cells: {
-        records: [[0x028729b0, 0x02887928]],
+        records: [[0x028729b0, 0x02887928], [0x0023265c, 0x0023267a]],
         cgTables: [[0x02800000, 7], [0x02900000, 2]],
         cgExtra: { 7: 0x0023c530 },
         courses: { count: 4, cells: 0x0023aff4, cgs: 0x0023afe4, flash: courseFlash(0x0023aff4) },
@@ -2590,7 +2613,10 @@ const DAYTONA_REV_A = {
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
-    cells: { records: [[0x02823c4c, 0x0283fbb4]], cgExtra: { 7: 0x0023a270 } },
+    cells: {
+        records: [[0x02823c4c, 0x0283fbb4], [0x00230a4c, 0x00230a6a], [0x00239ff0, 0x0023a04a]],
+        cgExtra: { 7: 0x0023a270 },
+    },
     objects: DAYTONA_OBJECTS_A,
     area: { heading: 0x17908, clip: 0x175e0, order: 0x17594 },
 };
@@ -2612,7 +2638,7 @@ const daytonase = daytonaBuild({
     cabinets: DAYTONA_CABINETS_SE,
     sky: { table: 0x47c8 },
     cells: {
-        records: [[0x0281df20, 0x02839e88]],
+        records: [[0x0281df20, 0x02839e88], [0x002316ec, 0x0023170a], [0x0023adb0, 0x0023ae0a]],
         cgExtra: { 7: 0x0023b030 },
         courses: { count: 4, cells: 0x00239770, cgs: 0x00239760, flash: courseFlash(0x00239770) },
     },
@@ -2628,15 +2654,24 @@ const daytonas = daytonaBuild({
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
     bankTable: 0x15b4,
     sky: { table: 0x4838 },
-    /* The Saturn advertisement is two more records, one after the others and
-     * one after a gap, on a CG of its own that 0x28860 loads straight from
-     * the pair at 0x23B2D4 before 0x288D8 draws them (`screens`). */
+    /* The Saturn advertisement is a CG of its own, which 0x28860 loads
+     * straight from the pair at 0x23B2D4, and eleven pictures: two scripts
+     * (0x23B1D4, 0x23B254) of steps {records, frames, scroll}, each record
+     * {address, tilemap address, first and end column}, drawn a column slice
+     * at a time by 0x28B48. One is the last of the main run; the rest are
+     * runs of their own, two of them after a gap in the main run, one in the
+     * program ROM and six far out in the data ROM (`screens`). */
     cells: {
-        records: [[0x0281df20, 0x0283a820], [0x0283a840, 0x0283b108]],
+        records: [
+            [0x0281df20, 0x0283a820], [0x0283a840, 0x0283b108], [0x0283b128, 0x0283b81c],
+            [0x0023b568, 0x0023c570], [0x0286fe2c, 0x02870a00], [0x02870a20, 0x028712e8],
+            [0x02871308, 0x02871bd0], [0x02871bf0, 0x02872040], [0x02872060, 0x02874f34],
+            [0x00231bfc, 0x00231c1a], [0x0023c800, 0x0023c85a],
+        ],
         cgExtra: { 7: 0x0023ca80 },
         courses: { count: 4, cells: 0x00239c80, cgs: 0x00239c70, flash: courseFlash(0x00239c80) },
         cgPairs: [[0x0023b2d4, 'Saturn advert']],
-        screens: [{ cg: 9, cells: [222, 223] }],
+        screens: [{ cg: 9, cells: [222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232] }],
     },
     objects: DAYTONA_OBJECTS_S,
     area: { heading: 0x17df4, clip: 0x17acc, order: 0x17a80 },

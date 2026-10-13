@@ -101,6 +101,48 @@ export function cellCount(rom) {
     return rom.game.cells ? cellRecords(rom).length : 0;
 }
 
+/** The cells the game never draws: those whose record's address no aligned
+ * word of the program or data ROM holds. Daytona's draw calls take their
+ * record from an `lda` or from a table of absolute pointers (js/games.js
+ * DAYTONA_CELLS). Sonic The Fighters' cells all come through its pattern
+ * table, so none of its count. */
+const unusedCache = new WeakMap();
+export function unusedCells(rom) {
+    let out = unusedCache.get(rom);
+    if (out) return out;
+    out = new Set();
+    if (rom.game.cells?.records) {
+        const records = cellRecords(rom);
+        const index = new Map(records.map((a, i) => [a, i]));
+        const named = new Set();
+        for (const v of [rom.mainCpuView, rom.mainDataView]) {
+            for (let o = 0; o + 4 <= v.byteLength; o += 4) {
+                const i = index.get(v.getUint32(o, true));
+                if (i !== undefined) named.add(i);
+            }
+        }
+        records.forEach((_, i) => { if (!named.has(i)) out.add(i); });
+    }
+    unusedCache.set(rom, out);
+    return out;
+}
+
+/** How many of a cell's entries fall on the leftover tiles of the game's
+ * `leftover` CG, when that CG is the one on top; 0 otherwise. Daytona's boot
+ * CG loads the DaytonaGP tiles, and the cells whose entries name the same
+ * characters land on them (js/games.js DAYTONA_CELLS). */
+export function leftoverTiles(rom, cell, cgs) {
+    const L = rom.game.cells?.leftover;
+    if (!L || cgs[cgs.length - 1] !== L.cg) return 0;
+    const c = readCell(rom, cell);
+    let n = 0;
+    for (const e of c?.entries ?? []) {
+        const ch = e & CHAR_MASK;
+        if (L.chars.some(([a, b]) => ch >= a && ch < b)) n++;
+    }
+    return n;
+}
+
 /* Every CG's lists: the tile lists, loaded in order, and the palette list. */
 const cgCache = new WeakMap();
 function cgListsAll(rom) {
