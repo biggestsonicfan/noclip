@@ -184,6 +184,21 @@ The same view, camera, size and SwiftShader, rendered once with all seven rules 
 
 - **The right-side hiding comes back.** With every rule off the wall is drawn over the bookcase from the right as in the issue's screenshot: only a window two shelves high and about 130 px wide, at the bookcase's left end, is left, and the bookcase at the far left of the room is covered too. So the rest of issue 69's fight is undone by rules 2-7 together, not by rule 1. Which of them does it was not measured.
 
+### Rules 2-7 one at a time at the issue 69 view (Pinboard #728)
+
+The same view, camera, size and SwiftShader, with rule 1 off throughout and exactly one of rules 2-7 also off per render (six renders, in a scratch copy of the page; no rule was changed in the source). Rules 2 and 3 were turned off separately inside `inFront`; rule 6 is `laterZone` and `letGo` together. The two pictures compared against are the stored rule-1-off and all-off renders above. Each render was taken twice and the two never differed.
+
+| Off (besides rule 1) | vs rule-1-off | vs all-off | Right-side bookcase hiding |
+|---|---|---|---|
+| 2 `APART` | 0 px | 225667 px | no |
+| 3 `SMALL_APART` | 6692 px | 219136 px | no |
+| 4 one-sided face behind its plane | 0 px | 225667 px | no |
+| 5 slope cap | 2 px | 225667 px | no |
+| 6 `laterZone` / `letGo` | 0 px | 225667 px | no |
+| 7 `smallerOnTop` | 0 px | 225667 px | no |
+
+Rule 3's 6692 px are all at the far left (x 0-72): the small bookcase there loses its two rows of books to the wall behind it. The big bookcase stays whole. No single rule among 2-7 brings back the issue's right-side hiding or accounts for most of the 225667 px, so it takes two or more of them at once. Pairs were not tried.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
