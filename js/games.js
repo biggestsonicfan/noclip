@@ -2722,7 +2722,10 @@ const vf2 = {
         stageMusicRegion: 'mainData',
         ambience: { scene: 0x1e940, round: 0x1e980, end: 0x1e9c0, players: 0x44044 },
     },
-    depth: { recede: 0, nearMin: 0.1 },
+    /* `layers` for the Great Wall's banners, painted in the wall's own plane:
+     * the brick showed through their edges (issue 87). See TECHNICAL.md,
+     * "Faces laid on faces". */
+    depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
     /* The fighters, posed out of Sonic The Fighters' motion format on a rig of
      * this game's own; js/vf2fighters.js. `standardRig` is the table every
