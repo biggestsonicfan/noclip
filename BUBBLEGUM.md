@@ -164,9 +164,19 @@ Rule 1 alone, one game at a time, from that game's own camera as MAME logged it,
 | Daytona Rev A | view matrix 0x501560, attract race holding sel_course, frames 520-3580 | 52 per course | Three-Seven 46 (up to 7441 px), Seaside 43 (≤127 px), Dinosaur Canyon 50 (≤330 px) | **the tire marks and worn-lane patches on the road.** With the rule on, the road's own faces are put over them in block-shaped pieces (frames 880, 1480, 3100) | **regression**: the marks are the board's (memory: tire marks are ranked over the road), and off keeps them whole |
 | Virtua Fighter 2 | camera record 0x515400 (STF's layout, yaw the other way), stage byte 0x500064 | 31 in the Colosseum fight (4800-6000), 31 in the demo stage (1800-3000) | Colosseum 21 (up to 5640 px); demo 5 (≤3 px) | **the tan border round the Colosseum ring.** With the rule on, the outer floor covers half its length from a low camera | **regression**: MAME's frame 6000 shows the border the whole way across, as rule off does |
 | House of the Dead (`hotdo`, `hotdp`) | not found: the rail camera is computed on the copro (memory: hotdp stage data) | | | | not measured |
-| Virtua Cop | not found: the matrices at 0x50F63C on are the enemies', not the view | | | | not measured; the stage 3 view from issue 69 is the only check so far |
+| Virtua Cop | not found: the matrices at 0x50F63C on are the enemies', not the view | | | | not measured from the game's camera; the issue 69 view, from the explorer's camera, is below |
 
 So rule 1 moves visible pixels from the game's own camera in two games it was not fitted on, both for the reason §7 gives: a decal or border that lies a little apart from a big face gets paired with it at a slant and loses to the group's plane. The rule stays in until the float depth buffer (item 9) can take it, and that change should be graded on these same frames: Daytona 880/1480/3100 on Three-Seven, VF2's Colosseum 5600-6000.
+
+### Rule 1 at the issue 69 view (Pinboard #723)
+
+The view is the one in the issue's link: Virtua Cop stage 3 (stage value 2), frame 2425, noclip camera at (-16.247, 7.46, 95.474), yaw 11.7412, pitch 0.017, fov 60. That is **the explorer's camera, not the game's**: the game's camera is still not found in RAM. It was rendered at 1120×640 under SwiftShader, with the same `ASKEW`-off switch (reach 0) and the clock held. 19527 px change, and two "on" renders do not differ at all.
+
+- **Rule off: the issue's fight comes back in part.** The blinds wall is drawn over the left end of the bookcase (a strip about 40 px wide and 200 px high), and the bookcase's frame shows through the blinds beside it. The shelf boards also shift along their edges.
+- **Rule on:** the bookcase is whole, apart from a dotted 1 px seam along the top of its middle shelf.
+- The rest of the issue's screenshot does not come back with rule 1 off on this build: there, the wall also hides the bookcase from the right.
+
+So at the view it was tuned for, rule 1 still removes a visible fight. Rule 1 is not one of the two rules that also change House of the Dead zone views (6 and 7 in the table above), so no HOTD zone view was rendered for it.
 
 ## 8. The new games (#712)
 
