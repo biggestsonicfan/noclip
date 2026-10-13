@@ -715,15 +715,15 @@ Flag bit 3 is the raft. `0x20054` walks eight logs from a list in the stage
 state (`0x100(g13)`), under the ring scale, at x = 5.4, then 1.4 and five steps
 of 1.6 down, and the last 0.2 back; `0x202E8` walks ten planks from
 `0x150(g13)` 2.2 apart from x = 9.9 and then model `0x764`. `0x1D6D0` and
-`0x1D824` fill both lists whole while the fighters are clear of the edge, and
-those are the lists drawn. Flag bit 6 swaps every list for the ones at
+`0x1D824` fill both lists whole while the raft is clear of the bank's shade,
+and the raft cut by the shade otherwise (below). Flag bit 6 swaps every list for the ones at
 `0x6FE38` while byte `0xDF` of the stage state says so: the Colosseum's second
-look.
+look, its lightning (below).
 
 The names are the debug menu's (`0x71AF4`, thirteen-byte strings, pointers at
 `0x46108`), indexed by the colour block plus one. Records 10 and 11, 13 and 14
 repeat earlier ones in everything drawn and are listed once; record 15 draws
-model `0x8FF` alone (flag bit 12) and is left out.
+model `0x8FF` alone (flag bit 12, `0x20078`) and is listed with just that.
 
 The sky is the tile chip's layer (`buildVf2Sky` in `js/scroll.js`). `0x24314`
 indexes a 32-byte record at `0x2502C` by `stage_num << 5`: the CG list at
@@ -739,8 +739,131 @@ so the bank slides along +X. Bit 4: `0x1D550` counts frames at `0x50A026` and
 sets the roll at `0x50A024` to `411 sin(128 t) + 133 sin(192 t + 0x1234)`, and
 `0x1DD8C` rolls the view by its negation under the raft, the ring floor and the
 fighters. The counts start again with the stage (`0x1FE78`); the explorer
-starts them again every thirty seconds. The logs drifting apart (`0x1D6D0`,
-`0x1D824`) follow the fighters and are left out.
+starts them again every thirty seconds.
+
+What looked like the logs drifting apart is the river's shade, and it follows
+the river, not the fighters (`0x1D66C`, the stage's "river shade" switch, on
+to start with). Each frame `0x1FBB4` takes the raft's reach along the river,
+the river less and plus a half length times cos(roll) (the ring setting for
+the logs, 11 for the planks), and tests it against [-22, -12], then
+[-70, -60]. Out of both, the lists are whole. In one, the band's part over the
+raft, as (x - river) / cos(roll), goes to `0x1FACC`, which walks the pieces
+from one end: logs from -5.95 s to -4.8 s and 1.6 s a step (s the ring scale),
+tables `0x6E648`, unit 0.05 s, cut entry 32; planks from -10.95 to -8.8 and 2.2
+a step, tables `0x6E998`, unit 0.05, cut entry 44 (`0x6E9C0` instead under a
+`0x500068` mode the explorer does not use). A piece the band misses takes entry
+0; one the band starts in, entry cut + round((start - piece start) / unit);
+one it covers, entry cut; one it ends in, round((end - piece start) / unit).
+The tables are u32 model numbers. A log that is not a whole one is drawn over
+`0x6A6` (the ends) or `0x6FF` (between), `0x20118`. The plank list's index i
+is at x = -9.9 + 2.2 i.
+
+Record `+0x80`..`+0x82` scales red, green and blue (0x80 is one) into
+`0x5000E0` for the colour tables (`0x2C38`), as Fighting Vipers'
+`stage_RED`: the mirror stage's 50 70 80 is its water, Souseiji's and the
+stones' a warmer dusk. `+0x76` is the stage's kind, and `0x31408`, after the
+fighters, runs the kind's own effects under the camera.
+
+- Tou-rin (kind 12): `0x30E74` draws `0x70FBC[(frame >> 1) & 0xFF]` at the
+  origin, 256 models of blown leaves, each one frame of a 512-frame gust.
+  `0x30EAC` is a burst the fight sets off (below). The frame in that
+  index is `0x500020`, the board's power-on frame counter (zeroed at
+  `0x99E8`, one added a frame at `0xA028`), drawn under the stage origin's
+  matrix. That counter is not a stage-record field and not the explorer's
+  frame, so which leaf the explorer shows at a given frame is an
+  approximation of the board's, and stays one.
+- The Colosseum: its sky's per-frame routine `0x2468C` runs four channels. A
+  frame's random byte (`0x94D0`, which sums hardware counters, so a seeded
+  generator stands in) starts channel n if it is n and the channel is idle;
+  0 and 2 never run together. Each channel steps the timeline at `0x24D70`
+  once a frame (0 on, 1 off, 0xFF stop): on for frames 0-2, 4-5, 8-10, 12-17,
+  20-22 and 24-25. Channel 0 rewrites the cloud's palette groups 59-95 from
+  `0x24C6C`; 1 lights the mountain (groups 100-117 from `0x24CB6`,
+  `0x24CF8`); 2 puts the bolt's eight 2x18-tile blocks (`0x2AA8346`, `0x8F1C`'s
+  format) over stream columns 24-31 from tile row 8. Each off write puts the
+  stage's own palette or tiles back. Channel 3 sets bit 0 of `0xDF`, which
+  swaps in the second look (its rings at `+0x64` of the list at `0x6FE38`),
+  and `0x1FC00` sets the light to 9999 at angles `0x9D00`, `0xBF00` while it
+  is on.
+- The mirror stage (kind 4): the tint above, and the sky's per-frame routine
+  `0x24DBC` turns on the line scroll and shifts line l by
+  `0x24E30[(frame + l + 0x2E) & 127]`, two ±4-pixel sines interleaved line by
+  line. The line table is indexed by screen line (`segaic24.cpp`) at
+  `g6 + l`, and V is `8 * list[2] - g6`, so line l shows panorama row
+  `8 * list[2] + l` at any pitch. `0x30CA4`'s bubbles rise from a fighter's
+  part (below).
+- Stages 7, 9 and 12-14 shimmer the sea the same way (`0x24F90`): lines
+  `[g1, 0xF0)` take `0x25024[((frame >> 2) + l - g1) & 7]`, g1 `0x96`, or 100
+  on stage 7.
+
+#### The switched effects (`js/vf2fx.js`)
+
+What the stage view leaves out unless asked is a switch in the stage panel's
+Effects field, each listed by the stage it belongs to; switching one rebuilds
+the stage and keeps the round's clock. Three run on the power-on counter `c`
+(`0x500020`) and the camera (`g13 + 0x18` x, `+0x20` z, `+0x26` yaw). The
+explorer's frame stands in for `c` and its own camera for the board's: the
+yaw is `cameraOnCourse`'s heading, the sense the culling tables agree with
+(Budou-jou keeps the billboard at x = -12 while the camera faces -x). The
+octant is yaw >> 13; the cell is col + 4 row, each of x and z + 10 counted
+past 0 and past 20 (truncated for the billboards, rounded for the Islands).
+
+- **billboards**, Budou-jou (`0x2EC24`, kind 11): `0x2EE90[c & 15]` at
+  (12, 1.19, 12) and `0x2EE90[(c + 8) & 15]` at (-12, 1.19, 12) (models
+  `0xF58`-`0xF67`), turned to the yaw ^ 0x8000. `0x2EE40[cell] &
+  0x2EE70[octant]`: bit 1 draws the first, bit 0 the second.
+- **animated objects**, the Islands (`0x2EEE8`, kind 1):
+  `0x2F788[(c >> 2) & 63]` at (12.5, 0, 17.6) turned 0xE000, unless
+  `0x2F778[octant]` is 0xFFFF; while yaw bit 15 is set, `0x2F808[((c >> 2) + 8)
+  & 63]` at the origin and `0x2F788[((c >> 2) + 16) & 63]` at (22.4, 0, -5.8)
+  turned 0xC000. Then 23 records at `0x2F364` (44 bytes): record i draws
+  `(+0x00)[(+0x24)[((c >> +0x28) + +0x23) & +0x22]]` at `+0x04`, turned y, z,
+  x by `+0x1C`.. and scaled by `+0x10`, if `+0x29` has `0x2F35C[octant]` and
+  bit `cell` of `+0x2A` is set.
+- **corner objects**, Souseiji (`0x2FCBC`, kind 7): corner 0 while
+  `0x2FD08[octant]` is set, corner 1 while `0x2FD10[octant]` is. The upper
+  model `0x7125C[(c / 3 + 8 i) & 15]` at height 1.86, scaled by `0x2FD18[k]`,
+  turned to the yaw ^ 0x8000; under it `0x7121C` / `0x7123C[(c / 3) & 15]` at
+  -0.5, turned x, z, y by `+0x2B0`.. They stand at (9.19, -9.19) and
+  (-9.19, -9.19).
+
+The rest a fighter sets off, and the stage view has none, so a stand-in sets
+them off at fixed times of the explorer's thirty-second round and stands at the
+ring's centre:
+
+- **corner falls**: k (`+0x27E` / `+0x27F`) is 1 once a fighter (`+0x1F4`)
+  stands past ±8.69 in x and below -8.69 in z (`0x30168`, `0x3018C`), then one
+  more a frame to 31 (`0x30240`). The lower model tips by x = k << 9 (negated
+  for corner 1) and z = atan2(sin x, 1); both sink 0.125 k out along the
+  diagonal; the upper one shrinks down `0x2FD18` and goes at 16, when the lower
+  one becomes `0xE43`. The stand-in steps into corner 0 at 10 s and corner 1 at
+  20 s. On, it replaces the corner objects at rest.
+- **burst**, Tou-rin and Souseiji (`0x30EAC`, kinds 12 and 7): when a fighter's
+  `+0x1A8` is 0x40A with `+0x1AA` at 1, 177 frames of `0x70CFC[n]` and
+  `0x70E3C[n]` (the same list 32 behind) at the fighter's waist (`+0x1F4`)
+  less 1.5 in y. The stand-in: every 10 s from 1 s, at the origin.
+- **bubbles**, the mirror stage (`0x30CA4`, kind 4): `0x711BC[(c >> 2) & 15]`
+  turned to the yaw (and tilted by pitch / 16, left out), at a point re-taken
+  every 64 frames from a fighter's part, (0.15, 0, -0.03) in its frame. Not
+  drawn while `0x50004C` is 2. The stand-in's part is at (0, 1, 0).
+- **stone flies**, the stones (`0x311B8`): below.
+
+- The stones (kind 5): `0x31040` draws the u16 at `0x70CBC`, model `0xEE1`,
+  translated to the stage state's `+0x54`. The stage set-up (`0x2EC0C`) clears
+  `+0x40` and `0x31004` puts `+0x54` at (6, 4.7, 18.5): the stone at rest, which
+  the explorer draws. Once the fight sets bit 1 of `+0x40` (the round's end at
+  `0xF700`, or all of `0x171730` in `0x500700` at `0x313FC`), `0x311B8` pushes
+  the stone at the head (`+0x20C`, 0.25 up) of the fighter `0x500065` picks:
+  each frame 0.02 of the way on each axis, held within a limit that grows
+  0.0005 a frame from 0 (`+0x60`); the yaw `+0x70` turns to atan2(dz, dx) by up
+  to 0x400 a frame, the roll `+0x72` to the climb by up to 0x200 within
+  ±0x2000; and `0x31188` draws `0x70CBC[c & 31]` turned by them. Bit 2 puts it
+  back and bit 3 carries it with a fighter; neither is followed. The **stone
+  flies** switch lets it go at 5 s at a head 1.6 up at the centre, and replaces
+  the stone at rest. One MAME dump (vf2, attract forced to
+  stage 7, frames 1500, 1597 and 1694, `+0x40` = 0) draws `0xEE1` once, with
+  the stage origin's rotation and the origin moved by (6, 4.7, 18.5); the
+  largest translation error is 7.1e-7.
 
 ### Virtua Fighter 2's fighters (`js/vf2fighters.js`)
 

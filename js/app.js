@@ -141,6 +141,9 @@ const state = {
      * cuts. */
     easeChain: true,
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
+    /* The stage's switches (`extras`, js/vf2fx.js) the user has flipped, by
+     * key; one not here is as the stage starts it. */
+    extraOn: {},
     wireframe: false,
     modelCache: new Map(),
     /* The scroll layer's sky, decoded once per stage and kept: slot ->
@@ -731,10 +734,39 @@ function stageView(stage) {
  * there are none to apply here.
  */
 function stageDisplayList(stage, view = stageView(stage)) {
-    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode, view);
+    if (stage.placements) {
+        return buildPlacementDisplayList(stage, getModel, state.objectMode, view)
+            .filter((d) => (!d.extra || extraOn(stage, d.extra)) && !(d.unless && extraOn(stage, d.unless)));
+    }
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
+}
+
+/*
+ * The stage's switches: what the stage view leaves out unless asked, each a
+ * checkbox that rebuilds the stage with it in or out.
+ */
+function renderStageExtras(stage) {
+    const box = $('#stage-extras');
+    $('#extras-field').hidden = !stage.extras?.length;
+    box.innerHTML = '';
+    for (const x of stage.extras ?? []) {
+        const row = el('label', 'layer', `<input type="checkbox" ${extraOn(stage, x.key) ? 'checked' : ''}>
+             <span></span>`);
+        row.title = x.title;
+        row.querySelector('span').textContent = x.label;
+        row.querySelector('input').addEventListener('change', (e) => {
+            state.extraOn[x.key] = e.target.checked;
+            loadStage(state.stageIndex, { keepCamera: true, keepClock: true });
+        });
+        box.appendChild(row);
+    }
+}
+
+/* Whether a stage's switch is on: as the user left it, or as the stage starts. */
+function extraOn(stage, key) {
+    return state.extraOn[key] ?? stage.extras?.find((x) => x.key === key)?.on ?? false;
 }
 
 /*
@@ -1307,15 +1339,7 @@ function addSkyPanorama(slot) {
          * tables the fill shader reads, and this is an image. */
         sky = null;
         if (pano) {
-            const tex = new THREE.DataTexture(pano.rgba, pano.width, pano.height, THREE.RGBAFormat);
-            /* The panorama's first row is the top of the sky, and a DataTexture
-             * puts its first row at the bottom unless told otherwise. */
-            tex.flipY = true;
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.magFilter = THREE.LinearFilter;
-            tex.minFilter = THREE.LinearFilter;
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.needsUpdate = true;
+            const tex = skyTexture(pano.rgba, pano);
             sky = {
                 tex,
                 /* The strip's height as a fraction of the radius: at the
@@ -1334,6 +1358,11 @@ function addSkyPanorama(slot) {
                 width: pano.width,
                 topColor: pano.topColor.map((c) => c / 255),
                 footColor: pano.footColor?.map((c) => c / 255),
+                lines: pano.lineShift ? skyLines(pano) : null,
+                /* A sky whose picture changes with the frame: the key of the
+                 * frame's picture, and the picture for a key. */
+                images: pano.imageAt
+                    ? { at: pano.imageAt, image: pano.image, pano, textures: new Map([[0, tex]]) } : null,
             };
         }
         state.skyPanoramas.set(slot, sky);
@@ -1350,6 +1379,7 @@ function addSkyPanorama(slot) {
     const mat = new THREE.MeshBasicMaterial({
         map: sky.tex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     });
+    if (sky.lines) bendSky(mat, sky.lines);
     const mesh = new THREE.Mesh(geom, mat);
     mesh.renderOrder = BACKDROP_ORDER;
     mesh.userData.layer = 'sky';
@@ -1362,8 +1392,74 @@ function addSkyPanorama(slot) {
     mesh.rotation.y = (2 * Math.PI * sky.centre) / sky.width;
     if (sky.footColor) mesh.add(skyFloor(sky.footColor, height));
     v.root.add(mesh);
-    state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance };
+    state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance, lines: sky.lines, images: sky.images };
+    stepSkyLines(Math.max(0, state.anim.frame));
+    stepSkyImage(Math.max(0, state.anim.frame));
     stepSky();
+}
+
+function skyTexture(rgba, { width, height }) {
+    const tex = new THREE.DataTexture(rgba, width, height, THREE.RGBAFormat);
+    /* The panorama's first row is the top of the sky, and a DataTexture
+     * puts its first row at the bottom unless told otherwise. */
+    tex.flipY = true;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.needsUpdate = true;
+    return tex;
+}
+
+/* The picture a changing sky shows at this frame, made the first time. */
+function stepSkyImage(frame) {
+    const images = state.sky?.images;
+    if (!images) return;
+    const key = images.at(frame);
+    let tex = images.textures.get(key);
+    if (!tex) {
+        const rgba = images.image(key);
+        tex = rgba ? skyTexture(rgba, images.pano) : images.textures.get(0);
+        images.textures.set(key, tex);
+    }
+    const mat = state.sky.mesh.material;
+    if (mat.map !== tex) mat.map = tex;
+}
+
+/*
+ * A sky the board bends line by line (Virtua Fighter 2's, js/scroll.js): one
+ * shift a panorama row, kept in a one-texel-wide texture the sky's shader
+ * looks its row up in, as a fraction of a turn. The texture is flipped as the
+ * panorama is, so the two share the cylinder's V.
+ */
+function skyLines(pano) {
+    const data = new Float32Array(pano.height);
+    const tex = new THREE.DataTexture(data, 1, pano.height, THREE.RedFormat, THREE.FloatType);
+    tex.flipY = true;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    return { shift: pano.lineShift, width: pano.width, data, tex, frame: -1 };
+}
+
+function bendSky(mat, lines) {
+    mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uSkyLines = { value: lines.tex };
+        shader.fragmentShader = 'uniform sampler2D uSkyLines;\n' + shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            THREE.ShaderChunk.map_fragment.replaceAll(
+                'vMapUv', 'vec2(vMapUv.x - texture2D(uSkyLines, vec2(0.5, vMapUv.y)).r, vMapUv.y)'));
+    };
+}
+
+/* The bent sky's shifts for this frame; the screen's x shows the row's x less
+ * the shift (segaic24.cpp), so the picture moves right by it. */
+function stepSkyLines(frame) {
+    const lines = state.sky?.lines;
+    if (!lines || lines.frame === frame) return;
+    lines.frame = frame;
+    const px = lines.shift(frame);
+    for (let i = 0; i < px.length; i++) lines.data[i] = px[i] / lines.width;
+    lines.tex.needsUpdate = true;
 }
 
 /* What a camera looking down past the strip's foot sees: the foot's colour
@@ -1386,7 +1482,11 @@ function skyFloor(rgb, height) {
 
 /* Throw the decoded skies away, with their textures. */
 function clearSkyPanoramas() {
-    for (const sky of state.skyPanoramas.values()) sky?.tex.dispose();
+    for (const sky of state.skyPanoramas.values()) {
+        sky?.tex.dispose();
+        sky?.lines?.tex.dispose();
+        for (const t of sky?.images?.textures.values() ?? []) t.dispose();
+    }
     state.skyPanoramas.clear();
 }
 
@@ -1424,12 +1524,12 @@ function stepSky() {
 
 /* ---- Stage view ---------------------------------------------------------- */
 
-function loadStage(slot, { keepCamera = false } = {}) {
+function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
     const v = state.viewer;
     const stage = state.stages[slot];
     if (!stage) return;
     state.stageIndex = slot;
-    resetStageAnimation();
+    resetStageAnimation(keepClock);
     playStageMusic();
     v.clear();
 
@@ -1730,7 +1830,7 @@ function setRideStage(on) {
 
 /* Drop the animation state, and the frames it decoded, whenever the scene is
  * torn down — the other two views clear the same root. */
-function resetStageAnimation() {
+function resetStageAnimation(keepClock = false) {
     const a = state.anim;
     disposeEggLabFootage();
     for (const g of a.geom.values()) { g.mesh.dispose(); g.edges.dispose(); }
@@ -1740,7 +1840,8 @@ function resetStageAnimation() {
     a.blocks = [];
     a.phases = [];
     a.liveCam = null;
-    a.start = performance.now();
+    /* A stage rebuilt for a switch goes on where its round was. */
+    if (!keepClock) a.start = performance.now();
     a.frame = -1;
 }
 
@@ -1954,6 +2055,8 @@ function stepStageAnimation(now) {
     }
 
     stepEggLabFootage(frame);
+    stepSkyLines(frame);
+    stepSkyImage(frame);
     setWorldFrame(frame);
     stepStageColors(frame);
     stepStageLight(frame);
@@ -2130,6 +2233,10 @@ function stepStageMaterials(frame) {
 function stepStageLight(frame) {
     const stage = state.stages[state.stageIndex];
     if (!stage) return;
+    if (stage.lightAt) {
+        state.viewer.material.uniforms.uLight.value.set(...stage.lightAt(frame));
+        return;
+    }
     const yaw = stageLightYaw(stage, frame, state.frames);
     const bright = stageBright(stage, frame);
     if (yaw === null && bright === null) return;
@@ -3270,6 +3377,7 @@ function renderStagePanel(stage, counts, totals, list) {
         });
         layers.appendChild(row);
     }
+    renderStageExtras(stage);
 
     const parts = $('#stage-parts');
     parts.innerHTML = '';
