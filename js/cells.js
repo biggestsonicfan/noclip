@@ -129,8 +129,8 @@ export function unusedCells(rom) {
 
 /** How many of a cell's entries fall on the leftover tiles of the game's
  * `leftover` CG, when that CG is the one on top; 0 otherwise. Daytona's boot
- * CG loads tiles nothing lays out, and the cells CG 7 draws on the same
- * characters show them out of order (js/games.js DAYTONA_CELLS). */
+ * CG loads the DaytonaGP tiles, and the cells whose entries name the same
+ * characters land on them (js/games.js DAYTONA_CELLS). */
 export function leftoverTiles(rom, cell, cgs) {
     const L = rom.game.cells?.leftover;
     if (!L || cgs[cgs.length - 1] !== L.cg) return 0;

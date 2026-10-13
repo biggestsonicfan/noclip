@@ -4084,9 +4084,8 @@ function drawCell() {
             + ` the game puts the rest in the tile chip some other way.`)
         + (unusedCells(state.rom).has(c.index) ? '<br>Unused: nothing in the program or data ROM'
             + ' names this record, so the game never draws it.' : '')
-        + (leftoverTiles(state.rom, c.index, cgs) ? '<br>On this CG the cell shows leftover tiles:'
-            + ' an older DAYTONA, streak and flag the CG loads but no record lays out,'
-            + ' so they come out of order.' : '');
+        + (leftoverTiles(state.rom, c.index, cgs) ? '<br>With CG 0 loaded, this cell\'s map entries land on'
+            + ' the leftover DaytonaGP tiles (chars 0x1200-0x14CA / 0x1800-0x1ACA).' : '');
     updateHud();
 }
 
