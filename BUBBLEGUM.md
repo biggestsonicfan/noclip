@@ -236,6 +236,19 @@ The same view, camera, size and SwiftShader, rendered once with rule 1 **on**, r
 - **The right-side hiding appears: rules 2 and 3 off are enough for it with rule 1 on.** The wall covers the big bookcase from the right, and only a window at its left end, two shelves high, is left.
 - **What rule 1 still changes:** the 16396 px between this picture and the 2 + 3 picture with rule 1 off are rule 1's own. With rule 1 on, the left end of the window is whole: the bookcase frame shows there, about 50 px wide and 190 px high, so the window is about 180 px wide where the rule-1-off picture's is about 130 px. In the rule-1-off picture that strip is the blinds wall, with bits of the frame showing through. With rule 1 on, the wall is also more solid. The brown trim along its top shows through only from about x 905, where the rule-1-off picture shows it from about x 725. The brown strip along the wall's foot does not show through at all. A few desk and shelf edges and a small patch by the vent (about x 330-350) differ too.
 
+### Rule 2 alone and rule 3 alone off with rule 1 on at the issue 69 view (Pinboard #736)
+
+The same view, camera, size and SwiftShader, rendered twice with rule 1 **on** and rules 4-7 on: once with only rule 2 off, once with only rule 3 off (in the same scratch copy of the page; no rule was changed in the source). Each was compared with the stored pictures above. No count was under 100 px, so neither was rendered again.
+
+| Off (rule 1 on) | vs rule-1-off | vs all-off | vs rule 1 on + rules 2 and 3 off | Picture |
+|---|---|---|---|---|
+| 2 | 19539 px | 240376 px | 225822 px | no hiding |
+| 3 | 22908 px | 237213 px | 222495 px | far-left only |
+
+- **Rule 2 off:** the picture is the rule-1-on one. It differs from the stored rule-1-on render of #723 by 17 px, scattered between x 375 and 585, and the big bookcase is whole.
+- **Rule 3 off:** the small bookcase at the far left loses its books to the wall behind it, as with rule 3 off and rule 1 off. Against the rule-1-on render, 3348 px differ at x 0-86 and 93 px elsewhere; the big bookcase is whole.
+- **With rule 1 on, the pair is still required.** Neither rule 2 alone nor rule 3 alone gives either kind of right-side cover: not the issue's about-130 px window, and not the coarse cover with the about-180 px window that rules 2 and 3 off together give.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
