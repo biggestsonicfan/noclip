@@ -117,14 +117,21 @@ function at(rom, addr) {
         const r = xtraResolve(rom, addr);
         return { view: r.view, u8: r.data, off: r.off };
     }
+    if (inProgram(rom, addr)) return { view: rom.mainCpuView, u8: rom.maincpu, off: addr - PROGRAM_ALIAS };
     return { view: rom.mainDataView, u8: rom.mainData, off: addr - MAIN_DATA_BASE };
 }
 
 function ptrOk(rom, addr) {
     if (addr >= 0x06000000 && addr < 0x07000000) return true;
+    if (inProgram(rom, addr)) return true;
     const o = addr - MAIN_DATA_BASE;
     return o >= 0 && o < rom.mainData.length;
 }
+
+/* Daytona USA keeps a few of its lists in the program ROM, which its own
+ * pointers name through the alias at 0x200000. */
+const PROGRAM_ALIAS = 0x00200000;
+const inProgram = (rom, addr) => addr >= PROGRAM_ALIAS && addr - PROGRAM_ALIAS < rom.maincpu.length;
 
 /* For js/cells.js, which reads the same tables. */
 export { at as scrollAt, ptrOk as scrollPtrOk, CHAR_MASK, TILE_BYTES };

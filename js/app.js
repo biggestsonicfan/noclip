@@ -15,7 +15,7 @@ import { readVf2Stages } from './vf2.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
-import { cellCount, cgCount, readCell, rankCGs, renderCell } from './cells.js';
+import { cellCount, cgCount, cgLabel, readCell, rankCGs, renderCell } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -4009,7 +4009,7 @@ function renderCellList() {
         if (!c) continue;
         const best = ranks[i][0];
         const info = `${c.cols * 8}&times;${c.rows * 8} · `
-            + (best?.cover === 1 ? `CG ${best.cg}` : best ? `CG ${best.cg}, part` : 'no CG');
+            + (best?.cover === 1 ? cgLabel(state.rom, best.cg) : best ? `CG ${best.cg}, part` : 'no CG');
         const row = el('div', 'row-item' + (i === state.cell.index ? ' sel' : ''),
             `<span class="id">${i}</span><span class="info">${info}</span>`);
         row.dataset.index = String(i);
@@ -4039,12 +4039,13 @@ function selectCell(idx, { cg = -1 } = {}) {
     const draws = document.createElement('optgroup');
     draws.label = 'Draw this cell';
     for (const r of ranks) {
-        draws.appendChild(new Option(r.cover === 1 ? `CG ${r.cg}` : `CG ${r.cg} (${Math.round(r.cover * 100)}%)`, r.cg));
+        const label = cgLabel(state.rom, r.cg);
+        draws.appendChild(new Option(r.cover === 1 ? label : `${label} ${Math.round(r.cover * 100)}%`, r.cg));
     }
     const rest = document.createElement('optgroup');
     rest.label = 'Others';
     for (let g = 0; g < cgCount(state.rom); g++) {
-        if (!ranks.some((r) => r.cg === g)) rest.appendChild(new Option(`CG ${g}`, g));
+        if (!ranks.some((r) => r.cg === g)) rest.appendChild(new Option(cgLabel(state.rom, g), g));
     }
     if (draws.children.length) sel.appendChild(draws);
     sel.appendChild(rest);
@@ -4057,7 +4058,10 @@ function drawCell() {
     const c = state.cell;
     const canvas = $('#cell-view');
     const cgs = [c.under, c.cg].filter((g) => g >= 0);
-    const pic = renderCell(state.rom, c.index, cgs);
+    /* Daytona's tile layer goes through colorxlat as its sky does, so a cell
+     * takes the cabinet's colours (js/games.js DAYTONA_CELLS). */
+    const cxlat = state.rom.game.cells.colorxlat ? buildColorxlat(state.rom) : null;
+    const pic = renderCell(state.rom, c.index, cgs, cxlat);
     const info = $('#cell-info');
     if (!pic) {
         canvas.width = canvas.height = 1;
@@ -4692,7 +4696,7 @@ function loadGameContent() {
         const under = $('#cell-under');
         under.innerHTML = '';
         under.add(new Option('nothing', -1));
-        for (let g = 0; g < cgCount(state.rom); g++) under.add(new Option(`CG ${g}`, g));
+        for (let g = 0; g < cgCount(state.rom); g++) under.add(new Option(cgLabel(state.rom, g), g));
         under.value = String(state.cell.under);
         renderCellList();
     }
