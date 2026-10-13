@@ -84,7 +84,11 @@ Three views, and a fourth for the 2D art:
   `dsp_pattern_new` draws, each with the CG (`_Scroll_Initialize`'s tile pixels
   and colours) that writes every tile it names picked for it — 530 of them have
   one — and any other CG, or a second one loaded under it, to choose. The
-  camera button saves the cell itself at its own size, transparent where pen 0
+  program never draws 124 of them (126 in Sonic Championship, with a
+  Fighting Vipers logo and an STF title of its own): a "50% Version for AOU
+  Show" notice, a location test one, ROBOEGG silhouettes, the staff roll's
+  text and more. The list marks them, and searching for `unused` lists only
+  those. The camera button saves the cell itself at its own size, transparent where pen 0
   is, as `noclip-sfight-cell<N>-cg<M>-<time>.png`. See
   [`js/cells.js`](js/cells.js).
 

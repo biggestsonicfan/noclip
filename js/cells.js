@@ -101,16 +101,17 @@ export function cellCount(rom) {
     return rom.game.cells ? cellRecords(rom).length : 0;
 }
 
-/** The cells the game never draws: those whose record's address no aligned
- * word of the program or data ROM holds. Daytona's draw calls take their
- * record from an `lda` or from a table of absolute pointers (js/games.js
- * DAYTONA_CELLS). Sonic The Fighters' cells all come through its pattern
- * table, so none of its count. */
+/** The cells the game never draws. Daytona's draw calls take their record
+ * from an `lda` or from a table of absolute pointers (js/games.js
+ * DAYTONA_CELLS), so a record no aligned word of the program or data ROM
+ * holds is one of them. Sonic The Fighters' cells all come through its
+ * pattern table by number, which no scan of the ROM can follow, so its
+ * game entry lists them (`cells.unused`). */
 const unusedCache = new WeakMap();
 export function unusedCells(rom) {
     let out = unusedCache.get(rom);
     if (out) return out;
-    out = new Set();
+    out = new Set(rom.game.cells?.unused);
     if (rom.game.cells?.records) {
         const records = cellRecords(rom);
         const index = new Map(records.map((a, i) => [a, i]));

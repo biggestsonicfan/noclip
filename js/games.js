@@ -17,6 +17,19 @@
 
 /* ---- Sonic The Fighters -------------------------------------------------- */
 
+/* Sonic The Fighters' cells the program never draws: see sfight.cells. */
+const SFIGHT_UNUSED_CELLS = [
+    12, 19, 20, 23, 61, 75, 79, 81, 87, 93, 95, 97, 104, 111, 112, 123, 124,
+    129, 131, 133, 135, 137, 139, 141, 143, 145, 147, 149, 151, 153, 170,
+    176, 177, 178, 193, 195, 196, 198, 200, 203, 205, 206, 208, 210, 212,
+    214, 216, 218, 223, 226, 228, 229, 231, 233, 235, 237, 239, 241, 243,
+    245, 247, 249, 251, 259, 260, 303, 305, 330, 343, 344, 345, 346, 347,
+    348, 349, 356, 364, 365, 366, 369, 374, 388, 389, 407, 409, 410, 411,
+    412, 413, 414, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425,
+    426, 427, 428, 429, 430, 431, 432, 433, 434, 436, 498, 499, 503, 504,
+    505, 506, 507, 508, 509, 510, 511, 512, 514,
+];
+
 /* Mirrors the MAME `sfight` region layout (see m2-hle2 src/profiles/sfight.h).
  * Only the regions the viewer reads are assembled — program code, the
  * model/palette data region, the polygon ROM, the texture ROM and the start of
@@ -205,7 +218,22 @@ const sfight = {
      * 89), bossm_init (86), MES_ROUND_INT and sub_7B380 (35),
      * MES_CONTINUE_INT (83), the versus screen's results (24) and the logos
      * before the attract (3, 25). 59, 125-128 and 201 are from the owner's
-     * check against the game (1, 9, 22). */
+     * check against the game (1, 9, 22).
+     *
+     * `unused` are the cells nothing in the program draws (js/cells.js
+     * unusedCells). Every draw routine takes its cell by number: from an
+     * `lda`/`mov` (traced back through the branches that reach the call),
+     * from a table (the cards, portraits, tips, name plates, staff credits,
+     * barrier, timer and win-star animations, stage cards, movie script,
+     * big digits), as a font (0, 13 and the HUD's digit cells) or as an
+     * absolute pointer into the pattern table (121, 308). What is left
+     * includes the odd-numbered cards, a "50% Version for AOU Show" and a
+     * "Location Test Version" notice (228, 349), four control-method menus,
+     * K.O. (the game writes it in polygons), the ROBOEGG and ROCKET METAL
+     * silhouettes and the staff roll's text. Cells only the dead
+     * adv_movie_cont_fv (a Fighting Vipers leftover) or the debug viewer
+     * would draw count as unused; an attract run in MAME drew nothing
+     * outside the used set. */
     cells: {
         cgTable: 0x06480000, patternTable: 0x06480300, charBytes: 0x80000,
         cards: {
@@ -231,6 +259,7 @@ const sfight = {
             { cg: 3, cells: [88] }, { cg: 25, cells: [175] },
             { cg: 1, cells: [59] }, { cg: 9, cells: [125, 126, 127, 128] }, { cg: 22, cells: [201] },
         ],
+        unused: SFIGHT_UNUSED_CELLS,
     },
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
@@ -336,6 +365,13 @@ const schamp = {
         portraits: { ...sfight.cells.portraits, list: schampAt(sfight.cells.portraits.list) },
         tips: { ...sfight.cells.tips, list: schampAt(sfight.cells.tips.list) },
         names: { ...sfight.cells.names, tables: sfight.cells.names.tables.map(schampAt) },
+        /* The same, and two of its own nine: a Fighting Vipers logo (535)
+         * and a Sonic The Fighters title with the SEGA mark (536). The rest
+         * are the English titles the export build draws in place of
+         * sfight's: 537, 538, 539, 541 and 542 from an `lda` beside the
+         * Japanese one, the staff roll's 540 from a second table, and
+         * ROBOTNIK (543) in player_names_usa. */
+        unused: [...SFIGHT_UNUSED_CELLS, 535, 536],
     },
 };
 
