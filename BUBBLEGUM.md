@@ -135,7 +135,7 @@ These skips each hide one known decode bug. Fixing the bug removes the skip, and
 
 | # | Rule | Where | Fitted on | Applies to |
 |---|---|---|---|---|
-| 1 | `ASKEW` = tan 80°: faces apart are paired as far as they overlap seen within 80° of square on | `layers.js:116`, `411-416` | issue 69, two office wall pieces half a unit apart | every layered game |
+| 1 | `ASKEW` = tan 80°: faces apart are paired as far as they overlap seen within 80° of square on | `layers.js:116`, `pairsOf` (its `consider`) `411-416` | issue 69, two office wall pieces half a unit apart | every layered game |
 | 2 | `APART` = 0.25: a face that far in front across the whole overlap goes on top from every camera, whatever the key | `layers.js:319`, `inFront` `347-351` | issue 71, a bookcase 0.4 in front of a wall | every layered game |
 | 3 | `SMALL_APART` = 0.05: the same for a face that is smaller than the other | `layers.js:329`, `inFront` | issue 73, books 0.11 in front of a wall | every layered game |
 | 4 | a one-sided face `APART` or more behind its group's plane keeps its own depth | `setPlanes`, `layers.js:452-461` | issue 78, a hall ceiling over a lower one | every layered game |
@@ -153,6 +153,20 @@ Two kinds are mixed here.
 - *Is there one rule under the four?* §1 already has the explorer's answer for "a camera the board never uses": `Viewer.drawScene`'s `uKeyReach`, where a keyed face only counts within reach of the nearest surface, and true depth decides the rest. Rules 2 and 3 are the same idea per pair with two distances (0.25, 0.05) instead of one. A single "apart by more than the reach, true depth wins" in the ranking, the same number the key pass uses, is the candidate to try first. Rules 6 and 7 are about the union view ("every segment at once"), which §3 left as a plain union with no filtering for HOTD. In a single-segment view the draws are the board's own list, so the sort is the picture there and neither rule should be needed. Gating both on the union view, and checking whether issue 83 was seen in a single segment, would show whether 7 is needed at all.
 
 Until it is measured, these are the explorer's newest bubblegum and the one item here that crosses games.
+
+### Rule 1 measured (Pinboard #714)
+
+Rule 1 alone, one game at a time, from that game's own camera as MAME logged it, rendered with `ASKEW` on and with it off (reach 0), at 496×384 under SwiftShader. Each "on" frame was rendered twice to get the noise floor, with the stage clock held on the board's frame. Nothing else was changed. A change in the picture counts as a regression.
+
+| Game | Camera | Frames | Changed | What changes | Verdict |
+|---|---|---|---|---|---|
+| STF, 16 stages | camera record 0x519E98, Sonic vs Bean replay, frames 400-1300 | 31 per stage | South Island 1 (13 px), Canyon Cruise 18 (≤62 px), Casino Night 29 (≤14 px), Stage 10 31 (≤39 px), 1-2 frames of ≤13 px on Dynamite Plant, 13, 14, 15; none on Aurora, Mushroom Hill, 9, 11, 12 | 1-px seams: a rope's edge, a banner's top edge, single pixels along a grid line | no visible change. Flying Carpet and Giant Wing change only within the noise. Stage 8 hangs the headless page when it loads, so it is not measured |
+| Daytona Rev A | view matrix 0x501560, attract race holding sel_course, frames 520-3580 | 52 per course | Three-Seven 46 (up to 7441 px), Seaside 43 (≤127 px), Dinosaur Canyon 50 (≤330 px) | **the tire marks and worn-lane patches on the road.** With the rule on, the road's own faces are put over them in block-shaped pieces (frames 880, 1480, 3100) | **regression**: the marks are the board's (memory: tire marks are ranked over the road), and off keeps them whole |
+| Virtua Fighter 2 | camera record 0x515400 (STF's layout, yaw the other way), stage byte 0x500064 | 31 in the Colosseum fight (4800-6000), 31 in the demo stage (1800-3000) | Colosseum 21 (up to 5640 px); demo 5 (≤3 px) | **the tan border round the Colosseum ring.** With the rule on, the outer floor covers half its length from a low camera | **regression**: MAME's frame 6000 shows the border the whole way across, as rule off does |
+| House of the Dead (`hotdo`, `hotdp`) | not found: the rail camera is computed on the copro (memory: hotdp stage data) | | | | not measured |
+| Virtua Cop | not found: the matrices at 0x50F63C on are the enemies', not the view | | | | not measured; the stage 3 view from issue 69 is the only check so far |
+
+So rule 1 moves visible pixels from the game's own camera in two games it was not fitted on, both for the reason §7 gives: a decal or border that lies a little apart from a big face gets paired with it at a slant and loses to the group's plane. The rule stays in until the float depth buffer (item 9) can take it, and that change should be graded on these same frames: Daytona 880/1480/3100 on Three-Seven, VF2's Colosseum 5600-6000.
 
 ## 8. The new games (#712)
 
@@ -185,7 +199,7 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 
 Next (#712), in this order:
 
-6. **Measure §7's seven rules** with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
+6. **Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
 7. **Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.
 8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`.
 9. **A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it. This is the largest change, and the one with the widest reach.
