@@ -2217,6 +2217,8 @@ function daytonaBuild(spec) {
          * by the shape of what it points at.
          */
         sky: spec.sky ?? null,
+        /* The 2D pictures and their CGs, for the Cells tab — DAYTONA_CELLS. */
+        cells: spec.cells ? { ...DAYTONA_CELLS, ...spec.cells } : null,
         /*
          * The same depth arrangement The House of the Dead wants, and for the
          * same reason: this board has no depth buffer, and a course is large
@@ -2235,9 +2237,53 @@ function daytonaBuild(spec) {
         /* The music, off until switched on — see DAYTONA_SOUND. */
         sound: spec.sound === undefined ? DAYTONA_SOUND : spec.sound,
         /* Stages, but no rig: this game has no motion tables of any kind. */
-        features: { stages: true, characters: false, motions: false, bodies: false },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: Boolean(spec.cells) },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js): the title, the course and car select, the
+ * HUD's dials and lamps, the rankings. The tile chip and the list formats are
+ * Sonic The Fighters', and the tables are laid out differently.
+ *
+ * The draw routine (0x19304 in Revision A; 0x18E2C in 1993, 0x19784 in the
+ * Special Edition, 0x197F4 in the Saturn build) takes a record's address and
+ * a tilemap address: a halfword added to every entry, a halfword that is 0
+ * for byte entries and 1 for halfword ones, the row count, the column count,
+ * then the entries row by row onto 0x80-byte tilemap rows. Nothing indexes the
+ * records; they lie end to end, from the lowest one any call names to the
+ * model table (`records`, a run [first, end) per run), and a cell is its
+ * place in that run. Every record a call names directly lands on a record
+ * start, in every build.
+ *
+ * The CG loader (0x1DD70) takes a CG list, its partner (0x1DDE0) a palette
+ * list, and the game hands them both halves of a pair it finds through one
+ * of two tables (`cgTables`, [table, count]): the bank at 0x2600000 (the
+ * 1993 build's 0x2800000), seven pairs, of which the code loads 0 at boot, 1
+ * when a race starts and 5 and 6 on their own, and 0x2700000 (0x2900000),
+ * two pairs loaded over the bank's 0 (7) and 1 (8). Before CG 7 the loader
+ * puts in one more CG list out of the program ROM (`cgExtra`, by CG number).
+ *
+ * Bank pairs 2, 3 and 4 are the courses' START YOUR ENGINES pictures, which
+ * the race start streams in (0x1DE40) from a table by course (`courses.cgs`)
+ * and draws (0x26BF0) from another (`courses.cells`), a record per course;
+ * a cell in that table opens on its course's CG. Their colours come from the
+ * race start's palette cycle (`courses.flash`), not their palette lists.
+ *
+ * The tile layer's palette goes through colorxlat as Daytona's sky's does
+ * (`colorxlat`), so the cells take the cabinet's colours.
+ */
+/* The race start's palette cycle, laid out around a build's course picture
+ * table: see flashCourse in js/cells.js. */
+const courseFlash = (cells) => ({ table: cells - 0x50, also: [[cells + 0x10, 0x01800e80, 2]], step: 9 });
+
+const DAYTONA_CELLS = {
+    cgTables: [[0x02600000, 7], [0x02700000, 2]],
+    cgNames: ['boot', 'race', 'Three Seven Speedway', 'Dinosaur Canyon', 'Seaside Street Galaxy', null, null, 'over 0', 'over 1'],
+    courses: { count: 4, cells: 0x002389ac, cgs: 0x0023899c, flash: courseFlash(0x002389ac) },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
 
 /*
  * The trackside objects, which js/daytona.js reads and draws: where each
@@ -2416,6 +2462,12 @@ const daytona93 = daytonaBuild({
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'maincpu', at: 0x39b0 },
     sky: { table: 0x3a48 },
+    cells: {
+        records: [[0x028729b0, 0x02887928]],
+        cgTables: [[0x02800000, 7], [0x02900000, 2]],
+        cgExtra: { 7: 0x0023c530 },
+        courses: { count: 4, cells: 0x0023aff4, cgs: 0x0023afe4, flash: courseFlash(0x0023aff4) },
+    },
     objects: DAYTONA_OBJECTS_93,
     area: { heading: 0x17658, clip: 0x17150, order: 0x17104 },
     /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
@@ -2437,6 +2489,7 @@ const DAYTONA_REV_A = {
     light: [-0.45, -0.89, 0.45],
     courses: { source: 'mainData', at: 0x805298 },
     sky: { table: 0x4770 },
+    cells: { records: [[0x02823c4c, 0x0283fbb4]], cgExtra: { 7: 0x0023a270 } },
     objects: DAYTONA_OBJECTS_A,
     area: { heading: 0x17908, clip: 0x175e0, order: 0x17594 },
 };
@@ -2457,6 +2510,11 @@ const daytonase = daytonaBuild({
     bankTable: 0x15b4,
     cabinets: DAYTONA_CABINETS_SE,
     sky: { table: 0x47c8 },
+    cells: {
+        records: [[0x0281df20, 0x02839e88]],
+        cgExtra: { 7: 0x0023b030 },
+        courses: { count: 4, cells: 0x00239770, cgs: 0x00239760, flash: courseFlash(0x00239770) },
+    },
     objects: DAYTONA_OBJECTS_SE,
     area: { heading: 0x17d84, clip: 0x17a5c, order: 0x17a10 },
 });
@@ -2469,6 +2527,16 @@ const daytonas = daytonaBuild({
     data8: [0x800000, 'epr-17967.ic6', 0xa94d8690, 'epr-17968.ic7', 0x9d5a92c6],
     bankTable: 0x15b4,
     sky: { table: 0x4838 },
+    /* The Saturn advertisement is two more records, one after the others and
+     * one after a gap, on a CG of its own that 0x28860 loads straight from
+     * the pair at 0x23B2D4 before 0x288D8 draws them (`screens`). */
+    cells: {
+        records: [[0x0281df20, 0x0283a820], [0x0283a840, 0x0283b108]],
+        cgExtra: { 7: 0x0023ca80 },
+        courses: { count: 4, cells: 0x00239c80, cgs: 0x00239c70, flash: courseFlash(0x00239c80) },
+        cgPairs: [[0x0023b2d4, 'Saturn advert']],
+        screens: [{ cg: 9, cells: [222, 223] }],
+    },
     objects: DAYTONA_OBJECTS_S,
     area: { heading: 0x17df4, clip: 0x17acc, order: 0x17a80 },
 });

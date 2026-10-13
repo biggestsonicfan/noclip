@@ -28,11 +28,22 @@
  * CG 1 and then CG 81 — so a cell can need two. A CG fits a cell when it
  * writes every character and every colour the cell uses; `rankCGs` puts
  * those first, and the panel's second picker loads another CG under it.
+ *
+ * Daytona USA has the same tile chip and the same list formats, but no
+ * pattern table: its draw routine (0x19304 in Revision A) takes the record's
+ * address, and the records lie end to end in one run of the data ROM
+ * (`records`), so a cell is the record's place in that run. Its halfword at
+ * 0x02 says how wide an entry is: 0 a byte, anything else a halfword. Its CGs
+ * are pointers to a pair of (CG list, palette list), in two tables
+ * (`cgTables`); `cgExtra` names a CG list the loader puts in before one of
+ * them, and `cgPairs` pairs the code names directly. See js/games.js
+ * DAYTONA_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 
+const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
 const CG_ENTRIES = 0xb8;        /* _ScrollCG_Initialize's bound */
 const ROW_BYTES = 0x80;         /* the tilemap's row, 64 entries */
@@ -40,22 +51,99 @@ const MAX_SIDE = 64;            /* the tilemap is 64 entries square */
 
 const word = (rom, addr) => { const t = scrollAt(rom, addr); return t.view.getUint32(t.off, true); };
 
-/** How many cells the pattern table holds: up to its terminating zero. */
-export function cellCount(rom) {
+/* Each cell's record address, worked out once per ROM set. */
+const recordCache = new WeakMap();
+function cellRecords(rom) {
+    let out = recordCache.get(rom);
+    if (out) return out;
     const C = rom.game.cells;
-    if (!C) return 0;
-    let n = 0;
-    while (n < MAX_CELLS && scrollPtrOk(rom, C.patternTable + n * 4)) {
-        const p = word(rom, C.patternTable + n * 4);
-        if (!p || !scrollPtrOk(rom, p)) break;
-        n++;
+    out = [];
+    if (C.records) {
+        for (const [first, end] of C.records) {
+            for (let a = first; a < end && out.length < MAX_CELLS;) {
+                const size = recordSize(rom, a);
+                if (!size) break;
+                out.push(a);
+                a += size;
+            }
+        }
+    } else {
+        while (out.length < MAX_CELLS && scrollPtrOk(rom, C.patternTable + out.length * 4)) {
+            const p = word(rom, C.patternTable + out.length * 4);
+            if (!p || !scrollPtrOk(rom, p)) break;
+            out.push(p);
+        }
     }
-    return n;
+    recordCache.set(rom, out);
+    return out;
 }
 
-/** How many CGs there are: entry pairs below _ScrollCG_Initialize's bound. */
+/* A record's header: the base, the entry width, the rows and the columns.
+ * Null where it is no record. */
+function recordHeader(rom, p) {
+    if (!scrollPtrOk(rom, p)) return null;
+    const R = scrollAt(rom, p);
+    if (R.off + 0x0c > R.u8.length) return null;
+    const rows = R.view.getUint32(R.off + 4, true);
+    const cols = R.view.getUint32(R.off + 8, true);
+    if (!rows || !cols || rows > MAX_SIDE || cols > MAX_SIDE) return null;
+    const wide = !rom.game.cells.records || R.view.getUint16(R.off + 2, true) !== 0;
+    const bytes = 0x0c + rows * cols * (wide ? 2 : 1);
+    if (R.off + bytes > R.u8.length) return null;
+    return { R, base: R.view.getUint16(R.off, true), wide, rows, cols, bytes };
+}
+
+const recordSize = (rom, p) => recordHeader(rom, p)?.bytes ?? 0;
+
+/** How many cells there are: up to the pattern table's terminating zero, or
+ * every record in the game's runs of them. */
+export function cellCount(rom) {
+    return rom.game.cells ? cellRecords(rom).length : 0;
+}
+
+/* Every CG's lists: the tile lists, loaded in order, and the palette list. */
+const cgCache = new WeakMap();
+function cgListsAll(rom) {
+    let all = cgCache.get(rom);
+    if (all) return all;
+    const C = rom.game.cells;
+    all = [];
+    const pairAt = (pair, name, extra) => ({
+        tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
+    });
+    if (C.cgTables) {
+        for (const [table, count] of C.cgTables) {
+            for (let i = 0; i < count; i++) {
+                const n = all.length;
+                all.push(pairAt(word(rom, table + i * 4), C.cgNames?.[n], C.cgExtra?.[n]));
+            }
+        }
+        for (let course = (C.courses?.count ?? 0) - 1; course >= 0; course--) {
+            const L = all[courseCG(rom, course)];
+            if (L) L.course = course;
+        }
+        for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
+    } else {
+        for (let cg = 0; cg < CG_ENTRIES / 2; cg++) {
+            const tiles = word(rom, C.cgTable + cg * 8);
+            all.push(tiles ? { tiles: [tiles], pal: word(rom, C.cgTable + cg * 8 + 4) } : null);
+        }
+    }
+    cgCache.set(rom, all);
+    return all;
+}
+
+/** How many CGs there are: entry pairs below _ScrollCG_Initialize's bound, or
+ * the game's tables of them. */
 export function cgCount(rom) {
-    return rom.game.cells ? CG_ENTRIES / 2 : 0;
+    return rom.game.cells ? cgListsAll(rom).length : 0;
+}
+
+/** What the panel calls CG n: its number, and the game's name for it if the
+ * profile has one. */
+export function cgLabel(rom, cg) {
+    const name = rom.game.cells ? cgLists(rom, cg)?.name : null;
+    return name ? `CG ${cg} (${name})` : `CG ${cg}`;
 }
 
 /**
@@ -63,29 +151,67 @@ export function cgCount(rom) {
  * @returns {null|{cols:number, rows:number, entries:Uint16Array}}
  */
 export function readCell(rom, cell) {
-    const C = rom.game.cells;
-    const p = word(rom, C.patternTable + cell * 4);
-    if (!p || !scrollPtrOk(rom, p)) return null;
-    const R = scrollAt(rom, p);
-    const base = R.view.getUint16(R.off, true);
-    const rows = R.view.getUint32(R.off + 4, true);
-    const cols = R.view.getUint32(R.off + 8, true);
-    if (!rows || !cols || rows > MAX_SIDE || cols > MAX_SIDE) return null;
-    if (R.off + 0x0c + rows * cols * 2 > R.u8.length) return null;
+    const p = cellRecords(rom)[cell];
+    const h = p === undefined ? null : recordHeader(rom, p);
+    if (!h) return null;
+    const { R, base, wide, rows, cols } = h;
     const entries = new Uint16Array(rows * cols);
     for (let i = 0; i < entries.length; i++) {
-        entries[i] = (R.view.getUint16(R.off + 0x0c + i * 2, true) + base) & 0xffff;
+        const v = wide ? R.view.getUint16(R.off + 0x0c + i * 2, true) : R.u8[R.off + 0x0c + i];
+        entries[i] = (v + base) & 0xffff;
     }
     return { cols, rows, entries };
 }
 
-/* The list pointers of CG n, or null for an empty slot. */
+/* The lists of CG n, or null for an empty slot. */
 function cgLists(rom, cg) {
+    return cg >= 0 ? cgListsAll(rom)[cg] ?? null : null;
+}
+
+/* The bank CG a Daytona course's race start streams in. */
+function courseCG(rom, course) {
     const C = rom.game.cells;
-    if (cg < 0 || cg * 2 + 1 >= CG_ENTRIES) return null;
-    const tiles = word(rom, C.cgTable + cg * 8);
-    const pal = word(rom, C.cgTable + cg * 8 + 4);
-    return tiles ? { tiles, pal } : null;
+    return (word(rom, C.courses.cgs + course * 4) - C.cgTables[0][0]) / 4;
+}
+
+/* What loading CG n leaves in the tile chip: its tile lists one after
+ * another, then its palette, and a course CG's flash over that. */
+function loadCG(rom, L) {
+    const out = loadTiles(rom, L);
+    if (L.course !== undefined) flashCourse(rom, out, L.course);
+    return out;
+}
+
+function loadTiles(rom, L) {
+    const charBytes = rom.game.cells.charBytes;
+    if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
+    const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
+    const out = parts[parts.length - 1];
+    for (const r of parts.slice(0, -1)) {
+        for (const [first, n] of r.charRuns) {
+            out.chars.set(r.chars.subarray(first * TILE_BYTES, (first + n) * TILE_BYTES), first * TILE_BYTES);
+        }
+        out.charRuns = r.charRuns.concat(out.charRuns);
+    }
+    return out;
+}
+
+/* A course CG's palette list writes nothing into the groups its picture
+ * uses: the race start's palette cycle fills them (0x26C20 in Revision A),
+ * from a record per course in `flash.table`, {group count, colours, first
+ * group's address}, every group taking the same 16 colours, the step's.
+ * `flash.also` are blocks the same for every course, [colours, address,
+ * groups]. Before the first frame the game shows step `flash.step`, and so
+ * does the panel. */
+function flashCourse(rom, out, course) {
+    const F = rom.game.cells.courses.flash;
+    const t = F.table + course * 16;
+    for (const [src, dest, groups] of [[word(rom, t + 4), word(rom, t + 8), word(rom, t)], ...F.also]) {
+        const s = scrollAt(rom, src + F.step * 32);
+        const first = (dest - PAL_BASE) >> 1;
+        for (let i = 0; i < groups * 16; i++) out.pal[first + i] = s.view.getUint16(s.off + (i & 15) * 2, true);
+        out.palRuns.push([first, groups * 16]);
+    }
 }
 
 /* What each CG writes, worked out once per ROM set: the character RAM it
@@ -98,7 +224,7 @@ function cgCover(rom) {
     for (let cg = 0; cg < cgCount(rom); cg++) {
         const L = cgLists(rom, cg);
         if (!L) { all.push(null); continue; }
-        const { charRuns, palRuns } = loadScrollCG(rom, L.tiles, L.pal, rom.game.cells.charBytes);
+        const { charRuns, palRuns } = loadCG(rom, L);
         all.push({ charRuns, palRuns });
     }
     coverCache.set(rom, all);
@@ -119,43 +245,65 @@ function gameCGs(rom) {
     let map = gameCache.get(rom);
     if (map) return map;
     map = new Map();
-    const K = rom.game.cells.cards;
-    for (const [cells, cgs] of K?.tables ?? []) {
-        for (let i = 0; i < K.count; i++) {
-            const cell = rom.mainCpuView.getUint16(cells + i * 2, true);
-            const cg = rom.mainCpuView.getUint16(cgs + i * 2, true) >> 1;
-            for (const c of [cell, cell - 1]) if (!map.has(c)) map.set(c, cg);
-        }
-    }
-    const P = rom.game.cells.portraits;
-    for (let i = 0; i < (P?.count ?? 0); i++) {
-        const frames = rom.mainCpuView.getUint32(P.list + i * 4, true);
-        for (let f = 0; f < P.frames; f++) {
-            const cell = rom.mainCpuView.getUint16(frames + f * 2, true);
-            if (!map.has(cell)) map.set(cell, P.cg);
-        }
-    }
-    const T = rom.game.cells.tips;
-    for (let i = 0; i < (T?.count ?? 0); i++) {
-        const cell = rom.mainCpuView.getUint32(T.list + i * 4, true);
-        if (!map.has(cell)) map.set(cell, T.cg);
-    }
-    const N = rom.game.cells.names;
-    const plates = [];
-    for (const table of N?.tables ?? []) {
-        for (let i = 0; i < N.count; i++) {
-            const cg = rom.mainCpuView.getUint16(table + i * 8, true) >> 1;
-            const cell = rom.mainCpuView.getUint16(table + i * 8 + 2, true);
-            plates.push([cell, cg]);
-        }
-    }
-    for (const [cell, cg] of plates) if (!map.has(cell)) map.set(cell, cg);
-    for (const [cell, cg] of plates) if (!map.has(cell + 1)) map.set(cell + 1, cg + 1);
-    for (const { cg, cells } of rom.game.cells.screens ?? []) {
-        for (const cell of cells) if (!map.has(cell)) map.set(cell, cg);
-    }
+    const C = rom.game.cells;
+    /* Each table's [cell, CG] pairs, in the order they win. */
+    const pairs = [
+        ...cardCGs(rom, C.cards), ...portraitCGs(rom, C.portraits), ...tipCGs(rom, C.tips),
+        ...plateCGs(rom, C.names), ...courseCGs(rom, C.courses),
+        ...(C.screens ?? []).flatMap(({ cg, cells }) => cells.map((cell) => [cell, cg])),
+    ];
+    for (const [cell, cg] of pairs) if (!map.has(cell)) map.set(cell, cg);
     gameCache.set(rom, map);
     return map;
+}
+
+const u16 = (rom, addr) => rom.mainCpuView.getUint16(addr, true);
+
+function cardCGs(rom, K) {
+    const out = [];
+    for (const [cells, cgs] of K?.tables ?? []) {
+        for (let i = 0; i < K.count; i++) {
+            const cell = u16(rom, cells + i * 2);
+            const cg = u16(rom, cgs + i * 2) >> 1;
+            out.push([cell, cg], [cell - 1, cg]);
+        }
+    }
+    return out;
+}
+
+function portraitCGs(rom, P) {
+    const out = [];
+    for (let i = 0; i < (P?.count ?? 0); i++) {
+        const frames = rom.mainCpuView.getUint32(P.list + i * 4, true);
+        for (let f = 0; f < P.frames; f++) out.push([u16(rom, frames + f * 2), P.cg]);
+    }
+    return out;
+}
+
+function tipCGs(rom, T) {
+    const out = [];
+    for (let i = 0; i < (T?.count ?? 0); i++) out.push([rom.mainCpuView.getUint32(T.list + i * 4, true), T.cg]);
+    return out;
+}
+
+/* Every plate first, then every twin. */
+function plateCGs(rom, N) {
+    const plates = [];
+    for (const table of N?.tables ?? []) {
+        for (let i = 0; i < N.count; i++) plates.push([u16(rom, table + i * 8 + 2), u16(rom, table + i * 8) >> 1]);
+    }
+    return plates.concat(plates.map(([cell, cg]) => [cell + 1, cg + 1]));
+}
+
+/* Daytona's course pictures: a cell per course, on that course's CG. */
+function courseCGs(rom, R) {
+    const out = [];
+    const records = R ? cellRecords(rom) : [];
+    for (let course = 0; course < (R?.count ?? 0); course++) {
+        const cell = records.indexOf(word(rom, R.cells + course * 4));
+        if (cell >= 0) out.push([cell, courseCG(rom, course)]);
+    }
+    return out;
 }
 
 /**
@@ -262,7 +410,7 @@ export function renderCell(rom, cell, cgs, cxlat = null) {
     for (const cg of cgs) {
         const L = cgLists(rom, cg);
         if (!L) continue;
-        const r = loadScrollCG(rom, L.tiles, L.pal, charBytes);
+        const r = loadCG(rom, L);
         for (const [first, n] of r.charRuns) {
             chars.set(r.chars.subarray(first * TILE_BYTES, (first + n) * TILE_BYTES), first * TILE_BYTES);
         }

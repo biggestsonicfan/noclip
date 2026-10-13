@@ -157,6 +157,15 @@ fourth song is only reachable that way; the **Song** list under the switch is
 the same choice. Every build but the 1993 one has it. See [Daytona USA's
 music](TECHNICAL.md#daytona-usas-music-the-model-1-sound-board).
 
+The **Cells** tab is here too, in every build: the title, the course and car
+select, the HUD's dials and lamps, the rankings, the courses' START YOUR
+ENGINES pictures and the EPA notice, 222 cells (147 in the 1993 build, 224 with
+the Saturn advert), each opened on the CG the game draws it with. All but one
+have a CG that writes every tile they name. The tile chip is Sonic The
+Fighters', the tables are not: see `DAYTONA_CELLS` in
+[`js/games.js`](js/games.js). Their colours go through colorxlat as the sky's
+do, so they follow the cabinet.
+
 It is the only set here that is not on a 2A or 2B board. This is the original
 Model 2: a Fujitsu TGP beside the i960 where the later titles have a SHARC,
 texture RAM at `0x12000000` rather than `0x11000000`, and AM2's library two
