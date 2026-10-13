@@ -178,6 +178,12 @@ The view is the one in the issue's link: Virtua Cop stage 3 (stage value 2), fra
 
 So at the view it was tuned for, rule 1 still removes a visible fight. Rule 1 is not one of the two rules that also change House of the Dead zone views (6 and 7 in the table above), so no HOTD zone view was rendered for it.
 
+### All seven rules off at the issue 69 view (Pinboard #726)
+
+The same view, camera, size and SwiftShader, rendered once with all seven rules off at once (in a scratch copy of the page; no rule was changed in the source). Against the rule-1-off picture above it differs by **225667 px** (of 716800). A fresh rule-1-off render matched the recorded one exactly, and two all-off renders were identical, so none of that is noise.
+
+- **The right-side hiding comes back.** With every rule off the wall is drawn over the bookcase from the right as in the issue's screenshot: only a window two shelves high and about 130 px wide, at the bookcase's left end, is left, and the bookcase at the far left of the room is covered too. So the rest of issue 69's fight is undone by rules 2-7 together, not by rule 1. Which of them does it was not measured.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
