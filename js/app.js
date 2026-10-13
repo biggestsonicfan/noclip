@@ -4082,8 +4082,8 @@ function drawCell() {
         + `${pic.width / 8}&times;${pic.height / 8} tiles`
         + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
             + ` the game puts the rest in the tile chip some other way.`)
-        + (unusedCells(state.rom).has(c.index) ? '<br>Unused: nothing in the program or data ROM'
-            + ' names this record, so the game never draws it.' : '')
+        + (unusedCells(state.rom).has(c.index) ? '<br>Unused: nothing in the program names this cell,'
+            + ' so the game never draws it.' : '')
         + (leftoverTiles(state.rom, c.index, cgs) ? '<br>With CG 0 loaded, this cell\'s map entries land on'
             + ' the leftover DaytonaGP tiles (chars 0x1200-0x14CA / 0x1800-0x1ACA).' : '');
     updateHud();
