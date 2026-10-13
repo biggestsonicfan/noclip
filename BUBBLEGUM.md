@@ -270,6 +270,24 @@ The same view, camera, size and SwiftShader, rendered once with rule 1 **on** an
 - **The picture is the rule-1-on plus rules-2-and-3-off one.** The wall covers the big bookcase from the right, but the left window is about 180 px wide with the bookcase frame showing, not the issue's about-130 px window. The 51 px are thin slivers: a 32 px run of one row at x 935-966 (y 334), 7 px at x 356-362 (y 339), and 12 px on a desk edge around x 540-557 (y 438-441).
 - **Rules 4-7 barely change this view once rule 1 is on and rules 2 and 3 are off.** Turning them off too moves the gap to the all-off picture from 16396 px to 16436 px; it does not close it. With rules 2 and 3 off, the gap between the coarse cover and the issue match comes from rule 1 alone. Rules 4-7 were not turned off one at a time.
 
+### The float depth buffer, tried (Pinboard #755)
+
+Item 9 was built as written on branch `float-depth` (704fcc6, not for merging; no PR). three r185's `reversedDepthBuffer` puts reversed depth in a 32-bit float buffer (canvas through an MSAA target with a `FloatType` depth texture, key and plate targets too), and `FACE_LAYERS` keeps each face's own depth, lifted 2⁻²⁰ of it per layer. The group plane, rules 1, 4 and 5 and the 24-bit argument in `rankLayers` are gone. One three quirk had to be worked round: under reversed depth it turns the whole sorted render list round, `renderOrder` included, so the backdrop (order -1, no depth test) drew last over everything. The explorer now sets its own sorts, negated when `camera.reversedDepth` is set. All pictures are 496×384 under SwiftShader from the game's own camera, against master.
+
+| View | Changed px | Against MAME |
+|---|---|---|
+| Daytona Three-Seven 880 | 5735 | tire marks whole across block edges, as in MAME (master cuts them) |
+| Daytona Three-Seven 1480 | 2874 | thin fence edges only |
+| Daytona Three-Seven 3100 | 4519 | tire marks whole, as in MAME |
+| VF2 Colosseum 5600 | 4618 | ring border whole, as in MAME (master cuts it) |
+| VF2 Colosseum 6000 | 5552 | ring border whole, as in MAME |
+
+- **Issue 38 holds.** The flag view (stage 2, t 1270-1290): 955-1297 px move, all distant edges; the flag's emblem is the same, so `twins` still works.
+- **It can't be done as written: Daytona stage 2's start line goes.** Over the full sets (Daytona stages 0-2 at 52 cameras each, VF2 stages 1 and 3 at 31 each) the largest change is stage 2 frame 2560: 46624 px, the chequered start line and its yellow bands gone under the road. Frame 2440 loses the same line further off (4192 px). The line lies behind the road, not on it, and the sort puts it on top; rule 1 paired it with the road and the group plane drew it there. Lifting a face by its own depth plus a few ulps can't do that. Bigger lifts measured at 2560 / 2440: 2⁻¹⁴ leaves 37385 / 4192 px, 2⁻¹² 3388 / 3194, 2⁻¹⁰ 47 / 723. Even 2⁻¹⁰ of depth, about 8000 ulps, is not enough at 2440, and a lift that size is a depth bias, not "a few ulps". This is the case the rule-1 count foresaw: about 400 Daytona pairs where the face on top lies more than 0.001 behind its partner (120-160 more than 0.05, 10-20 more than 0.25). VF2 has none.
+- **VF2 stage 3 (2160-2400) moves 7000-18000 px** in the floor shadow by the arch. No MAME frame was taken there, so which is right is open.
+
+So the float buffer fixes the two pictures it was meant to fix, but rule 1's group plane is still what draws decals that sit behind their face. Removing rules 1, 4 and 5 needs another way to put such a face on top. That is a rule change, outside item 9, and was not tried.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
@@ -304,7 +322,7 @@ Next (#712), in this order:
 6. **Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
 7. ~~**Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.~~ Measured and rejected (Pinboard #742; see "Rules 6 and 7 in a single segment" in §7). Rule 6 is already union-only, and rule 7 is needed in a single segment.
 8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`. As written, this can't work. `uKeyReach` is 1, twice the 0.5 gap inside which faces are paired at all, so no pair would ever be "beyond the reach". Rules 2 and 3 split at 0.25 and 0.05 because issues 69 and 73 sit at those distances, and rule 7 (issue 83) is a third case of the same kind. A single number would have to be measured anew, not borrowed from the key pass.
-9. **A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it. This is the largest change, and the one with the widest reach.
+9. ~~**A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it.~~ Tried and stopped (Pinboard #755; see "The float depth buffer, tried" in §7). It fixes the tire marks and the ring border, but Daytona stage 2's start line lies behind the road, and own depth plus a few ulps can't put it on top. Branch `float-depth`, not merged.
 10. ~~Virtua Cop's focal from its view record, and its `INTACT` masks from the routines (§8).~~ Done (#94): the focal from the lens routine at 0x1CE30, and the masks from the segment loader.
 
 Still open from the first audit, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
