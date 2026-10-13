@@ -1,6 +1,14 @@
-# Bubblegum fixes: an audit (Pinboard #248)
+# Bubblegum fixes: an audit (Pinboard #248, refreshed #712)
 
-This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. It is the audit of master at `7f17395` (2026-09-30), and nothing in `js/` was changed by it. Line numbers are as of that commit. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. The first audit was of master at `7f17395` (2026-09-30); §1-§6 keep its findings and what each fix did, with line numbers as of that commit. The refresh (Pinboard #712) is of master at `213fb82` (2026-10-12), after Virtua Cop, Virtua Fighter 2, the Cells tab and the Virtua Cop z-fight issues landed; its new findings are §7 and §8, with line numbers as of that commit. Nothing in `js/` was changed by either audit. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+
+## Where things stand (2026-10-12)
+
+Everything the first audit found is fixed or checked, except three things no routine has been read for yet (the finished HOTD's prop lifetimes and enemy routines, and the lone models no routine names; see "Suggested order"). The z-sort flags (§1), the static layer vote (§2), the union heuristics (§3), the fitted ground and horizon (§4), the skips (§5) and the small ones (§6) are all gone or cited.
+
+What has grown back is in the same place §2 cleared: the face layers. Since 2026-10-11 `js/layers.js` has gained seven fitted rules, each from one Virtua Cop stage 3 issue (69, 71, 73, 78, 80, 82, 83), and every one of them applies to every game that has `layers` on: STF, both HOTDs, every Daytona, Virtua Cop and VF2. None was graded on anything but the issue's own view. §7 lists them and what the board's rule under them may be. That is the one cross-game item open, and the one to do next.
+
+The two new games (§8) are mostly read from their routines. What is not is labelled in the code: a few per-type lists from MAME runs and one measured focal in Virtua Cop, and VF2's fight-driven effects, which are switches marked "stand-in".
 
 ---
 
@@ -13,7 +21,7 @@ This file lists the places where the explorer patches a symptom (a list of model
 - the bound, `uZsortRecede` = 12 units (`js/games.js:158`, used at `js/viewer.js:199-206`);
 - the cut-off, "a face deeper than the bound keeps its own depth" (`js/viewer.js:204`), added for Aurora Icefield's ice wedges.
 
-Only Sonic The Fighters uses that bound. Fighting Vipers, both HOTDs and Daytona set `recede: 0` (`js/games.js:481, 775, 1171, 1726`) and rely on the depth buffer plus face layers (§2). Every patch in the table below is STF-only and exists because of those two numbers:
+Only Sonic The Fighters uses that bound (still true at `213fb82`: Virtua Cop and VF2 set `recede: 0` too). Fighting Vipers, both HOTDs and Daytona set `recede: 0` (`js/games.js:481, 775, 1171, 1726`) and rely on the depth buffer plus face layers (§2). Every patch in the table below is STF-only and exists because of those two numbers:
 
 | Patch | Where | Keyed on | Symptom it fixed |
 |---|---|---|---|
@@ -74,6 +82,8 @@ This one is less certain than §1. The depth range left under the plane depth is
 
 *Done (Pinboard #259).* The vote, the window exception, the circle-breaker and the three switches are gone; the grouping stays. `rankLayers` keys each paired face as the board does (near or far corner, or "very far", by its z mode, rounded to the 12-bit-mantissa bucket of `float_to_zval`) from the camera about to draw, puts the later face on top in a tie, and gives each face its longest path up as its layer. That runs on the CPU every frame (well under 1 ms for HOTD's 2262 paired faces and Daytona's 16147), not in the depth bits: a 24-bit step is about 3e-6·z² view units, a quarter of a unit 300 out, which no key could hide under. A copy (`twins`) is now ranked in every game. Graded against MAME, on the pixels the change moved: Casino Night, 61 frames of the board camera, 1.58M pixels nearer MAME and 0.35M further (the blue disc the vote laid over the floor is gone); Flying Carpet changes only the desert, which does not register with MAME; Dinosaur Canyon (349 frames) changes at most 33 pixels a frame, the flags unchanged. HOTD could not be graded: attract keeps no view matrix in main RAM.
 
+*Since then (#712):* the live ranking is no longer the sort alone. Seven rules have been added on top of it for Virtua Cop's stage 3, and they apply to every game with `layers` on. See §7.
+
 ## 3. Drawing every state at once, then filtering
 
 The board draws one zone, one camera block, one phase at a time. The explorer draws the union of all of them so you can fly through the whole stage, which is fair, but the union then needs heuristics to undo the overlaps:
@@ -119,6 +129,48 @@ These skips each hide one known decode bug. Fixing the bug removes the skip, and
 | `bestTextureSet` / `bankTextureSet` | `texture.js` (`programTextureSets`, `bestTextureCombo`), `app.js` (`modelTextureGuess`) | *Checked (#264, then this branch):* derived where the program says, a narrow guess where it does not. **FV:** a fighter's 16 parts come from the character record at `0x640D2B0[char]` (+0 parts, +0x20 set). Player set-up 0x1243C hands the set to 0x4B0FC, and handler 0x4B1C0 loads set N and N+1 into the player's slot. A model whose tiles all lie on boot set 36 (0x4ACBC) takes that set. Of 3462 lone models, 180 are fighter parts, 1591 are on the boot set and 51 are untextured. The other 1589 stay a guess, now limited to sets the board can load together: 1370 lie on the fighters' pages (every fighter's pair lands on the same pages, so nothing says whose), 216 on the stages' pages, and 3 on single-set coverage. **Daytona:** boot loads its bank onto sheet 1 (0x11B8, 0x1454). sel_course picks sheet 0's bank (0x1438, `ld 0x15A0[course*4]`). Of 1390 lone models, 159 are untextured and 913 are on sheet 1 alone, the same on every course. 254 are named by one course's records: a window's other 63 frames and a check point's last-lap list. 64 stay on the opening set as a labelled guess. **HOTD:** the bank rule is the derivation (the stage data and palettes, `games.js`), and it is no longer called a guess. Spawn records agree for 17 bodies spawned under one set. 10 bodies disagree, where the class does not read +0x24 as the body |
 | `DAYTONA_PATCHES` | `games.js:~1431-1470` | m2emulator's ROM fixes, already an opt-in switch (off by default); band-aids by definition, but labelled as such |
 
+## 7. Face layers again: seven rules from one stage (#712)
+
+§2's fix left the layers with one rule: the board's key from this camera, the later face on a tie. Between 2026-10-11 and 2026-10-12 the Virtua Cop issues added seven more. Each is a threshold or a special case fitted to one view of stage 3, and each runs for every game with `depth.layers` on (STF, `hotdp`, `hotdo`, `hotd`, every Daytona build, `vcop`, `vf2`; Fighting Vipers alone has it off, `games.js:532`). None of them was graded on another game, against MAME, or over the 16-stage harness §1 used. Line numbers are as of `213fb82`.
+
+| # | Rule | Where | Fitted on | Applies to |
+|---|---|---|---|---|
+| 1 | `ASKEW` = tan 80°: faces apart are paired as far as they overlap seen within 80° of square on | `layers.js:116`, `411-416` | issue 69, two office wall pieces half a unit apart | every layered game |
+| 2 | `APART` = 0.25: a face that far in front across the whole overlap goes on top from every camera, whatever the key | `layers.js:319`, `inFront` `347-351` | issue 71, a bookcase 0.4 in front of a wall | every layered game |
+| 3 | `SMALL_APART` = 0.05: the same for a face that is smaller than the other | `layers.js:329`, `inFront` | issue 73, books 0.11 in front of a wall | every layered game |
+| 4 | a one-sided face `APART` or more behind its group's plane keeps its own depth | `setPlanes`, `layers.js:452-461` | issue 78, a hall ceiling over a lower one | every layered game |
+| 5 | the slope a layer lifts a face with no plane is capped at that of a face seen about 70° off square on (3 px) | `viewer.js:565-573` | issue 80, a computer case top through a monitor | every layered game |
+| 6 | `laterZone`: faces of draws with no zone in common go the later zone's way; and a circle of pairs is broken by letting go a face that waits only on the sort's pairs | `layers.js:363-367`, `layersFrom`/`letGo` `644-701` | issue 82, the road under the lobby carpet | draws that carry `zones`: Virtua Cop's segments **and HOTD's zones** (`placements.js:579-680`) |
+| 7 | `smallerOnTop`, `SMALLER` = 0.9: of two far-corner faces from draws with different zone sets, less than 0.05 apart, the smaller goes on top | `layers.js:383-395` | issue 83, courtyard gravel on the road | as 6, and in a single HOTD zone too, wherever two draws' zone sets differ |
+
+Two kinds are mixed here.
+
+**Rules 1, 4 and 5 pay for the explorer's own depth trick, not for the board.** A face in a group is drawn at the depth of its group's largest face's plane (`viewer.js:540-583`), which can be as much as the gap (0.5) from where the face is. At a slant that error grows by the tangent of the angle, and each of the three rules limits one way it shows: pairing further (1), dropping the plane for faces well behind it (4), capping the slope (5). The plane is there because a 24-bit depth buffer can't keep a pane 0.0025 behind its wall at a distance (`rankLayers`' note, `layers.js:589-592`). The explorer already writes `gl_FragDepth`, so it could write a reversed or logarithmic depth into a 32-bit float depth buffer instead. Then the step at 300 units out is about 300 × 2⁻²⁴ ≈ 2e-5, far under 0.0025, and a face could keep its own depth plus a few ulps per layer. That would remove the group plane, and with it rules 1, 4 and 5 and the "a 24-bit step is a quarter of a unit" argument in `rankLayers`. Risk: issue 38 (Daytona's flag copies) was about two triangles interpolating a hair apart, not about precision, so the copy rule (`twins`) has to be checked under it, and the render targets (`viewer.js:1419-1425`) need a depth texture of that format in WebGL2.
+
+**Rules 2, 3, 6 and 7 replace the board's answer with the depth buffer's, for cameras the game never uses.** The board keys a whole polygon by one corner, so near a big face's edge it can lose to the face behind it. That is the board's picture, but from where the game's camera never stands. The comment at `layers.js:305-317` says this plainly. Two questions for each:
+
+- *Does it change what a game's own camera sees?* STF and HOTD lean on decals a few hundredths in front of their walls, keyed by the far corner. Rule 3 now puts every such decal that is smaller and 0.05 or more in front on top from every camera, where the board would sometimes put the wall on top. Rule 7 changes HOTD's ordering inside one zone wherever a draw is listed in more zones than its neighbour. This has not been measured. The harness exists: the 16 STF stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras (memory: explorer vs MAME pictures), and Daytona's attract frames. A run of each with the seven rules on and off says which of them move board-camera pixels.
+- *Is there one rule under the four?* §1 already has the explorer's answer for "a camera the board never uses": `Viewer.drawScene`'s `uKeyReach`, where a keyed face only counts within reach of the nearest surface, and true depth decides the rest. Rules 2 and 3 are the same idea per pair with two distances (0.25, 0.05) instead of one. A single "apart by more than the reach, true depth wins" in the ranking, the same number the key pass uses, is the candidate to try first. Rules 6 and 7 are about the union view ("every segment at once"), which §3 left as a plain union with no filtering for HOTD. In a single-segment view the draws are the board's own list, so the sort is the picture there and neither rule should be needed. Gating both on the union view, and checking whether issue 83 was seen in a single segment, would show whether 7 is needed at all.
+
+Until it is measured, these are the explorer's newest bubblegum and the one item here that crosses games.
+
+## 8. The new games (#712)
+
+**Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
+
+| What | Where | Note |
+|---|---|---|
+| `INTACT` | `vcop.js:139` | how many parts of a breakable object stand whole, per type: three (types 0, 1, 3) from a MAME run's mask, two (0x26, 0x27) from their routines' masks. Reading the mask each type's routine sets would cover the types no stage list reaches |
+| `IN_WORLD`, `SCRIPTS`, `GLINTS` | `vcop.js:133-149` | per-type sets, each with its reason cited; `IN_WORLD` includes 0x24, "a pair no list places", from MAME draws. Small, and each line names the routine |
+| `REST_Y` | `vcop.js:153` | one crate's resting height, from the routine at 0x37500. Cited |
+| `BOARD_FOCAL` = 1180 | `vcopsky.js:68` | measured from a MAME frame, not read. Daytona's focal comes from the view record (0x501730/0x501734, §4); Virtua Cop is a Daytona-family program, so its view record is the place to look |
+| `CLOUDLESS_STAGE`/`FROM` | `vcop.js:244-245` | the high-rise drops the clouds from its third segment; the routine that drops them isn't cited |
+| `paletteFixes` | `games.js:2615` | the boot's own palette writes (commit `1ed1c25`), not a patch |
+
+**Virtua Fighter 2** (`vf2.js`, `vf2fx.js`, `vf2fighters.js`) is cited almost line by line. The approximations are labelled as such. The fight-driven effects (Souseiji's corner falls, the burst, the bubbles, the stone that flies) are switches named "stand-in", because what sets them off is fight state the explorer doesn't run. The Colosseum's lightning uses a seeded generator, because the board's random number adds hardware counters (`vf2.js:268-273`). The head always looks at the opponent, and the chest twist is left out, both said in `vf2fighters.js:74-77`. The Great Wall's banners turned `layers` on for VF2 (issue 87, `games.js:2793-2796`), so VF2 now runs every rule in §7.
+
+**The Cells tab** (`cells.js`) picks a cell's CG by the game's own lists where it names one. Where it doesn't, it falls back to tile coverage and then `seamScore`, a picture heuristic (`cells.js:309-364`). That is labelled in the code and only orders a picker.
+
 ## Checked and clean
 
 These look like magic numbers but cite the routine or a MAME measurement, and should stay: `SOUTH_ISLAND_CAGE_CORNERS`, `EGGMAN_DOORS`, `MUSHROOM_RINGS`, `FRAME_TABLES`, `CANYON_SLOPE_DIV` (display.js); the `colors.js` constants from sub_74C; `AREA_REACH`, `SLOT_REELS`, `BIRD_RADIUS` (daytona.js); `TAILS_LAB_VECTER_Y`; `partDraws` (a port of sub_764C0); `RAW_MIP_RECTS`; `osage.js`'s gravity and damping; `exhaust.js`'s chest slots; `zanzou.js`'s spacing (checked against 901 MAME captures). The placement opcode sets in `placements.js:50-61` are the stage-script VM's operand lengths.
@@ -131,6 +183,14 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 4. ~~**Live key ranking in face layers (§2).**~~ Done (Pinboard #259), graded on STF and Daytona.
 5. ~~**A current-zone/block state (§3) and the TGP ground query (§4).**~~ Done (#260, #261).
 
-Still open, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
+Next (#712), in this order:
+
+6. **Measure §7's seven rules** with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
+7. **Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.
+8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`.
+9. **A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it. This is the largest change, and the one with the widest reach.
+10. Virtua Cop's focal from its view record, and its `INTACT` masks from the routines (§8). Small, one game.
+
+Still open from the first audit, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
 
 Merging master (Pinboard #440): master's issue 58 fix for Tails' lab's posters (`keepFar`'s layer -1 floor and `leaveApart`'s reordering, `dadf307`, `2f800f0`) was written for the static vote that §2 removed, so it went with it. With the live ranking the issue 58 view renders clean on the RTX 3070 and under SwiftShader. It was not clean, though: two palm trees stood on the world-map poster that master does not show (Pinboard #441). They are model 3798, drawn by `adv_movie_snc_disp` outside the lab, 150 units behind the room's back wall. The board never draws them inside: `adv_movie_snc_disp2` draws the room without them, and MAME's attract run shows the poster bare from the board's own camera. The cause was the key pass itself. `drawScene` left the key texture bound after pass 3, so from the second frame on pass 1 drew into the texture its own program samples, and WebGL dropped every one of those draws as a feedback loop. The key texture held only its clear, no face was held to `uKeyReach`, and window 4 (the palms, the hangar) was drawn over window 3 (the room) wherever it lay behind it. Separately, the clear was zeros rather than "no surface" (view z -1e9), because three.js premultiplies the clear colour by its alpha of 0; that only matters to the mirrored-draw test, and changes 13 pixels on an Aurora view of the ice. Both are fixed: the placeholder goes back after pass 3, and the clear's alpha is 1. The picture is now what a single `drawScene` on a fresh page gave all along (identical on issue 46, within run-to-run noise on the stage views), which is what a grader rendering one frame per page saw. Pixels changed against the branch, with a second render of the branch as the noise floor: issue 58 1.1k (the palms), issue 46 238k (noise 0: the outside's hangar door, roof edge and dish no longer cover the room), issue 44 91k (noise 11k, the dish and the roof edge gone). On the 16 stages' default orbit views, cameras the board never uses: Final Eggman Boss 11k (noise 2k), Aurora 9k (noise 0.2k), Stage 8 3k (0.7k), under 2k each elsewhere. The RTX 3070 and SwiftShader agree.
