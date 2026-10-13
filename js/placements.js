@@ -765,6 +765,11 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
          * several — see the all-placements stage in readPlacementStages. */
         set: zone ? zone.set : d.set,
         ...(d.block != null ? { block: d.block } : {}),
+        /* A draw a switch shows or hides, and one the camera picks
+         * (Virtua Fighter 2's effects, js/vf2fx.js). */
+        ...(d.extra ? { extra: d.extra } : {}),
+        ...(d.unless ? { unless: d.unless } : {}),
+        ...(d.live ? { live: d.live } : {}),
         /* A draw that carries its own transform keeps it — Virtua Cop's,
          * three turns each (js/vcop.js). */
         ops: d.ops ?? [['t', [d.pos[0], d.pos[1], -d.pos[2]]],

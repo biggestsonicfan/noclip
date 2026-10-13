@@ -141,6 +141,9 @@ const state = {
      * cuts. */
     easeChain: true,
     layerOn: Object.fromEntries(LAYER_ORDER.map((k) => [k, true])),
+    /* The stage's switches (`extras`, js/vf2fx.js) the user has flipped, by
+     * key; one not here is as the stage starts it. */
+    extraOn: {},
     wireframe: false,
     modelCache: new Map(),
     /* The scroll layer's sky, decoded once per stage and kept: slot ->
@@ -727,10 +730,39 @@ function stageView(stage) {
  * there are none to apply here.
  */
 function stageDisplayList(stage, view = stageView(stage)) {
-    if (stage.placements) return buildPlacementDisplayList(stage, getModel, state.objectMode, view);
+    if (stage.placements) {
+        return buildPlacementDisplayList(stage, getModel, state.objectMode, view)
+            .filter((d) => (!d.extra || extraOn(stage, d.extra)) && !(d.unless && extraOn(stage, d.unless)));
+    }
     return state.rom.game.stageTable.flat
         ? buildFlatDisplayList(stage)
         : buildStageDisplayList(stage, state.frames);
+}
+
+/*
+ * The stage's switches: what the stage view leaves out unless asked, each a
+ * checkbox that rebuilds the stage with it in or out.
+ */
+function renderStageExtras(stage) {
+    const box = $('#stage-extras');
+    $('#extras-field').hidden = !stage.extras?.length;
+    box.innerHTML = '';
+    for (const x of stage.extras ?? []) {
+        const row = el('label', 'layer', `<input type="checkbox" ${extraOn(stage, x.key) ? 'checked' : ''}>
+             <span></span>`);
+        row.title = x.title;
+        row.querySelector('span').textContent = x.label;
+        row.querySelector('input').addEventListener('change', (e) => {
+            state.extraOn[x.key] = e.target.checked;
+            loadStage(state.stageIndex, { keepCamera: true, keepClock: true });
+        });
+        box.appendChild(row);
+    }
+}
+
+/* Whether a stage's switch is on: as the user left it, or as the stage starts. */
+function extraOn(stage, key) {
+    return state.extraOn[key] ?? stage.extras?.find((x) => x.key === key)?.on ?? false;
 }
 
 /*
@@ -1488,12 +1520,12 @@ function stepSky() {
 
 /* ---- Stage view ---------------------------------------------------------- */
 
-function loadStage(slot, { keepCamera = false } = {}) {
+function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
     const v = state.viewer;
     const stage = state.stages[slot];
     if (!stage) return;
     state.stageIndex = slot;
-    resetStageAnimation();
+    resetStageAnimation(keepClock);
     playStageMusic();
     v.clear();
 
@@ -1794,7 +1826,7 @@ function setRideStage(on) {
 
 /* Drop the animation state, and the frames it decoded, whenever the scene is
  * torn down — the other two views clear the same root. */
-function resetStageAnimation() {
+function resetStageAnimation(keepClock = false) {
     const a = state.anim;
     disposeEggLabFootage();
     for (const g of a.geom.values()) { g.mesh.dispose(); g.edges.dispose(); }
@@ -1804,7 +1836,8 @@ function resetStageAnimation() {
     a.blocks = [];
     a.phases = [];
     a.liveCam = null;
-    a.start = performance.now();
+    /* A stage rebuilt for a switch goes on where its round was. */
+    if (!keepClock) a.start = performance.now();
     a.frame = -1;
 }
 
@@ -3340,6 +3373,7 @@ function renderStagePanel(stage, counts, totals, list) {
         });
         layers.appendChild(row);
     }
+    renderStageExtras(stage);
 
     const parts = $('#stage-parts');
     parts.innerHTML = '';

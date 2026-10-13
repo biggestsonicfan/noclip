@@ -36,7 +36,8 @@
  * Flag bit 3 is the raft (0x20054): eight logs under the ring scale, from a
  * list the fight breaks up as fighters near the edge (0x1D6D0 fills it whole),
  * and ten more planks from 0x150 of the stage state (0x1D824), 2.2 apart,
- * then model 0x764. Flag bit 12 draws model 0x8FF and nothing else (stage 15).
+ * then model 0x764. Both lists are the river's shade, not the fight's (see
+ * RAFT_SHADE). Flag bit 12 draws model 0x8FF and nothing else (stage 15).
  *
  * The raft also moves, and the frame counts kept for it start at zero when the
  * stage is set up (0x1FE78). Under flag bit 3 the river goes by: 0x1D530 takes
@@ -59,6 +60,7 @@
 
 import { gameLighting, stageLight } from './stages.js';
 import { buildVf2Sky, buildVf2StormSky } from './scroll.js';
+import { vf2KindExtras } from './vf2fx.js';
 
 const RECORD_BYTES = 256;
 const EMPTY = 0xffff;
@@ -83,6 +85,7 @@ const FLAG_ALT = 1 << 6;
 const FLAG_RAFT = 1 << 3;
 const FLAG_MIRROR = 1 << 5;
 const FLAG_ONLY = 1 << 12;
+const ONLY_MODEL = 0x8ff;
 /* The second look's lists, which the alternate reads index without the stage. */
 const ALT_LISTS = 0x6fe38;
 const ALT_RINGS = 0x64;
@@ -126,6 +129,95 @@ export function raftRoll(t) {
     return Math.trunc(ROLL_SWELLS.reduce((sum, [k, step, phase]) => sum + k * boardSin(t * step + phase), 0));
 }
 
+/*
+ * The shade the raft drifts under (0x1D66C). Each frame the raft's reach along
+ * the river, the river (0x50A014) less and plus its half length times the
+ * roll's cosine (0x1FBB4: the ring setting for the logs, 11 for the planks),
+ * is tested against two bands of the bank, [-22, -12] and then [-70, -60].
+ * Out of both, the lists are the intact ones. In one, the band's part over the
+ * raft, back in the raft's own length ((x - river) / cos roll), is handed to
+ * 0x1FACC, which walks the pieces from one end, each a stretch of the raft and
+ * a table of models, u32s: the band missing the piece takes entry 0; starting
+ * in it, entry `cut` + its start in steps of `step`; covering it, `cut`;
+ * ending in it, its end in steps. Those are the log or plank cut where the
+ * shade falls. A log whose model is not a whole one is drawn over the whole one
+ * (0x20118): 0x6A6 at the ends, 0x6FF between.
+ */
+const RAFT_SHADE = {
+    bands: [[-22, -12], [-70, -60]],
+    logs: { tables: 0x6e648, from: -5.95, end: -4.8, step: 1.6, count: 8, unit: 0.05, cut: 32 },
+    planks: { tables: 0x6e998, from: -10.95, end: -8.8, step: 2.2, count: 10, unit: 0.05, cut: 44, size: 11 },
+    whole: [[0x68e, 0x6a6], [0x6bf, 0x6ff, 0x6df, 0x71f]],
+    under: [0x6a6, 0x6ff],
+};
+
+const RAFT_SHADE_SWITCH = {
+    key: 'raftShade', label: 'river shade',
+    title: 'The logs and planks cut where the bank\'s shade falls on them as the river carries the raft (0x1D66C); off, the raft whole',
+    on: true,
+};
+
+/* The band over the raft on frame t, in the raft's own length, or null. */
+function shadeBand(t, size) {
+    const river = RIVER_STEP * t;
+    const cos = Math.cos((raftRoll(t) * 2 * Math.PI) / 0x10000);
+    const lo = river - size * cos, hi = river + size * cos;
+    const band = RAFT_SHADE.bands.find(([a, b]) => lo <= b && hi > a);
+    if (!band) return null;
+    return [Math.max(lo, band[0]), Math.min(hi, band[1])].map((x) => (x - river) / cos);
+}
+
+/* Which entry of its table a piece from g0 to g1 takes under the band. */
+function shadeEntry([g5, g6], g0, g1, unit, cut) {
+    if (g0 >= g6 || g1 <= g5) return 0;
+    if (g0 < g5) return cut + Math.round((g5 - g0) / unit);
+    return g1 <= g6 ? cut : Math.round((g6 - g0) / unit);
+}
+
+/* Each piece's entry, frame by frame through the round: [piece][frame]. */
+function shadeEntries(list, size, scale) {
+    const out = Array.from({ length: list.count }, () => new Uint8Array(ROUND_FRAMES));
+    for (let f = 0; f < ROUND_FRAMES; f++) {
+        const band = shadeBand(f + 1, size);
+        if (!band) continue;
+        let g0 = list.from * scale, g1 = list.end * scale;
+        for (let i = 0; i < list.count; i++) {
+            out[i][f] = shadeEntry(band, g0, g1, list.unit * scale, list.cut);
+            [g0, g1] = [g1, g1 + list.step * scale];
+        }
+    }
+    return out;
+}
+
+/* A piece's models as an animation: the entries it takes, in order of use. */
+function shadeAnim(rom, table, entries, model = (m) => m) {
+    const used = [...new Set(entries)];
+    const frames = used.map((e) => model(u32(rom, table + e * 4)));
+    const at = new Map(used.map((e, i) => [e, i]));
+    const index = new Uint16Array(entries.length).map((_, f) => at.get(entries[f]));
+    return { frames, index: (f) => index[f % ROUND_FRAMES] };
+}
+
+/* The shaded raft as [model, layer, ops, anim] pieces, logs then planks. */
+function raftShadePieces(rom, ringSize) {
+    const R = RAFT_SHADE, s = ringSize / RING_UNIT;
+    const pieces = [];
+    const logs = shadeEntries(R.logs, ringSize, s);
+    logs.forEach((entries, i) => {
+        const table = u32(rom, R.logs.tables + i * 4), end = i === 0 || i === 7 ? 0 : 1;
+        const under = (m) => (R.whole[end].includes(m) ? 0 : R.under[end]);
+        pieces.push([R.under[end], 'platform', scaled(s, RAFT_LOG_X[i]), shadeAnim(rom, table, entries, under)]);
+        pieces.push([RAFT_LOGS[i], 'platform', scaled(s, RAFT_LOG_X[i]), shadeAnim(rom, table, entries)]);
+    });
+    const planks = shadeEntries(R.planks, R.planks.size, 1);
+    planks.forEach((entries, i) => {
+        const table = u32(rom, R.planks.tables + i * 4);
+        const x = -RAFT_PLANK_X0 + i * RAFT_PLANK_STEP;
+        pieces.push([RAFT_PLANKS[i], 'platform', [['t', [x, 0, 0]]], shadeAnim(rom, table, entries)]);
+    });
+    return pieces;
+}
+
 /* A piece's ops with the raft's motion in front of them, as a function of the
  * frame; ops unchanged where the stage does not move. The roll is an ang_z by
  * the negated angle, which the viewer takes as it stands (see angZ in
@@ -145,7 +237,7 @@ function raftMotion(flags, layer, ops = []) {
  * hook 0x30E74 draws one model at the stage's origin: the u16 at
  * 0x70FBC[(frame >> 1) & 0xFF], 256 frames of blown leaves and dust drawn
  * once each, so the gust takes 512 frames to come round; -1 draws nothing.
- * The same kind's 0x30EAC is a burst the fight sets off, left out.
+ * The same kind's 0x30EAC is a burst the fight sets off, a switch (js/vf2fx.js).
  */
 const KIND_TOURIN = 12;
 const WIND = { at: 0x70fbc, count: 256, shift: 1 };
@@ -157,7 +249,7 @@ const WIND = { at: 0x70fbc, count: 256, shift: 1 };
  * That is the stone at rest. Once the fight sets bit 1 of +0x40 (the round's
  * end at 0xF700, or the 0x500700 bits at 0x313FC), 0x311B8 pushes it about
  * by a fighter's place and 0x31188 runs 0x70CBC[0x500020 & 31], the power-on
- * frame counter; both are fight state, left out.
+ * frame counter: the "stone flies" switch (js/vf2fx.js), which hides this.
  */
 const KIND_STONES = 5;
 const STONE = { at: 0x70cbc, pos: [6, 4.7, 18.5] };
@@ -265,11 +357,13 @@ function stageName(rom, colors) {
 
 const scaled = (s, x = 0) => [['s', [s, 1, s]], ['t', [x, 0, 0]]];
 
-/* The raft's logs, under the ring scale, and its planks after them. */
+/* The raft's logs, under the ring scale, and its planks after them, whole:
+ * what the shade's switch puts back (see RAFT_SHADE). */
 function raftPieces(s) {
+    const whole = { unless: 'raftShade' };
     return [
-        ...RAFT_LOGS.map((m, i) => [m, 'platform', scaled(s, RAFT_LOG_X[i])]),
-        ...RAFT_PLANKS.map((m, i) => [m, 'platform', [['t', [RAFT_PLANK_X0 - i * RAFT_PLANK_STEP, 0, 0]]]]),
+        ...RAFT_LOGS.map((m, i) => [m, 'platform', scaled(s, RAFT_LOG_X[i]), null, whole]),
+        ...RAFT_PLANKS.map((m, i) => [m, 'platform', [['t', [RAFT_PLANK_X0 - i * RAFT_PLANK_STEP, 0, 0]]], null, whole]),
         [RAFT_TAIL, 'platform'],
     ];
 }
@@ -278,8 +372,8 @@ function raftPieces(s) {
  * Each is [model, layer, ops?]; without ops it stands at the origin. */
 function stagePieces(rom, base, lists, ringSize, rings = base + RINGS) {
     const flags = u32(rom, base + FLAGS);
-    /* Stage 15's one model has nothing to see in it; it is left out. */
-    if (flags & FLAG_ONLY) return [];
+    /* Stage 15 draws its one model and nothing else (0x20078). */
+    if (flags & FLAG_ONLY) return [[ONLY_MODEL, 'scenery']];
     const s = ringSize / RING_UNIT;
     const pieces = [
         ...modelList(rom, lists + SCENERY.at, SCENERY.count).map((m) => [m, 'scenery']),
@@ -311,15 +405,39 @@ function stormPieces(rom, base, ringSize, storm) {
     });
 }
 
-/* The kind's own draws after the fighters, as [model, layer, ops, anim]. */
+/* The kind's own draws after the fighters, as [model, layer, ops, anim, tags]. */
 function kindPieces(rom, kind) {
     if (kind === KIND_STONES) {
         const [x, y, z] = STONE.pos;
-        return [[u16(rom, STONE.at), 'scenery', [['t', [x, y, -z]]]]];
+        return [[u16(rom, STONE.at), 'scenery', [['t', [x, y, -z]]], null, { unless: 'stoneFlies' }]];
     }
     if (kind !== KIND_TOURIN) return [];
     const frames = modelList(rom, WIND.at, WIND.count).map((m) => (m === EMPTY ? 0 : m));
     return [[frames.find((m) => m), 'scenery', undefined, { frames, shift: WIND.shift, phase: 0 }]];
+}
+
+/* A stage's draws, and the switches over the ones left out unless asked. */
+function stageDraws(rom, base, { set, flags, storm, alt, ringSize }) {
+    const t = rom.game.modelTable;
+    const kind = rom.mainCpuView.getUint8(base + KIND);
+    const raft = !alt && flags & FLAG_RAFT && u16(rom, base + EXTRA) !== EMPTY;
+    const pieces = [
+        ...(storm ? stormPieces(rom, base, ringSize, storm) : lookPieces(rom, base, ringSize, alt)),
+        ...(raft ? raftShadePieces(rom, ringSize).map((p) => [...p, { extra: 'raftShade' }]) : []),
+        ...kindPieces(rom, kind),
+    ].filter(([m]) => m !== EMPTY && m < t.count);
+    const draws = pieces.map(([model, layer, ops, anim, tags]) => {
+        const moved = raftMotion(flags, layer, ops);
+        if (anim) anim.frames = anim.frames.map((m) => (m < t.count ? m : 0));
+        return {
+            model, pos: [0, 0, 0], set, layer, ...tags,
+            ...(moved ? { ops: moved } : {}), ...(anim ? { anim } : {}),
+        };
+    }).filter((d) => !d.anim || d.anim.frames.some((m) => m));
+    const fx = alt ? { extras: [], draws: [] } : vf2KindExtras(rom, kind, (m) => m > 0 && m < t.count);
+    const extras = [...(raft ? [RAFT_SHADE_SWITCH] : []), ...fx.extras];
+    draws.push(...fx.draws.map((d) => ({ pos: [0, 0, 0], set, ...d })));
+    return { draws, extras };
 }
 
 function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
@@ -327,19 +445,10 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
     const base = T.at + n * RECORD_BYTES;
     const set = u32(rom, base + TEX_SET);
     const colors = u32(rom, base + COLOR_BLOCK);
-    const t = rom.game.modelTable;
     const flags = u32(rom, base + FLAGS);
     const storm = !alt && flags & FLAG_ALT && u32(rom, SKY_FRAME_ROUTINE(n)) === STORM_SKY
         ? stormSchedule(rom) : null;
-    const pieces = [
-        ...(storm ? stormPieces(rom, base, ringSize, storm) : lookPieces(rom, base, ringSize, alt)),
-        ...kindPieces(rom, rom.mainCpuView.getUint8(base + KIND)),
-    ].filter(([m]) => m !== EMPTY && m < t.count);
-    const draws = pieces.map(([model, layer, ops, anim]) => {
-        const moved = raftMotion(flags, layer, ops);
-        if (anim) anim.frames = anim.frames.map((m) => (m < t.count ? m : 0));
-        return { model, pos: [0, 0, 0], set, layer, ...(moved ? { ops: moved } : {}), ...(anim ? { anim } : {}) };
-    });
+    const { draws, extras } = stageDraws(rom, base, { set, flags, storm, alt, ringSize });
     const tint = [0, 1, 2].map((i) => rom.mainCpuView.getUint8(base + TINT + i) / UNIT_TINT);
     const light = stageLight(rom.mainCpuView.getFloat32(base + BRIGHT, true),
         rom.mainCpuView.getInt16(base + VECTER, true), rom.mainCpuView.getInt16(base + VECTER + 2, true));
@@ -355,6 +464,8 @@ function stageOf(rom, lit, n, { alt = false, ringSize } = {}) {
         name: alt ? `${name} (second look)` : name,
         chapter: n,
         draws,
+        /* The switches for what is left out unless asked (js/vf2fx.js). */
+        extras,
         objects: [],
         sky: null,
         /* The tile layer's panorama (js/scroll.js). */
@@ -393,7 +504,7 @@ function vf2Panorama(rom, n, cxlat, storm) {
 /* What a stage draws, to tell the copies (11 of 10, 13 of 9, 14 of 1) from
  * the stages: they differ only in bytes the draw never reads. */
 function drawKey(stage) {
-    return `${stage.texSet}|${stage.draws.map((d) => d.model).join()}`;
+    return `${stage.texSet}|${stage.draws.map((d) => d.model).join()}|${stage.extras.map((x) => x.key).join()}`;
 }
 
 /**
