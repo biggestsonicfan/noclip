@@ -62,10 +62,13 @@ const SEA_ROWS = 32;
 const TURN_LAYERS = 6;
 const VIEW_CENTRE_COL = 248;
 const CHAR_MASK = 0x3fff;
-/* The 3D's focal in lines, which is the 384-line picture over an 18.5 degree
- * field of view: measured, a MAME frame against the explorer from the same
- * camera (0x50F460). */
-const BOARD_FOCAL = 1180;
+/* The 3D's focal in pixels, as 0x1CE30 works it out for the GEO's focal
+ * command each frame: 248 / tan(fov / 2), half the 496-pixel width over the
+ * field of view across at 0x50F3F4. That rests at 30 degrees (0x1CD0C, and
+ * 0x10700 sets the same 925.5 outright), which a MAME run of the attract
+ * holds from frame 240 on except while the demo zooms onto a target. */
+const BOARD_FOV = 30;
+const BOARD_FOCAL = VIEW_CENTRE_COL / Math.tan((BOARD_FOV / 2) * (Math.PI / 180));
 
 function u16(rom, addr) {
     const o = addr - MAIN_DATA_BASE;
@@ -181,8 +184,8 @@ export function buildVcopSky(rom, stage, cxlat = null) {
         width, height, rgba,
         horizon: LAYER_TILES * 8,
         /* Up at the board's focal: the layer is in screen space, a line a
-         * row, with the eye line where the 3D's is, and Virtua Cop's lens
-         * never zooms. */
+         * row, with the eye line where the 3D's is. The lens the 3D has at
+         * rest; the layer's scroll doesn't follow the zoom. */
         focal: BOARD_FOCAL,
         centre: VIEW_CENTRE_COL,
         topColor: Array.from(rgba.subarray(0, 3)),

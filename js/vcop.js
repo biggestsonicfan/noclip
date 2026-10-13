@@ -132,10 +132,13 @@ const MAX_PARTS = 32;
  * camera's turns at 0x50F450 each frame, nothing that stands anywhere. */
 const GLINTS = new Set([0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54]);
 /* The objects that break, and how many of their parts stand whole: the rest
- * are the pieces they fly into, which the routine hides until then. A drum is
- * its body and its shadow (a MAME run's mask, 3, 18 parts); the slab on stage
- * 3's roof (0x26) its first part, the 24 bits of it hidden (0x44D40's mask,
- * 1); and 0x27 up there its first ten (0x453C0's mask once it comes, 0x3FF). */
+ * are the pieces they fly into, which the routine hides until then. A segment's
+ * loader (0x31600) sets the mask of types 0, 1 and 3 to 3 after the spawn
+ * (0x31768, 0x317A8, 0x317EC): a drum is its body and its shadow, 18 parts in
+ * all, which its routine (0x33370) later turns to 6. The slab on stage 3's
+ * roof (0x26) is its first part, the 24 bits of it hidden (0x44D40's mask, 1);
+ * and 0x27 up there its first ten (0x453C0's mask once it comes, 0x3FF). The other types a MAME run of the attract spawns keep every part
+ * (0x31CA0's mask). */
 const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x26, 1], [0x27, 10]]);
 /* The scripts: a record that stands for an event — the helicopter that comes
  * over (0x38F10 spawns it at 0x4F060) — and draws none of its own parts where
