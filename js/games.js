@@ -2764,7 +2764,7 @@ const daytonagtx = daytonaBuild({
  *             found from the program rather than the other way round: this
  *             game names a model by number. `lda 0x24C8000[g0*16]` for up to
  *             0x4D1 and `lda 0x28693F0[g0*16]` past it, the second table
- *             starting where the first stops counting (see `extra`).
+ *             starting where the first stops counting (`past`), up to 0x4E2.
  */
 const vcop = {
     ...daytonaBuild({
@@ -2820,7 +2820,12 @@ const vcop = {
     /* Four words and no terminator: {oba, tpa, tha, count}, written to the
      * engine as tpa, tha, oba, count like Daytona's. Model 0, the van, has its
      * texture records at the very start, so a tha of 0 is one. */
-    modelTable: { offset: 0x4c8000, count: 0x4d2, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true },
+    modelTable: {
+        offset: 0x4c8000, count: 0x4e3, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true,
+        past: { from: 0x4d2, offset: 0x8693f0 },
+        /* The 0x800 words uploaded to texture RAM 0x4000 at game start. */
+        textureRam: { at: 0x81d3de, from: 0x4000 },
+    },
     colors: { luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true },
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
