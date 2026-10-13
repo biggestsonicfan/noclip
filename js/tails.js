@@ -55,6 +55,7 @@
  */
 
 import { turnedBy } from './pose.js';
+import { progAddr } from './romset.js';
 
 /* The slot the pair is drawn on, and so the frame the offset below is in. */
 export const PELVIS_SLOT = 9;
@@ -85,8 +86,9 @@ export const SPLAY = 0x1000;
  * @returns {?{cycleAddr:number, blurAddr:number, cycle:number[], blur:number[]}}
  */
 export function readTails(rom, charIndex) {
-    const t = TAIL_TABLES[charIndex];
-    if (!t) return null;
+    const tables = TAIL_TABLES[charIndex];
+    if (!tables) return null;
+    const t = { cycle: progAddr(rom, tables.cycle), blur: progAddr(rom, tables.blur) };
     const dv = rom.mainCpuView;
     if (t.cycle + CYCLE_LENGTH * 2 > rom.maincpu.length) return null;
     const cycle = [];

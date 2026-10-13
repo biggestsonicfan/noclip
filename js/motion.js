@@ -40,7 +40,7 @@
  * targets the pose engine solves against — see `js/pose.js`.
  */
 
-import { xtraToMainData, XTRA_DATA_BASE, MAIN_DATA_BASE } from './romset.js';
+import { xtraToMainData, XTRA_DATA_BASE, MAIN_DATA_BASE, progAddr } from './romset.js';
 
 export const MOTION_LIST_ADDR = 0x06400004;
 export const MOTION_COUNT = 519;
@@ -77,7 +77,7 @@ const MOT_LIST_ADDR = 0x000ce380;
 export function motionSkeletonType(rom, id) {
     const dv = rom.mainCpuView;
     if (id < 0 || id >= MOTION_COUNT) return 0;
-    const rec = dv.getUint32(MOT_LIST_ADDR + id * 4, true);
+    const rec = dv.getUint32(progAddr(rom, MOT_LIST_ADDR) + id * 4, true);
     if (!rec || rec + 0x0d > rom.maincpu.length) return 0;
     return dv.getUint8(rec + 0x0c);
 }
@@ -121,7 +121,7 @@ const MOT_RECORD_HEAD = 0x0d;
 export function readMotionScript(rom, id) {
     const m = rom.maincpu, dv = rom.mainCpuView;
     if (id < 0 || id >= MOTION_COUNT) return [];
-    const rec = dv.getUint32(MOT_LIST_ADDR + id * 4, true);
+    const rec = dv.getUint32(progAddr(rom, MOT_LIST_ADDR) + id * 4, true);
     if (!rec || rec + MOT_RECORD_HEAD >= m.length) return [];
 
     let p = rec + MOT_RECORD_HEAD;
@@ -140,7 +140,7 @@ export function readMotionScript(rom, id) {
         const op = m[p] & 0x7f;
         if (op === 0 || op >= PLAY_OPS) break;
         out.push({ op, frame: dv.getUint16(p + 1, true), at: p });
-        p += m[PLAY_LENGTHS + op];
+        p += m[progAddr(rom, PLAY_LENGTHS) + op];
     }
     return out;
 }
@@ -164,7 +164,7 @@ const SETUP_TIMING = 0x02;
 export function readMotionTiming(rom, id) {
     const m = rom.maincpu, dv = rom.mainCpuView;
     if (id < 0 || id >= MOTION_COUNT) return null;
-    const rec = dv.getUint32(MOT_LIST_ADDR + id * 4, true);
+    const rec = dv.getUint32(progAddr(rom, MOT_LIST_ADDR) + id * 4, true);
     if (!rec || rec + MOT_RECORD_HEAD >= m.length) return null;
     for (let p = rec + MOT_RECORD_HEAD; p + 7 <= m.length;) {
         const op = m[p];

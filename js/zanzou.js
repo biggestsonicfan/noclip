@@ -61,6 +61,7 @@
 
 import { readMotionScript, motionSkeletonType, commandsBy } from './motion.js';
 import { coproSin, coproCos } from './pose.js';
+import { progAddr } from './romset.js';
 
 const TRAIL_OP = 0x26;
 /* `send_zanzou_data` sets zanzou_ma to 0.1 and writes 3 into DM 0x32182, the
@@ -114,9 +115,9 @@ export function readTrails(rom, motionId, charIndex, { squished = false } = {}) 
 export function trailTables(rom, charIndex, skel) {
     const dv = rom.mainCpuView;
     const inRom = (a) => a > 0 && a + 4 <= rom.maincpu.length;
-    const boneTable = dv.getUint32(BONE_LENGTH_TABLES + skel * 4, true);
+    const boneTable = dv.getUint32(progAddr(rom, BONE_LENGTH_TABLES) + skel * 4, true);
     const bone = inRom(boneTable) ? dv.getFloat32(boneTable + charIndex * 4, true) : 0;
-    const modelTable = dv.getUint32(MODEL_TABLES + skel * 4, true);
+    const modelTable = dv.getUint32(progAddr(rom, MODEL_TABLES) + skel * 4, true);
     const entries = inRom(modelTable) ? dv.getUint32(modelTable + charIndex * 4, true) : 0;
     const models = [];
     for (let p = 0; p < PART_COUNT; p++) {

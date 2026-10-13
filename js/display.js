@@ -40,6 +40,8 @@
  * is what lets the viewer scrub or pause one. See readFrameTables below.
  */
 
+import { progAddr } from './romset.js';
+
 /* stage_x is set to 8.0 wherever the game enters a stage, and never varies. */
 const STAGE_X = 8.0;
 /* cage_display divides cage_height by this to get its Y scale; cage_height is
@@ -96,21 +98,22 @@ const PROPELLER_BLADE = [2863, 2846];
 export function readFrameTables(rom) {
     const dv = rom.mainCpuView;
     const out = {};
-    for (const [name, [addr, count, size]] of Object.entries(FRAME_TABLES)) {
+    for (const [name, [table, count, size]] of Object.entries(FRAME_TABLES)) {
+        const addr = progAddr(rom, table);
         out[name] = Array.from({ length: count }, (_, i) => (size === 4
             ? dv.getUint32(addr + i * 4, true)
             : dv.getUint16(addr + i * 2, true)));
     }
     out.blade = PROPELLER_BLADE.slice();
     out.labScreen = labScreenTable(out.labScreens);
-    out.eggWindows = readEggLabWindows(dv);
+    out.eggWindows = readEggLabWindows(rom);
     /* Not a run of model ids but the records the ice pillars are built from —
      * read here so a stage is still built out of one pass over the ROM. */
     out.pillars = readIcePillars(rom);
     /* Nor are these: the texture points the two overrides replace outright —
      * see AURORA_SCROLL and BOSS_FLOOR_SCROLL. */
-    out.auroraPoints = readTexturePoints(rom, AURORA_POINTS);
-    out.bossFloorPoints = readTexturePoints(rom, BOSS_FLOOR_POINTS);
+    out.auroraPoints = readTexturePoints(rom, progAddr(rom, AURORA_POINTS));
+    out.bossFloorPoints = readTexturePoints(rom, progAddr(rom, BOSS_FLOOR_POINTS));
     /* Nor is this: the script Canyon Cruise flies, the heading it flies at and
      * the canyon it flies through — see readCanyonFlight. */
     out.canyon = readCanyonFlight(rom);
@@ -419,9 +422,10 @@ function eggLabClock(frame) {
  * projects about, in the board's 496x384 picture, y running down. set_window
  * turns y the other way (383 - y) on its way to the GEO.
  */
-function readEggLabWindows(dv) {
+function readEggLabWindows(rom) {
+    const dv = rom.mainCpuView;
     return EGG_LAB_WINDOWS.map(({ rect }) => {
-        const s = (i) => dv.getUint16(rect + i * 2, true);
+        const s = (i) => dv.getUint16(progAddr(rom, rect) + i * 2, true);
         return { y1: s(0), x0: s(1), y0: s(2), x1: s(3), cy: s(4), cx: s(5) };
     });
 }
@@ -984,7 +988,7 @@ const ICE_DIAMOND_SPIN = 0x100;     /* per frame_counter frame */
 function readIcePillars(rom) {
     const dv = rom.mainCpuView;
     return ICE_PILLAR_ORDER.map((i) => {
-        const b = ICE_PILLARS + i * ICE_PILLAR_STRIDE;
+        const b = progAddr(rom, ICE_PILLARS) + i * ICE_PILLAR_STRIDE;
         return {
             /* The record carries an x and a z; the y pushed between them is
              * another `lda system_address_table`, so a pillar stands on the
@@ -1289,7 +1293,7 @@ function readCanyonFlight(rom) {
 
     const keys = [];
     for (let i = 0; i < CANYON_SCRIPT_KEYS; i++) {
-        const at = CANYON_SCRIPT + i * CANYON_KEY_SIZE;
+        const at = progAddr(rom, CANYON_SCRIPT) + i * CANYON_KEY_SIZE;
         keys.push({
             type: dv.getInt16(at, true),
             frame: dv.getInt16(at + 2, true),
@@ -1301,10 +1305,10 @@ function readCanyonFlight(rom) {
     }
 
     const triggers = Array.from({ length: CANYON_TRIGGER_COUNT },
-        (_, i) => dv.getInt16(CANYON_TRIGGERS + i * 2, true));
+        (_, i) => dv.getInt16(progAddr(rom, CANYON_TRIGGERS) + i * 2, true));
 
     const groups = [];
-    let at = CANYON_ENV_OBJECTS;
+    let at = progAddr(rom, CANYON_ENV_OBJECTS);
     while (groups.length <= CANYON_TRIGGER_COUNT) {
         const group = [];
         for (; dv.getInt32(at, true) !== -1; at += 16) {
@@ -2193,7 +2197,7 @@ export function buildStageDisplayList(stage, frames = null) {
      * giant_wing_disp ask for the world's instead, by loading a matrix
      * camera_init saved there — pushWorld. */
     for (const object of stage.objects ?? []) {
-        const [routine, routineWindow] = OBJECT_ROUTINES.get(object.disp) ?? [];
+        const [routine, routineWindow] = OBJECT_ROUTINES.get(object.routine) ?? [];
         if (!routine) continue;
         const at = (model) => OBJECT_WINDOWS.get(model) ?? routineWindow;
         routine({

@@ -3343,7 +3343,7 @@ function renderStagePanel(stage, counts, totals, list) {
      * other thirteen the checkbox would be a control over nothing. */
     const rides = stageMoves(stage);
     $('#ride-field').hidden = !rides;
-    $('#skyeye-field').hidden = state.rom.game.id !== 'sfight';
+    $('#skyeye-field').hidden = !state.rom.game.features.skyEye;
     $('#mode-field').hidden = !stage.objectDraws;
     /* A stage's views: House of the Dead's zones, Daytona's camera window. */
     const views = stage.views?.length > 1 ? stage.views : null;
@@ -4713,7 +4713,7 @@ function loadGameContent() {
  */
 function updateSkyEye() {
     const out = $('#skyeye-readout');
-    if (!out || state.tab !== 'stage' || state.rom?.game.id !== 'sfight') return null;
+    if (!out || state.tab !== 'stage' || !state.rom?.game.features.skyEye) return null;
     const v = state.viewer;
     const text = describeBoardCamera(boardCamera(v.camera, v.root), state.stageIndex);
     if (out.textContent !== text) out.textContent = text;

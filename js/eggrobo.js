@@ -65,6 +65,8 @@
  * alternates every 256 frames because bit 8 is the next one up from the window.
  */
 
+import { progAddr, sfightAddr } from './romset.js';
+
 /* Where each table lives, and the two characters that reach them. */
 const EGG_MECH_ARMS_ADDR = 0x00034e96;   /* u16 model ids, zero-terminated */
 const EGG_ROBO_ANIMS_ADDR = 0x0001d2e4;  /* four routine pointers */
@@ -100,7 +102,7 @@ export function readMechArms(rom) {
     const dv = rom.mainCpuView;
     const out = [];
     for (let i = 0; i < ARM_COUNT; i++) {
-        const a = EGG_MECH_ARMS_ADDR + i * 2;
+        const a = progAddr(rom, EGG_MECH_ARMS_ADDR) + i * 2;
         if (a + 2 > rom.maincpu.length) return null;
         const id = dv.getUint16(a, true);
         if (!id) break;
@@ -118,7 +120,7 @@ export function readRoboHead(rom) {
     const dv = rom.mainCpuView;
     const out = [];
     for (let i = 0; i <= HEAD_LAST; i++) {
-        const a = EGG_ROBO_HEAD_ADDR + i * 4;
+        const a = progAddr(rom, EGG_ROBO_HEAD_ADDR) + i * 4;
         if (a + 4 > rom.maincpu.length) return null;
         const id = dv.getUint32(a, true);
         if (!id || id >= rom.game.modelTable.count) return null;
@@ -136,7 +138,10 @@ export function readRoboHead(rom) {
 export function readRoboAnims(rom) {
     const dv = rom.mainCpuView;
     const out = [];
-    for (let i = 0; i < 4; i++) out.push(dv.getUint32(EGG_ROBO_ANIMS_ADDR + i * 4, true));
+    /* Named by sfight's addresses, which headFrame compares them with. */
+    for (let i = 0; i < 4; i++) {
+        out.push(sfightAddr(rom, dv.getUint32(progAddr(rom, EGG_ROBO_ANIMS_ADDR) + i * 4, true)));
+    }
     return out;
 }
 

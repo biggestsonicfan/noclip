@@ -39,6 +39,7 @@
  */
 
 import { readMotionTiming, decodeMotion, sampleMotion } from './motion.js';
+import { progAddr } from './romset.js';
 
 const MOVESET_ARRAY = 0x0001efac;
 const DEBUG_CPU_MOVESETS = 0x000de278;
@@ -266,14 +267,14 @@ function readCpuMoves(rom, base) {
     const m = rom.maincpu, dv = rom.mainCpuView;
     if (base >= CPU_NAMED) return [];
     const bases = [];
-    for (let i = 0; i < 17; i++) bases.push(dv.getUint32(DEBUG_CPU_MOVESETS + i * 4, true));
+    for (let i = 0; i < 17; i++) bases.push(dv.getUint32(progAddr(rom, DEBUG_CPU_MOVESETS) + i * 4, true));
     const start = bases[base];
     if (!start) return [];
     const stop = Math.min(...bases.filter((b) => b > start), start + 512 * CPU_RECORD);
     const out = [];
     for (let a = start; a + CPU_RECORD <= stop && a + CPU_RECORD <= m.length; a += CPU_RECORD) {
         const ptr = dv.getUint32(a, true);
-        if (ptr < NAME_POOL[0] || ptr >= NAME_POOL[1]) break;
+        if (ptr < progAddr(rom, NAME_POOL[0]) || ptr >= progAddr(rom, NAME_POOL[1])) break;
         let name = '';
         for (let p = ptr; m[p] && name.length < 48; p++) name += String.fromCharCode(m[p]);
         const steps = [];
@@ -309,7 +310,7 @@ export function readMoves(rom, charIndex) {
     const m = rom.maincpu, dv = rom.mainCpuView;
     const base = baseIndex(charIndex);
     if (base >= 24) return null;
-    const root = dv.getUint32(MOVESET_ARRAY + base * 4, true);
+    const root = dv.getUint32(progAddr(rom, MOVESET_ARRAY) + base * 4, true);
     if (!root || root >= m.length || m[root] !== HEADER) return null;
 
     const tables = new Map();

@@ -10,7 +10,7 @@
  */
 
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
-import { detectGames, detectPrepared } from './games.js';
+import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -348,6 +348,21 @@ export const XTRA_DATA_BASE = 0x06000000;
 /* main_data as the i960 sees it: every pointer into the data ROMs is this
  * plus the offset into the assembled region. */
 export const MAIN_DATA_BASE = 0x02000000;
+
+/**
+ * A program ROM address as Sonic The Fighters keeps it, moved to where this
+ * build keeps the same thing (js/games.js relocate). The tables the viewer
+ * names by address are named by sfight's; Sonic Championship's program has
+ * them a little further on.
+ */
+export function progAddr(rom, addr) {
+    return relocate(rom.game, addr);
+}
+
+/** The other way: the sfight address of what this build keeps at `addr`. */
+export function sfightAddr(rom, addr) {
+    return unrelocate(rom.game, addr);
+}
 
 export function xtraToMainData(addr) {
     return 0x01000000 + ((addr - XTRA_DATA_BASE) & 0x000fffff);

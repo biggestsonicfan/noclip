@@ -12,7 +12,7 @@
  * and the platform each carry a transform from the function that draws them.
  */
 
-import { xtraResolve, MAIN_DATA_BASE } from './romset.js';
+import { xtraResolve, MAIN_DATA_BASE, sfightAddr } from './romset.js';
 import { readObjectRecords, courseObjectDraws, courseGround, courseReach, courseArea } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 
@@ -94,6 +94,9 @@ function readStageObjects(rom, base) {
         objects.push({
             init: dv.getUint32(b + 8, true),
             disp: dv.getUint32(b + 12, true),
+            /* The routine by sfight's address for it, which display.js
+             * dispatches on. */
+            routine: sfightAddr(rom, dv.getUint32(b + 12, true)),
             arg: dv.getUint32(b + 16, true),
         });
     }

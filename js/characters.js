@@ -22,6 +22,7 @@
 import { SLOT_NAMES, SLOT_PARENT, SLOT_COUNT, readSkeleton } from './pose.js';
 import { readTexturePoints } from './display.js';
 import { motionSkeletonType } from './motion.js';
+import { progAddr } from './romset.js';
 
 const CHAR_PARTS_ADDR = 0x000c5268;
 
@@ -53,7 +54,7 @@ export const SKELETON_SQUISHED = 2;
 
 function skeletonPtr(rom, charIndex, type) {
     const dv = rom.mainCpuView;
-    const table = dv.getUint32(SKELETON_TYPE_DATA_ADDR + type * 4, true);
+    const table = dv.getUint32(progAddr(rom, SKELETON_TYPE_DATA_ADDR) + type * 4, true);
     if (!table || table + charIndex * 4 + 4 > rom.maincpu.length) return 0;
     const ptr = dv.getUint32(table + charIndex * 4, true);
     return ptr && ptr + SLOT_COUNT * 12 <= rom.maincpu.length ? ptr : 0;
@@ -98,7 +99,7 @@ const EYE_POINTS_OFFSET = 0x10;
 
 function readFace(rom, charIndex) {
     const dv = rom.mainCpuView;
-    const rec = dv.getUint32(FACE_TABLE_ADDR + charIndex * 4, true);
+    const rec = dv.getUint32(progAddr(rom, FACE_TABLE_ADDR) + charIndex * 4, true);
     if (!rec || rec + 0x0c > rom.maincpu.length) return { eyes: [], heads: [], eyePoints: [] };
     const pair = (off) => {
         const w = dv.getUint32(rec + off, true);
@@ -160,7 +161,7 @@ export function faceVariantOwners(rom) {
     const out = new Map();
     for (let c = 0; c < FACE_TABLE_ENTRIES; c++) {
         for (let v = 0; v < FACE_VARIANT_COUNT; v++) {
-            const table = dv.getUint32(FACE_VARIANT_TABLES + v * 4, true);
+            const table = dv.getUint32(progAddr(rom, FACE_VARIANT_TABLES) + v * 4, true);
             if (!table || table + FACE_TABLE_ENTRIES * 4 > rom.maincpu.length) continue;
             const rec = dv.getUint32(table + c * 4, true);
             if (!rec || rec + 0x0c > rom.maincpu.length) continue;
@@ -269,7 +270,7 @@ function characterSkeletonType(rom, animPtr) {
  */
 export function readCharacter(rom, charIndex) {
     const dv = rom.mainCpuView;
-    const record = dv.getUint32(CHAR_PARTS_ADDR + charIndex * 4, true);
+    const record = dv.getUint32(progAddr(rom, CHAR_PARTS_ADDR) + charIndex * 4, true);
     if (!record || record + 0x30 > rom.maincpu.length) return null;
 
     const partsPtr = dv.getUint32(record + 0x00, true);

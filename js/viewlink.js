@@ -106,7 +106,7 @@ export function viewLink(state) {
         /* The same camera as the game's own record (js/skyeye.js): what
          * m2-hle2's SKY EYE mode reads, and what a link written by it carries
          * instead of `pos` and `look`. */
-        if (rom.game.id === 'sfight') {
+        if (rom.game.features.skyEye) {
             const b = boardCameraParams(boardCamera(v.camera, v.root));
             p.set('eye', b.eye);
             p.set('ang', b.ang);
