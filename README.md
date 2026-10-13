@@ -159,9 +159,12 @@ music](TECHNICAL.md#daytona-usas-music-the-model-1-sound-board).
 
 The **Cells** tab is here too, in every build: the title, the course and car
 select, the HUD's dials and lamps, the rankings, the courses' START YOUR
-ENGINES pictures and the EPA notice, 222 cells (147 in the 1993 build, 224 with
-the Saturn advert), each opened on the CG the game draws it with. All but one
-have a CG that writes every tile they name. The tile chip is Sonic The
+ENGINES pictures and the EPA notice, 224 cells (148 in the 1993 build, 235 with
+the Saturn advert's eleven), each opened on the CG the game draws it with. All
+but one have a CG that writes every tile they name, and the program ROM's
+© SEGA 1994 line, whose 4 comes from CG 7 over CG 0. The game never draws 18 of
+them (5 in 1993), among them a big 0-9: the list marks them, and searching
+for `unused` lists only those. The tile chip is Sonic The
 Fighters', the tables are not: see `DAYTONA_CELLS` in
 [`js/games.js`](js/games.js). Their colours go through colorxlat as the sky's
 do, so they follow the cabinet.
