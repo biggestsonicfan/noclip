@@ -796,6 +796,19 @@ fighters, runs the kind's own effects under the camera.
   `[g1, 0xF0)` take `0x25024[((frame >> 2) + l - g1) & 7]`, g1 `0x96`, or 100
   on stage 7.
 
+#### Faces laid on faces
+
+The Great Wall's banners (`棋逢对手`, `决斗胜负`) are painted on the wall in the
+wall's own plane. A depth buffer finds the same depth on both, so the brick
+showed through the banner's edges in stripes (issue 87). On the board, the
+polygon sort decides which face is drawn on top; the board has no depth buffer.
+VF2 therefore sets `depth.layers`, like Sonic The Fighters, The House of the Dead
+and Daytona: `js/layers.js` ranks coplanar faces the way the board's sort does,
+from the camera, every frame. The same ranking settles two other ties. The
+Islands' grass now lays its ragged fringe over the sand, where the sand used to
+cut it in straight lines. A triangle that the Mirror stage's floor lost to the
+tile under it is drawn again.
+
 #### The switched effects (`js/vf2fx.js`)
 
 What the stage view leaves out unless asked is a switch in the stage panel's
