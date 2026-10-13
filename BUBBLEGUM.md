@@ -288,6 +288,64 @@ Item 9 was built as written on branch `float-depth` (704fcc6, not for merging; n
 
 So the float buffer fixes the two pictures it was meant to fix, but rule 1's group plane is still what draws decals that sit behind their face. Removing rules 1, 4 and 5 needs another way to put such a face on top. That is a rule change, outside item 9, and was not tried.
 
+### Rules 2-7 from each game's camera (Pinboard #758)
+
+Item 6, for rules 2-7 (rule 1 is #714, above). Each rule was switched off on its own in a scratch copy of master's page (`globalThis.__off`; rule 6 is `laterZone` and `letGo` together; rule 5 is the slope cap line in the shader), with every other rule on, and compared pixel for pixel with the all-on picture. The all-on set was rendered twice, and the two renders were the same everywhere (0 px), so every count below is the rule's own. SwiftShader, clock held on the frame. No rule was changed in the source.
+
+**The game's own cameras (496×384).** Cameras changed / most pixels in one frame (the frame):
+
+| Off | Daytona Three-Seven (52) | Seaside (52) | Dinosaur Canyon (52) | VF2 Colosseum (31) | VF2 stage 3 (31) | STF, 15 stages × 31 (camera record) |
+|---|---|---|---|---|---|---|
+| 2 `APART` | 23 / 859 (880) | 0 | 1 / 4 | 0 | 5 / 537 (1800) | 1 frame, 1 px (stage 15) |
+| 3 `SMALL_APART` | 10 / 669 (1480) | 1 / 1 | 16 / 560 (2560) | 0 | 20 / 1394 (2680) | 1 frame, 1 px (stage 10) |
+| 4 plane drop | 1 / 717 (880) | 1 / 9 | 3 / 13 | 0 | 0 | 0 |
+| 5 slope cap | 33 / 1318 (2140) | 29 / 206 | 24 / 229 | 0 | 22 / 190 (2000) | ≤15 px (stages 4, 7, 15) |
+| 6 `laterZone` / `letGo` | 1 / 19 | 0 | 1 / 66 (2020) | 0 | 0 | 0 |
+| 7 `smallerOnTop` | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The cameras are #714's: Daytona's view matrix in the attract race (frames 520-3580), VF2's camera record, STF's record 0x519E98 in the Sonic vs Bean replay (frames 400-1300). STF stage 8 still hangs the headless page and is not in any set. Daytona's matrix is the driver's eye, not MAME's chase camera, so the Daytona frames are compared with MAME by eye only.
+
+- **Rule 2, Daytona Three-Seven 880:** on, the tire marks are cut into block-shaped pieces; off, they are whole, like MAME's streaks. Frames 1060 and 3280-3340 are the same marks, smaller. **A regression**, the same kind as rule 1's.
+- **Rule 4, Three-Seven 880:** on, a mark near the white line is cut; off, it is whole. **A regression.**
+- **Rule 3, Dinosaur Canyon 2560:** on, a dark tire mark runs across the yellow start band; off, the band covers it. Three-Seven 1480: a tire patch changes. VF2 stage 3 2640-2760: the edge of the water wedge at the floor's rim changes shape. Which is right in these three is not known (no registered MAME frame).
+- **Rule 5:** off, Three-Seven 1660 shows a teal band along the top of a wall, so rule 5 is right there. The rest (2140 and the other courses, VF2 stage 3) are thin lines, seams and small patches.
+- **Rule 2, VF2 stage 3 1800:** a 1 px line along a plank seam.
+- **Rule 6:** dots in one tire mark (Dinosaur Canyon 2020, Three-Seven 1600).
+- **STF:** essentially nothing. Seams of 1-15 px.
+
+**STF, #258's 8 cameras round each stage (15 stages; stage 8 hangs).** Rule 2: 4, 2 and 7 px on stages 4, 10, 15. Rule 3: 1-5 px on stages 0, 6, 7, 10, 13, 14, 15. Rule 4: 1 px (stage 4). Rule 5: 1-12 px (stages 0, 4, 7, 13-15). Rule 6: 29 px on stage 15. Rule 7: 0. All are seams.
+
+**The issue 44/46/58 views (STF, 1120×640):** 0 px for every rule, except rule 5 at issue 58 (1 px).
+
+**Virtua Cop's issue views (1120×640, the explorer's camera)**, px changed with the rule off:
+
+| View | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|
+| 69 | 17 | 3441 | 5 | 3 | 0 | 0 |
+| 71 | 0 | 39 | 0 | 0 | 4127 | 0 |
+| 73 | 0 | 5529 | 0 | 0 | 0 | 0 |
+| 73, t 1125 | 641 | 437 | 178 | 8 | 206 | 0 |
+| 78 | 0 | 436 | 7755 | 0 | 0 | 0 |
+| 80 | 556 | 2511 | 134 | 474 | 1932 | 0 |
+| 82 | 323 | 18055 | 41 | 8 | 166417 | 771 |
+| 83 | 439 | 90 | 121 | 1 | 145802 | 89286 |
+
+Each rule moves its own issue's view (3 at 73, 4 at 78, 5 at 80, 6 at 82, 6 and 7 at 83), except **rule 2 at issue 71: 0 px**. At that view, issue 71's bookcase stays on top without it. Rule 6 at 71 is a strip along the desk's edge; at 83, it is the road through the courtyard.
+
+**House of the Dead (`hotd`), stage 1, zones 0-4, each zone's framing camera (640×400, frame 100):** every rule moves 0 px, except rule 2 in zone 1 (3 px). The rules do still decide pairs there. Of zone 0's 557 pairs, 53 are fixed by rules 2, 3 or 7, not left to the key; with rule 2 off that drops to 39, and with rule 3 off to 41. Rule 7 decides 4 of zone 4's 77, as #742 found for zones 5-9. They just don't show from the zone's own camera. Zones 5-11, the other stages and `hotdp` were not run: one zone takes about 3 minutes to render under the machine's load, and the full set would have taken a day. HOTD has no game camera yet (#714), so these are the explorer's framing cameras, not the rail's.
+
+**Not done:** `grade-zsort` at the board's cameras (m2-hle2) was not run as a separate tool. The STF camera-record set above stands in for it: the same cameras, but compared rule on against rule off, not against the board's picture.
+
+So:
+
+- **Rules 2 and 4 are regressions on Daytona.** Both cut the tire marks at Three-Seven 880, as rule 1 does.
+- **Rule 3 moves Daytona and VF2 pictures**, but whether for better or worse is unknown.
+- **Rule 5 helps on Daytona** (1660) and is noise elsewhere.
+- **Rule 6 is noise outside Virtua Cop. Rule 7 moves nothing outside Virtua Cop.**
+- **STF hardly moves for any of them, and neither do HOTD's first five zones.**
+
+No rule was changed.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
@@ -319,7 +377,7 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 
 Next (#712), in this order:
 
-6. **Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
+6. ~~**Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.~~ Measured (rule 1 in #714, rules 2-7 in Pinboard #758; see "Rules 2-7 from each game's camera" in §7). Rules 1, 2 and 4 cut Daytona's tire marks, rule 3 moves Daytona and VF2 pictures for better or worse (unknown which), and rule 5 helps on Daytona. Rules 6 and 7 only move Virtua Cop. STF and HOTD's first zones barely move. `grade-zsort` was not run as its own tool, and HOTD only for stage 1, zones 0-4. No rule was changed.
 7. ~~**Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.~~ Measured and rejected (Pinboard #742; see "Rules 6 and 7 in a single segment" in §7). Rule 6 is already union-only, and rule 7 is needed in a single segment.
 8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`. As written, this can't work. `uKeyReach` is 1, twice the 0.5 gap inside which faces are paired at all, so no pair would ever be "beyond the reach". Rules 2 and 3 split at 0.25 and 0.05 because issues 69 and 73 sit at those distances, and rule 7 (issue 83) is a third case of the same kind. A single number would have to be measured anew, not borrowed from the key pass.
 9. ~~**A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it.~~ Tried and stopped (Pinboard #755; see "The float depth buffer, tried" in §7). It fixes the tire marks and the ring border, but Daytona stage 2's start line lies behind the road, and own depth plus a few ulps can't put it on top. Branch `float-depth`, not merged.
