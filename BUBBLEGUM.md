@@ -199,6 +199,30 @@ The same view, camera, size and SwiftShader, with rule 1 off throughout and exac
 
 Rule 3's 6692 px are all at the far left (x 0-72): the small bookcase there loses its two rows of books to the wall behind it. The big bookcase stays whole. No single rule among 2-7 brings back the issue's right-side hiding or accounts for most of the 225667 px, so it takes two or more of them at once. Pairs were not tried.
 
+### Rules 2-7 two at a time at the issue 69 view (Pinboard #730)
+
+The same view, camera, size and SwiftShader, with rule 1 off throughout and exactly one pair of rules 2-7 also off per render (all 15 pairs, in the same scratch copy of the page; no rule was changed in the source). Rules 2 and 3 were turned off separately inside `inFront`; rule 6 is `laterZone` and `letGo` together. The pictures compared against are the stored rule-1-off and all-off renders above. Every pair with a count under 100 px (including 2+3's 0 px against all-off) was rendered a second time; each second render matched its first exactly.
+
+| Off (besides rule 1) | vs rule-1-off | vs all-off | Right-side bookcase hiding |
+|---|---|---|---|
+| 2 + 3 | 225667 px | 0 px | **yes** |
+| 2 + 4 | 0 px | 225667 px | no |
+| 2 + 5 | 0 px | 225667 px | no |
+| 2 + 6 | 0 px | 225667 px | no |
+| 2 + 7 | 0 px | 225667 px | no |
+| 3 + 4 | 6692 px | 219136 px | no |
+| 3 + 5 | 6694 px | 219136 px | no |
+| 3 + 6 | 6692 px | 219136 px | no |
+| 3 + 7 | 6692 px | 219136 px | no |
+| 4 + 5 | 2 px | 225667 px | no |
+| 4 + 6 | 0 px | 225667 px | no |
+| 4 + 7 | 0 px | 225667 px | no |
+| 5 + 6 | 2 px | 225667 px | no |
+| 5 + 7 | 2 px | 225667 px | no |
+| 6 + 7 | 0 px | 225667 px | no |
+
+Only rules 2 and 3 together (`APART` and `SMALL_APART`, both in `inFront`) bring back the issue's right-side hiding. That pair covers all 225667 px: its picture is identical to the all-off one, with the wall hiding the big bookcase from the right except the window at its left end, as in the issue screenshot. Every pair with rule 3 but not rule 2 shows only rule 3's far-left change; 3 + 5 adds rule 5's 2 px. The other pairs give 0 or 2 px. Triples were not tried.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
