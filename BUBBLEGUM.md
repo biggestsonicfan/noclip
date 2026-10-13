@@ -249,6 +249,17 @@ The same view, camera, size and SwiftShader, rendered twice with rule 1 **on** a
 - **Rule 3 off:** the small bookcase at the far left loses its books to the wall behind it, as with rule 3 off and rule 1 off. Against the rule-1-on render, 3348 px differ at x 0-86 and 93 px elsewhere; the big bookcase is whole.
 - **With rule 1 on, the pair is still required.** Neither rule 2 alone nor rule 3 alone gives either kind of right-side cover: not the issue's about-130 px window, and not the coarse cover with the about-180 px window that rules 2 and 3 off together give.
 
+### Rules 2-7 off with rule 1 on at the issue 69 view (Pinboard #740)
+
+The same view, camera, size and SwiftShader, rendered once with rule 1 **on** and rules 2, 3, 4, 5, 6 and 7 all off (in the same scratch copy of the page; no rule was changed in the source), and compared with the stored pictures above. The count against the rule-1-on plus rules-2-and-3-off picture was under 100 px, so the picture was rendered a second time; the second render was byte-for-byte the same as the first.
+
+| Off (rule 1 on) | vs rule-1-off | vs all-off | vs rule 1 on + rules 2 and 3 off | Picture |
+|---|---|---|---|---|
+| 2-7 | 240572 px | 16436 px | 51 px | coarse cover only |
+
+- **The picture is the rule-1-on plus rules-2-and-3-off one.** The wall covers the big bookcase from the right, but the left window is about 180 px wide with the bookcase frame showing, not the issue's about-130 px window. The 51 px are thin slivers: a 32 px run of one row at x 935-966 (y 334), 7 px at x 356-362 (y 339), and 12 px on a desk edge around x 540-557 (y 438-441).
+- **Rules 4-7 barely change this view once rule 1 is on and rules 2 and 3 are off.** Turning them off too moves the gap to the all-off picture from 16396 px to 16436 px; it does not close it. With rules 2 and 3 off, the gap between the coarse cover and the issue match comes from rule 1 alone. Rules 4-7 were not turned off one at a time.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
