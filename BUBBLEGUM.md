@@ -223,6 +223,19 @@ The same view, camera, size and SwiftShader, with rule 1 off throughout and exac
 
 Only rules 2 and 3 together (`APART` and `SMALL_APART`, both in `inFront`) bring back the issue's right-side hiding. That pair covers all 225667 px: its picture is identical to the all-off one, with the wall hiding the big bookcase from the right except the window at its left end, as in the issue screenshot. Every pair with rule 3 but not rule 2 shows only rule 3's far-left change; 3 + 5 adds rule 5's 2 px. The other pairs give 0 or 2 px. Triples were not tried.
 
+### Rules 2 and 3 off with rule 1 on at the issue 69 view (Pinboard #735)
+
+The same view, camera, size and SwiftShader, rendered once with rule 1 **on**, rules 2 and 3 off, and rules 4-7 on (in the same scratch copy of the page; no rule was changed in the source). It was compared with the stored pictures above. No count was under 100 px, so it was not rendered again.
+
+| Compared with | Differs by |
+|---|---|
+| rule-1-off picture | 240567 px |
+| all-off picture | 16396 px |
+| rule 1 off + rules 2 and 3 off picture | 16396 px |
+
+- **The right-side hiding appears: rules 2 and 3 off are enough for it with rule 1 on.** The wall covers the big bookcase from the right, and only a window at its left end, two shelves high, is left.
+- **What rule 1 still changes:** the 16396 px between this picture and the 2 + 3 picture with rule 1 off are rule 1's own. With rule 1 on, the left end of the window is whole: the bookcase frame shows there, about 50 px wide and 190 px high, so the window is about 180 px wide where the rule-1-off picture's is about 130 px. In the rule-1-off picture that strip is the blinds wall, with bits of the frame showing through. With rule 1 on, the wall is also more solid. The brown trim along its top shows through only from about x 905, where the rule-1-off picture shows it from about x 725. The brown strip along the wall's foot does not show through at all. A few desk and shelf edges and a small patch by the vent (about x 330-350) differ too.
+
 ## 8. The new games (#712)
 
 **Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
