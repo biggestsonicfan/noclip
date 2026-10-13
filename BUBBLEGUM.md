@@ -1,6 +1,14 @@
-# Bubblegum fixes: an audit (Pinboard #248)
+# Bubblegum fixes: an audit (Pinboard #248, refreshed #712)
 
-This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. It is the audit of master at `7f17395` (2026-09-30), and nothing in `js/` was changed by it. Line numbers are as of that commit. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. The first audit was of master at `7f17395` (2026-09-30); §1-§6 keep its findings and what each fix did, with line numbers as of that commit. The refresh (Pinboard #712) is of master at `213fb82` (2026-10-12), after Virtua Cop, Virtua Fighter 2, the Cells tab and the Virtua Cop z-fight issues landed; its new findings are §7 and §8, with line numbers as of that commit. Nothing in `js/` was changed by either audit. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+
+## Where things stand (2026-10-12)
+
+Everything the first audit found is fixed or checked, except three things no routine has been read for yet (the finished HOTD's prop lifetimes and enemy routines, and the lone models no routine names; see "Suggested order"). The z-sort flags (§1), the static layer vote (§2), the union heuristics (§3), the fitted ground and horizon (§4), the skips (§5) and the small ones (§6) are all gone or cited.
+
+What has grown back is in the same place §2 cleared: the face layers. Since 2026-10-11 `js/layers.js` has gained seven fitted rules, each from one Virtua Cop stage 3 issue (69, 71, 73, 78, 80, 82, 83), and every one of them applies to every game that has `layers` on: STF, both HOTDs, every Daytona, Virtua Cop and VF2. None was graded on anything but the issue's own view. §7 lists them and what the board's rule under them may be. That is the one cross-game item open, and the one to do next.
+
+The two new games (§8) are mostly read from their routines. What is not is labelled in the code: a few per-type lists from MAME runs in Virtua Cop, and VF2's fight-driven effects, which are switches marked "stand-in".
 
 ---
 
@@ -13,7 +21,7 @@ This file lists the places where the explorer patches a symptom (a list of model
 - the bound, `uZsortRecede` = 12 units (`js/games.js:158`, used at `js/viewer.js:199-206`);
 - the cut-off, "a face deeper than the bound keeps its own depth" (`js/viewer.js:204`), added for Aurora Icefield's ice wedges.
 
-Only Sonic The Fighters uses that bound. Fighting Vipers, both HOTDs and Daytona set `recede: 0` (`js/games.js:481, 775, 1171, 1726`) and rely on the depth buffer plus face layers (§2). Every patch in the table below is STF-only and exists because of those two numbers:
+Only Sonic The Fighters uses that bound (still true at `213fb82`: Virtua Cop and VF2 set `recede: 0` too). Fighting Vipers, both HOTDs and Daytona set `recede: 0` (`js/games.js:481, 775, 1171, 1726`) and rely on the depth buffer plus face layers (§2). Every patch in the table below is STF-only and exists because of those two numbers:
 
 | Patch | Where | Keyed on | Symptom it fixed |
 |---|---|---|---|
@@ -74,6 +82,8 @@ This one is less certain than §1. The depth range left under the plane depth is
 
 *Done (Pinboard #259).* The vote, the window exception, the circle-breaker and the three switches are gone; the grouping stays. `rankLayers` keys each paired face as the board does (near or far corner, or "very far", by its z mode, rounded to the 12-bit-mantissa bucket of `float_to_zval`) from the camera about to draw, puts the later face on top in a tie, and gives each face its longest path up as its layer. That runs on the CPU every frame (well under 1 ms for HOTD's 2262 paired faces and Daytona's 16147), not in the depth bits: a 24-bit step is about 3e-6·z² view units, a quarter of a unit 300 out, which no key could hide under. A copy (`twins`) is now ranked in every game. Graded against MAME, on the pixels the change moved: Casino Night, 61 frames of the board camera, 1.58M pixels nearer MAME and 0.35M further (the blue disc the vote laid over the floor is gone); Flying Carpet changes only the desert, which does not register with MAME; Dinosaur Canyon (349 frames) changes at most 33 pixels a frame, the flags unchanged. HOTD could not be graded: attract keeps no view matrix in main RAM.
 
+*Since then (#712):* the live ranking is no longer the sort alone. Seven rules have been added on top of it for Virtua Cop's stage 3, and they apply to every game with `layers` on. See §7.
+
 ## 3. Drawing every state at once, then filtering
 
 The board draws one zone, one camera block, one phase at a time. The explorer draws the union of all of them so you can fly through the whole stage, which is fair, but the union then needs heuristics to undo the overlaps:
@@ -119,6 +129,240 @@ These skips each hide one known decode bug. Fixing the bug removes the skip, and
 | `bestTextureSet` / `bankTextureSet` | `texture.js` (`programTextureSets`, `bestTextureCombo`), `app.js` (`modelTextureGuess`) | *Checked (#264, then this branch):* derived where the program says, a narrow guess where it does not. **FV:** a fighter's 16 parts come from the character record at `0x640D2B0[char]` (+0 parts, +0x20 set). Player set-up 0x1243C hands the set to 0x4B0FC, and handler 0x4B1C0 loads set N and N+1 into the player's slot. A model whose tiles all lie on boot set 36 (0x4ACBC) takes that set. Of 3462 lone models, 180 are fighter parts, 1591 are on the boot set and 51 are untextured. The other 1589 stay a guess, now limited to sets the board can load together: 1370 lie on the fighters' pages (every fighter's pair lands on the same pages, so nothing says whose), 216 on the stages' pages, and 3 on single-set coverage. **Daytona:** boot loads its bank onto sheet 1 (0x11B8, 0x1454). sel_course picks sheet 0's bank (0x1438, `ld 0x15A0[course*4]`). Of 1390 lone models, 159 are untextured and 913 are on sheet 1 alone, the same on every course. 254 are named by one course's records: a window's other 63 frames and a check point's last-lap list. 64 stay on the opening set as a labelled guess. **HOTD:** the bank rule is the derivation (the stage data and palettes, `games.js`), and it is no longer called a guess. Spawn records agree for 17 bodies spawned under one set. 10 bodies disagree, where the class does not read +0x24 as the body |
 | `DAYTONA_PATCHES` | `games.js:~1431-1470` | m2emulator's ROM fixes, already an opt-in switch (off by default); band-aids by definition, but labelled as such |
 
+## 7. Face layers again: seven rules from one stage (#712)
+
+§2's fix left the layers with one rule: the board's key from this camera, the later face on a tie. Between 2026-10-11 and 2026-10-12 the Virtua Cop issues added seven more. Each is a threshold or a special case fitted to one view of stage 3, and each runs for every game with `depth.layers` on (STF, `hotdp`, `hotdo`, `hotd`, every Daytona build, `vcop`, `vf2`; Fighting Vipers alone has it off, `games.js:532`). None of them was graded on another game, against MAME, or over the 16-stage harness §1 used. Line numbers are as of `213fb82`.
+
+| # | Rule | Where | Fitted on | Applies to |
+|---|---|---|---|---|
+| 1 | `ASKEW` = tan 80°: faces apart are paired as far as they overlap seen within 80° of square on | `layers.js:116`, `pairsOf` (its `consider`) `411-416` | issue 69, two office wall pieces half a unit apart | every layered game |
+| 2 | `APART` = 0.25: a face that far in front across the whole overlap goes on top from every camera, whatever the key | `layers.js:319`, `inFront` `347-351` | issue 71, a bookcase 0.4 in front of a wall | every layered game |
+| 3 | `SMALL_APART` = 0.05: the same for a face that is smaller than the other | `layers.js:329`, `inFront` | issue 73, books 0.11 in front of a wall | every layered game |
+| 4 | a one-sided face `APART` or more behind its group's plane keeps its own depth | `setPlanes`, `layers.js:452-461` | issue 78, a hall ceiling over a lower one | every layered game |
+| 5 | the slope a layer lifts a face with no plane is capped at that of a face seen about 70° off square on (3 px) | `viewer.js:565-573` | issue 80, a computer case top through a monitor | every layered game |
+| 6 | `laterZone`: faces of draws with no zone in common go the later zone's way; and a circle of pairs is broken by letting go a face that waits only on the sort's pairs | `layers.js:363-367`, `layersFrom`/`letGo` `644-701` | issue 82, the road under the lobby carpet | draws that carry `zones`: Virtua Cop's segments **and HOTD's zones** (`placements.js:579-680`) |
+| 7 | `smallerOnTop`, `SMALLER` = 0.9: of two far-corner faces from draws with different zone sets, less than 0.05 apart, the smaller goes on top | `layers.js:383-395` | issue 83, courtyard gravel on the road | as 6, and in a single HOTD zone too, wherever two draws' zone sets differ |
+
+Two kinds are mixed here.
+
+**Rules 1, 4 and 5 pay for the explorer's own depth trick, not for the board.** A face in a group is drawn at the depth of its group's largest face's plane (`viewer.js:540-583`), which can be as much as the gap (0.5) from where the face is. At a slant that error grows by the tangent of the angle, and each of the three rules limits one way it shows: pairing further (1), dropping the plane for faces well behind it (4), capping the slope (5). The plane is there because a 24-bit depth buffer can't keep a pane 0.0025 behind its wall at a distance (`rankLayers`' note, `layers.js:589-592`). The explorer already writes `gl_FragDepth`, so it could write a reversed or logarithmic depth into a 32-bit float depth buffer instead. Then the step at 300 units out is about 300 × 2⁻²⁴ ≈ 2e-5, far under 0.0025, and a face could keep its own depth plus a few ulps per layer. That would remove the group plane, and with it rules 1, 4 and 5 and the "a 24-bit step is a quarter of a unit" argument in `rankLayers`. Risk: issue 38 (Daytona's flag copies) was about two triangles interpolating a hair apart, not about precision, so the copy rule (`twins`) has to be checked under it, and the render targets (`viewer.js:1419-1425`) need a depth texture of that format in WebGL2.
+
+**Rules 2, 3, 6 and 7 replace the board's answer with the depth buffer's, for cameras the game never uses.** The board keys a whole polygon by one corner, so near a big face's edge it can lose to the face behind it. That is the board's picture, but from where the game's camera never stands. The comment at `layers.js:305-317` says this plainly. Two questions for each:
+
+- *Does it change what a game's own camera sees?* STF and HOTD lean on decals a few hundredths in front of their walls, keyed by the far corner. Rule 3 now puts every such decal that is smaller and 0.05 or more in front on top from every camera, where the board would sometimes put the wall on top. Rule 7 changes HOTD's ordering inside one zone wherever a draw is listed in more zones than its neighbour. This has not been measured. The harness exists: the 16 STF stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras (memory: explorer vs MAME pictures), and Daytona's attract frames. A run of each with the seven rules on and off says which of them move board-camera pixels.
+- *Is there one rule under the four?* §1 already has the explorer's answer for "a camera the board never uses": `Viewer.drawScene`'s `uKeyReach`, where a keyed face only counts within reach of the nearest surface, and true depth decides the rest. Rules 2 and 3 are the same idea per pair with two distances (0.25, 0.05) instead of one. A single "apart by more than the reach, true depth wins" in the ranking, the same number the key pass uses, is the candidate to try first. Rules 6 and 7 are about the union view ("every segment at once"), which §3 left as a plain union with no filtering for HOTD. In a single-segment view the draws are the board's own list, so the sort is the picture there and neither rule should be needed. Gating both on the union view, and checking whether issue 83 was seen in a single segment, would show whether 7 is needed at all.
+
+Until it is measured, these are the explorer's newest bubblegum and the one item here that crosses games.
+
+### Rules 6 and 7 in a single segment (Pinboard #742)
+
+Rules 6 and 7 were gated on the union view (`zones` passed to the layers only when `stageView(stage) === stage.union`). Every single-segment and single-zone view was rendered from its own framing camera at 640×400 under SwiftShader, against master.
+
+- **Rule 6 does nothing in a single segment, by construction.** Every draw there shares the segment, so `laterZone` never fires. It is already union-only and needs no gate.
+- **Rule 7 is needed in a single segment.** In Virtua Cop's single-segment views it orders 3-45 pairs per segment differently. Pixels moved in stage 3 segment 7 (462 px), segments 1 and 2 (64 and 63 px), stage 1 segment 4 (15 px) and segment 1 (3 px), and stage 2 segment 7 (4 px). The 462 px are issue 83 itself: with the gate, the road's grey quads come back through the courtyard's brick in segment 7's own view. So rule 7 is a free-camera rule like 2 and 3, not a union one. Issues 82 and 83 were both filed in the default `all` view, which is why that wasn't seen.
+- **In House of the Dead, rule 7 moves no pixels from each zone's framing camera.** In stage 1, zones 0-11, it reorders 4 pairs in zones 5-9 (77 to 73, 75 to 71). The finished game's other stages and the prototype were not run.
+
+The gate was not kept.
+
+### Rule 1 measured (Pinboard #714)
+
+Rule 1 alone, one game at a time, from that game's own camera as MAME logged it, rendered with `ASKEW` on and with it off (reach 0), at 496×384 under SwiftShader. Each "on" frame was rendered twice to get the noise floor, with the stage clock held on the board's frame. Nothing else was changed. A change in the picture counts as a regression.
+
+| Game | Camera | Frames | Changed | What changes | Verdict |
+|---|---|---|---|---|---|
+| STF, 16 stages | camera record 0x519E98, Sonic vs Bean replay, frames 400-1300 | 31 per stage | South Island 1 (13 px), Canyon Cruise 18 (≤62 px), Casino Night 29 (≤14 px), Stage 10 31 (≤39 px), 1-2 frames of ≤13 px on Dynamite Plant, 13, 14, 15; none on Aurora, Mushroom Hill, 9, 11, 12 | 1-px seams: a rope's edge, a banner's top edge, single pixels along a grid line | no visible change. Flying Carpet and Giant Wing change only within the noise. Stage 8 hangs the headless page when it loads, so it is not measured |
+| Daytona Rev A | view matrix 0x501560, attract race holding sel_course, frames 520-3580 | 52 per course | Three-Seven 46 (up to 7441 px), Seaside 43 (≤127 px), Dinosaur Canyon 50 (≤330 px) | **the tire marks and worn-lane patches on the road.** With the rule on, the road's own faces are put over them in block-shaped pieces (frames 880, 1480, 3100) | **regression**: the marks are the board's (memory: tire marks are ranked over the road), and off keeps them whole |
+| Virtua Fighter 2 | camera record 0x515400 (STF's layout, yaw the other way), stage byte 0x500064 | 31 in the Colosseum fight (4800-6000), 31 in the demo stage (1800-3000) | Colosseum 21 (up to 5640 px); demo 5 (≤3 px) | **the tan border round the Colosseum ring.** With the rule on, the outer floor covers half its length from a low camera | **regression**: MAME's frame 6000 shows the border the whole way across, as rule off does |
+| House of the Dead (`hotdo`, `hotdp`) | not found: the rail camera is computed on the copro (memory: hotdp stage data) | | | | not measured |
+| Virtua Cop | not found: the matrices at 0x50F63C on are the enemies', not the view | | | | not measured from the game's camera; the issue 69 view, from the explorer's camera, is below |
+
+So rule 1 moves visible pixels from the game's own camera in two games it was not fitted on, both for the reason §7 gives: a decal or border that lies a little apart from a big face gets paired with it at a slant and loses to the group's plane. The rule stays in until the float depth buffer (item 9) can take it, and that change should be graded on these same frames: Daytona 880/1480/3100 on Three-Seven, VF2's Colosseum 5600-6000.
+
+### Rule 1 at the issue 69 view (Pinboard #723)
+
+The view is the one in the issue's link: Virtua Cop stage 3 (stage value 2), frame 2425, noclip camera at (-16.247, 7.46, 95.474), yaw 11.7412, pitch 0.017, fov 60. That is **the explorer's camera, not the game's**: the game's camera is still not found in RAM. It was rendered at 1120×640 under SwiftShader, with the same `ASKEW`-off switch (reach 0) and the clock held. 19527 px change, and two "on" renders do not differ at all.
+
+- **Rule off: the issue's fight comes back in part.** The blinds wall is drawn over the left end of the bookcase (a strip about 40 px wide and 200 px high), and the bookcase's frame shows through the blinds beside it. The shelf boards also shift along their edges.
+- **Rule on:** the bookcase is whole, apart from a dotted 1 px seam along the top of its middle shelf.
+- The rest of the issue's screenshot does not come back with rule 1 off on this build: there, the wall also hides the bookcase from the right.
+
+So at the view it was tuned for, rule 1 still removes a visible fight. Rule 1 is not one of the two rules that also change House of the Dead zone views (6 and 7 in the table above), so no HOTD zone view was rendered for it.
+
+### All seven rules off at the issue 69 view (Pinboard #726)
+
+The same view, camera, size and SwiftShader, rendered once with all seven rules off at once (in a scratch copy of the page; no rule was changed in the source). Against the rule-1-off picture above it differs by **225667 px** (of 716800). A fresh rule-1-off render matched the recorded one exactly, and two all-off renders were identical, so none of that is noise.
+
+- **The right-side hiding comes back.** With every rule off the wall is drawn over the bookcase from the right as in the issue's screenshot: only a window two shelves high and about 130 px wide, at the bookcase's left end, is left, and the bookcase at the far left of the room is covered too. So the rest of issue 69's fight is undone by rules 2-7 together, not by rule 1. Which of them does it was not measured.
+
+### Rules 2-7 one at a time at the issue 69 view (Pinboard #728)
+
+The same view, camera, size and SwiftShader, with rule 1 off throughout and exactly one of rules 2-7 also off per render (six renders, in a scratch copy of the page; no rule was changed in the source). Rules 2 and 3 were turned off separately inside `inFront`; rule 6 is `laterZone` and `letGo` together. The two pictures compared against are the stored rule-1-off and all-off renders above. Each render was taken twice and the two never differed.
+
+| Off (besides rule 1) | vs rule-1-off | vs all-off | Right-side bookcase hiding |
+|---|---|---|---|
+| 2 `APART` | 0 px | 225667 px | no |
+| 3 `SMALL_APART` | 6692 px | 219136 px | no |
+| 4 one-sided face behind its plane | 0 px | 225667 px | no |
+| 5 slope cap | 2 px | 225667 px | no |
+| 6 `laterZone` / `letGo` | 0 px | 225667 px | no |
+| 7 `smallerOnTop` | 0 px | 225667 px | no |
+
+Rule 3's 6692 px are all at the far left (x 0-72): the small bookcase there loses its two rows of books to the wall behind it. The big bookcase stays whole. No single rule among 2-7 brings back the issue's right-side hiding or accounts for most of the 225667 px, so it takes two or more of them at once. Pairs were not tried.
+
+### Rules 2-7 two at a time at the issue 69 view (Pinboard #730)
+
+The same view, camera, size and SwiftShader, with rule 1 off throughout and exactly one pair of rules 2-7 also off per render (all 15 pairs, in the same scratch copy of the page; no rule was changed in the source). Rules 2 and 3 were turned off separately inside `inFront`; rule 6 is `laterZone` and `letGo` together. The pictures compared against are the stored rule-1-off and all-off renders above. Every pair with a count under 100 px (including 2+3's 0 px against all-off) was rendered a second time; each second render matched its first exactly.
+
+| Off (besides rule 1) | vs rule-1-off | vs all-off | Right-side bookcase hiding |
+|---|---|---|---|
+| 2 + 3 | 225667 px | 0 px | **yes** |
+| 2 + 4 | 0 px | 225667 px | no |
+| 2 + 5 | 0 px | 225667 px | no |
+| 2 + 6 | 0 px | 225667 px | no |
+| 2 + 7 | 0 px | 225667 px | no |
+| 3 + 4 | 6692 px | 219136 px | no |
+| 3 + 5 | 6694 px | 219136 px | no |
+| 3 + 6 | 6692 px | 219136 px | no |
+| 3 + 7 | 6692 px | 219136 px | no |
+| 4 + 5 | 2 px | 225667 px | no |
+| 4 + 6 | 0 px | 225667 px | no |
+| 4 + 7 | 0 px | 225667 px | no |
+| 5 + 6 | 2 px | 225667 px | no |
+| 5 + 7 | 2 px | 225667 px | no |
+| 6 + 7 | 0 px | 225667 px | no |
+
+Only rules 2 and 3 together (`APART` and `SMALL_APART`, both in `inFront`) bring back the issue's right-side hiding. That pair covers all 225667 px: its picture is identical to the all-off one, with the wall hiding the big bookcase from the right except the window at its left end, as in the issue screenshot. Every pair with rule 3 but not rule 2 shows only rule 3's far-left change; 3 + 5 adds rule 5's 2 px. The other pairs give 0 or 2 px. Triples were not tried.
+
+### Rules 2 and 3 off with rule 1 on at the issue 69 view (Pinboard #735)
+
+The same view, camera, size and SwiftShader, rendered once with rule 1 **on**, rules 2 and 3 off, and rules 4-7 on (in the same scratch copy of the page; no rule was changed in the source). It was compared with the stored pictures above. No count was under 100 px, so it was not rendered again.
+
+| Compared with | Differs by |
+|---|---|
+| rule-1-off picture | 240567 px |
+| all-off picture | 16396 px |
+| rule 1 off + rules 2 and 3 off picture | 16396 px |
+
+- **The right-side hiding appears: rules 2 and 3 off are enough for it with rule 1 on.** The wall covers the big bookcase from the right, and only a window at its left end, two shelves high, is left.
+- **What rule 1 still changes:** the 16396 px between this picture and the 2 + 3 picture with rule 1 off are rule 1's own. With rule 1 on, the left end of the window is whole: the bookcase frame shows there, about 50 px wide and 190 px high, so the window is about 180 px wide where the rule-1-off picture's is about 130 px. In the rule-1-off picture that strip is the blinds wall, with bits of the frame showing through. With rule 1 on, the wall is also more solid. The brown trim along its top shows through only from about x 905, where the rule-1-off picture shows it from about x 725. The brown strip along the wall's foot does not show through at all. A few desk and shelf edges and a small patch by the vent (about x 330-350) differ too.
+
+### Rule 2 alone and rule 3 alone off with rule 1 on at the issue 69 view (Pinboard #736)
+
+The same view, camera, size and SwiftShader, rendered twice with rule 1 **on** and rules 4-7 on: once with only rule 2 off, once with only rule 3 off (in the same scratch copy of the page; no rule was changed in the source). Each was compared with the stored pictures above. No count was under 100 px, so neither was rendered again.
+
+| Off (rule 1 on) | vs rule-1-off | vs all-off | vs rule 1 on + rules 2 and 3 off | Picture |
+|---|---|---|---|---|
+| 2 | 19539 px | 240376 px | 225822 px | no hiding |
+| 3 | 22908 px | 237213 px | 222495 px | far-left only |
+
+- **Rule 2 off:** the picture is the rule-1-on one. It differs from the stored rule-1-on render of #723 by 17 px, scattered between x 375 and 585, and the big bookcase is whole.
+- **Rule 3 off:** the small bookcase at the far left loses its books to the wall behind it, as with rule 3 off and rule 1 off. Against the rule-1-on render, 3348 px differ at x 0-86 and 93 px elsewhere; the big bookcase is whole.
+- **With rule 1 on, the pair is still required.** Neither rule 2 alone nor rule 3 alone gives either kind of right-side cover: not the issue's about-130 px window, and not the coarse cover with the about-180 px window that rules 2 and 3 off together give.
+
+### Rules 2-7 off with rule 1 on at the issue 69 view (Pinboard #740)
+
+The same view, camera, size and SwiftShader, rendered once with rule 1 **on** and rules 2, 3, 4, 5, 6 and 7 all off (in the same scratch copy of the page; no rule was changed in the source), and compared with the stored pictures above. The count against the rule-1-on plus rules-2-and-3-off picture was under 100 px, so the picture was rendered a second time; the second render was byte-for-byte the same as the first.
+
+| Off (rule 1 on) | vs rule-1-off | vs all-off | vs rule 1 on + rules 2 and 3 off | Picture |
+|---|---|---|---|---|
+| 2-7 | 240572 px | 16436 px | 51 px | coarse cover only |
+
+- **The picture is the rule-1-on plus rules-2-and-3-off one.** The wall covers the big bookcase from the right, but the left window is about 180 px wide with the bookcase frame showing, not the issue's about-130 px window. The 51 px are thin slivers: a 32 px run of one row at x 935-966 (y 334), 7 px at x 356-362 (y 339), and 12 px on a desk edge around x 540-557 (y 438-441).
+- **Rules 4-7 barely change this view once rule 1 is on and rules 2 and 3 are off.** Turning them off too moves the gap to the all-off picture from 16396 px to 16436 px; it does not close it. With rules 2 and 3 off, the gap between the coarse cover and the issue match comes from rule 1 alone. Rules 4-7 were not turned off one at a time.
+
+### The float depth buffer, tried (Pinboard #755)
+
+Item 9 was built as written on branch `float-depth` (704fcc6, not for merging; no PR). three r185's `reversedDepthBuffer` puts reversed depth in a 32-bit float buffer (canvas through an MSAA target with a `FloatType` depth texture, key and plate targets too), and `FACE_LAYERS` keeps each face's own depth, lifted 2⁻²⁰ of it per layer. The group plane, rules 1, 4 and 5 and the 24-bit argument in `rankLayers` are gone. One three quirk had to be worked round: under reversed depth it turns the whole sorted render list round, `renderOrder` included, so the backdrop (order -1, no depth test) drew last over everything. The explorer now sets its own sorts, negated when `camera.reversedDepth` is set. All pictures are 496×384 under SwiftShader from the game's own camera, against master.
+
+| View | Changed px | Against MAME |
+|---|---|---|
+| Daytona Three-Seven 880 | 5735 | tire marks whole across block edges, as in MAME (master cuts them) |
+| Daytona Three-Seven 1480 | 2874 | thin fence edges only |
+| Daytona Three-Seven 3100 | 4519 | tire marks whole, as in MAME |
+| VF2 Colosseum 5600 | 4618 | ring border whole, as in MAME (master cuts it) |
+| VF2 Colosseum 6000 | 5552 | ring border whole, as in MAME |
+
+- **Issue 38 holds.** The flag view (stage 2, t 1270-1290): 955-1297 px move, all distant edges; the flag's emblem is the same, so `twins` still works.
+- **It can't be done as written: Daytona stage 2's start line goes.** Over the full sets (Daytona stages 0-2 at 52 cameras each, VF2 stages 1 and 3 at 31 each) the largest change is stage 2 frame 2560: 46624 px, the chequered start line and its yellow bands gone under the road. Frame 2440 loses the same line further off (4192 px). The line lies behind the road, not on it, and the sort puts it on top; rule 1 paired it with the road and the group plane drew it there. Lifting a face by its own depth plus a few ulps can't do that. Bigger lifts measured at 2560 / 2440: 2⁻¹⁴ leaves 37385 / 4192 px, 2⁻¹² 3388 / 3194, 2⁻¹⁰ 47 / 723. Even 2⁻¹⁰ of depth, about 8000 ulps, is not enough at 2440, and a lift that size is a depth bias, not "a few ulps". This is the case the rule-1 count foresaw: about 400 Daytona pairs where the face on top lies more than 0.001 behind its partner (120-160 more than 0.05, 10-20 more than 0.25). VF2 has none.
+- **VF2 stage 3 (2160-2400) moves 7000-18000 px** in the floor shadow by the arch. No MAME frame was taken there, so which is right is open.
+
+So the float buffer fixes the two pictures it was meant to fix, but rule 1's group plane is still what draws decals that sit behind their face. Removing rules 1, 4 and 5 needs another way to put such a face on top. That is a rule change, outside item 9, and was not tried.
+
+### Rules 2-7 from each game's camera (Pinboard #758)
+
+Item 6, for rules 2-7 (rule 1 is #714, above). Each rule was switched off on its own in a scratch copy of master's page (`globalThis.__off`; rule 6 is `laterZone` and `letGo` together; rule 5 is the slope cap line in the shader), with every other rule on, and compared pixel for pixel with the all-on picture. The all-on set was rendered twice, and the two renders were the same everywhere (0 px), so every count below is the rule's own. SwiftShader, clock held on the frame. No rule was changed in the source.
+
+**The game's own cameras (496×384).** Cameras changed / most pixels in one frame (the frame):
+
+| Off | Daytona Three-Seven (52) | Seaside (52) | Dinosaur Canyon (52) | VF2 Colosseum (31) | VF2 stage 3 (31) | STF, 15 stages × 31 (camera record) |
+|---|---|---|---|---|---|---|
+| 2 `APART` | 23 / 859 (880) | 0 | 1 / 4 | 0 | 5 / 537 (1800) | 1 frame, 1 px (stage 15) |
+| 3 `SMALL_APART` | 10 / 669 (1480) | 1 / 1 | 16 / 560 (2560) | 0 | 20 / 1394 (2680) | 1 frame, 1 px (stage 10) |
+| 4 plane drop | 1 / 717 (880) | 1 / 9 | 3 / 13 | 0 | 0 | 0 |
+| 5 slope cap | 33 / 1318 (2140) | 29 / 206 | 24 / 229 | 0 | 22 / 190 (2000) | ≤15 px (stages 4, 7, 15) |
+| 6 `laterZone` / `letGo` | 1 / 19 | 0 | 1 / 66 (2020) | 0 | 0 | 0 |
+| 7 `smallerOnTop` | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The cameras are #714's: Daytona's view matrix in the attract race (frames 520-3580), VF2's camera record, STF's record 0x519E98 in the Sonic vs Bean replay (frames 400-1300). STF stage 8 still hangs the headless page and is not in any set. Daytona's matrix is the driver's eye, not MAME's chase camera, so the Daytona frames are compared with MAME by eye only.
+
+- **Rule 2, Daytona Three-Seven 880:** on, the tire marks are cut into block-shaped pieces; off, they are whole, like MAME's streaks. Frames 1060 and 3280-3340 are the same marks, smaller. **A regression**, the same kind as rule 1's.
+- **Rule 4, Three-Seven 880:** on, a mark near the white line is cut; off, it is whole. **A regression.**
+- **Rule 3, Dinosaur Canyon 2560:** on, a dark tire mark runs across the yellow start band; off, the band covers it. Three-Seven 1480: a tire patch changes. VF2 stage 3 2640-2760: the edge of the water wedge at the floor's rim changes shape. Which is right in these three is not known (no registered MAME frame).
+- **Rule 5:** off, Three-Seven 1660 shows a teal band along the top of a wall, so rule 5 is right there. The rest (2140 and the other courses, VF2 stage 3) are thin lines, seams and small patches.
+- **Rule 2, VF2 stage 3 1800:** a 1 px line along a plank seam.
+- **Rule 6:** dots in one tire mark (Dinosaur Canyon 2020, Three-Seven 1600).
+- **STF:** essentially nothing. Seams of 1-15 px.
+
+**STF, #258's 8 cameras round each stage (15 stages; stage 8 hangs).** Rule 2: 4, 2 and 7 px on stages 4, 10, 15. Rule 3: 1-5 px on stages 0, 6, 7, 10, 13, 14, 15. Rule 4: 1 px (stage 4). Rule 5: 1-12 px (stages 0, 4, 7, 13-15). Rule 6: 29 px on stage 15. Rule 7: 0. All are seams.
+
+**The issue 44/46/58 views (STF, 1120×640):** 0 px for every rule, except rule 5 at issue 58 (1 px).
+
+**Virtua Cop's issue views (1120×640, the explorer's camera)**, px changed with the rule off:
+
+| View | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|
+| 69 | 17 | 3441 | 5 | 3 | 0 | 0 |
+| 71 | 0 | 39 | 0 | 0 | 4127 | 0 |
+| 73 | 0 | 5529 | 0 | 0 | 0 | 0 |
+| 73, t 1125 | 641 | 437 | 178 | 8 | 206 | 0 |
+| 78 | 0 | 436 | 7755 | 0 | 0 | 0 |
+| 80 | 556 | 2511 | 134 | 474 | 1932 | 0 |
+| 82 | 323 | 18055 | 41 | 8 | 166417 | 771 |
+| 83 | 439 | 90 | 121 | 1 | 145802 | 89286 |
+
+Each rule moves its own issue's view (3 at 73, 4 at 78, 5 at 80, 6 at 82, 6 and 7 at 83), except **rule 2 at issue 71: 0 px**. At that view, issue 71's bookcase stays on top without it. Rule 6 at 71 is a strip along the desk's edge; at 83, it is the road through the courtyard.
+
+**House of the Dead (`hotd`), stage 1, zones 0-4, each zone's framing camera (640×400, frame 100):** every rule moves 0 px, except rule 2 in zone 1 (3 px). The rules do still decide pairs there. Of zone 0's 557 pairs, 53 are fixed by rules 2, 3 or 7, not left to the key; with rule 2 off that drops to 39, and with rule 3 off to 41. Rule 7 decides 4 of zone 4's 77, as #742 found for zones 5-9. They just don't show from the zone's own camera. Zones 5-11, the other stages and `hotdp` were not run: one zone takes about 3 minutes to render under the machine's load, and the full set would have taken a day. HOTD has no game camera yet (#714), so these are the explorer's framing cameras, not the rail's.
+
+**Not done:** `grade-zsort` at the board's cameras (m2-hle2) was not run as a separate tool. The STF camera-record set above stands in for it: the same cameras, but compared rule on against rule off, not against the board's picture.
+
+So:
+
+- **Rules 2 and 4 are regressions on Daytona.** Both cut the tire marks at Three-Seven 880, as rule 1 does.
+- **Rule 3 moves Daytona and VF2 pictures**, but whether for better or worse is unknown.
+- **Rule 5 helps on Daytona** (1660) and is noise elsewhere.
+- **Rule 6 is noise outside Virtua Cop. Rule 7 moves nothing outside Virtua Cop.**
+- **STF hardly moves for any of them, and neither do HOTD's first five zones.**
+
+No rule was changed.
+
+## 8. The new games (#712)
+
+**Virtua Cop** (`vcop.js`, `vcopsky.js`) reads its segments, objects, clouds and sky from the program, with routines cited. What is not read from a routine:
+
+| What | Where | Note |
+|---|---|---|
+| `INTACT` | `vcop.js:139` | how many parts of a breakable object stand whole, per type. *Read (#94):* types 0, 1 and 3 get mask 3 from the segment loader's switch (0x31600, stores at 0x31768, 0x317A8, 0x317EC), and 0x26 and 0x27 from their routines' masks. A write tap on every slot's mask over 20000 attract frames found no other type spawned with part of its mask clear |
+| `IN_WORLD`, `SCRIPTS`, `GLINTS` | `vcop.js:133-149` | per-type sets, each with its reason cited; `IN_WORLD` includes 0x24, "a pair no list places", from MAME draws. Small, and each line names the routine |
+| `REST_Y` | `vcop.js:153` | one crate's resting height, from the routine at 0x37500. Cited |
+| `BOARD_FOCAL` | `vcopsky.js` | *Read (#94):* 0x1CE30 sends the GEO's focal each frame as 248 / tan(fov / 2), from the field of view at 0x50F3F4. That rests at 30° (0x1CD0C; 0x10700 sets 925.5 outright), so the focal is 925.5, not the 1180 measured before: that frame was mid-zoom (23.6°), as the attract demo narrows to 6.4° onto a target. The sky's scroll doesn't follow the zoom. Not yet graded against a MAME frame |
+| `CLOUDLESS_STAGE`/`FROM` | `vcop.js:244-245` | the high-rise drops the clouds from its third segment; the routine that drops them isn't cited |
+| `paletteFixes` | `games.js:2615` | the boot's own palette writes (commit `1ed1c25`), not a patch |
+
+**Virtua Fighter 2** (`vf2.js`, `vf2fx.js`, `vf2fighters.js`) is cited almost line by line. The approximations are labelled as such. The fight-driven effects (Souseiji's corner falls, the burst, the bubbles, the stone that flies) are switches named "stand-in", because what sets them off is fight state the explorer doesn't run. The Colosseum's lightning uses a seeded generator, because the board's random number adds hardware counters (`vf2.js:268-273`). The head always looks at the opponent, and the chest twist is left out, both said in `vf2fighters.js:74-77`. The Great Wall's banners turned `layers` on for VF2 (issue 87, `games.js:2793-2796`), so VF2 now runs every rule in §7.
+
+**The Cells tab** (`cells.js`) picks a cell's CG by the game's own lists where it names one. Where it doesn't, it falls back to tile coverage and then `seamScore`, a picture heuristic (`cells.js:309-364`). That is labelled in the code and only orders a picker.
+
 ## Checked and clean
 
 These look like magic numbers but cite the routine or a MAME measurement, and should stay: `SOUTH_ISLAND_CAGE_CORNERS`, `EGGMAN_DOORS`, `MUSHROOM_RINGS`, `FRAME_TABLES`, `CANYON_SLOPE_DIV` (display.js); the `colors.js` constants from sub_74C; `AREA_REACH`, `SLOT_REELS`, `BIRD_RADIUS` (daytona.js); `TAILS_LAB_VECTER_Y`; `partDraws` (a port of sub_764C0); `RAW_MIP_RECTS`; `osage.js`'s gravity and damping; `exhaust.js`'s chest slots; `zanzou.js`'s spacing (checked against 901 MAME captures). The placement opcode sets in `placements.js:50-61` are the stage-script VM's operand lengths.
@@ -131,6 +375,14 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 4. ~~**Live key ranking in face layers (§2).**~~ Done (Pinboard #259), graded on STF and Daytona.
 5. ~~**A current-zone/block state (§3) and the TGP ground query (§4).**~~ Done (#260, #261).
 
-Still open, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
+Next (#712), in this order:
+
+6. ~~**Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.~~ Measured (rule 1 in #714, rules 2-7 in Pinboard #758; see "Rules 2-7 from each game's camera" in §7). Rules 1, 2 and 4 cut Daytona's tire marks, rule 3 moves Daytona and VF2 pictures for better or worse (unknown which), and rule 5 helps on Daytona. Rules 6 and 7 only move Virtua Cop. STF and HOTD's first zones barely move. `grade-zsort` was not run as its own tool, and HOTD only for stage 1, zones 0-4. No rule was changed.
+7. ~~**Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.~~ Measured and rejected (Pinboard #742; see "Rules 6 and 7 in a single segment" in §7). Rule 6 is already union-only, and rule 7 is needed in a single segment.
+8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`. As written, this can't work. `uKeyReach` is 1, twice the 0.5 gap inside which faces are paired at all, so no pair would ever be "beyond the reach". Rules 2 and 3 split at 0.25 and 0.05 because issues 69 and 73 sit at those distances, and rule 7 (issue 83) is a third case of the same kind. A single number would have to be measured anew, not borrowed from the key pass.
+9. ~~**A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it.~~ Tried and stopped (Pinboard #755; see "The float depth buffer, tried" in §7). It fixes the tire marks and the ring border, but Daytona stage 2's start line lies behind the road, and own depth plus a few ulps can't put it on top. Branch `float-depth`, not merged.
+10. ~~Virtua Cop's focal from its view record, and its `INTACT` masks from the routines (§8).~~ Done (#94): the focal from the lens routine at 0x1CE30, and the masks from the segment loader.
+
+Still open from the first audit, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
 
 Merging master (Pinboard #440): master's issue 58 fix for Tails' lab's posters (`keepFar`'s layer -1 floor and `leaveApart`'s reordering, `dadf307`, `2f800f0`) was written for the static vote that §2 removed, so it went with it. With the live ranking the issue 58 view renders clean on the RTX 3070 and under SwiftShader. It was not clean, though: two palm trees stood on the world-map poster that master does not show (Pinboard #441). They are model 3798, drawn by `adv_movie_snc_disp` outside the lab, 150 units behind the room's back wall. The board never draws them inside: `adv_movie_snc_disp2` draws the room without them, and MAME's attract run shows the poster bare from the board's own camera. The cause was the key pass itself. `drawScene` left the key texture bound after pass 3, so from the second frame on pass 1 drew into the texture its own program samples, and WebGL dropped every one of those draws as a feedback loop. The key texture held only its clear, no face was held to `uKeyReach`, and window 4 (the palms, the hangar) was drawn over window 3 (the room) wherever it lay behind it. Separately, the clear was zeros rather than "no surface" (view z -1e9), because three.js premultiplies the clear colour by its alpha of 0; that only matters to the mirrored-draw test, and changes 13 pixels on an Aurora view of the ice. Both are fixed: the placeholder goes back after pass 3, and the clear's alpha is 1. The picture is now what a single `drawScene` on a fresh page gave all along (identical on issue 46, within run-to-run noise on the stage views), which is what a grader rendering one frame per page saw. Pixels changed against the branch, with a second render of the branch as the noise floor: issue 58 1.1k (the palms), issue 46 238k (noise 0: the outside's hangar door, roof edge and dish no longer cover the room), issue 44 91k (noise 11k, the dish and the roof edge gone). On the 16 stages' default orbit views, cameras the board never uses: Final Eggman Boss 11k (noise 2k), Aurora 9k (noise 0.2k), Stage 8 3k (0.7k), under 2k each elsewhere. The RTX 3070 and SwiftShader agree.
