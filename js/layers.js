@@ -35,16 +35,12 @@
  * cross the depth buffer is right.
  *
  * What comes out is a layer per face — 0 for a face nothing lies under, one
- * more than the highest face under it otherwise — and a plane for the faces
- * that lie on any other. An order is only as good as the depth buffer's
- * ability to keep it, and it cannot keep one by depth alone: a window pane a
- * few thousandths behind its wall is behind it to the buffer when seen close
- * and square on, and a few hundred units out the rounding of each vertex's
- * depth is as large as any offset small enough not to show. So the faces of a
- * group all take their depth from one plane, the largest face's, computed per
- * pixel where the view ray meets it, and are then parted by their layers alone
- * (see FACE_LAYERS in js/viewer.js). A face that strays further than the gap
- * from that plane, through a tilt, keeps the depth it has.
+ * more than the highest face under it otherwise. Each face keeps its own
+ * depth, and a layer lifts it a few steps of a 32-bit float depth buffer
+ * (see FACE_LAYERS in js/viewer.js): enough to part two faces in one plane,
+ * and no more. A face the sort puts on top that lies further behind than a
+ * few steps -- a window pane a few thousandths behind its wall, seen close and
+ * square on -- stays behind.
  */
 
 /* Andrew's monotone chain, counter-clockwise. */
@@ -99,22 +95,6 @@ function intersect(subject, clipper) {
     return out.length >= 3 ? out : [];
 }
 
-/*
- * How far a face apart from another, per unit apart, may lie beside it and
- * still be drawn over it: tan 80 degrees. A face of a group is drawn at the
- * depth of the group's plane, as much as the gap behind or in front of where
- * it is (see the note at the top), and seen at a slant that depth is the
- * depth of what lies in the plane beside it, as far off as the gap times the
- * tangent of the slant. Unpaired, the two are at one depth with no order, and
- * the depth buffer splits the pixels between them. Virtua Cop's third stage
- * has that (issue 69): two pieces of an office wall drawn together, one half
- * a unit in front of the other, its faces taken back onto the other's plane
- * where they met the end of a counter they never overlap square on. So two
- * faces apart are paired as far as they overlap seen within 80 degrees of
- * square on; beyond that the slant is a sliver.
- */
-const ASKEW = Math.tan((80 * Math.PI) / 180);
-
 /* Whether two faces' boxes, each grown by `grow`, overlap. */
 function boxesMeet(f, g, grow) {
     return [0, 1, 2].every((a) => f.lo[a] <= g.hi[a] + grow && g.lo[a] <= f.hi[a] + grow);
@@ -124,16 +104,6 @@ function boxesMeet(f, g, grow) {
 function mainAxis(n) {
     const x = Math.abs(n[0]), y = Math.abs(n[1]), z = Math.abs(n[2]);
     return x >= y && x >= z ? 0 : y >= z ? 1 : 2;
-}
-
-/* A convex polygon grown by r all round, near enough: the hull of its
- * corners moved r each way of eight. */
-function grown(poly, r) {
-    const pts = [];
-    for (const [x, y] of poly) {
-        for (let k = 0; k < 8; k++) pts.push([x + r * Math.cos(k * Math.PI / 4), y + r * Math.sin(k * Math.PI / 4)]);
-    }
-    return hull(pts);
 }
 
 /* The two axes left when `ax` is dropped. */
@@ -194,10 +164,9 @@ function facesOf(draws) {
                 const lo = [0, 1, 2].map((a) => Math.min(...pts.map((p) => p[a])));
                 const hi = [0, 1, 2].map((a) => Math.max(...pts.map((p) => p[a])));
                 const zmode = (decoded.flags[r / 3] >> 5) & 3;
-                const twoSided = ((decoded.flags[r / 3] >> 7) & 1) === 1;
                 /* The four corners the board sorts the face by. */
                 const zc = zCorners ? zCorners.map((a) => world(a, r)) : [...pts.slice(0, 3), pts[2]];
-                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, twoSided, zc, lo, hi, hulls: [], zones });
+                faces.push({ draw: di, t0: t, t1: u, pts, n, area, zmode, zc, lo, hi, hulls: [], zones });
             }
             t = u + 1;
         }
@@ -408,12 +377,7 @@ function pairsOf(faces, out, gap, cosine) {
         if (cos < cosine && !copy) return;
         if (!boxesMeet(f, g, gap)) return;
         const ax = mainAxis(f.n);
-        /* Seen at a slant, faces apart overlap further than they do square
-         * on; see ASKEW. */
-        const reach = ASKEW * Math.abs(f.n[0] * (g.pts[0][0] - f.pts[0][0])
-            + f.n[1] * (g.pts[0][1] - f.pts[0][1]) + f.n[2] * (g.pts[0][2] - f.pts[0][2]));
-        const fh = flatHull(f, ax);
-        const common = intersect(reach > 1e-3 ? grown(fh, reach) : fh, flatHull(g, ax));
+        const common = intersect(flatHull(f, ax), flatHull(g, ax));
         if (!common.length || polygonArea(common) <= Math.max(1e-3, 0.01 * Math.min(f.area, g.area))) return;
 
         const [lo, hi] = behind(f, g, ax, common);
@@ -436,64 +400,11 @@ function pairsOf(faces, out, gap, cosine) {
     return pairs;
 }
 
-/* Each paired face given the plane of its group's largest face, unless a
- * corner of it lies further than the gap from that plane, or the whole face
- * lies APART or more behind it; returns how many.
- *
- * A face that far behind is under the faces in front of it by its own depth,
- * seen from the side it is drawn from, which for a face drawn from one side
- * is the only side the camera sees it from,
- * and taking the plane would only pull it forward, by as much as the gap
- * times the tangent of the slant it is seen at. Where the ray meets the plane
- * off the face in front, that lands it in front of whatever lies between.
- * Virtua Cop's third stage has a hall ceiling half a unit over a lower one
- * (issue 78): drawn at the lower one's height, it came through the office
- * wall and the bookcase against it, seen from the office below. */
-function setPlanes(draws, faces, out, group, gap) {
-    const { paired, find, largest } = group;
-    let planes = 0;
-    faces.forEach((f, i) => {
-        if (!paired[i]) return;
-        const ref = faces[largest.get(find(i))];
-        const n = ref.n;
-        const d = n[0] * ref.pts[0][0] + n[1] * ref.pts[0][1] + n[2] * ref.pts[0][2];
-        const off = f.pts.map((p) => n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d);
-        if (off.some((s) => Math.abs(s) > gap) || (!f.twoSided && Math.min(...off) >= APART)) return;
-        /* Into the draw's own space: for x = A p + t, n.x = d is (A^T n).p = d - n.t. */
-        const M = draws[f.draw].matrix;
-        const plane = [
-            M[0] * n[0] + M[1] * n[1] + M[2] * n[2],
-            M[4] * n[0] + M[5] * n[1] + M[6] * n[2],
-            M[8] * n[0] + M[9] * n[1] + M[10] * n[2],
-            d - (n[0] * M[12] + n[1] * M[13] + n[2] * M[14]),
-        ];
-        const o = out[f.draw];
-        for (let k = f.t0 * 3; k < (f.t1 + 1) * 3; k++) o.plane.set(plane, k * 4);
-        planes++;
-    });
-    return planes;
-}
-
-/* The groups: faces joined by any pair, each taking the plane of its
- * largest face. */
-function groupsOf(faces, pairs) {
-    const root = faces.map((_, i) => i);
-    const find = (i) => {
-        while (root[i] !== i) i = root[i] = root[root[i]];
-        return i;
-    };
+/* Which faces any pair joins. */
+function pairedOf(faces, pairs) {
     const paired = new Uint8Array(faces.length);
-    for (let k = 0; k < pairs.length; k += 3) {
-        paired[pairs[k]] = paired[pairs[k + 1]] = 1;
-        root[find(pairs[k])] = find(pairs[k + 1]);
-    }
-    const largest = new Map();
-    faces.forEach((f, i) => {
-        if (!paired[i]) return;
-        const r = find(i), best = largest.get(r);
-        if (best === undefined || f.area > faces[best].area) largest.set(r, i);
-    });
-    return { paired, find, largest };
+    for (let k = 0; k < pairs.length; k += 3) paired[pairs[k]] = paired[pairs[k + 1]] = 1;
+    return paired;
 }
 
 /* What rankLayers needs: the paired faces alone, renumbered, with their
@@ -523,18 +434,16 @@ function rankingOf(faces, pairs, paired, out) {
 }
 
 /**
- * The faces lying on each other, and a depth plane for every vertex of every
- * draw; the layers themselves come from `rankLayers` for each camera.
+ * The faces lying on each other, for every vertex of every draw; the layers
+ * themselves come from `rankLayers` for each camera.
  *
  * @param {{decoded: object, matrix: ArrayLike<number>, zCorners?: Float32Array[], zones?: Set<number>}[]}
  *   draws in the order the game submits them; `matrix` is the draw's
  *   column-major 4x4, and `zCorners` stands in for the decode's own
  * @param {{gap?: number, cosine?: number}} [opts] how far apart two faces may
  *   stand and still be ordered, and the least cosine between their normals
- * @returns {{layer: Float32Array, plane: Float32Array, snap: number[]}[]} per
- *   draw, one layer per vertex (0 until ranked) and four numbers per vertex:
- *   the plane its face takes its depth from, n.p = d in the draw's own space,
- *   or zeros for a face that keeps its own depth; and pairs of vertex indices
+ * @returns {{layer: Float32Array, snap: number[]}[]} per draw, one layer per
+ *   vertex (0 until ranked), and pairs of vertex indices
  *   (copy, original) for a copy to be drawn on the corners of the triangle it
  *   copies. The array carries `ranking`, what rankLayers needs, or null when
  *   no two faces lie on each other.
@@ -543,17 +452,15 @@ export function coplanarLayers(draws, { gap = 0.5, cosine = 0.999, stats = null 
     const faces = facesOf(draws);
     const out = draws.map(({ decoded }) => {
         const count = decoded ? decoded.positions.length / 3 : 0;
-        return { layer: new Float32Array(count), plane: new Float32Array(count * 4), snap: [] };
+        return { layer: new Float32Array(count), snap: [] };
     });
     const pairs = pairsOf(faces, out, gap, cosine);
-    const group = groupsOf(faces, pairs);
-    const planes = setPlanes(draws, faces, out, group, gap);
-    out.ranking = rankingOf(faces, pairs, group.paired, out);
+    const paired = pairedOf(faces, pairs);
+    out.ranking = rankingOf(faces, pairs, paired, out);
     if (stats) {
         stats.faces = faces.length;
-        stats.paired = group.paired.reduce((s, v) => s + v, 0);
+        stats.paired = paired.reduce((s, v) => s + v, 0);
         stats.edges = pairs.length / 3;
-        stats.planes = planes;
     }
     return out;
 }
@@ -586,10 +493,8 @@ function sortKeys({ corners, zmode, key }, view) {
  * wall sorts nearer by its far corner from an angle, and seen square on the
  * two share a bucket and the later wins.
  *
- * The keys are not handed to the shader as depth: a 24-bit buffer's step is
- * about 3e-6 z² view units with the near plane at 0.02, a quarter of a unit
- * 300 out, so no offset small enough to hide in the depth would survive
- * there. A layer is an order, and an order is all the shader needs.
+ * The keys are not handed to the shader as depth: a layer is an order, and
+ * an order is all the shader needs.
  *
  * @param {object} r a `ranking` from coplanarLayers
  * @param {ArrayLike<number>} view the camera, as four numbers: the depth along

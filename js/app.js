@@ -2119,13 +2119,18 @@ function buildEggLabFootage(stage) {
             renderer.getCurrentViewport(v.material.uniforms.uViewport.value);
         };
         /* The board's focal length about the window's own centre, which is
-         * where set_window puts the projection's. */
+         * where set_window puts the projection's. Built in place of the
+         * camera's own, which three.js calls again to reverse the depth (see
+         * Viewer) and would build from the field of view. */
         const camera = new THREE.PerspectiveCamera();
         const k = FOOTAGE_NEAR / BOARD_FOCAL;
-        camera.projectionMatrix.makePerspective(
-            (w.x0 - w.cx) * k, (w.x1 - w.cx) * k, (w.cy - w.y0) * k, (w.cy - w.y1) * k,
-            FOOTAGE_NEAR, FOOTAGE_FAR);
-        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        camera.updateProjectionMatrix = () => {
+            camera.projectionMatrix.makePerspective(
+                (w.x0 - w.cx) * k, (w.x1 - w.cx) * k, (w.cy - w.y0) * k, (w.cy - w.y1) * k,
+                FOOTAGE_NEAR, FOOTAGE_FAR, camera.coordinateSystem, camera.reversedDepth);
+            camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        };
+        camera.updateProjectionMatrix();
         const pool = Array.from({ length: FOOTAGE_POOL }, () => {
             const mesh = new THREE.Mesh(new THREE.BufferGeometry(), v.material);
             mesh.matrixAutoUpdate = false;
@@ -2293,8 +2298,8 @@ function transformedBounds(d, matrix) {
 }
 
 /*
- * Put each face lying on another in its plane over it, for a game whose art
- * depends on that (see js/layers.js). The pairs and planes are for the draws as
+ * Put each face lying on another over it, for a game whose art depends on
+ * that (see js/layers.js). The pairs are for the draws as
  * they stand when the scene is built; which face of a pair is on top is the
  * board's sort from the camera, worked out again every frame (rankFaceLayers).
  * A draw that swaps models through a cycle shares them with every frame whose
@@ -2322,11 +2327,10 @@ function applyFaceLayers(draws, space = state.viewer.root) {
     };
     const whole = ranker(layers.ranking);
     draws.forEach(({ mesh, entry, decoded, matrix }, i) => {
-        const set = (geometry, d, { layer, plane, snap }, r, at) => {
+        const set = (geometry, d, { layer, snap }, r, at) => {
             if (d.positions.length / 3 !== layer.length) return;
             const attr = new THREE.BufferAttribute(layer, 1);
             geometry.setAttribute('aLayer', attr);
-            geometry.setAttribute('aPlane', new THREE.BufferAttribute(plane, 4));
             if (!r.attrs.has(at)) r.attrs.set(at, []);
             r.attrs.get(at).push(attr);
             /* A copy drawn on the corners of the triangle it copies (see
@@ -2353,8 +2357,8 @@ function applyFaceLayers(draws, space = state.viewer.root) {
                 continue;
             }
             if (alone === null) {
-                const solo = coplanarLayers([{ decoded, matrix }])[0];
-                alone = sameEntries(solo.plane, layers[i].plane);
+                alone = sameEntries(pairedIn(coplanarLayers([{ decoded, matrix }]).ranking, 0),
+                    pairedIn(layers.ranking, i));
             }
             /* In the order the game submits them, which the sort's ties go by. */
             const box = boxOf(d, matrix);
@@ -2369,6 +2373,9 @@ function applyFaceLayers(draws, space = state.viewer.root) {
         }
     });
 }
+
+/* The first triangles of a draw's paired faces, in a ranking. */
+const pairedIn = (ranking, draw) => (ranking ? [...ranking.t0].filter((_, k) => ranking.draw[k] === draw) : []);
 
 /* Each ranking's layers for the camera about to draw (see rankLayers). */
 const rankView = { s: new THREE.Matrix4(), dir: new THREE.Vector3(), eye: new THREE.Vector3() };

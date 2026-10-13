@@ -29,7 +29,6 @@ const VERT_SHADER = /* glsl */`
     in vec3 aZc3;        // corners instead of its own
     in vec3 aFacePt;     // the point the board tests the normal against
     in float aLayer;     // how many coplanar faces lie under this one (js/layers.js)
-    in vec4 aPlane;      // the plane its group takes depth from, n.p = w; zeros if none
     // bit 7 of aFlags = drawn from both sides; 256/512 = filter wraps in X/Y
 
     // Set per game -- see ZSORT_RECEDE below.
@@ -69,17 +68,12 @@ const VERT_SHADER = /* glsl */`
     // so flat for the reason above.
     flat out vec3 vFacePt;
     flat out float vLayer;
-    flat out vec4 vPlane;
     // The board's sort key in view z, and whether the draw is mirrored.
     flat out vec2 vKey;
 
     void main() {
         vColor = aColor;
         vLayer = aLayer;
-        // The layer plane in camera space. For x = B p + u, n.p = w is
-        // (B^-T n).x = w + (B^-T n).u; a zero normal stays zero.
-        vec3 planeN = normalMatrix * aPlane.xyz;
-        vPlane = vec4(planeN, aPlane.w + dot(planeN, modelViewMatrix[3].xyz));
         vTexel = aTexel;
         vTile = aTile;
         vLumaBase = aLumaBase;
@@ -316,7 +310,6 @@ const FRAG_SHADER = /* glsl */`
     in vec3 vViewPos;
     flat in vec3 vFacePt;
     flat in float vLayer;
-    flat in vec4 vPlane;
     flat in vec2 vKey;
     uniform mat4 projectionMatrix;
     uniform float uZsortRecede;
@@ -325,13 +318,6 @@ const FRAG_SHADER = /* glsl */`
     uniform float uKeyReach;
 
     out vec4 fragColor;
-
-    // The depth buffer's value for a point at view z, which runs negative into
-    // the screen.
-    float viewDepth(float z) {
-        return 0.5 * (projectionMatrix[2][2] * z + projectionMatrix[3][2])
-            / (projectionMatrix[2][3] * z + projectionMatrix[3][3]) + 0.5;
-    }
 
     // Stable pseudo-colour for a tile rect, so distinct textures read as
     // distinct surfaces even when the atlas is unavailable.
@@ -537,51 +523,22 @@ const FRAG_SHADER = /* glsl */`
         // the pixel to rounding, which is the flicker on a wall's stains and a
         // floor's rugs as the camera moves.
         //
-        // The same value is not good enough, though, when it is only nearly the
-        // same. A window pane the art stands 0.0025 behind its wall is behind it
-        // by several steps of the buffer seen close and square on, and each
-        // vertex's depth comes out of the projection rounded by a step or two,
-        // so an offset of a couple of steps loses the whole row of windows in
-        // one view and keeps it in the next. So a face in a group takes its
-        // depth from the group's plane where this pixel's ray meets it -- the
-        // same inputs for every face of the group, the same answer -- and the
-        // layer need only beat the rounding of that one division. A face with
-        // no plane falls back on its own depth and the slope of this pixel.
-        //
-        // The ray is the pixel's, out of gl_FragCoord, rather than the face's
-        // own interpolated position: two faces that are not the same triangle
-        // interpolate a point on the ray a hair apart in its last bits, and at
-        // a distance that hair is a step of the buffer -- Daytona's flag
-        // emblem, a copy of the cloth with a corner moved, lost triangles of
-        // itself under the cloth that way (issue 38).
-        float layerDepth = gl_FragCoord.z;
-        float layerSlope = fwidth(gl_FragCoord.z);
-        float layerZ = vViewPos.z;
-        vec3 ray = vViewPos;
-        if (projectionMatrix[2][3] != 0.0 && uViewport.z > 0.0) {
-            vec2 ndc = (gl_FragCoord.xy - uViewport.xy) / uViewport.zw * 2.0 - 1.0;
-            ray = vec3((ndc.x + projectionMatrix[2][0]) / projectionMatrix[0][0],
-                       (ndc.y + projectionMatrix[2][1]) / projectionMatrix[1][1], -1.0);
-            // A face with no plane is lifted a slope a layer, and the slope of
-            // a face seen edge on is the depth of a long stretch of it: the top
-            // of a computer case on Virtua Cop's stage 3 desks, layer 7 seen
-            // from eye height, came 0.6 forward through the screen of the
-            // monitor in front of it as a line (issue 80). So the slope taken
-            // is no more than that of a face seen about 70 degrees off square
-            // on, whose depth runs three pixels' width over each pixel.
-            float pixel = -2.0 * layerZ / (projectionMatrix[1][1] * uViewport.w);
-            layerSlope = min(layerSlope, viewDepth(layerZ) - viewDepth(layerZ + 3.0 * pixel));
-        }
-        float planeDen = dot(vPlane.xyz, ray);
-        if (planeDen != 0.0) {
-            float planeZ = ray.z * vPlane.w / planeDen;
-            if (planeZ < 0.0) {
-                layerDepth = viewDepth(planeZ);
-                layerSlope = 0.0;
-                layerZ = planeZ;
-            }
-        }
-        gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
+        // Each face keeps its own depth and is lifted a few steps of the buffer
+        // a layer. The buffer is 32-bit float and reversed (see Viewer's
+        // constructor), so a step is a fixed share of the depth at every
+        // distance: 2^-20 of it is eight to sixteen steps, and 300 units out a
+        // layer is 3e-4 of a unit. That is meant to beat the rounding that
+        // parts two triangles interpolated across the same pixel (Daytona's
+        // flag emblem, a copy of the cloth on its corners, issue 38), and
+        // nothing more: a face the sort puts on top but modelled further
+        // behind than that stays behind. Without the extension the reversed
+        // buffer needs, the buffer is three.js's 24-bit one and a layer is
+        // four of its steps.
+#ifdef USE_REVERSED_DEPTH_BUFFER
+        gl_FragDepth = min(gl_FragCoord.z * (1.0 + vLayer * exp2(-20.0)), 1.0);
+#else
+        gl_FragDepth = max(gl_FragCoord.z - vLayer * (4.0 / 16777216.0), 0.0);
+#endif
 #endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
@@ -607,7 +564,11 @@ const FRAG_SHADER = /* glsl */`
                 if ((e.y - vViewPos.z) * e.w > uKeyReach) discard;
                 if (vKey.y > 0.5 && e.z < 0.5 && vViewPos.z < e.y - 0.01) discard;
             }
+#ifdef USE_REVERSED_DEPTH_BUFFER
+            gl_FragDepth = 1.0 / (1.0 + max(-vKey.x, 0.0));
+#else
             gl_FragDepth = 1.0 - 1.0 / (1.0 + max(-vKey.x, 0.0));
+#endif
         }
 #endif
 
@@ -1061,7 +1022,14 @@ export class Viewer {
         /* On a touchscreen the fly rig is driven by the stick and a look drag
          * rather than pointer lock, which a tap could not release. */
         this.touch = touch;
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        /* Depth reversed (1 at the near plane, 0 at infinity), so that drawn
+         * into a float buffer, as drawScene draws it, its precision is a share
+         * of the distance rather than falling off as its square: 300 units
+         * out a step of a 24-bit buffer is a quarter of a unit and a float
+         * step under 4e-5. That is what lets a face lying on another keep its own
+         * depth (FACE_LAYERS). It needs EXT_clip_control; without it three.js
+         * leaves the depth as it was. */
+        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, reversedDepthBuffer: true });
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
         /* The fill shader is GLSL ES 3.00 — it integer-indexes the luma and
          * colour-translate tables with texelFetch, which GLSL ES 1.00 has no
@@ -1078,6 +1046,22 @@ export class Viewer {
 
         this.camera = new THREE.PerspectiveCamera(60, 1, 0.05, 20000);
         this.camera.position.set(0, 12, 45);
+
+        /* three.js sorts its draw lists by depth as if it were not reversed
+         * and then turns each list round whole, render order and all: the
+         * backdrop (order -1) came last and covered the course. These are its
+         * own sorts (painterSortStable and its reverse), turned round first
+         * whenever three.js will turn them back. */
+        const turned = (f) => (a, b) => (this.camera.reversedDepth ? -f(a, b) : f(a, b));
+        const nearer = (a, b) => (this.camera.reversedDepth ? b.z - a.z : a.z - b.z);
+        this.turned = turned;
+        if (this.renderer.capabilities.reversedDepthBuffer) {
+            this.opaqueSort = turned((a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder
+                || a.material.id - b.material.id || nearer(a, b) || a.id - b.id);
+            this.renderer.setOpaqueSort(this.opaqueSort);
+            this.renderer.setTransparentSort(turned((a, b) => a.groupOrder - b.groupOrder
+                || a.renderOrder - b.renderOrder || nearer(b, a) || a.id - b.id));
+        }
 
         this.orbit = new OrbitControls(this.camera, canvas);
         this.orbit.enableDamping = true;
@@ -1096,7 +1080,7 @@ export class Viewer {
         this.material = createModelMaterial();
         /* Whatever draws the scene -- this viewer, or a tool rendering it into
          * a target of its own size -- the fragment shader needs the viewport
-         * to turn a pixel back into its ray (FACE_LAYERS). */
+         * to find its pixel in the key texture (drawScene). */
         this.scene.onBeforeRender = (renderer) => {
             renderer.getCurrentViewport(this.material.uniforms.uViewport.value);
         };
@@ -1143,9 +1127,12 @@ export class Viewer {
          * distance its submission order deserves — index 0 submitted last and
          * kept in front, higher indices submitted earlier and pushed behind.
          * A unit is a depth-buffer step, so this settles ties and nothing more.
+         * three.js turns the factor round for a reversed buffer but not the
+         * units, so they are turned here.
          */
+        const back = this.renderer.capabilities.reversedDepthBuffer ? -1 : 1;
         this.planeMaterials = [0, 1, 2, 3].map((n) => (n === 0 ? this.material
-            : this.variantMaterial({ polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n })));
+            : this.variantMaterial({ polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: back * n })));
         /* One more copy per texture set, for a stage that spans several — see
          * setMaterial. */
         this.setMaterials = new Map();
@@ -1384,8 +1371,66 @@ export class Viewer {
      * Sphynx's rug under the sphinx and the lab's ground under its hangar were
      * each a window: the earlier draw loses to the later one by the board's
      * own rule, which a depth bias could only approximate.
+     *
+     * A draw to the canvas goes through floatTarget first: the canvas's own
+     * depth buffer is 24-bit, and only a target can have a float one.
      */
     drawScene() {
+        const r = this.renderer;
+        if (r.getRenderTarget() || !r.capabilities.reversedDepthBuffer) {
+            this.drawSorted();
+            return;
+        }
+        const size = r.getDrawingBufferSize(new THREE.Vector2());
+        const target = this.floatTarget(size.x, size.y);
+        r.setRenderTarget(target);
+        this.drawSorted();
+        r.setRenderTarget(null);
+        this.copyQuad.material.uniforms.uPlates.value = target.texture;
+        r.render(this.copyScene, this.plateCamera);
+    }
+
+    /** A target the size of the canvas with a 32-bit float depth buffer, and
+     * the quad that copies it out. */
+    floatTarget(w, h) {
+        if (this.canvasTarget?.width === w && this.canvasTarget.height === h) return this.canvasTarget;
+        this.canvasTarget?.dispose();
+        const r = this.renderer;
+        this.canvasTarget = new THREE.WebGLRenderTarget(w, h, {
+            minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false,
+            depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType),
+            resolveDepthBuffer: false,
+            samples: r.getContext().getContextAttributes().antialias ? 4 : 0,
+        });
+        /* Drawn into as the canvas is: three.js writes the output colour
+         * space (sRGB) only to the canvas and to an XR target, and for any
+         * other target leaves the stock materials' colour linear -- the grid,
+         * the axes, the plain-colour stand-ins. Its colour is stored as plain
+         * bytes, as the canvas's is, so the copy is exact; left to three.js,
+         * the texture would be sRGB and the multisampled buffer not, and the
+         * one would not resolve into the other. */
+        this.canvasTarget.isXRRenderTarget = true;
+        this.canvasTarget.texture.colorSpace = r.outputColorSpace;
+        this.canvasTarget.texture.internalFormat = 'RGBA8';
+        if (!this.copyQuad) {
+            this.copyQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+                glslVersion: THREE.GLSL3,
+                vertexShader: 'out vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+                fragmentShader: 'precision highp float; uniform sampler2D uPlates; in vec2 vUv; out vec4 c;'
+                    + ' void main() { c = texelFetch(uPlates, ivec2(gl_FragCoord.xy), 0); }',
+                uniforms: { uPlates: { value: null } },
+                depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+            }));
+            this.copyQuad.frustumCulled = false;
+            this.copyScene = new THREE.Scene();
+            this.copyScene.add(this.copyQuad);
+            this.plateCamera ??= new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        }
+        return this.canvasTarget;
+    }
+
+    /* drawScene's work, into the current target. */
+    drawSorted() {
         const r = this.renderer;
         const u = this.material.uniforms;
         const early = [];
@@ -1415,14 +1460,19 @@ export class Viewer {
                 || this.plateTarget.samples !== samples) {
             this.keyTarget?.dispose();
             this.plateTarget?.dispose();
+            /* Float depth in both, as in floatTarget, where the extension
+             * the reversed buffer needs is there. */
+            const depth = () => (r.capabilities.reversedDepthBuffer
+                ? new THREE.DepthTexture(w, h, THREE.FloatType) : null);
             this.keyTarget = new THREE.WebGLRenderTarget(w, h, {
                 type: THREE.FloatType, format: THREE.RGBAFormat,
                 minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-                depthBuffer: true, generateMipmaps: false,
+                depthBuffer: true, generateMipmaps: false, depthTexture: depth(),
             });
             this.plateTarget = new THREE.WebGLRenderTarget(w, h, {
                 minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
                 depthBuffer: true, generateMipmaps: false, samples,
+                depthTexture: depth(), resolveDepthBuffer: false,
             });
         }
         const bg = this.scene.background;
@@ -1491,12 +1541,12 @@ export class Viewer {
          * world-map poster. */
         const idle = u.uKeyTex.value;
         u.uKeyTex.value = this.keyTarget.texture;
-        r.setOpaqueSort((a, b) => a.id - b.id);
+        r.setOpaqueSort(this.turned((a, b) => a.id - b.id));
         for (const w of order) {
             r.clear(false, true, false);
             only(windows.get(w), 2);
         }
-        r.setOpaqueSort(null);
+        r.setOpaqueSort(this.opaqueSort ?? null);
         u.uKeyTex.value = idle;
 
         /* 4: the keyed picture over it, and what is not keyed. */
@@ -1515,7 +1565,7 @@ export class Viewer {
             this.plateQuad.frustumCulled = false;
             this.plateScene = new THREE.Scene();
             this.plateScene.add(this.plateQuad);
-            this.plateCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            this.plateCamera ??= new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         }
         this.plateQuad.material.uniforms.uPlates.value = this.plateTarget.texture;
         r.render(this.plateScene, this.plateCamera);
