@@ -15,7 +15,7 @@ import { readVf2Stages } from './vf2.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
-import { cellCount, cgCount, cgLabel, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
+import { cellCount, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -4083,7 +4083,10 @@ function drawCell() {
         + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
             + ` the game puts the rest in the tile chip some other way.`)
         + (unusedCells(state.rom).has(c.index) ? '<br>Unused: nothing in the program or data ROM'
-            + ' names this record, so the game never draws it.' : '');
+            + ' names this record, so the game never draws it.' : '')
+        + (leftoverTiles(state.rom, c.index, cgs) ? '<br>On this CG the cell shows leftover tiles:'
+            + ' an older DAYTONA, streak and flag the CG loads but no record lays out,'
+            + ' so they come out of order.' : '');
     updateHud();
 }
 

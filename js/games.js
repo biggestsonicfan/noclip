@@ -2286,6 +2286,14 @@ function daytonaBuild(spec) {
  *
  * The tile layer's palette goes through colorxlat as Daytona's sky's does
  * (`colorxlat`), so the cells take the cabinet's colours.
+ *
+ * CG 0's list (0x2073FC4) also loads 593 tiles no record lays out for it: a
+ * purple-to-cyan DAYTONA, a pink streak and a flag, at 0x20A7B08, 0x20A96EC
+ * and 0x20A9BF0, to characters 0x1200-0x14CA, and a recoloured copy
+ * (0x20AC534) to 0x1800-0x1ACA (`leftover`). CG 7 writes the TRY IT AGAIN
+ * text and the DAYTONA USA logos over the same characters, so cells 13, 14
+ * and 55, and the small 15-27 (11-14 in 1993), draw these tiles, out of
+ * order, when CG 0 is loaded.
  */
 /* The race start's palette cycle, laid out around a build's course picture
  * table: see flashCourse in js/cells.js. */
@@ -2297,6 +2305,7 @@ const DAYTONA_CELLS = {
     courses: { count: 4, cells: 0x002389ac, cgs: 0x0023899c, flash: courseFlash(0x002389ac) },
     charBytes: 0x80000,
     colorxlat: true,
+    leftover: { cg: 0, chars: [[0x1200, 0x14cb], [0x1800, 0x1acb]] },
 };
 
 /*
