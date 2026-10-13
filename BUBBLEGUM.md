@@ -8,7 +8,7 @@ Everything the first audit found is fixed or checked, except three things no rou
 
 What has grown back is in the same place §2 cleared: the face layers. Since 2026-10-11 `js/layers.js` has gained seven fitted rules, each from one Virtua Cop stage 3 issue (69, 71, 73, 78, 80, 82, 83), and every one of them applies to every game that has `layers` on: STF, both HOTDs, every Daytona, Virtua Cop and VF2. None was graded on anything but the issue's own view. §7 lists them and what the board's rule under them may be. That is the one cross-game item open, and the one to do next.
 
-The two new games (§8) are mostly read from their routines. What is not is labelled in the code: a few per-type lists from MAME runs and one measured focal in Virtua Cop, and VF2's fight-driven effects, which are switches marked "stand-in".
+The two new games (§8) are mostly read from their routines. What is not is labelled in the code: a few per-type lists from MAME runs in Virtua Cop, and VF2's fight-driven effects, which are switches marked "stand-in".
 
 ---
 
@@ -154,6 +154,16 @@ Two kinds are mixed here.
 
 Until it is measured, these are the explorer's newest bubblegum and the one item here that crosses games.
 
+### Rules 6 and 7 in a single segment (Pinboard #742)
+
+Rules 6 and 7 were gated on the union view (`zones` passed to the layers only when `stageView(stage) === stage.union`). Every single-segment and single-zone view was rendered from its own framing camera at 640×400 under SwiftShader, against master.
+
+- **Rule 6 does nothing in a single segment, by construction.** Every draw there shares the segment, so `laterZone` never fires. It is already union-only and needs no gate.
+- **Rule 7 is needed in a single segment.** In Virtua Cop's single-segment views it orders 3-45 pairs per segment differently. Pixels moved in stage 3 segment 7 (462 px), segments 1 and 2 (64 and 63 px), stage 1 segment 4 (15 px) and segment 1 (3 px), and stage 2 segment 7 (4 px). The 462 px are issue 83 itself: with the gate, the road's grey quads come back through the courtyard's brick in segment 7's own view. So rule 7 is a free-camera rule like 2 and 3, not a union one. Issues 82 and 83 were both filed in the default `all` view, which is why that wasn't seen.
+- **In House of the Dead, rule 7 moves no pixels from each zone's framing camera.** In stage 1, zones 0-11, it reorders 4 pairs in zones 5-9 (77 to 73, 75 to 71). The finished game's other stages and the prototype were not run.
+
+The gate was not kept.
+
 ### Rule 1 measured (Pinboard #714)
 
 Rule 1 alone, one game at a time, from that game's own camera as MAME logged it, rendered with `ASKEW` on and with it off (reach 0), at 496×384 under SwiftShader. Each "on" frame was rendered twice to get the noise floor, with the stage clock held on the board's frame. Nothing else was changed. A change in the picture counts as a regression.
@@ -266,10 +276,10 @@ The same view, camera, size and SwiftShader, rendered once with rule 1 **on** an
 
 | What | Where | Note |
 |---|---|---|
-| `INTACT` | `vcop.js:139` | how many parts of a breakable object stand whole, per type: three (types 0, 1, 3) from a MAME run's mask, two (0x26, 0x27) from their routines' masks. Reading the mask each type's routine sets would cover the types no stage list reaches |
+| `INTACT` | `vcop.js:139` | how many parts of a breakable object stand whole, per type. *Read (#94):* types 0, 1 and 3 get mask 3 from the segment loader's switch (0x31600, stores at 0x31768, 0x317A8, 0x317EC), and 0x26 and 0x27 from their routines' masks. A write tap on every slot's mask over 20000 attract frames found no other type spawned with part of its mask clear |
 | `IN_WORLD`, `SCRIPTS`, `GLINTS` | `vcop.js:133-149` | per-type sets, each with its reason cited; `IN_WORLD` includes 0x24, "a pair no list places", from MAME draws. Small, and each line names the routine |
 | `REST_Y` | `vcop.js:153` | one crate's resting height, from the routine at 0x37500. Cited |
-| `BOARD_FOCAL` = 1180 | `vcopsky.js:68` | measured from a MAME frame, not read. Daytona's focal comes from the view record (0x501730/0x501734, §4); Virtua Cop is a Daytona-family program, so its view record is the place to look |
+| `BOARD_FOCAL` | `vcopsky.js` | *Read (#94):* 0x1CE30 sends the GEO's focal each frame as 248 / tan(fov / 2), from the field of view at 0x50F3F4. That rests at 30° (0x1CD0C; 0x10700 sets 925.5 outright), so the focal is 925.5, not the 1180 measured before: that frame was mid-zoom (23.6°), as the attract demo narrows to 6.4° onto a target. The sky's scroll doesn't follow the zoom. Not yet graded against a MAME frame |
 | `CLOUDLESS_STAGE`/`FROM` | `vcop.js:244-245` | the high-rise drops the clouds from its third segment; the routine that drops them isn't cited |
 | `paletteFixes` | `games.js:2615` | the boot's own palette writes (commit `1ed1c25`), not a patch |
 
@@ -292,10 +302,10 @@ These look like magic numbers but cite the routine or a MAME measurement, and sh
 Next (#712), in this order:
 
 6. **Measure §7's seven rules** (rule 1 done, #714: a regression on Daytona and VF2) with each one on and off, on STF's 16 stages × 8 cameras, the issue 44/46/58 views, `grade-zsort` at the board's cameras, HOTD's zones and Daytona's attract frames, as well as Virtua Cop's issue views. A rule that moves board-camera pixels in another game is a regression there, whatever it fixed on stage 3.
-7. **Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.
-8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`.
+7. ~~**Gate rules 6 and 7 on the union view** (§7), if the measurement shows they do nothing in a single segment or zone.~~ Measured and rejected (Pinboard #742; see "Rules 6 and 7 in a single segment" in §7). Rule 6 is already union-only, and rule 7 is needed in a single segment.
+8. **One "apart beyond the reach, true depth wins" rule** in place of `APART` and `SMALL_APART`, with the key pass's `uKeyReach`. As written, this can't work. `uKeyReach` is 1, twice the 0.5 gap inside which faces are paired at all, so no pair would ever be "beyond the reach". Rules 2 and 3 split at 0.25 and 0.05 because issues 69 and 73 sit at those distances, and rule 7 (issue 83) is a third case of the same kind. A single number would have to be measured anew, not borrowed from the key pass.
 9. **A float depth buffer in place of the group plane**, which would take rules 1, 4 and 5 with it. This is the largest change, and the one with the widest reach.
-10. Virtua Cop's focal from its view record, and its `INTACT` masks from the routines (§8). Small, one game.
+10. ~~Virtua Cop's focal from its view record, and its `INTACT` masks from the routines (§8).~~ Done (#94): the focal from the lens routine at 0x1CE30, and the masks from the segment loader.
 
 Still open from the first audit, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
 
