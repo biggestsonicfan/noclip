@@ -235,7 +235,108 @@ const sfight = {
     /* What the viewer knows how to do with this game beyond drawing a model.
      * Stages, rigs and motions are read out of tables this repo has only
      * located for Sonic The Fighters. */
-    features: { stages: true, characters: true, motions: true, cells: true },
+    /* skyEye: the Stages tab reads the camera out as the game's own record
+     * (js/skyeye.js), the one both builds of the game keep. */
+    features: { stages: true, characters: true, motions: true, cells: true, skyEye: true },
+};
+
+/* ---- Sonic Championship -------------------------------------------------- */
+
+/*
+ * The `schamp` set: the export build, and MAME's parent of `sfight`. Its mask
+ * ROMs are sfight's, chip for chip, so the models, the textures, the palette
+ * and the copro tables are the same bytes. What it has of its own is the
+ * program pair (epr-19141/19142) and the XTRA_DATA pair (epr-19143/19144).
+ *
+ * The program is sfight's program with code put in or taken out in a few
+ * places, so everything after such a place sits a little further on. Matched
+ * 16 bytes at a time, the two ROMs line up in the runs below: from each
+ * sfight address, this far later in schamp, up to the next. Everything the
+ * viewer reads out of the program ROM falls inside a run, well clear of an
+ * edge — the routines, the frame tables, the stage records and the tables at
+ * 0xC0000 and on (+0x138). Pointers held in those tables are read out of this
+ * ROM, so they come out schamp's own; only the addresses the viewer itself
+ * names go through `relocate`.
+ *
+ * Its XTRA_DATA is the English text: cells 441 to 529 are drawn again in it
+ * and CGs 81 to 91 are new lists, and it has nine cells and two CGs sfight
+ * does not — 535 to 543, CGs 90 and 91. The cells tab reads them out of the
+ * pattern and CG tables, which run to their own ends, so nothing names them.
+ */
+const SCHAMP_RELOCATION = [
+    [0x00000, 0x000], [0x036a0, 0x008], [0x03c50, 0x000], [0x08c50, 0x00c],
+    [0x099f0, 0x02c], [0x52720, 0x034], [0x53250, 0x03c], [0x554f0, 0x044],
+    [0x561d0, 0x05c], [0x562d0, 0x074], [0x56890, 0x08c], [0x7b340, 0x094],
+    [0x7b460, 0x0ac], [0x7b5d0, 0x0c4], [0x7b6c0, 0x0dc], [0x7ce80, 0x0e4],
+    [0x7d4f0, 0x108], [0x7d610, 0x13c], [0x8e3d0, 0x138],
+];
+
+/**
+ * Where a build keeps what sfight keeps at `addr` in the program ROM: `addr`
+ * itself for every game without a `relocation` table.
+ */
+export function relocate(game, addr) {
+    const runs = game.relocation;
+    if (!runs) return addr;
+    let delta = 0;
+    for (const [from, d] of runs) {
+        if (addr < from) break;
+        delta = d;
+    }
+    return addr + delta;
+}
+
+/** The other way: the sfight address of what this build keeps at `addr`. */
+export function unrelocate(game, addr) {
+    const runs = game.relocation;
+    if (!runs) return addr;
+    let delta = 0;
+    for (const [from, d] of runs) {
+        if (addr < from + d) break;
+        delta = d;
+    }
+    return addr - delta;
+}
+
+const schampAt = (addr) => relocate({ relocation: SCHAMP_RELOCATION }, addr);
+
+const schamp = {
+    ...sfight,
+    id: 'schamp',
+    name: 'Sonic Championship',
+    identify: ['epr-19141.15', 'epr-19142.16'],
+    relocation: SCHAMP_RELOCATION,
+    regions: {
+        ...sfight.regions,
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19141.15', 0xb942ef21, 'epr-19142.16', 0x2d54bd76]],
+        },
+        mainData: {
+            ...sfight.regions.mainData,
+            parts: [
+                ...sfight.regions.mainData.parts.slice(0, 2),
+                [0x1000000, 'epr-19143.7', 0xf97176fd, 'epr-19144.8', 0xd040202a],
+            ],
+        },
+    },
+    texture: { ...sfight.texture, pageTable: schampAt(sfight.texture.pageTable) },
+    stageTable: {
+        ...sfight.stageTable,
+        at: schampAt(sfight.stageTable.at),
+        materials: { ...sfight.stageTable.materials, ptrs: schampAt(sfight.stageTable.materials.ptrs) },
+    },
+    sound: { ...sfight.sound, stageMusic: schampAt(sfight.sound.stageMusic) },
+    cells: {
+        ...sfight.cells,
+        cards: {
+            ...sfight.cells.cards,
+            tables: sfight.cells.cards.tables.map((t) => t.map(schampAt)),
+        },
+        portraits: { ...sfight.cells.portraits, list: schampAt(sfight.cells.portraits.list) },
+        tips: { ...sfight.cells.tips, list: schampAt(sfight.cells.tips.list) },
+        names: { ...sfight.cells.names, tables: sfight.cells.names.tables.map(schampAt) },
+    },
 };
 
 /* ---- Fighting Vipers ----------------------------------------------------- */
@@ -2807,7 +2908,7 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
-export const GAMES = [sfight, fvipers, hotdp, hotdo, hotd,
+export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
 
 /*

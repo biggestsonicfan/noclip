@@ -507,15 +507,22 @@ narrow desktop window keeps its sidebar; `?mobile` and `?desktop` on the URL
 force one or the other, and the link at the foot of the panel switches in place
 without dropping the ROM.
 
-Which zips depends on how your set is organised. The viewer reads Sonic The
-Fighters' own program EPROMs (`epr-19001`–`epr-19004`) and the mask ROMs
-(`mpr-19005`–`mpr-19020`) that MAME shares with the parent set, Sonic
-Championship (`schamp`), so a combined set is the least fuss:
+Sonic The Fighters comes in two builds, and the viewer reads both: Sonic The
+Fighters itself (`sfight`, program EPROMs `epr-19001`–`epr-19004`) and the
+export build, Sonic Championship (`schamp`, `epr-19141`–`epr-19144`), MAME's
+parent set. They share every mask ROM (`mpr-19005`–`mpr-19020`), so the models
+and textures are the same; Sonic Championship's program has its own English
+text and nine more cells (its title logo among them). Which zips depends on
+how your set is organised:
 
-- **non-merged** — `sfight.zip` on its own; it carries everything.
+- **non-merged** — `sfight.zip` on its own carries both builds and loads as
+  Sonic The Fighters; `schamp.zip` on its own loads as Sonic Championship.
 - **split** — `sfight.zip` *and* `schamp.zip` together: the program EPROMs come
   from the first, the data ROMs from the second.
-- **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it.
+- **merged** — `schamp.zip` on its own; the clone's EPROMs are inside it, and
+  it loads as Sonic Championship.
+
+Where a set holds both builds, the other is offered as a variant.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 

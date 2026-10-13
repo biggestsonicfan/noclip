@@ -53,6 +53,8 @@
  * he came in with (`placeChest` in js/app.js).
  */
 
+import { progAddr } from './romset.js';
+
 /* The slot the flame is drawn on, and so the frame it is drawn in. */
 export const CHEST_SLOT = 1;
 
@@ -88,8 +90,9 @@ export const CLOSED_CHESTS = [397, 2020];
  *             cycle:number[], bodyAddr:number, bodies:number[]}}
  */
 export function readExhaust(rom, charIndex) {
-    const t = EXHAUST_TABLES[charIndex];
-    if (!t) return null;
+    const tables = EXHAUST_TABLES[charIndex];
+    if (!tables) return null;
+    const t = { cone: progAddr(rom, tables.cone), burst: progAddr(rom, tables.burst) };
     const dv = rom.mainCpuView;
     if (t.burst + PHASE_COUNT * 2 > rom.maincpu.length) return null;
     const read = (addr) => {
@@ -103,7 +106,7 @@ export function readExhaust(rom, charIndex) {
      * routine's own guard is by id, and this is where the id it wants comes
      * from. A character with no body table keeps the chest its part table has. */
     const bodyAddr = charIndex < 52
-        ? dv.getUint32(BODY_ANIM_TABLE + charIndex * 4, true) : 0;
+        ? dv.getUint32(progAddr(rom, BODY_ANIM_TABLE) + charIndex * 4, true) : 0;
     const bodies = [];
     if (bodyAddr && bodyAddr + 4 <= rom.maincpu.length) {
         bodies.push(dv.getUint16(bodyAddr, true), dv.getUint16(bodyAddr + 2, true));

@@ -72,6 +72,7 @@
  */
 
 import { turnedBy, coproSin, coproCos } from './pose.js';
+import { progAddr } from './romset.js';
 
 const OSAGE_PER_CHARACTER = 0x00068d64;
 const RECORD_SIZE = { 1: 0x24, 2: 0x40, 3: 0x0c, 4: 0x18, 5: 0x44 };
@@ -140,7 +141,7 @@ const ltZero = (f) => f < -FLT_MIN;
  */
 export function readOsage(rom, charIndex) {
     const dv = rom.mainCpuView;
-    const table = dv.getUint32(OSAGE_PER_CHARACTER + charIndex * 4, true);
+    const table = dv.getUint32(progAddr(rom, OSAGE_PER_CHARACTER) + charIndex * 4, true);
     if (!table || table + 4 > rom.maincpu.length) return null;
 
     const records = [];
