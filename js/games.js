@@ -3016,8 +3016,128 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/*
+ * Dead or Alive, Revision B: the Model 2B board.
+ *
+ * The program does not keep its stages as tables. Each stage is a routine
+ * (`ld 0x719E0[stage]`, called from 0x71BC0 with the stage number in RAM byte
+ * 0x5555BE) that builds its matrices on the coprocessor and draws piece by
+ * piece, so js/doa.js runs it: an i960 interpreter (js/i960.js) and a
+ * coprocessor that does the routines' arithmetic. `visible` are the two cull
+ * tests the routines call, answered "in front"; `pokes` is RAM the routines
+ * read — 0x54FCDD is set, which draws the Danger Zone's banners and ropes
+ * (0x65F70) as the attract mode's fights do.
+ */
+const doab = {
+    id: 'doab',
+    name: 'Dead or Alive (Model 2B, Revision B)',
+    identify: ['epr-19379b.15', 'epr-19380b.16'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x00000, 'epr-19379b.15', 0x8a10a944, 'epr-19380b.16', 0x766c1ec8]],
+        },
+        /* MAME copies the last pair up to 0x1C00000 as well; nothing read
+         * here comes from that copy. */
+        mainData: {
+            size: 0x1c00000,
+            parts: [
+                [0x0000000, 'mpr-19318.11', 0xab431bfe, 'mpr-19319.12', 0xc5cb694d],
+                [0x0800000, 'mpr-19316.9', 0x2d2d1b1a, 'mpr-19317.10', 0x96b17bcf],
+                [0x1000000, 'mpr-19314.7', 0xa8d963fb, 'mpr-19315.8', 0x90ae5682],
+                [0x1800000, 'mpr-19312.5', 0x1dcedb10, 'mpr-19313.6', 0x8c63055e],
+            ],
+        },
+        polygons: {
+            size: 0x1800000,
+            parts: [
+                [0x0000000, 'mpr-19322.17', 0xd0e6ecf0, 'mpr-19325.21', 0x7cbe432d],
+                [0x0800000, 'mpr-19323.18', 0x453d3f4a, 'mpr-19326.22', 0xb976da02],
+                [0x1000000, 'mpr-19324.19', 0x0d6bf454, 'mpr-19327.23', 0x6a75634c],
+            ],
+        },
+        /* The material and texture-point streams the model table points at. */
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19321.27', 0x9c49e845, 'mpr-19320.25', 0x190c017f]],
+        },
+    },
+    modelTable: { offset: 0x0003a160, count: 19330, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* The boot copies 484 colours out of the program ROM to palette RAM
+     * 0x1802000 (0x70D80): a count and then the colours. `tables` points at
+     * the `ldos 0x62A40` operand that names them. */
+    palette: { tables: 0x70d84, sets: 1, split: 0 },
+    /* Raw sheets, filled from slabs (js/texture.js buildDoaTexram): a stage's
+     * set is its number. The slabs carry no mip chain -- MAME's texture RAM
+     * leaves rows 768-1023 empty on both sheets and still draws the far walls
+     * -- so the viewer stays on the full-size level (Viewer.setMipLevels). */
+    texture: {
+        raw: { layout: 'doa', stageSlabs: 0xcada0, charSlabs: 0xcade0 },
+        sets: 16,
+        residentSet: null,
+        defaultSet: 1,
+        mips: false,
+    },
+    /* Luma is 0x4000 bytes from data 0xFC0000 (0x10D0); colorxlat is a grey
+     * ramp with the stage's colours over rows 21-29 (js/colors.js
+     * buildDoaColorxlat). Both match MAME's RAM byte for byte. */
+    colors: {
+        luma: { data: 0xfc0000, bytes: 0x4000 },
+        doa: { stages: 0x7a7e0, count: 16, row0: 21, rows: 5 },
+    },
+    /*
+     * The boot uploads 31 material slots from program 0x6B0 (geometry-engine
+     * function 6). The light is the fighter's — a point the routine at
+     * 0x16760 takes through the camera each frame — and for a stage alone it
+     * is this fixed one, what MAME's display list holds with the camera
+     * square on: down and away from the viewer.
+     */
+    lighting: {
+        light: [0, -Math.SQRT1_2, -Math.SQRT1_2],
+        materials: { at: 0x6b0, count: 32 },
+    },
+    doa: {
+        routines: 0x719e0,
+        count: 16,
+        stageByte: 0x5555be,
+        visible: [0x72600, 0x72680],
+        pokes: [[0x54fcdd, 1]],
+    },
+    stageTable: { doa: true, flat: true },
+    depth: { recede: 0, nearMin: 0.1, layers: true },
+    scenes: null,
+    features: { stages: true, characters: false, motions: false, bodies: false },
+};
+
+/*
+ * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
+ * the data, model and texture chips are doab's, so the set needs doa.zip
+ * beside it. The model table is in those data chips, so it has not moved;
+ * the stage code and the program's tables sit 0x7A40 lower than Revision B's,
+ * and its RAM is laid out the same.
+ */
+const doaa = {
+    ...doab,
+    id: 'doaa',
+    name: 'Dead or Alive (Model 2A, Revision A)',
+    identify: ['epr-19310a.12', 'epr-19311a.13'],
+    identifyCrc: [0x06486f7a, 0x1be62912],
+    regions: {
+        ...doab.regions,
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x00000, 'epr-19310a.12', 0x06486f7a, 'epr-19311a.13', 0x1be62912]],
+        },
+    },
+    palette: { ...doab.palette, tables: 0x69344 },
+    texture: { ...doab.texture, raw: { layout: 'doa', stageSlabs: 0xc33e0, charSlabs: 0xc3420 } },
+    colors: { ...doab.colors, doa: { ...doab.colors.doa, stages: 0x72da0 } },
+    doa: { ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40] },
+};
+
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2, doaa, doab];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -810,6 +810,41 @@ function buildDaytonaTexram(rom, texSets) {
 }
 
 /*
+ * Texture RAM for Dead or Alive. The program copies 128-row strips out of
+ * 0xC0000-byte slabs in the data ROMs (0x7CBA0): a slab's first and last
+ * quarters are a character's, two strips side by side, and its middle half is
+ * a stage's. Rows 0-255 and 512-767 of a sheet take the two fighters' strips,
+ * rows 256-511 the stage's. The stage's slab is `stageSlabs[stage]`, a
+ * fighter's `charSlabs[char]`; the fighters here are the first two, which the
+ * attract mode loads at boot.
+ */
+function buildDoaTexram(rom, texSets) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const slab = (table, k) => cv.getUint32(table + k * 4, true) - MAIN_DATA_BASE;
+    const copy = (src, sheet, row, rows) => {
+        if (src >= 0 && src + rows * ROW_PAIR <= md.length) {
+            tex.set(md.subarray(src, src + rows * ROW_PAIR), sheet * SHEET_BYTES + row * ROW_PAIR);
+        }
+    };
+    for (let sheet = 0; sheet < 2; sheet++) {
+        for (let half = 0; half < 2; half++) {
+            const src = slab(raw.charSlabs, half) + 0x20000 * (1 - sheet);
+            copy(src, sheet, 128 * half, 128);
+            copy(src + 0x80000, sheet, 512 + 128 * half, 128);
+        }
+    }
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    if (sets.length) {
+        const src = slab(raw.stageSlabs, sets[sets.length - 1]) + 0x40000;
+        for (let sheet = 0; sheet < 2; sheet++) copy(src, sheet, 256, 256);
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
  * rectangles are complementary, so each sheet's mip half is half one bank and
@@ -984,9 +1019,10 @@ export function programTextureSets(rom, index, decoded) {
  */
 export function buildTexram(rom, texSets) {
     if (rom.game.texture.raw) {
-        return rom.game.texture.raw.layout === 'daytona'
-            ? buildDaytonaTexram(rom, texSets)
-            : buildRawTexram(rom, texSets);
+        const layout = rom.game.texture.raw.layout;
+        if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
+        if (layout === 'doa') return buildDoaTexram(rom, texSets);
+        return buildRawTexram(rom, texSets);
     }
     const md = rom.mainData;
     const dv = rom.mainDataView;

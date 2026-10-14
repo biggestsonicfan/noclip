@@ -12,6 +12,7 @@ import { readStageTable, readCourseStages, stageLight, gameLighting } from './st
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
+import { readDoaStages } from './doa.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -1004,6 +1005,7 @@ function composeOps(out, ops) {
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
         else if (kind === 'rz') OP_SCRATCH.makeRotationZ((v * Math.PI) / 180);
+        else if (kind === 'm') OP_SCRATCH.set(v[0], v[3], v[6], 0, v[1], v[4], v[7], 0, v[2], v[5], v[8], 0, 0, 0, 0, 1);
         else OP_SCRATCH.makeTranslation(v[0], v[1], v[2]);
         out.multiply(OP_SCRATCH);
     }
@@ -4680,6 +4682,7 @@ function loadGameContent() {
     $('#fix-field').hidden = !state.rom.game.patches?.length;
     useRomFixes($('#opt-fix-errors').checked);
     state.viewer.setDepthProfile(state.rom.game.depth);
+    state.viewer.setMipLevels(state.rom.game.texture.mips !== false);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     state.viewer.material.uniforms.uPlaneNormals.value = state.rom.game.lighting?.planeNormals ? 1 : 0;
     const on = applyGameFeatures();
@@ -4692,6 +4695,7 @@ function loadGameContent() {
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
+        else if (T.doa) state.stages = readDoaStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }

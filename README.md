@@ -11,7 +11,9 @@ views below are its. *Fighting Vipers* has stages and models — see
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
-stages and its models — see [Virtua Cop](#virtua-cop).
+stages and its models — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
+twelve stages and its models on both its boards — see
+[Dead or Alive](#dead-or-alive).
 
 Three views, and a fourth for the 2D art:
 
@@ -498,6 +500,22 @@ does not track, so with the opponent on, a head can be wrong. The chest's
 twist toward the opponent is left out: the move record says when it may run,
 but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
 to the face target `+0xB0C`, which the fight writes.
+
+## Dead or Alive
+
+`doa.zip` (Revision B, Model 2B) loads with the Stages and Models tabs, and so
+does `doaa.zip` (Revision A, Model 2A) dropped together with `doa.zip`, which
+holds the data, model and texture chips the two share. Tecmo's game keeps no
+stage records: each stage is a routine of its own that places its pieces and
+hands them to the geometry engine, so the explorer runs those routines on an
+i960 interpreter and keeps what they draw ([`js/doa.js`](js/doa.js)). That
+gives twelve stages, numbered as the game numbers them (the ROM has no names
+for them), with their banners and ropes, their textures and their colours.
+
+The textures are the game's own slabs, copied into texture RAM as the game
+copies them, and they carry no smaller levels; the explorer draws them at full
+size at every distance, as the board does. Not read yet: the sky, which the
+board draws behind the stages, and the fighters.
 
 ## Running it
 

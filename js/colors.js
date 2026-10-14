@@ -263,6 +263,40 @@ function buildRampColorxlat(rom, colorSet) {
 }
 
 /*
+ * Dead or Alive's colorxlat: a grey ramp the boot computes (0xFB0) and, over
+ * its odd rows, colours copied whole out of the program ROM (0x5D710). Row r
+ * of the ramp is k * (i + 1) >> 6 for luma i < 64, k = 0x40 + 6r + r / 6, and
+ * never under r; luma 64 on holds the last of it. The copies are 64 entries a
+ * row, three bytes an entry (red, green, blue), five rows two apart: the
+ * stage's at row 21 out of `stages[stage]`, the two fighters' at rows 1 and 11
+ * out of their costume's table. No fighter is in a stage view, so those stay
+ * grey.
+ */
+function buildDoaColorxlat(rom, stage) {
+    const C = rom.game.colors.doa;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const set = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const k = row ? 0x40 + 6 * row + Math.trunc(row / 6) : 0;
+        let v = 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            if (luma < 64) v = Math.max((k * (luma + 1)) >> 6, row);
+            for (let ch = 0; ch < 3; ch++) set(ch, row, luma, v);
+        }
+    }
+    const src = stage >= 0 && stage < C.count ? cv.getUint32(C.stages + stage * 4, true) : 0;
+    if (src && src + C.rows * 64 * 3 <= rom.maincpu.length) {
+        for (let r = 0; r < C.rows; r++) {
+            for (let luma = 0; luma < 64; luma++) {
+                for (let ch = 0; ch < 3; ch++) set(ch, C.row0 + 2 * r, luma, cv.getUint8(src + (r * 64 + luma) * 3 + ch));
+            }
+        }
+    }
+    return out;
+}
+
+/*
  * Virtua Cop's 0x43B0, run on the fresh ramp before the band goes over it:
  * rows 1..31, luma 1..63, every entry whose red is not zero and at most `top`
  * gains `add` in each channel. The test is on red alone, and the channels are
@@ -317,6 +351,7 @@ function writeBand(md, band, set) {
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
+    if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet);
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);

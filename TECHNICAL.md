@@ -28,6 +28,8 @@ js/
   exhaust.js     Metal Sonic's jet: the eight-frame plume drawn off the chest
   eggrobo.js     the Egg robots' two frame-counter animations: the boss's
                  arms and the minion's head
+  doa.js         Dead or Alive: runs each stage's own routine, keeps its draws
+  i960.js        the i960 interpreter doa.js runs them on
   viewer.js      three.js scene, shader, orbit + noclip cameras
   app.js         UI wiring
   sound/
@@ -1093,6 +1095,54 @@ in attract mode the head is up to 134 degrees off where the game looks at the
 motion's own target. That is fight state (see When the game looks above), so
 the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
 frames match. The misses are the fight's blend choices above.
+
+### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
+
+Dead or Alive keeps no stage records to read. Each stage is a routine, named
+by the table at `0x719E0 + 4 * stage` on Revision B, that writes the camera
+and each piece's matrix to the coprocessor's port and the piece's model to the
+geometrizer's. `js/i960.js` is just enough of an i960 to run them: the integer,
+float and branch instructions they use, and calls with their register frames.
+`js/doa.js` puts the program and data ROMs and a blank work RAM on its bus and
+listens on the two ports:
+
+- the copro port takes the matrix commands (load, multiply, translate, turn,
+  as the routines chain them), and the geometrizer's draw command reads the
+  current matrix and the model pointer, which the model table names;
+- the stage number goes in at `0x5555BE`, and `0x54FCDD = 1` has the
+  routines draw the banners and ropes as well;
+- the two culling helpers, `0x72600` and `0x72680`, are answered "in view",
+  and the view vector at `0x5B9870` is (1, 1, 1), so nothing is culled.
+
+Stages 0-11 draw; 12-15 point at a routine that draws nothing, and are
+skipped. A piece turned only about Y becomes a turn op; anything else becomes
+the new `m` op, a 3x3 by columns.
+
+The textures are slabs of 0xC0000 bytes that the routine at `0x7CBA0` copies
+into texture RAM by mode: rows 0-127 and 512-639 (modes 0, 3), rows 128-255
+and 640-767 (modes 1, 4), rows 256-511 (modes 2, 5), modes 3-5 to sheet 1.
+The stage's slab is `0xCADA0[stage]`, the fighters' `0xCADE0[char]`.
+`buildDoaTexram` does the same, the stage's slab onto both sheets. No slab
+carries a mip chain: MAME's texture RAM in a fight leaves rows 768-1023 of
+both sheets empty and still draws the far walls, so the board is never sent
+to a smaller level. The profile says `texture.mips: false` and the viewer
+stays on level 0 (`Viewer.setMipLevels`); sampling the lower levels drew the
+temple's walls black.
+
+Colour, each checked byte for byte against MAME's RAM: the face palette is
+484 colours from `0x62A42` (`0x70D80`), the luma 0x4000 bytes from data
+`0xFC0000` (`0x10D0`), and the colorxlat a grey ramp (`0xFB0`) with the
+stage's five rows of colour over rows 21-29 from `0x7A7E0[stage]`. The
+fighters' rows are left grey. The materials are 32 slots at `0x6B0`, and the
+light a fixed one, down and away from the camera.
+
+Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
+model and texture chips are Revision B's; its RAM is laid out the same, and
+everything the explorer reads from the program sits 0x7A40 lower. All twelve
+stages draw the same pieces and render pixel for pixel the same as Revision
+B's.
+
+Not read yet: the sky behind the stages, and the fighters.
 
 ### Polygon decoding (`js/model.js`)
 
