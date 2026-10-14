@@ -390,6 +390,59 @@ function railStops(rom, n, count) {
     return stops;
 }
 
+/* ---- the light ---------------------------------------------------------------
+ *
+ * The stage is lit by a world light the program rotates into camera space
+ * itself (0x1D0CC: the vector at 0x515B60 through the TGP, out to 0x515B50,
+ * which is what the geometrizer's light command gets). In play (0x5016CC 11,
+ * 0x5016D4 above 5) 0x1DF90 sets that vector from the stage's ten records at
+ * `0x2817AF0[stage]`, 0xC8 bytes a stage: a count and the light as three
+ * floats, then the frames the turn to it takes. The record is the first whose
+ * count the rail's count (0x50F490) has not passed, and 0x25890 normalises the
+ * vector. Stage 1 lights the warehouse from (14, -70, -70) and turns to
+ * (70, -70, -14) for counts 966 to 1353. The explorer stands at no count, so it
+ * takes the one nearest the eye, and the record's light at once, not over the
+ * turn's frames.
+ */
+const LIGHT_TABLE = 0x2817af0;
+const LIGHT_STAGE = 0xc8;
+const LIGHT_BYTES = 20;
+const LIGHT_KEYS = 10;
+
+function stageLightKeys(rom, n) {
+    const dv = rom.mainDataView;
+    const keys = [];
+    for (let k = 0; k < LIGHT_KEYS; k++) {
+        const off = LIGHT_TABLE - MAIN_DATA_BASE + n * LIGHT_STAGE + k * LIGHT_BYTES;
+        if (off < 0 || off + LIGHT_BYTES > rom.mainData.length) return null;
+        const [x, y, z] = [4, 8, 12].map((o) => dv.getFloat32(off + o, true));
+        const len = Math.hypot(x, y, z) || 1;
+        keys.push({ count: dv.getUint32(off, true), light: [x / len, y / len, -z / len] });
+    }
+    return keys;
+}
+
+/* The rail's count nearest a point, the explorer's axes. */
+function nearestCount(rail, [x, y, z]) {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < rail.count; i++) {
+        const e = rail.at(i).eye;
+        const d = (e[0] - x) ** 2 + (e[1] - y) ** 2 + (e[2] - z) ** 2;
+        if (d < bestD) { best = i; bestD = d; }
+    }
+    return best;
+}
+
+/* The stage's light seen from an eye: null where the stage has no table. */
+function railLight(rom, n, rail) {
+    const keys = rail && stageLightKeys(rom, n);
+    if (!keys) return null;
+    return (eye) => {
+        const c = nearestCount(rail, eye);
+        return (keys.find((k) => c <= k.count) ?? keys[LIGHT_KEYS - 1]).light;
+    };
+}
+
 /* The camera at the rail's start, and at each segment's mark, by view. */
 function stageCameras(rail) {
     if (!rail) return {};
@@ -448,6 +501,7 @@ function stageOf(rom, lit, n, segs) {
         tint: [1, 1, 1],
         bright: 1,
         light: lit.light,
+        lightFrom: railLight(rom, n, rail),
         materials: lit.materials,
         colorCycles: [],
         flags: 0,

@@ -1195,6 +1195,8 @@ function modelFighter(idx) {
 function applyStageShading(stage) {
     const u = state.viewer.material.uniforms;
     u.uLight.value.set(...stage.light);
+    /* A light kept by the eye (stepEyeLight) is looked up afresh. */
+    state.eyeLightAt = null;
     for (let i = 0; i < stage.materials.length; i++) {
         u.uMaterial.value[i].set(stage.materials[i].diffuse, stage.materials[i].ambient);
     }
@@ -2239,6 +2241,20 @@ function stepStageMaterials(frame) {
     if (!slots) return;
     const u = state.viewer.material.uniforms.uMaterial.value;
     for (const { slot, diffuse, ambient } of slots) u[slot].set(diffuse, ambient);
+}
+
+/*
+ * A light that follows where the camera stands rather than the frame: Virtua
+ * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
+ * looked up again once the camera has moved.
+ */
+function stepEyeLight() {
+    const stage = state.stages[state.stageIndex];
+    if (!stage?.lightFrom) return;
+    const p = state.viewer.camera.position;
+    if (state.eyeLightAt?.equals(p)) return;
+    state.eyeLightAt = p.clone();
+    state.viewer.material.uniforms.uLight.value.set(...stage.lightFrom(p.toArray()));
 }
 
 /*
@@ -4876,7 +4892,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); renderEggLabFootage(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); stepEyeLight(); renderEggLabFootage(); }
         /* The Cells tab's picture covers the view, and is drawn when it changes. */
         if (state.tab !== 'cell') state.viewer.render();
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();

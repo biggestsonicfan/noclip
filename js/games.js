@@ -2782,7 +2782,10 @@ const vcop = {
          * 0x5016FC is 0), parameter and coefficient interleaved. Slot 15 is
          * the car windows', a flat 255 that puts them on the blue of the band. */
         materials: { source: 'maincpu', at: 0x94d0, count: 32, stride: 8 },
-        light: [-0.45, -0.89, 0.45],
+        /* Out of play, 0x1E1C8's (0.14, -0.7, -0.7), which 0x25890 normalises;
+         * z negated for the explorer. In play the stage's own table takes over
+         * (js/vcop.js, railLight). */
+        light: [0.140028, -0.700140, 0.700140],
         courses: {},
         sound: null,
     }),
