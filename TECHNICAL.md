@@ -3758,6 +3758,48 @@ character has to reproduce all seven of player 1's exactly, and the set that
 does has to be the twelve fighters, who share one part block and one skin block
 between them. One character matching would be luck; twelve is the tables.
 
+### Microtextures
+
+The other end of the chain. A face can name a 128x128 detail square, and the
+board blends it into the texel wherever the face is magnified past its full-size
+level, by `min(-mml >> minlod, 127) / 256` — never quite half — with mml the
+level in 128ths (`model2rd.ipp draw_scanline_tex`). Header 0 bit 12 turns it on
+and bits 10-11 are its minimum LOD; header 2 bit 13 is its column and bits 14-15
+its row, in 128s, on the sheet the face's own tile is *not* on
+(`model2_v.cpp`). It is addressed by the face's own coordinate shifted left by
+`1 << minlod`, so it is two to 256 times finer than the texture it sits on.
+
+The House of the Dead is the game that uses it, and uses it as the pattern
+rather than as a detail: the mansion's wallpaper and its floor tiles are the
+microtextures, and the textures underneath are grime. Without it those rooms
+are plain smears up close. The prototype sets it on 1,093 triangles in 27 room
+models of the first half of its model table and the final game on 1,623 in 43
+(PN_room_n1a's floor is model 3315 there, 3169 in the prototype); Sonic The
+Fighters and Fighting Vipers never set it.
+
+The prototype's second half sets the bit on 66,000 triangles, and that is
+noise. Its uv and material pointers are the first half's with every one at
+word 0x400000 or above moved down 0x200000: the table relocated for a texture
+ROM whose second pair starts at byte 0x400000, chips half the size of the 4MB
+flash the prototype has. On that flash the moved pointers land in the first
+pair's upper half, which is bank 7's records and then erased bytes (`ffff`,
+`00ff`, `ff00`), so 46% of those faces read the enable bit as set, against
+under 1% in the first half. The game never reads the second half: all
+thirteen `lda 0x2C5D1F0[...*16]` index by the model number, nothing adds 5049,
+and a MAME read tap on it stayed at zero through ten minutes of attract and
+ten of Chapter 2, which read a moved-pointer bank of the first half 1.8 million
+times. It is not the green blood option either: that swaps single models (0x593
+or 0x594, sub at 0x486A8, test-menu byte 0x51E49E).
+
+The board samples the square at full size however fine the shift makes it,
+which at 256 times is noise. Texture RAM holds no mip chain for the squares, so
+`microAtlas` (js/atlas.js) copies the corner they live in (256x512 of each
+sheet) into a texture of its own, which WebGL mipmaps; each square is a power of
+two on a power-of-two boundary, so its levels never mix with a neighbour's. The
+shader reads it at the pixel's own footprint, and the blend fraction off the
+same screen-space level the mip chain uses. The *microtextures* switch turns it
+off.
+
 ### Ramp bands and palette bands
 
 Luma RAM decides which of the two a face gets, and the split is clean:

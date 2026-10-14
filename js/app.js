@@ -49,7 +49,7 @@ import {
 import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
-import { buildAtlas, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
+import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet, bestTextureCombo, bankTextureSet, programTextureSets, fighterSetList } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
 import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
@@ -528,11 +528,19 @@ function makeDataTexture(data, w, h) {
     return t;
 }
 
-/** A pair of texture-RAM sheets as the shader's atlas texture. */
+/** A pair of texture-RAM sheets as the shader's atlas texture. The
+ * microtexture squares ride along on it as `userData.micro`, mipmapped: see
+ * microAtlas in js/atlas.js. */
 function atlasTexture(sheet0, sheet1) {
-    const atlas = makeDataTexture(buildAtlas(sheet0, sheet1), ATLAS_W, ATLAS_H);
+    const texels = buildAtlas(sheet0, sheet1);
+    const atlas = makeDataTexture(texels, ATLAS_W, ATLAS_H);
     atlas.magFilter = THREE.LinearFilter;
     atlas.minFilter = THREE.LinearFilter;
+    const micro = makeDataTexture(microAtlas(texels), MICRO_W, MICRO_H);
+    micro.generateMipmaps = true;
+    micro.minFilter = THREE.LinearMipmapLinearFilter;
+    atlas.userData.micro = micro;
+    atlas.addEventListener('dispose', () => micro.dispose());
     return atlas;
 }
 
@@ -541,6 +549,7 @@ function setAtlasSheets(sheet0, sheet1) {
     const u = state.viewer.material.uniforms;
     u.uAtlas.value?.dispose?.();
     u.uAtlas.value = atlasTexture(sheet0, sheet1);
+    u.uMicro.value = u.uAtlas.value.userData.micro;
     u.uUseAtlas.value = 1;
 }
 
@@ -4407,6 +4416,7 @@ function wireOptions() {
     $('#opt-axes').addEventListener('change', (e) => { v.axes.visible = e.target.checked; });
     $('#opt-cull').addEventListener('change', (e) => v.backfaceCull(e.target.checked));
     $('#opt-smooth-holes').addEventListener('change', (e) => v.smoothHoles(e.target.checked));
+    $('#opt-micro').addEventListener('change', (e) => v.microTextures(e.target.checked));
     $('#opt-ride').addEventListener('change', (e) => setRideStage(e.target.checked));
     $('#skyeye-copy').addEventListener('click', () => {
         const text = updateSkyEye();
@@ -4876,6 +4886,7 @@ function start() {
     $('#tool-shot').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
     state.viewer.smoothHoles($('#opt-smooth-holes').checked);
+    state.viewer.microTextures($('#opt-micro').checked);
     loadGameContent();
     wireOptions();
     state.viewer.resize();
