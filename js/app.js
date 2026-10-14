@@ -1195,6 +1195,8 @@ function modelFighter(idx) {
 function applyStageShading(stage) {
     const u = state.viewer.material.uniforms;
     u.uLight.value.set(...stage.light);
+    /* A light kept by the eye (stepEyeLight) is looked up afresh. */
+    state.eyeLightAt = null;
     for (let i = 0; i < stage.materials.length; i++) {
         u.uMaterial.value[i].set(stage.materials[i].diffuse, stage.materials[i].ambient);
     }
@@ -1571,9 +1573,9 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
             totals[entry.layer]++;
             const partMaterial = perPart && entry.set != null ? materialForSet(entry.set, stage) : null;
             if (partMaterial) { state.rom.paletteSet = entry.set; partSets.add(entry.set); }
-            const d = entry.scroll?.points
-                ? getTpdModel(entry.model, entry.scroll.points)
-                : getModel(entry.model);
+            const d = entry.scroll?.points ? getTpdModel(entry.model, entry.scroll.points)
+                : entry.points ? getTpdModel(entry.model, entry.points.words, entry.points.key)
+                    : getModel(entry.model);
             if (!d) continue;
             composeOps(m, opsAt(entry, 0));
             const mesh = addStageDraw(entry, d, m, { shellFirst, windowed, material: partMaterial });
@@ -1633,6 +1635,8 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
          * frame; the scene is shown in the world's. */
         const c = new THREE.Vector3(...b.center).applyMatrix4(worldFrame);
         v.frame([c.x, c.y, c.z], b.radius, { fly: true, dir: [0.45, 0.36, 0.72] });
+        const cam = stage.cameras?.[stageView(stage)];
+        if (cam) lookFromStageCamera(cam, worldFrame);
     }
 
     /* Two stages can share a colour table — South Island and its two alternates
@@ -1643,6 +1647,25 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
 
     renderStagePanel(stage, counts, totals, list);
     updateHud();
+}
+
+/* How far ahead of a stage camera the orbit turns about. */
+const STAGE_CAMERA_ORBIT = 10;
+
+/*
+ * Put the camera where a stage says the board's stands for the view picked —
+ * Virtua Cop's rail (js/vcop.js) — looking the way it looks, after the
+ * framing has set the near and far planes and the pace from the whole stage.
+ */
+function lookFromStageCamera(cam, worldFrame) {
+    const v = state.viewer;
+    const eye = new THREE.Vector3(...cam.eye).applyMatrix4(worldFrame);
+    const at = new THREE.Vector3(...cam.at).applyMatrix4(worldFrame);
+    v.camera.position.copy(eye);
+    v.orbit.target.copy(at.sub(eye).setLength(STAGE_CAMERA_ORBIT).add(eye));
+    v.camera.lookAt(v.orbit.target);
+    v.orbit.update();
+    v.fly.syncFromCamera();
 }
 
 /*
@@ -2218,6 +2241,20 @@ function stepStageMaterials(frame) {
     if (!slots) return;
     const u = state.viewer.material.uniforms.uMaterial.value;
     for (const { slot, diffuse, ambient } of slots) u[slot].set(diffuse, ambient);
+}
+
+/*
+ * A light that follows where the camera stands rather than the frame: Virtua
+ * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
+ * looked up again once the camera has moved.
+ */
+function stepEyeLight() {
+    const stage = state.stages[state.stageIndex];
+    if (!stage?.lightFrom) return;
+    const p = state.viewer.camera.position;
+    if (state.eyeLightAt?.equals(p)) return;
+    state.eyeLightAt = p.clone();
+    state.viewer.material.uniforms.uLight.value.set(...stage.lightFrom(p.toArray()));
 }
 
 /*
@@ -4240,7 +4277,9 @@ function wireOptions() {
     /* Which zone or which blocks the stage is drawn with — see stageView. */
     $('#view-select').addEventListener('change', (e) => {
         state.stageViews[state.stageIndex] = e.target.value;
-        loadStage(state.stageIndex, { keepCamera: true });
+        /* A view with a camera of its own goes there; the rest keep the view. */
+        const stage = state.stages[state.stageIndex];
+        loadStage(state.stageIndex, { keepCamera: !stage?.cameras?.[e.target.value] });
     });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
@@ -4853,7 +4892,7 @@ function start() {
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
-        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); renderEggLabFootage(); }
+        if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); stepEyeLight(); renderEggLabFootage(); }
         /* The Cells tab's picture covers the view, and is drawn when it changes. */
         if (state.tab !== 'cell') state.viewer.render();
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();

@@ -2777,8 +2777,15 @@ const vcop = {
         bankTable: 0x28190e8, bootBank: 0x2300000, texSets: 3,
         luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc },
         cabinets: DAYTONA_CABINETS,
-        materials: { source: 'mainData', at: 0x81b294, count: 32, stride: 4 },
-        light: [-0.45, -0.89, 0.45],
+        /* Not Daytona's table at 0x81B294, which this build never sends: 0x6F90
+         * sends 0x94D0 (or 0x95D0, the same but for slots 16, 17 and 19, when
+         * 0x5016FC is 0), parameter and coefficient interleaved. Slot 15 is
+         * the car windows', a flat 255 that puts them on the blue of the band. */
+        materials: { source: 'maincpu', at: 0x94d0, count: 32, stride: 8 },
+        /* Out of play, 0x1E1C8's (0.14, -0.7, -0.7), which 0x25890 normalises;
+         * z negated for the explorer. In play the stage's own table takes over
+         * (js/vcop.js, railLight). */
+        light: [0.140028, -0.700140, 0.700140],
         courses: {},
         sound: null,
     }),
@@ -2826,7 +2833,20 @@ const vcop = {
         /* The 0x800 words uploaded to texture RAM 0x4000 at game start. */
         textureRam: { at: 0x81d3de, from: 0x4000 },
     },
-    colors: { luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true },
+    /* The band over luma 48..63, one table per stage (0x4170, by the stage
+     * number at 0x50F2A8). A fourth, 0x801800, is taken when 0x5016D4 is 10.
+     * Before it, 0x43B0 shifts the ramp by the same stage number: `top` is the
+     * highest red entry it moves and `add` what each channel gains. 0x5016D4
+     * being 10 takes { top: 0xe7, add: [15, -4, -7] } instead. */
+    colors: {
+        luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true,
+        band: { tables: [0x800c00, 0x801000, 0x801400] },
+        shift: [
+            { top: 0xf7, add: [8, 8, 8] },
+            { top: 0xef, add: [13, -2, -2] },
+            { top: 0xf7, add: [8, 8, 8] },
+        ],
+    },
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
     stageTable: { flat: true, segments: { at: 0x28390d0, count: 4 } },

@@ -224,8 +224,16 @@ function colorTable(dv, src) {
  * Only luma 0..63 is ever read back — js/viewer.js caps the index at 63, as
  * draw_scanline_tex does at 0x3F — so the flat tail is written for the sake of
  * being what the board holds rather than because anything samples it.
+ *
+ * Virtua Cop then lays a scene palette over luma 48..63 of every row, as the
+ * texture-mapped games do: 0x4170 copies sixteen colours a row out of the
+ * table its `band` names for the stage, and 0x4328 spreads each one into the
+ * three channels. A channel is four bits of the colour and one of the top
+ * three (red 0-3 and 12, green 4-7 and 13, blue 8-11 and 14), times 8. It is
+ * what turns a car's windows blue: their texels land in that band, on the
+ * white row.
  */
-function buildRampColorxlat(rom) {
+function buildRampColorxlat(rom, colorSet) {
     /* Which set is the test menu's CABINET setting (see DAYTONA_CABINETS in
      * js/games.js); the panel's switch puts its choice on the ROM set. */
     const C = rom.game.colors;
@@ -247,7 +255,47 @@ function buildRampColorxlat(rom) {
         const tail = t ? (flat + t) >>> 1 : 0;
         for (let luma = entries; luma < CXLAT_ROW / 2; luma++) put(row, luma, tail);
     }
+    const shift = C.shift?.[colorSet];
+    if (shift) shiftRamp(out, shift);
+    const band = C.band?.tables[colorSet];
+    if (band !== undefined) writeBand(rom.mainData, band, set);
     return out;
+}
+
+/*
+ * Virtua Cop's 0x43B0, run on the fresh ramp before the band goes over it:
+ * rows 1..31, luma 1..63, every entry whose red is not zero and at most `top`
+ * gains `add` in each channel. The test is on red alone, and the channels are
+ * 16-bit words, so a green or blue below what is taken off wraps as it does
+ * on the board.
+ */
+function shiftRamp(cxlat, { top, add }) {
+    const view = new DataView(cxlat.buffer, cxlat.byteOffset, cxlat.byteLength);
+    for (let row = 1; row < 32; row++) {
+        for (let luma = 1; luma < 64; luma++) {
+            const at = row * CXLAT_ROW + luma * 2;
+            const red = view.getUint16(at, true) & 0xff;
+            if (red === 0 || red > top) continue;
+            for (let ch = 0; ch < 3; ch++) {
+                const o = ch * CXLAT_CHANNEL + at;
+                view.setUint16(o, (view.getUint16(o, true) + add[ch]) & 0xffff, true);
+            }
+        }
+    }
+}
+
+/* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170). */
+function writeBand(md, band, set) {
+    for (let row = 0; row < 32; row++) {
+        for (let i = 0; i < GROUP_COLORS; i++) {
+            const o = band + (row * GROUP_COLORS + i) * 2;
+            const c = md[o] | (md[o + 1] << 8);
+            for (let ch = 0; ch < 3; ch++) {
+                const v = (((c >> (4 * ch)) & 0xf) << 1) | ((c >> (12 + ch)) & 1);
+                set(ch, row, PALETTE_LUMA0 + i, v << 3);
+            }
+        }
+    }
 }
 
 /**
@@ -268,7 +316,7 @@ function buildRampColorxlat(rom) {
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
-    if (rom.game.colors.ramp) return buildRampColorxlat(rom);
+    if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);

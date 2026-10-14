@@ -746,6 +746,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         ops: o.ops ?? [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
             ...propTurn(o.turn),
             ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])],
+        /* And its own texture points, where it has them: a car window's. */
+        ...(o.points ? { points: o.points } : {}),
     }));
     /* Objects a stage builds itself, already in the draw list's own shape —
      * Daytona USA's, whose routines are in js/daytona.js. */
