@@ -308,7 +308,9 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
      * and neither is bit 7, which says the board draws the face from behind as
      * well as in front; see the note on the facing point. Bits 8 and 9 let the
      * filter blend across the tile's edge in X and Y (bits 6 and 7); a face
-     * without them is clamped there. */
+     * without them is clamped there. Bit 10 turns on the microtexture, bits
+     * 11-12 are its minimum LOD and bits 13-15 where its 128x128 square sits;
+     * see the note where they are read. */
     let faceFlags = 0;
     /* Which of the 32 material slots the geometry engine lights this polygon
      * with — bits 18-22 of the attribute word. The slots themselves are per
@@ -495,6 +497,17 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                  * last row into its own first put a thin seam at every join. */
                 if ((th0 >> 6) & 1) faceFlags |= 256;
                 if ((th0 >> 7) & 1) faceFlags |= 512;
+                /* The microtexture: a 128x128 detail square the board blends
+                 * in, up to almost half, where the face is magnified past its
+                 * full-size level (model2rd.ipp, `object.utex && mml < 0`).
+                 * Bit 12 turns it on and bits 10-11 are its minimum LOD; th2
+                 * bit 13 picks its column of the other sheet and bits 14-15
+                 * its row (model2_v.cpp). The House of the Dead puts it on its
+                 * walls and floors, which up close read as flat smears of one
+                 * texel without it. */
+                if (textured && ((th0 >> 12) & 1)) {
+                    faceFlags |= 1024 | (((th0 >> 10) & 3) << 11) | (((th2 >> 13) & 7) << 13);
+                }
                 tx = 32 * (th2 & 0x3f);
                 ty = 32 * ((th2 >> 6) & 0x1f) + sheet * 1024;  /* sheets stack */
                 tw = textured ? texw : 0;
