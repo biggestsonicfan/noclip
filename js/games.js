@@ -2306,12 +2306,12 @@ function daytonaBuild(spec) {
          * function 6 out of two parallel arrays rather than one interleaved
          * table, which is why `stride` is 4 here and 8 in the other profiles.
          *
-         * The light is three floats out of a view record. On the board that
-         * vector is in the engine's post-transform frame, so it is a headlight
-         * rather than a world light; applied here as a world light it shades a
-         * model consistently from one side instead of following the camera,
-         * which is what a model viewer wants. Z is negated for the decoder's
-         * convention, as stageLight does for the other games.
+         * The light is a world light: Revision A keeps it at program 0x232DC4
+         * and every frame turns it into camera space through geometry-engine
+         * function 0x1A (0x722C) before sending it, as Virtua Cop does at
+         * 0x1D0CC. It is not unit length (1.094) and the board lights with it
+         * as it is. Z is negated for the decoder's convention, as stageLight
+         * does for the other games.
          *
          * The stored normal is lit rather than the polygon's plane: the mode
          * calls set geometry mode 3 and then 1, and 1 is geo_parse_np_s.
@@ -2613,7 +2613,11 @@ const daytona93 = daytonaBuild({
     dataSize: 0xa00000,
     polyC: [0xc00000, 'epr-16646.ic19', 0x7ba9fd6b, 'epr-16645.ic23', 0x78fe0b8a],
     tex8: [0x800000, 'mpr-16517.27', 0x4705d3dd, 'mpr-16516.26', 0xa260d45d],
-    modelTable: { offset: 0x887928, count: 2822 },
+    modelTable: {
+        offset: 0x887928, count: 2822,
+        /* The boot's copies, as Revision A's (DAYTONA_REV_A): 0x1580, 0x15EC, 0x164C. */
+        textureRam: [{ from: 0, at: 0x9e0000 }, { from: 0x5000, at: 0x9ea000 }], polygonRam: 0x9c0000,
+    },
     paletteOffset: 0x8955a0, paletteCount: 1007,
     bankTable: 0x14bc, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'maincpu', count: 0x2fd34, data: 0x2fd38 },
@@ -2640,7 +2644,15 @@ const daytona93 = daytonaBuild({
  * ROM pair the tables sit in, and the tables. A build lists what it changes. */
 const DAYTONA_REV_A = {
     data8: [0x800000, 'epr-16724a.6', 0x469f10fd, 'epr-16725a.7', 0xba0df8db],
-    modelTable: { offset: 0x83fbb4, count: 3190 },
+    modelTable: {
+        offset: 0x83fbb4, count: 3190,
+        /* The cars' glass and the 1P to 8P markers, models 2139 to 2165, are
+         * built in the board's RAMs: the boot copies texture RAM 0 on from
+         * here (0x1664), 0x5000 on, the texture points, from 0x8F5000
+         * (0x16D0), and polygon RAM from 0x8E0000 (0x1730). See textureAt in
+         * js/model.js. */
+        textureRam: [{ from: 0, at: 0x8f0000 }, { from: 0x5000, at: 0x8f5000 }], polygonRam: 0x8e0000,
+    },
     paletteOffset: 0x84f4ec, paletteCount: 1007,
     bankTable: 0x15a0, bootBank: 0x2500000, texSets: 4,
     luma: { source: 'mainData', count: 0x802fc4, data: 0x802fc8 },
@@ -2831,7 +2843,7 @@ const vcop = {
         offset: 0x4c8000, count: 0x4e3, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true,
         past: { from: 0x4d2, offset: 0x8693f0 },
         /* The 0x800 words uploaded to texture RAM 0x4000 at game start. */
-        textureRam: { at: 0x81d3de, from: 0x4000 },
+        textureRam: [{ from: 0x4000, at: 0x81d3de }],
     },
     /* The band over luma 48..63, one table per stage (0x4170, by the stage
      * number at 0x50F2A8). A fourth, 0x801800, is taken when 0x5016D4 is 10.
