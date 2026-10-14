@@ -735,11 +735,23 @@ const hotdp = {
      * 16-byte entry and the same mesh pointer encoding as the other two, in a
      * different place.
      *
-     * The table is two copies of 5049 entries. Where the halves differ, only the
-     * uv and material pointers do — the same meshes wearing a second set of
-     * texture records, most likely the green blood the test menu offers. Empty
-     * entries split each half into eight banks: the enemies and effects every
-     * chapter shares, then a set per part of the game.
+     * The table is two copies of 5049 entries. Empty entries split each half
+     * into eight banks: the enemies and effects every chapter shares, then a
+     * set per part of the game.
+     *
+     * The game reads only the first copy. The second has the same meshes, and
+     * its uv and material pointers are the first's with everything at word
+     * 0x400000 or above moved down by 0x200000, as if the second texture pair
+     * began at byte 0x400000 and not 0x800000: the table relocated for
+     * texture chips half the size. On these chips that lands in the first
+     * pair's upper half, which holds bank 7's records and then erased flash,
+     * so banks 3 to 7 of the second copy draw in junk colours with junk header
+     * bits (the microtexture bit on 46% of their faces, against under 1% in
+     * the first copy). Nothing reaches it: every `lda 0x2C5D1F0[...*16]`
+     * indexes by the model number, no code adds 5049, and a MAME read tap on
+     * the second copy saw nothing in ten minutes of attract or ten of Chapter
+     * 2. Green blood is not it either: the game swaps single models for that
+     * (0x593 or 0x594 at 0x486A8, by the byte at 0x51E49E).
      */
     modelTable: { offset: 0x00c5d1f0, count: 10097, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
@@ -1311,7 +1323,7 @@ const hotdo = {
     xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     /*
      * One copy of 7477 entries, where the prototype carried two — the second
-     * being the same meshes wearing a second set of texture records. Nothing
+     * a copy relocated for smaller texture chips that it never reads. Nothing
      * here repeats: the table ends at 7476 and the string pool starts in the
      * next entry.
      *

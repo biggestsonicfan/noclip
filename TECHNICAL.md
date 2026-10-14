@@ -3773,11 +3773,23 @@ The House of the Dead is the game that uses it, and uses it as the pattern
 rather than as a detail: the mansion's wallpaper and its floor tiles are the
 microtextures, and the textures underneath are grime. Without it those rooms
 are plain smears up close. The prototype sets it on 1,093 triangles in 27 room
-models of the first half of its model table and the final game on 1,623 in 43;
-Sonic The Fighters and Fighting Vipers never set it. The prototype's second
-half sets the bit on 66,000 triangles, but those headers do not fit any texture
-set (the models come out stippled in the wrong colours with or without it), so
-that is not evidence of anything yet.
+models of the first half of its model table and the final game on 1,623 in 43
+(PN_room_n1a's floor is model 3315 there, 3169 in the prototype); Sonic The
+Fighters and Fighting Vipers never set it.
+
+The prototype's second half sets the bit on 66,000 triangles, and that is
+noise. Its uv and material pointers are the first half's with every one at
+word 0x400000 or above moved down 0x200000: the table relocated for a texture
+ROM whose second pair starts at byte 0x400000, chips half the size of the 4MB
+flash the prototype has. On that flash the moved pointers land in the first
+pair's upper half, which is bank 7's records and then erased bytes (`ffff`,
+`00ff`, `ff00`), so 46% of those faces read the enable bit as set, against
+under 1% in the first half. The game never reads the second half: all
+thirteen `lda 0x2C5D1F0[...*16]` index by the model number, nothing adds 5049,
+and a MAME read tap on it stayed at zero through ten minutes of attract and
+ten of Chapter 2, which read a moved-pointer bank of the first half 1.8 million
+times. It is not the green blood option either: that swaps single models (0x593
+or 0x594, sub at 0x486A8, test-menu byte 0x51E49E).
 
 The board samples the square at full size however fine the shift makes it,
 which at 256 times is noise. Texture RAM holds no mip chain for the squares, so
