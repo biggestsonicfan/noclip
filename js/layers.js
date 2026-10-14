@@ -216,8 +216,8 @@ function cellsOf(faces, gap) {
             for (let y = c0[1]; y <= c1[1]; y++) {
                 for (let z = c0[2]; z <= c1[2]; z++) {
                     const k = `${x},${y},${z}`;
-                    const list = cells.get(k);
-                    if (list) list.push(i); else cells.set(k, [i]);
+                    const cell = cells.get(k);
+                    if (cell) cell.list.push(i); else cells.set(k, { at: [x, y, z], list: [i] });
                 }
             }
         }
@@ -283,23 +283,17 @@ function twins(f, g, gap) {
     return close >= 2 ? pair : null;
 }
 
-/* A pair is taken in the first cell, in the order the cells were made, of
- * those its two faces share: once, without a set of every pair seen, which
+/* A pair is taken in one cell of those its two faces share, the one at the
+ * low corner of their overlap: once, without a set of every pair seen, which
  * a stage dense with small faces (Virtua Cop's high-rise) runs past the
- * 2^24 a Set can hold. */
-function takenHere(f, g, cell, order) {
-    const x0 = Math.max(f.c0[0], g.c0[0]), x1 = Math.min(f.c1[0], g.c1[0]);
-    const y0 = Math.max(f.c0[1], g.c0[1]), y1 = Math.min(f.c1[1], g.c1[1]);
-    const z0 = Math.max(f.c0[2], g.c0[2]), z1 = Math.min(f.c1[2], g.c1[2]);
-    /* One cell shared: this one. */
-    if (x0 === x1 && y0 === y1 && z0 === z1) return true;
-    let first = Infinity;
-    for (let x = x0; x <= x1; x++) {
-        for (let y = y0; y <= y1; y++) {
-            for (let z = z0; z <= z1; z++) first = Math.min(first, order.get(`${x},${y},${z}`));
-        }
-    }
-    return first === cell;
+ * 2^24 a Set can hold. It used to be the first shared cell in the order the
+ * cells were made, which meant walking every shared cell for every pair met
+ * in each of them: two of House of the Dead's ground faces share thousands,
+ * and the stage took two and a half minutes to open (pinboard #831). */
+function takenHere(f, g, at) {
+    return Math.max(f.c0[0], g.c0[0]) === at[0]
+        && Math.max(f.c0[1], g.c0[1]) === at[1]
+        && Math.max(f.c0[2], g.c0[2]) === at[2];
 }
 
 /*
@@ -399,7 +393,6 @@ function smallerOnTop(f, g, lo, hi) {
  * a pair standing apart (see inFront), its face in front put over the other. */
 function pairsOf(faces, out, gap, cosine) {
     const cells = cellsOf(faces, gap);
-    const order = new Map([...cells.keys()].map((k, n) => [k, n]));
     const pairs = [];
     const consider = (i, j) => {
         const f = faces[i], g = faces[j];
@@ -423,13 +416,11 @@ function pairsOf(faces, out, gap, cosine) {
         }
         pairs.push(i, j, copy ? COPY : inFront(lo, hi, f.area, g.area) || laterZone(f, g) || smallerOnTop(f, g, lo, hi));
     };
-    let cell = -1;
-    for (const list of cells.values()) {
-        cell++;
+    for (const { at, list } of cells.values()) {
         for (let a = 0; a < list.length; a++) {
             for (let b = a + 1; b < list.length; b++) {
                 const i = Math.min(list[a], list[b]), j = Math.max(list[a], list[b]);
-                if (takenHere(faces[i], faces[j], cell, order)) consider(i, j);
+                if (takenHere(faces[i], faces[j], at)) consider(i, j);
             }
         }
     }
