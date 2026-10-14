@@ -235,10 +235,13 @@ export function setRomPatches(rom, on) {
 
 const MODEL_FIELDS = { uv: 0, mat: 4, mesh: 8 };
 
+/* A game whose numbers run on into a second table (`past`) indexes that one by
+ * the same number from its own base: Virtua Cop's models from 0x4D2 on. */
 export function readModelEntry(rom, index) {
     const t = rom.game.modelTable;
     const f = t.fields ?? MODEL_FIELDS;
-    const off = t.offset + index * t.stride;
+    const base = t.past && index >= t.past.from ? t.past.offset : t.offset;
+    const off = base + index * t.stride;
     const dv = rom.mainDataView;
     return {
         uvPtr: dv.getUint32(off + f.uv, true),

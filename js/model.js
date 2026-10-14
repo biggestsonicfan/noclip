@@ -71,7 +71,13 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
 
     /* Material stream: one 8-byte record per EMITTED face at matPtr*2.
      * UV stream: nv (pv,pu) 16-bit pairs per face-loop ITERATION at uvPtr*2. */
-    const matBase = entry.matPtr * 2;
+    /* Bit 23 points into texture RAM instead, which the game fills itself:
+     * Virtua Cop's second model table (0x4D2 on) has its records there, copied
+     * from its data ROM at game start (MAME model2_v.cpp, `& 0x800000`). */
+    const ram = rom.game.modelTable?.textureRam;
+    const inRam = ram !== undefined && (entry.matPtr & 0x800000) !== 0;
+    const matSrc = inRam ? rom.mainData : textures;
+    const matBase = inRam ? ram.at + ((entry.matPtr & 0xffff) - ram.from) * 2 : entry.matPtr * 2;
     /* A table whose first records sit at 0 says so: Virtua Cop's model 0. */
     const haveMat = entry.matPtr !== 0 || (!mesh && rom.game.modelTable?.matAtZero === true);
     let uvWord = entry.uvPtr;
@@ -412,11 +418,11 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
             let tho = (att[fi] >>> 12) & 0x1f;
             if (tho & 0x10) tho -= 0x20;
             hdr += tho * 8;
-            if (rec >= 0 && rec + 8 <= textures.length) {
-                const th0 = textures[rec] | (textures[rec + 1] << 8);
-                const th1 = textures[rec + 2] | (textures[rec + 3] << 8);
-                const th2 = textures[rec + 4] | (textures[rec + 5] << 8);
-                const th3 = textures[rec + 6] | (textures[rec + 7] << 8);
+            if (rec >= 0 && rec + 8 <= matSrc.length) {
+                const th0 = matSrc[rec] | (matSrc[rec + 1] << 8);
+                const th1 = matSrc[rec + 2] | (matSrc[rec + 3] << 8);
+                const th2 = matSrc[rec + 4] | (matSrc[rec + 5] << 8);
+                const th3 = matSrc[rec + 6] | (matSrc[rec + 7] << 8);
                 lumaBase = (th1 & 0xff) << 7;
                 textured = (th0 & 0x4000) !== 0;
                 /* Bits 14 and 13 select the renderer: textured, and
