@@ -185,11 +185,11 @@ function glassPoints(rom, [table, words, sign, scale], { yaw, pitch }) {
     return out;
 }
 
-/* A window record's points, from the rail's camera nearest the car it is on. */
+/* A window record's points, from the rail's stop that faces the car it is on. */
 function glassOf(rom, rail, s, list, k) {
     const glass = GLASS.get(list[k].routine);
     const car = list[list[k].parent];
-    const cam = glass && car && rail ? railNearest(rail, s, [car.x, -car.z]) : null;
+    const cam = glass && car && rail ? railFacing(rail, s, [car.x, -car.z]) : null;
     return cam ? glassPoints(rom, glass, cameraTurns(cam)) : null;
 }
 
@@ -269,7 +269,7 @@ function objectOps(list, k, depth = 0) {
 }
 
 /* Every part of every object of the stage once, with the segments that list it.
- * A window takes its points from the camera that passes its car nearest. */
+ * A window takes its points from the rail stop that faces its car. */
 function stageObjects(rom, n, set, segments, rail) {
     const arr = dataU32(rom, OBJECT_TABLE + n * 4);
     const count = rom.game.modelTable.count;
@@ -342,10 +342,16 @@ function stageClouds(rom, n, set, segments) {
  * at the first point. The set is dressed for that rail and little else: seen
  * from beside the quay, the gate and the van are behind the containers (issue
  * 96), so the explorer opens a stage, and a segment picked on its own, there.
+ *
+ * The rail runs to the stops listed at the record's +0x14 and waits at each
+ * for the shoot-out there (0x1B4A4: the list at 0x50F2E8, the stop at
+ * 0x50F2EC). In play the camera's turns are the rail's at its count, to the
+ * unit, between turns that take a count over a frame.
  */
 const RAIL_TABLE = 0x28642b0;
 const RAIL_BYTES = 24;
 const RAIL_POINT = 12;
+const RAIL_STOPS = 0x14;
 const MARK_TABLE = 0x2839170;
 
 function railPoint(rom, path, i) {
@@ -369,7 +375,19 @@ function stageRail(rom, n, segments) {
         starts.push(mark);
     }
     const at = (i) => ({ eye: railPoint(rom, eyes, i), at: railPoint(rom, ats, i) });
-    return { at, count, starts };
+    return { at, count, starts, stops: railStops(rom, n, count) };
+}
+
+/* The counts the rail waits at, up to its end. */
+function railStops(rom, n, count) {
+    const list = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES + RAIL_STOPS);
+    const stops = [];
+    for (let i = 0, last = -1; list; i++) {
+        const c = dataU32(rom, list + i * 4);
+        if (c === null || c <= last || c > count) break;
+        stops.push(last = c);
+    }
+    return stops;
 }
 
 /* The camera at the rail's start, and at each segment's mark, by view. */
@@ -380,17 +398,22 @@ function stageCameras(rail) {
     return cameras;
 }
 
-/* The camera on a segment's stretch of rail that passes nearest a point (the
- * explorer's axes): where the player sees what stands there. */
-function railNearest(rail, s, [x, z]) {
+/* The camera at the stop on a segment's stretch of rail that looks most
+ * nearly at a point (the explorer's axes): where the player stands and faces
+ * what stands there. Stage 1's second car is 8 degrees off at stop 805; the
+ * camera that passes it nearest (count 935) has it 42 degrees off, at the
+ * edge of the screen. */
+function railFacing(rail, s, [x, z]) {
     const from = rail.starts[s] ?? 0, to = rail.starts[s + 1] ?? rail.count;
-    let best = null, bestD = Infinity;
-    for (let i = from; i < to; i++) {
+    let best = null, bestA = Infinity;
+    for (const i of rail.stops.filter((c) => c >= from && c < to)) {
         const cam = rail.at(i);
-        const d = Math.hypot(cam.eye[0] - x, cam.eye[2] - z);
-        if (d < bestD) { best = cam; bestD = d; }
+        const look = Math.atan2(cam.at[0] - cam.eye[0], cam.at[2] - cam.eye[2]);
+        const off = Math.atan2(x - cam.eye[0], z - cam.eye[2]) - look;
+        const a = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
+        if (a < bestA) { best = cam; bestA = a; }
     }
-    return best;
+    return best ?? rail.at(from);
 }
 
 function stageOf(rom, lit, n, segs) {
