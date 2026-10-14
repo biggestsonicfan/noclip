@@ -519,7 +519,13 @@ size at every distance, as the board does.
 The sky behind the outdoor stages is the board's tile layer: four pictures a
 stage, laid round the arena as one ring and placed as the game scrolls them,
 which a MAME frame and the explorer from the same camera agree on. The indoor
-stages have none. Not read yet: the fighters.
+stages have none.
+
+On Revision B, stage 1 has the two fighters of the attract fight MAME shows
+there, Zack against Tina, posed by the game's own skeleton code at the frame
+MAME draws: textured, coloured and standing where MAME has them. They hold
+that one pose; the motions, their shadows and Revision A's fighters are not
+read yet, and Tina's ribbon swings only close to MAME's.
 
 ## Running it
 

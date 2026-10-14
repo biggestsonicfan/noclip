@@ -3080,11 +3080,15 @@ const doab = {
         mips: false,
     },
     /* Luma is 0x4000 bytes from data 0xFC0000 (0x10D0); colorxlat is a grey
-     * ramp with the stage's colours over rows 21-29 (js/colors.js
-     * buildDoaColorxlat). Both match MAME's RAM byte for byte. */
+     * ramp with the stage's colours over rows 21-29 and the attract fighters'
+     * over rows 1-9 and 11-19 (js/colors.js buildDoaColorxlat). Both match
+     * MAME's RAM byte for byte. */
     colors: {
         luma: { data: 0xfc0000, bytes: 0x4000 },
-        doa: { stages: 0x7a7e0, count: 16, row0: 21, rows: 5 },
+        doa: {
+            stages: 0x7a7e0, count: 16, row0: 21, rows: 5,
+            fighters: { table: 0x7a760, perCostume: 15, rows: [1, 11] },
+        },
     },
     /*
      * The boot uploads 31 material slots from program 0x6B0 (geometry-engine
@@ -3106,6 +3110,33 @@ const doab = {
         /* The sky: four scroll pictures a stage, named in the program, out of
          * the table of pictures in the data (js/scroll.js buildDoaSky). */
         sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+        /* The fight code run on posed players (js/doa.js runDoaFighters):
+         * load the character, clear its ribbon, set it up, start a motion,
+         * then draw the body and the ribbon. `heights` is the table of one
+         * float a character the skeleton scales the hips' lift by. The
+         * pokes are what the fight sets: 0x54FCDD/0x54FC93 pick the body
+         * path, 0x589DB0/1 let the ribbon swing. */
+        fighters: {
+            heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900, motion: 0x420c0,
+            body: 0x457c0, ribbon: 0x4feb0,
+            pokes: [[0x54fcdd, 1], [0x54fc93, 2], [0x589db0, 1], [0x589db1, 1]],
+        },
+        /* The attract fight MAME shows at frame 2000 on stage 1: Zack against
+         * Tina. `base` is the player's model bank (0x5A6ED0), `angles` and
+         * `head` the record's +0x14..+0x1C and +0x2D, `expression` the face
+         * model (0x58828C), `frame` the motion frame its joint angles were
+         * read at, `rootY` the hips' height off the spot (0x56AD54, as MAME
+         * had it; how 0x44840 reaches it from the root stream is not known). */
+        attract: {
+            stage: 1,
+            fighters: [
+                { char: 0, base: 80, pos: [6.382, 1, 0.471], angles: [0xff94, 0x98, 0x98], head: 3, motion: 484, frame: 22, rootY: 0.7706 },
+                {
+                    char: 1, base: 798, pos: [7.662, 1, 0.484], angles: [0x8175, 0x8175, 0x8175], head: 9,
+                    expression: 1, motion: 1222, frame: 15, mirror: true, rootY: 0.7441,
+                },
+            ],
+        },
     },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
@@ -3135,10 +3166,15 @@ const doaa = {
     },
     palette: { ...doab.palette, tables: 0x69344 },
     texture: { ...doab.texture, raw: { layout: 'doa', stageSlabs: 0xc33e0, charSlabs: 0xc3420 } },
-    colors: { ...doab.colors, doa: { ...doab.colors.doa, stages: 0x72da0 } },
+    colors: {
+        ...doab.colors,
+        doa: { ...doab.colors.doa, stages: 0x72da0, fighters: { ...doab.colors.doa.fighters, table: 0x72d20 } },
+    },
     doa: {
         ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
+        /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
+        fighters: undefined, attract: undefined,
     },
 };
 

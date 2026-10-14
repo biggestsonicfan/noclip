@@ -624,7 +624,10 @@ function useRomColorLuts(stage, fighter = null) {
     /* A game whose colour pipeline is not ported has no tables to build, and
      * without them the ramp would read zeros: shade flat on the palette. */
     if (!state.rom.game.colors || !stage) { u.uUseRamp.value = 0; return; }
-    const key = `${stage.texSet[1]}:${stage.tint.join(',')}:${fighter}`;
+    /* A stage that poses its own fighters (Dead or Alive's attract fight)
+     * names them; their colour rows go in with the stage's. */
+    const fighters = fighter == null ? stage.fighters ?? [] : [fighter];
+    const key = `${stage.texSet[1]}:${stage.tint.join(',')}:${JSON.stringify(fighters)}`;
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
@@ -632,7 +635,7 @@ function useRomColorLuts(stage, fighter = null) {
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,
-        fighters: fighter == null ? [] : [fighter],
+        fighters,
     });
     setLumaTables(luma, cxlat);
     state.lutKey = key;

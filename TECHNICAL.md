@@ -1133,7 +1133,8 @@ Colour, each checked byte for byte against MAME's RAM: the face palette is
 484 colours from `0x62A42` (`0x70D80`), the luma 0x4000 bytes from data
 `0xFC0000` (`0x10D0`), and the colorxlat a grey ramp (`0xFB0`) with the
 stage's five rows of colour over rows 21-29 from `0x7A7E0[stage]`. The
-fighters' rows are left grey. The materials are 32 slots at `0x6B0`, and the
+fighters' rows are 1-9 and 11-19, from `0x7A760[costume * 15 + char]`, grey
+in a stage with no fighter. The materials are 32 slots at `0x6B0`, and the
 light a fixed one, down and away from the camera.
 
 Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
@@ -1155,7 +1156,41 @@ and a positive yaw turns toward -X (the camera's eye and target at
 explorer shows the same arena and the same clouds over it. The colours are
 the raw palette, as MAME shows them.
 
-Not read yet: the fighters.
+### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
+
+The fighters are drawn by the game's own code too, on two players set up the
+way the fight start does (Revision B addresses):
+
+- the player record at `0x54FBE0 + 88 * p`: +1 character, +2 costume, +4
+  position (y 1.0 is the floor), +0x14/+0x18/+0x1C angles (the body faces the
+  first), +0x2D which head the body routine picks, +0x48 drawn;
+- `0x407A0(char, p)` loads the character, `0x4F930(p)` clears its ribbon,
+  `0x41900(p, char)` sets it up, and `0x420C0(p, motion)` starts a motion
+  with facing `0x550124[p]` (-1 is mirrored) and `0x56AC64[p] = 1`;
+- the motion's fifteen joint tracks are pointers at `0x56ACD0 + 60 * p`, six
+  bytes a frame (three int16 angles), which go to `0x56AA40 + 0xB4 * p` as
+  int32; a mirrored player turns the other way about Y and Z;
+- the face model is `0x58828C[p]`, the model bank `0x5A6ED0[p]`;
+- the skeleton (`0x47810`, from the body routine `0x457C0`) lifts the hips by
+  the root's y at `0x56AD54 + 12 * p` times the character's height
+  `0x589B80[p]`, which `0x4DAE0` copies from `0xC1E80[char]`;
+- `0x4FEB0(p)` draws the ribbon, a chain it swings from frame to frame with
+  `0x589DB0`/`0x589DB1` set, so the motion runs forty frames up to the pose.
+
+The profile's `doa.attract` names MAME's attract fight at frame 2000 on stage
+1: Zack (motion 484, frame 22) against Tina (motion 1222, frame 15, mirrored),
+with the record fields and root heights read from MAME's RAM. The root stream
+`0x44840` reads (dx, y, dz, twelve bytes a frame from `0x56ACC8[p]`) does not
+give the 0.77 MAME holds by the indexing tried, so the profile carries it.
+Each body part's matrix matches MAME's display list to the last bit, the
+colorxlat rows byte for byte, and texture sheet 1 (the fighters' slabs) byte
+for byte. The display list lags RAM: Zack's draws match track frame 22 while
+his joint angles in RAM are frame 25.
+
+Not read yet: the shadows (flattened copies, models 136-150 and 1493-1507,
+drawn by `0x45B24` only with the light at `0x5555B0` above the floor, which
+the attract script sets at run time), Tina's raw face draw, the motions, and
+Revision A's fight code.
 
 ### Polygon decoding (`js/model.js`)
 

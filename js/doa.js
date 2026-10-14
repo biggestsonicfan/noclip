@@ -40,6 +40,8 @@ import { buildDoaSky } from './scroll.js';
 const RAM_BASE = 0x500000;
 const RAM_SIZE = 0x100000;
 const DATA_BASE = 0x2000000;
+/* The upper half of the data ROMs again, as 0x6000000 (the motion tables). */
+const XTRA_BASE = 0x6000000, XTRA_FROM = 0x1000000;
 const COPRO_CMD = 0x880000, COPRO_PORT = 0x884000, COPRO_END = 0x888000;
 const GEO_CMD = 0x800000, GEO_PORT = 0x804000, GEO_END = 0x808000;
 const VIEW_VECTOR = 0x5b9870;
@@ -72,6 +74,11 @@ function mulRot(m, r) {
     return out;
 }
 
+/* m * a, both 3x4: a's frame placed in m's. */
+function compose(m, a) {
+    return [...mulRot(m, a).slice(0, 9), ...apply(m, a.slice(9))];
+}
+
 function apply(m, [x, y, z]) {
     return [0, 1, 2].map((k) => m[k] * x + m[3 + k] * y + m[6 + k] * z + m[9 + k]);
 }
@@ -99,10 +106,22 @@ const COPRO = {
      * a point ahead along every axis, against the view vector `cullAll` sets. */
     0x0c: [3, (cp) => cp.out([1, 1, 1])],
     0x0a: [2, (cp, a) => cp.outInt(Math.round(Math.atan2(a[1], a[0]) / ANGLE_RAD))],
-    0x1b: [1, (cp, a) => cp.out([Math.sqrt(Math.abs(a[0]))])],
+    0x1b: [1, (cp, a) => cp.out([Math.sin(((a[0] << 16) >> 16) * ANGLE_RAD)])],
+    0x1c: [1, (cp, a) => cp.out([Math.cos(((a[0] << 16) >> 16) * ANGLE_RAD)])],
+    0x07: [12, (cp, a) => { cp.m = a.slice(); }],
+    0x09: [12, (cp, a) => { cp.m = compose(cp.m, a); }],
+    0x10: [0, (cp) => { cp.m = IDENTITY; }],
+    0x19: [0, (cp) => cp.outInt(0)],
+    0x1a: [3, (cp, a) => cp.out(apply(cp.m, a))],
+    0x1f: [6, (cp, a) => cp.out([Math.hypot(a[3] - a[0], a[4] - a[1], a[5] - a[2])])],
+    0x0f: [6, (cp, a) => {
+        const dx = a[3] - a[0], dy = a[4] - a[1], dz = a[5] - a[2];
+        cp.outInt(Math.round(Math.atan2(dx, dz) / ANGLE_RAD) & 0xffff);
+        cp.outInt(Math.round(Math.atan2(-dy, Math.hypot(dx, dz)) / ANGLE_RAD) & 0xffff);
+    }],
 };
 /* Commands whose words are integers rather than singles. */
-const INT_ARGS = new Set([0x14, 0x15, 0x16]);
+const INT_ARGS = new Set([0x14, 0x15, 0x16, 0x1b, 0x1c]);
 
 class Copro {
     constructor(log) {
@@ -209,6 +228,13 @@ function makeBus(rom, ram, copro, geo, models) {
             models.noteRead(a - DATA_BASE);
             return dv.getUint32(a - DATA_BASE, true);
         }
+        if (a >= XTRA_BASE && a < XTRA_BASE + XTRA_FROM) {
+            /* The board's data region is 0x2000000 long; the last 4 MB
+             * repeat the 4 MB before them. */
+            let off = a - XTRA_BASE + XTRA_FROM;
+            if (off >= dv.byteLength) off -= 0x400000;
+            if (off < dv.byteLength - 3) return dv.getUint32(off, true);
+        }
         if (a >= COPRO_PORT && a < COPRO_END) return copro.read();
         return other.get(a) ?? 0;
     };
@@ -284,6 +310,16 @@ export function boardToOps(m) {
  * @param {object} [opts] ram: bytes to poke first, as [[addr, u8], ...]
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
+export function doaMachine(rom) {
+    const ram = new Uint8Array(RAM_SIZE);
+    const unknown = new Set();
+    const copro = new Copro(unknown);
+    const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
+    const geo = new Geo(copro, models);
+    const cpu = new I960(makeBus(rom, ram, copro, geo, models));
+    return { ram, rv: new DataView(ram.buffer), unknown, copro, geo, cpu };
+}
+
 export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
@@ -302,6 +338,99 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps } = {}) 
     for (const at of D.skip ?? []) cpu.hooks.set(at, () => {});
     const done = cpu.call(entry, [], { maxSteps });
     return { draws: geo.draws, unknown: [...unknown], done };
+}
+
+/* ---- the fighters: the game's own skeleton code on a posed player ---- */
+
+/* RAM the fight code keeps per player (p = 0, 1). */
+const PLAYER = 0x54fbe0, PLAYER_SIZE = 88;
+const FACING = 0x550124, START_FRAME = 0x56ac64, JOINT_TRACKS = 0x56acd0, JOINT_ANGLES = 0x56aa40;
+const BODY_SCALES = [0x56ac50, 0x588ee0], MODEL_BASE = 0x5a6ed0, EXPRESSION = 0x58828c;
+const JOINTS = 15;
+/* Where the motion has carried the hips from the player's spot, (x, y, z) a
+ * player: 0x44840 keeps it from the motion's root stream. The skeleton
+ * (0x47810) lifts the hips by its y times the character's height (0x589B80,
+ * which 0x4DAE0 copies from a table of one float a character). */
+const ROOT = 0x56ad50, HEIGHT = 0x589b80;
+
+/* A player record as the fight loop leaves it: character, costume, where it
+ * stands (y 1.0 is the floor), three angles (the body faces the first; the
+ * other two turn the head), +0x2D (which head the body routine picks; its
+ * meaning is not known) and drawn. */
+function placePlayer(rv, p, f) {
+    const at = PLAYER + p * PLAYER_SIZE - RAM_BASE;
+    rv.setUint8(at + 1, f.char);
+    rv.setUint8(at + 2, f.costume ?? 0);
+    f.pos.forEach((v, k) => rv.setFloat32(at + 4 + 4 * k, v, true));
+    rv.setFloat32(at + 0x10, 1, true);
+    f.angles.forEach((v, k) => rv.setUint16(at + 0x14 + 4 * k, v, true));
+    rv.setUint8(at + 0x2d, f.head);
+    rv.setUint8(at + 0x48, 1);
+}
+
+/* Joint angles for one frame of the motion: three int16 a joint, straight
+ * from the tracks 0x420C0 pointed at. A mirrored player (facing -1) has its
+ * joints swapped already and turns the other way about Y and Z. */
+function setJointAngles(cpu, rv, p, tracks, frame, mirror) {
+    const sign = mirror ? [1, -1, -1] : [1, 1, 1];
+    for (let j = 0; j < JOINTS; j++) {
+        for (let k = 0; k < 3; k++) {
+            const w = (cpu.bus.read16(tracks[j] + frame * 6 + 2 * k) << 16) >> 16;
+            rv.setInt32(JOINT_ANGLES - RAM_BASE + p * 0xb4 + j * 12 + 4 * k, sign[k] * w, true);
+        }
+    }
+}
+
+/* Set a player up the way the fight start does and start its motion. */
+function startPlayer(M, F, p, f) {
+    const { cpu, rv } = M;
+    const call = (at, args) => cpu.call(at, args, { maxSteps: 5_000_000 });
+    placePlayer(rv, p, f);
+    rv.setUint32(HEIGHT - RAM_BASE + 4 * p, cpu.bus.read32(F.heights + 4 * f.char), true);
+    rv.setUint32(MODEL_BASE - RAM_BASE + 4 * p, f.base, true);
+    call(F.load, [f.char, p]);
+    call(F.clearRibbon, [p]);
+    call(F.setup, [p, f.char]);
+    rv.setInt16(FACING - RAM_BASE + 2 * p, f.mirror ? -1 : 1, true);
+    rv.setInt16(START_FRAME - RAM_BASE + 2 * p, 1, true);
+    call(F.motion, [p, f.motion]);
+    for (const s of BODY_SCALES) rv.setFloat32(s - RAM_BASE + 4 * p, 1, true);
+    /* Which of the character's face models the body routine draws. */
+    rv.setInt16(EXPRESSION - RAM_BASE + 2 * p, f.expression ?? 0, true);
+    const tracks = [];
+    for (let j = 0; j < JOINTS; j++) tracks.push(rv.getUint32(JOINT_TRACKS - RAM_BASE + p * 60 + j * 4, true));
+    return tracks;
+}
+
+/**
+ * Pose the fighters a profile names and return what the body (0x457C0) and
+ * ribbon (0x4FEB0) routines draw, in the board's frame. The hair and ribbon
+ * are chains the code swings from frame to frame, so the motion runs `warm`
+ * frames up to the one asked for and only that last frame's draws are kept.
+ *
+ * @param {object} rom
+ * @param {{char:number, costume?:number, base:number, pos:number[], yaw:number,
+ *          mirror?:boolean, motion:number, frame:number, rootY?:number}[]} fighters
+ * @returns {{draws: {model:number, m:number[]}[], unknown: string[]}}
+ */
+export function runDoaFighters(rom, fighters, { warm = 40 } = {}) {
+    const F = rom.game.doa.fighters;
+    const M = doaMachine(rom);
+    const { cpu, rv, geo } = M;
+    for (const [a, v] of F.pokes ?? []) rv.setUint8(a - RAM_BASE, v);
+    const tracks = fighters.map((f, p) => startPlayer(M, F, p, f));
+    const draws = [];
+    fighters.forEach((f, p) => {
+        for (let fr = Math.max(0, f.frame - warm); fr <= f.frame; fr++) {
+            setJointAngles(cpu, rv, p, tracks[p], fr, f.mirror);
+            rv.setFloat32(ROOT - RAM_BASE + p * 12 + 4, f.rootY ?? 0, true);
+            geo.draws = [];
+            cpu.call(F.body, [p], { maxSteps: 5_000_000 });
+            cpu.call(F.ribbon, [p], { maxSteps: 5_000_000 });
+        }
+        draws.push(...geo.draws);
+    });
+    return { draws, unknown: [...M.unknown] };
 }
 
 /** Every stage the table names, as explorer stages. */
@@ -328,13 +457,27 @@ export function readDoaStages(rom) {
     return stages;
 }
 
+/* The attract fight's two fighters, posed, if this is its stage. */
+function attractOf(rom, n) {
+    const A = rom.game.doa.attract;
+    if (!A || A.stage !== n || !rom.game.doa.fighters) return null;
+    try {
+        return { fighters: A.fighters, run: runDoaFighters(rom, A.fighters) };
+    } catch (e) {
+        console.warn(`doa: fighters: ${e.message}`);
+        return null;
+    }
+}
+
 function stageOf(rom, n, entry, run) {
     const D = rom.game.doa;
     const lit = gameLighting(rom);
     const set = n;
-    const draws = run.draws.map((d) => ({
-        model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer: 'scenery', ops: boardToOps(d.m),
-    }));
+    const placed = (layer) => (d) => ({
+        model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer, ops: boardToOps(d.m),
+    });
+    const fight = attractOf(rom, n);
+    const draws = [...run.draws.map(placed('scenery')), ...(fight?.run.draws.map(placed('fighters')) ?? [])];
     return {
         slot: n,
         placements: true,
@@ -354,6 +497,7 @@ function stageOf(rom, n, entry, run) {
         texSets: [set],
         /* The texture set and the colour block: both are the stage number. */
         texSet: [set, set],
+        fighters: fight?.fighters ?? [],
         tint: [1, 1, 1],
         bright: 1,
         light: lit?.light,
@@ -361,6 +505,7 @@ function stageOf(rom, n, entry, run) {
         colorCycles: [],
         floorSize: 0,
         meta: [['stage', n], ['routine', `0x${entry.toString(16)}`], ['pieces', draws.length],
+            ...(fight ? [['fighters', fight.fighters.map((f) => f.char).join(' vs ')]] : []),
             ...(run.unknown.length ? [['unread', run.unknown.join(', ')]] : [])],
     };
 }

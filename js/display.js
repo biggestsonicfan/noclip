@@ -2289,10 +2289,11 @@ export function describeOps(ops) {
 }
 
 /* `scenery` is a placement stage's one layer: its draws are all the same kind
- * of thing, a model where the table puts it. */
+ * of thing, a model where the table puts it. `fighters` are the bodies a stage
+ * poses with the game's own code (Dead or Alive's attract fight). */
 export const DISPLAY_LAYER_ORDER =
     ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery',
-        'outside', 'inside'];
+        'fighters', 'outside', 'inside'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further
