@@ -255,9 +255,33 @@ function buildRampColorxlat(rom, colorSet) {
         const tail = t ? (flat + t) >>> 1 : 0;
         for (let luma = entries; luma < CXLAT_ROW / 2; luma++) put(row, luma, tail);
     }
+    const shift = C.shift?.[colorSet];
+    if (shift) shiftRamp(out, shift);
     const band = C.band?.tables[colorSet];
     if (band !== undefined) writeBand(rom.mainData, band, set);
     return out;
+}
+
+/*
+ * Virtua Cop's 0x43B0, run on the fresh ramp before the band goes over it:
+ * rows 1..31, luma 1..63, every entry whose red is not zero and at most `top`
+ * gains `add` in each channel. The test is on red alone, and the channels are
+ * 16-bit words, so a green or blue below what is taken off wraps as it does
+ * on the board.
+ */
+function shiftRamp(cxlat, { top, add }) {
+    const view = new DataView(cxlat.buffer, cxlat.byteOffset, cxlat.byteLength);
+    for (let row = 1; row < 32; row++) {
+        for (let luma = 1; luma < 64; luma++) {
+            const at = row * CXLAT_ROW + luma * 2;
+            const red = view.getUint16(at, true) & 0xff;
+            if (red === 0 || red > top) continue;
+            for (let ch = 0; ch < 3; ch++) {
+                const o = ch * CXLAT_CHANNEL + at;
+                view.setUint16(o, (view.getUint16(o, true) + add[ch]) & 0xffff, true);
+            }
+        }
+    }
 }
 
 /* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170). */

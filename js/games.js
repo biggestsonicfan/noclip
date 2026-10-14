@@ -2831,10 +2831,18 @@ const vcop = {
         textureRam: { at: 0x81d3de, from: 0x4000 },
     },
     /* The band over luma 48..63, one table per stage (0x4170, by the stage
-     * number at 0x50F2A8). A fourth, 0x801800, is taken when 0x5016D4 is 10. */
+     * number at 0x50F2A8). A fourth, 0x801800, is taken when 0x5016D4 is 10.
+     * Before it, 0x43B0 shifts the ramp by the same stage number: `top` is the
+     * highest red entry it moves and `add` what each channel gains. 0x5016D4
+     * being 10 takes { top: 0xe7, add: [15, -4, -7] } instead. */
     colors: {
         luma: { source: 'mainData', count: 0x8190f8, data: 0x8190fc }, ramp: RAMP_DELUXE, solid: true,
         band: { tables: [0x800c00, 0x801000, 0x801400] },
+        shift: [
+            { top: 0xf7, add: [8, 8, 8] },
+            { top: 0xef, add: [13, -2, -2] },
+            { top: 0xf7, add: [8, 8, 8] },
+        ],
     },
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
