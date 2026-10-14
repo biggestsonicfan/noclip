@@ -1571,9 +1571,9 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
             totals[entry.layer]++;
             const partMaterial = perPart && entry.set != null ? materialForSet(entry.set, stage) : null;
             if (partMaterial) { state.rom.paletteSet = entry.set; partSets.add(entry.set); }
-            const d = entry.scroll?.points
-                ? getTpdModel(entry.model, entry.scroll.points)
-                : getModel(entry.model);
+            const d = entry.scroll?.points ? getTpdModel(entry.model, entry.scroll.points)
+                : entry.points ? getTpdModel(entry.model, entry.points.words, entry.points.key)
+                    : getModel(entry.model);
             if (!d) continue;
             composeOps(m, opsAt(entry, 0));
             const mesh = addStageDraw(entry, d, m, { shellFirst, windowed, material: partMaterial });

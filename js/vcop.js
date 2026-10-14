@@ -122,15 +122,77 @@ function mergeSegments(segs, modelCount) {
  * (0x3D) came out as a door. The slot's draw (0x326D0) gives every part its
  * own matrix and draws it with 0xBA70 if its bit of the slot's mask is set.
  * A part stands at its offset under its object's matrix, and an object on
- * another at its place under that one's: a lorry's windows ride on it.
+ * another at its place under that one's: a car's windows are six records of
+ * their own (types 0x18-0x1D on stage 1's first car, 0x4F-0x54 on its second),
+ * each standing on the car at (0,0,0), drawn on its matrix (0x40190, 0x404C0).
+ * Their texture points are the routine's own; see GLASS.
  */
 const OBJECT_TABLE = 0x286e100;
 const OBJECT_BYTES = 52;
 const TYPE_TABLE = 0x28690e0;
 const MAX_PARTS = 32;
-/* The glints on a car's glass: whose routines (0x407F0 on) place them by the
- * camera's turns at 0x50F450 each frame, nothing that stands anywhere. */
-const GLINTS = new Set([0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54]);
+/* A car window's texture points, which its routine (the record's +0x30) writes
+ * to texture RAM every frame and draws the window with in place of the
+ * model's (MAME's draws of the six name 0x805000 on, with bit 23 set): a table
+ * of (v, u) words from 0x281D9CA, each v slid by the camera's yaw and each u by
+ * its pitch, the turns at 0x50F458 and 0x50F454:
+ *
+ *     dv = scale * trunc(sign * 0x900 * yaw / 0x8000)
+ *     du = scale * trunc(-0x300 * pitch / 0x8000)
+ *
+ * and 0x38930 lifts a column whose least word is below zero by whole tiles
+ * (0x400) to the first that is not. So the glass shows a reflection that
+ * slides as the camera turns; the ROM's own points, unslid, are the white of
+ * it. Slot word +0x11B8 is set in play and the attract both (with it zero the
+ * routine passes no offsets). Per routine: its table, words, the sign on the
+ * yaw and the scale; the second car's six (0x40B20 on) are the first's again.
+ * Checked against the words MAME sends at yaw -0x8000 and 16790. */
+const GLASS_TABLES = [
+    [0x281d9ca, 42, 1, 3],      /* windscreen */
+    [0x281da1e, 8, -1, 3],      /* rear window */
+    [0x281da2e, 8, -1, 4],      /* the side windows */
+    [0x281da3e, 8, 1, 4],
+    [0x281da4e, 8, -1, 4],
+    [0x281da5e, 8, 1, 4],
+];
+const GLASS = new Map([
+    ...[0x407f0, 0x40870, 0x40900, 0x40990, 0x40a10, 0x40aa0].map((r, i) => [r, GLASS_TABLES[i]]),
+    ...[0x40b20, 0x40ba0, 0x40c30, 0x40cc0, 0x40d40, 0x40dd0].map((r, i) => [r, GLASS_TABLES[i]]),
+]);
+const GLASS_TILE = 0x400;
+const TURN = 0x10000;
+
+/* The board's turns for a camera, in its own axes (z the explorer's negated):
+ * yaw about Y from +Z towards +X, pitch up; half a turn is -0x8000. */
+function cameraTurns({ eye, at }) {
+    const dx = at[0] - eye[0], dy = at[1] - eye[1], dz = -(at[2] - eye[2]);
+    const turn = (rad) => {
+        const t = Math.round(rad / (2 * Math.PI) * TURN);
+        return t >= TURN / 2 ? t - TURN : t;
+    };
+    return { yaw: turn(Math.atan2(dx, dz)), pitch: turn(Math.atan2(dy, Math.hypot(dx, dz))) };
+}
+
+function glassPoints(rom, [table, words, sign, scale], { yaw, pitch }) {
+    const dv = rom.mainDataView, off = table - MAIN_DATA_BASE;
+    const slide = [scale * Math.trunc(sign * 0x900 * yaw / 0x8000), scale * Math.trunc(-0x300 * pitch / 0x8000)];
+    const out = [];
+    for (let i = 0; i < words; i++) out.push(dv.getUint16(off + i * 2, true) + slide[i & 1]);
+    for (const c of [0, 1]) {
+        const least = Math.min(...out.filter((_, i) => (i & 1) === c));
+        if (least < 0) for (let i = c; i < words; i += 2) out[i] += Math.ceil(-least / GLASS_TILE) * GLASS_TILE;
+    }
+    return out;
+}
+
+/* A window record's points, from the rail's camera nearest the car it is on. */
+function glassOf(rom, rail, s, list, k) {
+    const glass = GLASS.get(list[k].routine);
+    const car = list[list[k].parent];
+    const cam = glass && car && rail ? railNearest(rail, s, [car.x, -car.z]) : null;
+    return cam ? glassPoints(rom, glass, cameraTurns(cam)) : null;
+}
+
 /* The objects that break, and how many of their parts stand whole: the rest
  * are the pieces they fly into, which the routine hides until then. A segment's
  * loader (0x31600) sets the mask of types 0, 1 and 3 to 3 after the spawn
@@ -164,6 +226,7 @@ function readObjectRecord(rom, addr) {
         z: dv.getFloat32(off + 12, true),
         ax: dv.getInt32(off + 16, true), ay: dv.getInt32(off + 20, true), az: dv.getInt32(off + 24, true),
         parent: dv.getInt32(off + 32, true),
+        routine: dv.getUint32(off + 48, true),
     };
 }
 
@@ -205,8 +268,9 @@ function objectOps(list, k, depth = 0) {
     return [...up, ...recordOps(r)];
 }
 
-/* Every part of every object of the stage once, with the segments that list it. */
-function stageObjects(rom, n, set, segments) {
+/* Every part of every object of the stage once, with the segments that list it.
+ * A window takes its points from the camera that passes its car nearest. */
+function stageObjects(rom, n, set, segments, rail) {
     const arr = dataU32(rom, OBJECT_TABLE + n * 4);
     const count = rom.game.modelTable.count;
     const byKey = new Map();
@@ -216,13 +280,17 @@ function stageObjects(rom, n, set, segments) {
         if (!p || p < MAIN_DATA_BASE) continue;
         const list = readObjectList(rom, p);
         list.forEach((r, k) => {
-            if (GLINTS.has(r.type) || SCRIPTS.has(r.type)) return;
+            if (SCRIPTS.has(r.type)) return;
             const ops = IN_WORLD.has(r.type) ? [] : objectOps(list, k);
+            const points = glassOf(rom, rail, s, list, k);
             for (const part of typeParts(rom, r.type)) {
                 if (part.model >= count) continue;
                 const partOps = [...ops, ...recordOps(part)];
                 const key = JSON.stringify([part.model, partOps]);
-                if (!byKey.has(key)) byKey.set(key, { model: part.model, pos: [r.x, r.y, r.z], set, ops: partOps, zones: new Set() });
+                if (!byKey.has(key)) {
+                    byKey.set(key, { model: part.model, pos: [r.x, r.y, r.z], set, ops: partOps, zones: new Set() });
+                    if (points) byKey.get(key).points = { words: points, key: `glass@${set}:${points.join(',')}` };
+                }
                 byKey.get(key).zones.add(s);
             }
         });
@@ -286,20 +354,43 @@ function railPoint(rom, path, i) {
     return [dv.getFloat32(off, true), dv.getFloat32(off + 4, true), -dv.getFloat32(off + 8, true)];
 }
 
-/* The camera at the rail's start, and at each segment's mark, by view. */
-function stageCameras(rom, n, segments) {
+/* The stage's rail: the camera at each count, how many there are (the
+ * record's +0x10), and where each segment starts on it. */
+function stageRail(rom, n, segments) {
     const eyes = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES);
     const ats = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES + 8);
+    const count = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES + 16);
     const marks = dataU32(rom, MARK_TABLE + n * 4);
-    if (!eyes || !ats || !marks) return {};
-    const at = (i) => ({ eye: railPoint(rom, eyes, i), at: railPoint(rom, ats, i) });
-    const cameras = { all: at(0), 'zone:0': at(0) };
+    if (!eyes || !ats || !count || !marks) return null;
+    const starts = [0];
     for (let s = 1; s < segments; s++) {
         const mark = dataU32(rom, marks + (s - 1) * 4);
         if (mark === null || mark === END) break;
-        cameras[`zone:${s}`] = at(mark);
+        starts.push(mark);
     }
+    const at = (i) => ({ eye: railPoint(rom, eyes, i), at: railPoint(rom, ats, i) });
+    return { at, count, starts };
+}
+
+/* The camera at the rail's start, and at each segment's mark, by view. */
+function stageCameras(rail) {
+    if (!rail) return {};
+    const cameras = { all: rail.at(0) };
+    rail.starts.forEach((i, s) => { cameras[`zone:${s}`] = rail.at(i); });
     return cameras;
+}
+
+/* The camera on a segment's stretch of rail that passes nearest a point (the
+ * explorer's axes): where the player sees what stands there. */
+function railNearest(rail, s, [x, z]) {
+    const from = rail.starts[s] ?? 0, to = rail.starts[s + 1] ?? rail.count;
+    let best = null, bestD = Infinity;
+    for (let i = from; i < to; i++) {
+        const cam = rail.at(i);
+        const d = Math.hypot(cam.eye[0] - x, cam.eye[2] - z);
+        if (d < bestD) { best = cam; bestD = d; }
+    }
+    return best;
 }
 
 function stageOf(rom, lit, n, segs) {
@@ -308,7 +399,8 @@ function stageOf(rom, lit, n, segs) {
     const draws = mergeSegments(segs, t.count).map((r) => ({
         model: r.model, pos: [r.x, r.y, r.z], set, zones: r.zones, ops: recordOps(r),
     }));
-    const objects = stageObjects(rom, n, set, segs.length);
+    const rail = stageRail(rom, n, segs.length);
+    const objects = stageObjects(rom, n, set, segs.length, rail);
     const clouds = stageClouds(rom, n, set, segs.length);
     const zones = segs.map((recs, s) => ({ zone: s, set, label: `segment ${s + 1} · ${recs.length} pieces` }));
     return {
@@ -324,7 +416,7 @@ function stageOf(rom, lit, n, segs) {
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
         zones,
-        cameras: stageCameras(rom, n, segs.length),
+        cameras: stageCameras(rail),
         views: [['all', 'Every segment at once'], ...zones.map((z, i) => [`zone:${i}`, z.label])],
         view: 'all',
         union: 'all',
