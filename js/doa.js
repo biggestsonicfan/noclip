@@ -344,14 +344,30 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps } = {}) 
 
 /* RAM the fight code keeps per player (p = 0, 1). */
 const PLAYER = 0x54fbe0, PLAYER_SIZE = 88;
-const FACING = 0x550124, START_FRAME = 0x56ac64, JOINT_TRACKS = 0x56acd0, JOINT_ANGLES = 0x56aa40;
+const FACING = 0x550124, START_FRAME = 0x56ac64;
 const BODY_SCALES = [0x56ac50, 0x588ee0], MODEL_BASE = 0x5a6ed0, EXPRESSION = 0x58828c;
-const JOINTS = 15;
-/* Where the motion has carried the hips from the player's spot, (x, y, z) a
- * player: 0x44840 keeps it from the motion's root stream. The skeleton
- * (0x47810) lifts the hips by its y times the character's height (0x589B80,
- * which 0x4DAE0 copies from a table of one float a character). */
-const ROOT = 0x56ad50, HEIGHT = 0x589b80;
+/* The motion step (0x44840) plays the motion 0x420C0 started: each call it
+ * moves the motion's clock on by the speed at 0x56ADA0 times the record's
+ * rate (+0x10), and takes the joint angles (0x56AA40) and the hips' place
+ * (0x56AD50, x y z a player) from the frame the clock has reached, a mirrored
+ * player's (facing -1) mirrored. The skeleton (0x47810) lifts the hips by
+ * that y times the character's height (0x589B80, which 0x4DAE0 copies from a
+ * table of one float a character); the body routine turns x and z by the
+ * heading at 0x56AC28 into the player's spot and clears them, so a fighter
+ * steps as its motion does. */
+const SPEED = 0x56ada0, HEADING = 0x56ac28, HEIGHT = 0x589b80, RATE = 0x10;
+/* A move can ease in from the pose before it: the fight code sets a count of
+ * frames at 0x56AC04, 0x4A5B0 works out a step per joint toward the move's
+ * first frame, and 0x4A8D0 takes one step a frame and counts down, in place
+ * of the motion step, until the count runs out. */
+const BLEND = 0x56ac04;
+/* The fight loop opens each frame with 0x4DF20, which works out the push on
+ * the hair and ribbon, which is also the way the shadows fall, from the
+ * stage's light (0x5555B0) and the stage number,
+ * and closes it with 0x4DDC0, which copies the fight's state for the next
+ * frame and the low bit of the frame count (0x54B158) to 0x589DB1: the chains
+ * swing only on frames of their parity, so every other frame. */
+const LIGHT = 0x5555b0, FRAME_COUNT = 0x54b158;
 
 /* A player record as the fight loop leaves it: character, costume, where it
  * stands (y 1.0 is the floor), three angles (the body faces the first; the
@@ -362,26 +378,13 @@ function placePlayer(rv, p, f) {
     rv.setUint8(at + 1, f.char);
     rv.setUint8(at + 2, f.costume ?? 0);
     f.pos.forEach((v, k) => rv.setFloat32(at + 4 + 4 * k, v, true));
-    rv.setFloat32(at + 0x10, 1, true);
+    rv.setFloat32(at + RATE, 1, true);
     f.angles.forEach((v, k) => rv.setUint16(at + 0x14 + 4 * k, v, true));
     rv.setUint8(at + 0x2d, f.head);
     rv.setUint8(at + 0x48, 1);
 }
 
-/* Joint angles for one frame of the motion: three int16 a joint, straight
- * from the tracks 0x420C0 pointed at. A mirrored player (facing -1) has its
- * joints swapped already and turns the other way about Y and Z. */
-function setJointAngles(cpu, rv, p, tracks, frame, mirror) {
-    const sign = mirror ? [1, -1, -1] : [1, 1, 1];
-    for (let j = 0; j < JOINTS; j++) {
-        for (let k = 0; k < 3; k++) {
-            const w = (cpu.bus.read16(tracks[j] + frame * 6 + 2 * k) << 16) >> 16;
-            rv.setInt32(JOINT_ANGLES - RAM_BASE + p * 0xb4 + j * 12 + 4 * k, sign[k] * w, true);
-        }
-    }
-}
-
-/* Set a player up the way the fight start does and start its motion. */
+/* Set a player up the way the fight start does. */
 function startPlayer(M, F, p, f) {
     const { cpu, rv } = M;
     const call = (at, args) => cpu.call(at, args, { maxSteps: 5_000_000 });
@@ -392,45 +395,115 @@ function startPlayer(M, F, p, f) {
     call(F.clearRibbon, [p]);
     call(F.setup, [p, f.char]);
     rv.setInt16(FACING - RAM_BASE + 2 * p, f.mirror ? -1 : 1, true);
-    rv.setInt16(START_FRAME - RAM_BASE + 2 * p, 1, true);
-    call(F.motion, [p, f.motion]);
+    rv.setUint32(HEADING - RAM_BASE + 4 * p, f.angles[0], true);
+    rv.setFloat32(SPEED - RAM_BASE + 4 * p, 1, true);
     for (const s of BODY_SCALES) rv.setFloat32(s - RAM_BASE + 4 * p, 1, true);
     /* Which of the character's face models the body routine draws. */
     rv.setInt16(EXPRESSION - RAM_BASE + 2 * p, f.expression ?? 0, true);
-    const tracks = [];
-    for (let j = 0; j < JOINTS; j++) tracks.push(rv.getUint32(JOINT_TRACKS - RAM_BASE + p * 60 + j * 4, true));
-    return tracks;
+}
+
+/* Start one of a player's moves: [motion, frames, rate, blend, from], `from`
+ * the motion frame it starts on (1 if not given). */
+function startMove(M, F, p, [motion, , rate, blend, from]) {
+    const { cpu, rv } = M;
+    rv.setInt16(START_FRAME - RAM_BASE + 2 * p, from ?? 1, true);
+    cpu.call(F.motion, [p, motion], { maxSteps: 5_000_000 });
+    rv.setFloat32(PLAYER + p * PLAYER_SIZE + RATE - RAM_BASE, rate ?? 1, true);
+    rv.setInt16(BLEND - RAM_BASE + 2 * p, blend ?? 0, true);
+    if (blend) cpu.call(F.blendStart, [p], { maxSteps: 5_000_000 });
+}
+
+/* Move a player on a frame: a step of its blend while one runs, else of its motion. */
+function stepPlayer(M, F, p) {
+    const blending = M.rv.getInt16(BLEND - RAM_BASE + 2 * p, true) !== 0;
+    M.cpu.call(blending ? F.blend : F.step, [p], { maxSteps: 5_000_000 });
+}
+
+/* Which move a player starts at each of its frames, and how many it plays. */
+function moveStarts(f) {
+    const starts = new Map();
+    let n = 0;
+    for (const move of f.moves) {
+        starts.set(n, move);
+        n += move[1];
+    }
+    return { starts, frames: n };
+}
+
+/* Move a player's draws so that it stands at `pos` (x, z): the motion has
+ * walked it from there while it played. */
+function standAt(draws, rv, p, pos) {
+    const at = PLAYER + p * PLAYER_SIZE - RAM_BASE;
+    const dx = pos[0] - rv.getFloat32(at + 4, true), dz = pos[2] - rv.getFloat32(at + 12, true);
+    return draws.map((d) => ({ ...d, m: [...d.m.slice(0, 9), d.m[9] + dx, d.m[10], d.m[11] + dz] }));
 }
 
 /**
  * Pose the fighters a profile names and return what the body (0x457C0) and
- * ribbon (0x4FEB0) routines draw, in the board's frame. The hair and ribbon
- * are chains the code swings from frame to frame, so the motion runs `warm`
- * frames up to the one asked for and only that last frame's draws are kept.
+ * ribbon (0x4FEB0) routines draw, in the board's frame. Each fighter plays
+ * its moves, a step (0x44840) and a draw a frame, the way the fight loop
+ * does: the hair and ribbon are chains the code swings from frame to frame,
+ * so how they hang depends on the moves before. The round start (0x54660)
+ * sets the floor and the ring the shadows fall on. The fighters end together;
+ * only that last frame's draws are kept, moved to where the profile puts each
+ * player.
  *
  * @param {object} rom
- * @param {{char:number, costume?:number, base:number, pos:number[], yaw:number,
- *          mirror?:boolean, motion:number, frame:number, rootY?:number}[]} fighters
+ * @param {{char:number, costume?:number, base:number, pos:number[], angles:number[],
+ *          mirror?:boolean, moves:number[][]}[]} fighters
+ *        `moves`: [motion, frames, rate?, blend?, from?] in order
+ * @param {{stage?:number, light?:number[], frame?:number}} [scene] the stage,
+ *        its light (0x5555B0) and the board's frame count on the last frame
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[]}}
  */
-export function runDoaFighters(rom, fighters, { warm = 40 } = {}) {
+export function runDoaFighters(rom, fighters, scene = {}) {
     const F = rom.game.doa.fighters;
     const M = doaMachine(rom);
-    const { cpu, rv, geo } = M;
+    const { rv } = M;
+    for (const [a, v] of F.boot ?? []) rv.setFloat32(a - RAM_BASE, v, true);
+    M.cpu.call(F.roundStart, [], { maxSteps: 5_000_000 });
     for (const [a, v] of F.pokes ?? []) rv.setUint8(a - RAM_BASE, v);
-    const tracks = fighters.map((f, p) => startPlayer(M, F, p, f));
-    const draws = [];
-    fighters.forEach((f, p) => {
-        for (let fr = Math.max(0, f.frame - warm); fr <= f.frame; fr++) {
-            setJointAngles(cpu, rv, p, tracks[p], fr, f.mirror);
-            rv.setFloat32(ROOT - RAM_BASE + p * 12 + 4, f.rootY ?? 0, true);
-            geo.draws = [];
-            cpu.call(F.body, [p], { maxSteps: 5_000_000 });
-            cpu.call(F.ribbon, [p], { maxSteps: 5_000_000 });
-        }
-        draws.push(...geo.draws);
-    });
+    rv.setUint8(rom.game.doa.stageByte - RAM_BASE, scene.stage ?? 0);
+    (scene.light ?? []).forEach((v, k) => rv.setFloat32(LIGHT - RAM_BASE + 4 * k, v, true));
+    fighters.forEach((f, p) => startPlayer(M, F, p, f));
+    const plans = fighters.map(moveStarts);
+    const last = Math.max(...plans.map((s) => s.frames));
+    /* The frame count's parity on the last frame is the board's. */
+    const frame = (t) => t - last + (scene.frame ?? 0);
+    endFrame(M, F, frame(-1));
+    let byPlayer = [];
+    for (let t = 0; t < last; t++) {
+        byPlayer = fighters.map(() => []);
+        const playing = plans.map((s, p) => [p, s.starts.get(t - (last - s.frames)), t >= last - s.frames]);
+        fightFrame(M, F, playing.filter(([, , on]) => on), byPlayer);
+        endFrame(M, F, frame(t));
+    }
+    const draws = fighters.flatMap((f, p) => standAt(byPlayer[p], rv, p, f.pos));
     return { draws, unknown: [...M.unknown] };
+}
+
+/* One frame of the fight loop for the players playing ([p, the move it
+ * starts on the frame if any]): each moves and draws its body, then each
+ * draws its chains. */
+function fightFrame(M, F, playing, byPlayer) {
+    const call = (at, ...args) => M.cpu.call(at, args, { maxSteps: 5_000_000 });
+    call(F.frameStart);
+    for (const [p, move] of playing) {
+        if (move) startMove(M, F, p, move);
+        stepPlayer(M, F, p);
+        M.geo.draws = byPlayer[p];
+        call(F.body, p);
+    }
+    for (const [p] of playing) {
+        M.geo.draws = byPlayer[p];
+        call(F.ribbon, p);
+    }
+}
+
+/* Close frame `n` of the board's frame count. */
+function endFrame(M, F, n) {
+    M.rv.setUint32(FRAME_COUNT - RAM_BASE, n >>> 0, true);
+    M.cpu.call(F.frameEnd, [], { maxSteps: 5_000_000 });
 }
 
 /** Every stage the table names, as explorer stages. */
@@ -462,7 +535,7 @@ function attractOf(rom, n) {
     const A = rom.game.doa.attract;
     if (!A || A.stage !== n || !rom.game.doa.fighters) return null;
     try {
-        return { fighters: A.fighters, run: runDoaFighters(rom, A.fighters) };
+        return { fighters: A.fighters, run: runDoaFighters(rom, A.fighters, A) };
     } catch (e) {
         console.warn(`doa: fighters: ${e.message}`);
         return null;

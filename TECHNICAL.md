@@ -1174,23 +1174,48 @@ way the fight start does (Revision B addresses):
 - the skeleton (`0x47810`, from the body routine `0x457C0`) lifts the hips by
   the root's y at `0x56AD54 + 12 * p` times the character's height
   `0x589B80[p]`, which `0x4DAE0` copies from `0xC1E80[char]`;
-- `0x4FEB0(p)` draws the ribbon, a chain it swings from frame to frame with
-  `0x589DB0`/`0x589DB1` set, so the motion runs forty frames up to the pose.
+- the motion step `0x44840` moves the motion's clock on by the speed at
+  `0x56ADA0[p]` times the record's rate (+0x10), and takes the joint angles
+  and the hips' place (`0x56AD50 + 12 * p`: dx, y, dz) from the frame it has
+  reached; the skeleton lifts the hips by that y times the height, and the
+  body routine turns dx and dz by the heading `0x56AC28[p]` into the
+  record's position and clears them, so the fighter steps as its motion does;
+- a move can blend in: the fight sets a frame count at `0x56AC04[p]`,
+  `0x4A5B0(p)` works out a step per joint toward the move's first frame, and
+  `0x4A8D0(p)` takes one a frame in place of the motion step until the count
+  runs out;
+- `0x4FEB0(p)` draws the ribbon (Tina's struct at `0x568470`), a chain it
+  swings from frame to frame: a bob (`0x400B0`: acceleration, speed and place
+  at `+0x5C..+0x64`, 32 frames a swing from the load on) and a push
+  (`+0x74..+0x7C`), the joint the ribbon hangs from's move since the last
+  swing; it swings only on frames whose parity is `0x589DB1`;
+- the fight loop's frame (`0x4D8D8`) opens with `0x4DF20`, which works out
+  `0x589DC0..C8` from the light at `0x5555B0` plus, with `0x54FC94 = 4`, the
+  stage's entry of the table at `0xC32A0`, and closes with `0x4DDC0`, which
+  copies the low bit of the frame count `0x54B158` to `0x589DB1`;
+- the shadows (models 136-150 and 1493-1507, drawn by `0x45B24` from the body
+  routine, before the skeleton moves: they are the frame before's) project
+  each joint along `0x589DC0` onto the floor at `0x58BA80` if it lies inside
+  the ring at `0x550100..0x550114`, else onto y 0. The round start `0x54660`
+  sets the floor (1.0) and the ring, half of the size the boot sets at
+  `0x54FD5C/60` (24.0, at `0x44B8`).
 
 The profile's `doa.attract` names MAME's attract fight at frame 2000 on stage
-1: Zack (motion 484, frame 22) against Tina (motion 1222, frame 15, mirrored),
-with the record fields and root heights read from MAME's RAM. The root stream
-`0x44840` reads (dx, y, dz, twelve bytes a frame from `0x56ACC8[p]`) does not
-give the 0.77 MAME holds by the indexing tried, so the profile carries it.
-Each body part's matrix matches MAME's display list to the last bit, the
-colorxlat rows byte for byte, and texture sheet 1 (the fighters' slabs) byte
-for byte. The display list lags RAM: Zack's draws match track frame 22 while
-his joint angles in RAM are frame 25.
+1: the stage, the light the attract script sets (`0x19710` turns two angles
+into it), the frame count, and each player's record fields and moves as MAME
+logged them frame by frame (`[motion, frames, rate, blend, start frame]`).
+Zack enters 484 at frame 13 with a five-frame blend at speed 2.7; Tina's moves
+go back to the round's start (frame 1821), as her ribbon's bob counts from the
+load. The explorer plays them all through the fight loop's frame and keeps
+the last frame's draws. Against MAME's display list for that frame all 69
+draws match: bodies, faces and hands to the last bit in their turn and 0.012
+in place (Zack's record x, which the display list lags by a frame), the
+shadows within 0.04 and 0.07 radians, the ribbon's root in place. The
+ribbon's three links swing 0.15-1.2 radians off: its push is the joint's
+move in the world, and MAME's Tina is pushed and knocked back round the ring
+by the fight (`0x51F00` and the hit code), which the profile does not play.
 
-Not read yet: the shadows (flattened copies, models 136-150 and 1493-1507,
-drawn by `0x45B24` only with the light at `0x5555B0` above the floor, which
-the attract script sets at run time), Tina's raw face draw, the motions, and
-Revision A's fight code.
+Not read yet: Revision A's fight code.
 
 ### Polygon decoding (`js/model.js`)
 

@@ -3112,28 +3112,42 @@ const doab = {
         sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
         /* The fight code run on posed players (js/doa.js runDoaFighters):
          * load the character, clear its ribbon, set it up, start a motion,
-         * then draw the body and the ribbon. `heights` is the table of one
-         * float a character the skeleton scales the hips' lift by. The
-         * pokes are what the fight sets: 0x54FCDD/0x54FC93 pick the body
-         * path, 0x589DB0/1 let the ribbon swing. */
+         * then step it (the hips and the steps) and draw the body and the
+         * ribbon, a frame at a time, between the fight loop's frame start
+         * and end. A move can blend in from the pose before it.
+         * `heights` is the table of one float a character the skeleton
+         * scales the hips' lift by. `boot` is floats the boot sets (0x44B8):
+         * the ring's size, which the round start halves into the bounds a
+         * shadow lands on the floor inside. The pokes are what the fight
+         * sets: 0x54FCDD/0x54FC93 pick the body path, 0x54FC94 4 takes the
+         * shadows' slant from the stage, 0x589DB0 lets the ribbon swing. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900, motion: 0x420c0,
-            body: 0x457c0, ribbon: 0x4feb0,
-            pokes: [[0x54fcdd, 1], [0x54fc93, 2], [0x589db0, 1], [0x589db1, 1]],
+            step: 0x44840, blendStart: 0x4a5b0, blend: 0x4a8d0, body: 0x457c0, ribbon: 0x4feb0,
+            roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
+            boot: [[0x54fd5c, 24], [0x54fd60, 24]],
+            pokes: [[0x54fcdd, 1], [0x54fc93, 2], [0x54fc94, 4], [0x589db0, 1]],
         },
         /* The attract fight MAME shows at frame 2000 on stage 1: Zack against
          * Tina. `base` is the player's model bank (0x5A6ED0), `angles` and
          * `head` the record's +0x14..+0x1C and +0x2D, `expression` the face
-         * model (0x58828C), `frame` the motion frame its joint angles were
-         * read at, `rootY` the hips' height off the spot (0x56AD54, as MAME
-         * had it; how 0x44840 reaches it from the root stream is not known). */
+         * model (0x58828C). `moves` are what the player plays up to the
+         * frame the board draws, as MAME logged them: [motion, frames, rate
+         * (the speed at 0x56ADA0 times the record's rate), blend frames,
+         * start frame]; Tina's go back to the round's start,
+         * as her ribbon's swing counts from there. `light` is the stage's
+         * light, `frame` the board's frame count (0x54B158), whose low bit
+         * picks the frames the chains swing on. */
         attract: {
             stage: 1,
+            light: [0.2387, 0.8988, -0.3677],
+            frame: 0x761,
             fighters: [
-                { char: 0, base: 80, pos: [6.382, 1, 0.471], angles: [0xff94, 0x98, 0x98], head: 3, motion: 484, frame: 22, rootY: 0.7706 },
+                { char: 0, base: 80, pos: [6.382, 1, 0.471], angles: [0xff94, 0x98, 0x98], head: 3, moves: [[484, 9, 2.7, 5, 13]] },
                 {
                     char: 1, base: 798, pos: [7.662, 1, 0.484], angles: [0x8175, 0x8175, 0x8175], head: 9,
-                    expression: 1, motion: 1222, frame: 15, mirror: true, rootY: 0.7441,
+                    expression: 1, mirror: true,
+                    moves: [[1142, 21], [1266, 14], [1217, 18, 2.6], [1218, 19, 2.4], [519, 57], [1142, 14, 1, 7], [1221, 9, 2.23], [1221, 13, 2.07], [1222, 11, 1.45]],
                 },
             ],
         },
