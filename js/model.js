@@ -33,6 +33,47 @@ function bgr555(cw, out) {
     out[2] = ((cw >> 10) & 0x1f) / 31;
 }
 
+/*
+ * The board's two RAMs a game fills with model data of its own.
+ *
+ * A texture pointer with bit 23 set is a word of texture RAM rather than of
+ * the texture ROM (MAME model2_v.cpp, `& 0x800000`), and an object address
+ * without it a word of polygon RAM. Both are copied straight out of the data
+ * ROM, so `textureRam` lists the runs as {from, at}: the texture RAM word a run
+ * starts at, and the data ROM byte it is copied from, a halfword a word; a
+ * later run is copied over an earlier one. `polygonRam` is the data ROM byte
+ * polygon RAM's word 0 is copied from, a word a word.
+ *
+ *   Virtua Cop: the second model table's materials (0x4D2 on), 0x800 words at
+ *   texture RAM 0x4000 from data 0x81D3DE, at game start.
+ *   Daytona USA: the cars' glass (Rev A models 2139-2141, three levels of
+ *   detail) and the link cabinets' 1P to 8P markers (2142-2165, each with its
+ *   arrow three ways), their meshes, materials and texture points. The boot
+ *   sends texture RAM 0 on from data 0x8F0000 (0x1664 in Rev A), 0x5000 on
+ *   from 0x8F5000 (0x16D0) and polygon RAM from 0x8E0000 (0x1730). The game later uploads the glass's points again every
+ *   frame, slid by the camera, which is its reflection moving; read here they
+ *   are the boot's.
+ *
+ * A pointer into texture RAM that no run covers has no points to read.
+ */
+function textureAt(rom, ptr) {
+    const runs = rom.game.modelTable?.textureRam;
+    if (runs && (ptr & 0x800000) !== 0) {
+        const w = ptr & 0xffff;
+        const run = runs.findLast((r) => w >= r.from);
+        if (run) return { src: rom.mainData, base: run.at + (w - run.from) * 2 };
+        return { src: rom.mainData, base: -1 };
+    }
+    return { src: rom.textures, base: ptr * 2 };
+}
+
+/* A model's mesh in polygon RAM, as a data ROM offset; false where it is not. */
+function polygonRamOffset(rom, meshPtr) {
+    const at = rom.game.modelTable?.polygonRam;
+    if (at === undefined || meshPtr === 0 || (meshPtr & 0x800000) !== 0) return false;
+    return at + meshPtr * 4;
+}
+
 /**
  * Decode one model out of the polygon ROM into triangle-soup buffers plus the
  * quad-edge list the original wireframe path emits.
@@ -57,29 +98,28 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     const entry = mesh ? { uvPtr: mesh.uvPtr, matPtr: mesh.matPtr, meshPtr: 1 } : readModelEntry(rom, modelIdx);
     if (entry.meshPtr === 0) return null;
 
-    const polygons = mesh ? mesh.bytes : rom.polygons;
+    /* An object address without bit 23 is polygon RAM, which the game fills
+     * itself (`polygonRam`): Daytona USA's cars' glass and player markers. */
+    const ramMesh = !mesh && polygonRamOffset(rom, entry.meshPtr);
+    const polygons = mesh ? mesh.bytes : ramMesh !== false ? rom.mainData : rom.polygons;
     const polyView = mesh ? new DataView(mesh.bytes.buffer, mesh.bytes.byteOffset, mesh.bytes.byteLength)
-        : rom.polygonsView;
-    const textures = rom.textures;
+        : ramMesh !== false ? rom.mainDataView : rom.polygonsView;
     const palette = facePalette(rom);
     /* The highest colorbase any face names — which of a game's per-set palettes
      * can colour this model at all. */
     let paletteMax = -1;
 
-    let meshOffset = mesh ? 0 : meshOffsetOf(rom, entry);
+    let meshOffset = mesh ? 0 : ramMesh !== false ? ramMesh : meshOffsetOf(rom, entry);
     if (meshOffset < 0 || meshOffset + VERTEX_PAIR_SIZE > polygons.length) return null;
 
     /* Material stream: one 8-byte record per EMITTED face at matPtr*2.
      * UV stream: nv (pv,pu) 16-bit pairs per face-loop ITERATION at uvPtr*2. */
-    /* Bit 23 points into texture RAM instead, which the game fills itself:
-     * Virtua Cop's second model table (0x4D2 on) has its records there, copied
-     * from its data ROM at game start (MAME model2_v.cpp, `& 0x800000`). */
-    const ram = rom.game.modelTable?.textureRam;
-    const inRam = ram !== undefined && (entry.matPtr & 0x800000) !== 0;
-    const matSrc = inRam ? rom.mainData : textures;
-    const matBase = inRam ? ram.at + ((entry.matPtr & 0xffff) - ram.from) * 2 : entry.matPtr * 2;
+    /* Either may point into texture RAM instead (textureAt). */
+    const { src: matSrc, base: matBase } = textureAt(rom, entry.matPtr);
+    const { src: uvSrc, base: uvBase } = textureAt(rom, entry.uvPtr);
     /* A table whose first records sit at 0 says so: Virtua Cop's model 0. */
-    const haveMat = entry.matPtr !== 0 || (!mesh && rom.game.modelTable?.matAtZero === true);
+    const haveMat = matBase >= 0
+        && (entry.matPtr !== 0 || (!mesh && rom.game.modelTable?.matAtZero === true));
     let uvWord = entry.uvPtr;
     const haveUv = entry.uvPtr !== 0 || points !== null;
 
@@ -479,10 +519,10 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                     pv = points[pair];
                     pu = points[pair + 1];
                 } else {
-                    const b = (uvWord + k * 2) * 2;
-                    if (b + 4 > textures.length) break;
-                    pv = textures[b] | (textures[b + 1] << 8);
-                    pu = textures[b + 2] | (textures[b + 3] << 8);
+                    const b = uvBase + pair * 2;
+                    if (uvBase < 0 || b + 4 > uvSrc.length) break;
+                    pv = uvSrc[b] | (uvSrc[b + 1] << 8);
+                    pu = uvSrc[b + 2] | (uvSrc[b + 3] << 8);
                 }
                 uvu[slot[k]] = pu / 8;    /* tile-relative texel; wrapped per-pixel */
                 uvv[slot[k]] = pv / 8;
