@@ -263,6 +263,45 @@ function stageClouds(rom, n, set, segments) {
     return out;
 }
 
+/* ---- the rail ----------------------------------------------------------------
+ *
+ * Where the camera stands. The stage start (0xC474) takes the stage's 24-byte
+ * record at `0x28642B0[stage]` and keeps its first word, the eye's path, at
+ * 0x50F498 and its third, the path of the point it looks at, at 0x50F4A0, and
+ * zeroes the rail's count (0x50F490): each path is a point of three floats per
+ * count. The segment marks of the stage routine above are counts on the same
+ * rail, so a segment comes up with the camera at its mark, and the stage opens
+ * at the first point. The set is dressed for that rail and little else: seen
+ * from beside the quay, the gate and the van are behind the containers (issue
+ * 96), so the explorer opens a stage, and a segment picked on its own, there.
+ */
+const RAIL_TABLE = 0x28642b0;
+const RAIL_BYTES = 24;
+const RAIL_POINT = 12;
+const MARK_TABLE = 0x2839170;
+
+function railPoint(rom, path, i) {
+    const off = path - MAIN_DATA_BASE + i * RAIL_POINT;
+    const dv = rom.mainDataView;
+    return [dv.getFloat32(off, true), dv.getFloat32(off + 4, true), -dv.getFloat32(off + 8, true)];
+}
+
+/* The camera at the rail's start, and at each segment's mark, by view. */
+function stageCameras(rom, n, segments) {
+    const eyes = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES);
+    const ats = dataU32(rom, RAIL_TABLE + n * RAIL_BYTES + 8);
+    const marks = dataU32(rom, MARK_TABLE + n * 4);
+    if (!eyes || !ats || !marks) return {};
+    const at = (i) => ({ eye: railPoint(rom, eyes, i), at: railPoint(rom, ats, i) });
+    const cameras = { all: at(0), 'zone:0': at(0) };
+    for (let s = 1; s < segments; s++) {
+        const mark = dataU32(rom, marks + (s - 1) * 4);
+        if (mark === null || mark === END) break;
+        cameras[`zone:${s}`] = at(mark);
+    }
+    return cameras;
+}
+
 function stageOf(rom, lit, n, segs) {
     const t = rom.game.modelTable;
     const set = n % rom.game.texture.sets;
@@ -285,6 +324,7 @@ function stageOf(rom, lit, n, segs) {
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
         zones,
+        cameras: stageCameras(rom, n, segs.length),
         views: [['all', 'Every segment at once'], ...zones.map((z, i) => [`zone:${i}`, z.label])],
         view: 'all',
         union: 'all',

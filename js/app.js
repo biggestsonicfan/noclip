@@ -1633,6 +1633,8 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
          * frame; the scene is shown in the world's. */
         const c = new THREE.Vector3(...b.center).applyMatrix4(worldFrame);
         v.frame([c.x, c.y, c.z], b.radius, { fly: true, dir: [0.45, 0.36, 0.72] });
+        const cam = stage.cameras?.[stageView(stage)];
+        if (cam) lookFromStageCamera(cam, worldFrame);
     }
 
     /* Two stages can share a colour table — South Island and its two alternates
@@ -1643,6 +1645,25 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
 
     renderStagePanel(stage, counts, totals, list);
     updateHud();
+}
+
+/* How far ahead of a stage camera the orbit turns about. */
+const STAGE_CAMERA_ORBIT = 10;
+
+/*
+ * Put the camera where a stage says the board's stands for the view picked —
+ * Virtua Cop's rail (js/vcop.js) — looking the way it looks, after the
+ * framing has set the near and far planes and the pace from the whole stage.
+ */
+function lookFromStageCamera(cam, worldFrame) {
+    const v = state.viewer;
+    const eye = new THREE.Vector3(...cam.eye).applyMatrix4(worldFrame);
+    const at = new THREE.Vector3(...cam.at).applyMatrix4(worldFrame);
+    v.camera.position.copy(eye);
+    v.orbit.target.copy(at.sub(eye).setLength(STAGE_CAMERA_ORBIT).add(eye));
+    v.camera.lookAt(v.orbit.target);
+    v.orbit.update();
+    v.fly.syncFromCamera();
 }
 
 /*
@@ -4240,7 +4261,9 @@ function wireOptions() {
     /* Which zone or which blocks the stage is drawn with — see stageView. */
     $('#view-select').addEventListener('change', (e) => {
         state.stageViews[state.stageIndex] = e.target.value;
-        loadStage(state.stageIndex, { keepCamera: true });
+        /* A view with a camera of its own goes there; the rest keep the view. */
+        const stage = state.stages[state.stageIndex];
+        loadStage(state.stageIndex, { keepCamera: !stage?.cameras?.[e.target.value] });
     });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
