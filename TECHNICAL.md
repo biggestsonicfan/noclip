@@ -1138,11 +1138,24 @@ light a fixed one, down and away from the camera.
 
 Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
 model and texture chips are Revision B's; its RAM is laid out the same, and
-everything the explorer reads from the program sits 0x7A40 lower. All twelve
-stages draw the same pieces and render pixel for pixel the same as Revision
-B's.
+everything the explorer reads from the program sits 0x7A40 lower (the sky's
+stage table 0x79C0). All twelve stages draw the same pieces and render pixel
+for pixel the same as Revision B's.
 
-Not read yet: the sky behind the stages, and the fighters.
+The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
+`js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
+palette, map). As a stage starts, `0x6F558` lays four of them, named per
+stage at program `0xC7660`, side by side into a 2048-pixel ring; stages 4, 5,
+7 and 9 clear the layer, and 6 and 12-15 fill it with one plain tile. Each
+frame `0x6FE00` scrolls it by `yaw >> 5` (a turn is the ring) and `0x70090` by
+`200 * (pitch + 0xE39) / 0x238E`, linear in the pitch, so level centres row
+272 on the eye line at 229 rows a radian. The board's yaw 0 looks down its +Z
+and a positive yaw turns toward -X (the camera's eye and target at
+`0x555598`). Rendered from the eye and target of a MAME attract frame, the
+explorer shows the same arena and the same clouds over it. The colours are
+the raw palette, as MAME shows them.
+
+Not read yet: the fighters.
 
 ### Polygon decoding (`js/model.js`)
 

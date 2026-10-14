@@ -514,8 +514,12 @@ for them), with their banners and ropes, their textures and their colours.
 
 The textures are the game's own slabs, copied into texture RAM as the game
 copies them, and they carry no smaller levels; the explorer draws them at full
-size at every distance, as the board does. Not read yet: the sky, which the
-board draws behind the stages, and the fighters.
+size at every distance, as the board does.
+
+The sky behind the outdoor stages is the board's tile layer: four pictures a
+stage, laid round the arena as one ring and placed as the game scrolls them,
+which a MAME frame and the explorer from the same camera agree on. The indoor
+stages have none. Not read yet: the fighters.
 
 ## Running it
 

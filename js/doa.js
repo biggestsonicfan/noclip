@@ -35,6 +35,7 @@
 
 import { I960, bitsToFloat, floatToBits } from './i960.js';
 import { gameLighting } from './stages.js';
+import { buildDoaSky } from './scroll.js';
 
 const RAM_BASE = 0x500000;
 const RAM_SIZE = 0x100000;
@@ -344,6 +345,8 @@ function stageOf(rom, n, entry, run) {
         draws,
         objects: [],
         sky: null,
+        /* The tile layer's panorama (js/scroll.js); its colours are raw. */
+        panorama: () => buildDoaSky(rom, n),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',

@@ -3103,6 +3103,9 @@ const doab = {
         stageByte: 0x5555be,
         visible: [0x72600, 0x72680],
         pokes: [[0x54fcdd, 1]],
+        /* The sky: four scroll pictures a stage, named in the program, out of
+         * the table of pictures in the data (js/scroll.js buildDoaSky). */
+        sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
     },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
@@ -3114,8 +3117,8 @@ const doab = {
  * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
  * the data, model and texture chips are doab's, so the set needs doa.zip
  * beside it. The model table is in those data chips, so it has not moved;
- * the stage code and the program's tables sit 0x7A40 lower than Revision B's,
- * and its RAM is laid out the same.
+ * the stage code and the program's tables sit 0x7A40 lower than Revision B's
+ * (the sky's stage table 0x79C0), and its RAM is laid out the same.
  */
 const doaa = {
     ...doab,
@@ -3133,7 +3136,10 @@ const doaa = {
     palette: { ...doab.palette, tables: 0x69344 },
     texture: { ...doab.texture, raw: { layout: 'doa', stageSlabs: 0xc33e0, charSlabs: 0xc3420 } },
     colors: { ...doab.colors, doa: { ...doab.colors.doa, stages: 0x72da0 } },
-    doa: { ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40] },
+    doa: {
+        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
+        sky: { ...doab.doa.sky, stages: 0xbfca0 },
+    },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,

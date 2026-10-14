@@ -434,6 +434,128 @@ const DAYTONA_CHAR_BYTES = 0x80000;
  * The Fighters' CG 0 has 35 tile entries, so it is not small. */
 const MAX_LIST_ENTRIES = 256;
 
+/*
+ * Dead or Alive's sky for one stage.
+ *
+ * The same tile chip, with a format of Tecmo's own. Data 0xC0000 is a table
+ * of 242 scroll pictures, three pointers each: the tiles, the palette and the
+ * map. The tiles are chunks of a count and that many 32-byte tiles until a
+ * count of 0; the game hands each chunk whole 128-tile blocks of character
+ * RAM, and each chunk's 16 colours go to every block it took. The map is a
+ * width and height, then entries whose low 13 bits are the picture's own
+ * tile; the loader (0x9250) adds the slot's first block, so the group, bits
+ * 7-14, is the block the tile landed in and so its chunk's colours.
+ *
+ * 0x6F558 builds the sky as the stage starts: four pictures, named by stage
+ * in the table at program 0xC7660 (four halfwords a stage), each 64 tiles by
+ * 48, laid side by side into a 2048-pixel ring. Stages 4, 5, 7 and 9 clear
+ * the layer instead, and 6 and 12-15 fill it with one plain tile, so those
+ * stand under the backdrop alone. In MAME the four go round in order: stage
+ * 1's attract loads pictures 125-128.
+ *
+ * Each frame 0x6FE00 scrolls the layer by `yaw >> 5`, so a turn is the whole
+ * ring and screen column x shows ring column x - (yaw >> 5) + 8: at yaw 0
+ * the centre of the 496-pixel picture is column 256. Vertically it is linear
+ * in the pitch, not its tangent (0x70090):
+ *
+ *   V = 200 * (pitch + 0xE39) / 0x238E,  held to 0..200
+ *
+ * 0x238E is 50 degrees of the 0x10000 turn, so the strip moves 229 rows a
+ * radian, and level (pitch 0) is V = 80, which centres row 192 + 80 on the
+ * eye line. Fitting the decoded ring to MAME frames of the attract at known
+ * yaw and pitch put it at exactly those offsets. The palette is the raw
+ * colour, as MAME shows it: no colorxlat.
+ */
+const DOA_PICTURES = 4;
+const DOA_LEVEL_ROW = VIEW_CENTRE_ROW + 80;
+const DOA_FOCAL = 200 / (0x238e / 0x10000 * 2 * Math.PI);
+const DOA_CENTRE_COL = VIEW_CENTRE_COL + 8;
+const DOA_BLOCK = 128;          /* tiles to a block of character RAM */
+const DOA_TILE_MASK = 0x1fff;
+
+/**
+ * @param {object} rom    loaded ROM set
+ * @param {number} stage  the stage number (0x5555BE)
+ */
+export function buildDoaSky(rom, stage) {
+    const S = rom.game.doa?.sky;
+    if (!S || S.skyless.includes(stage)) return null;
+    const pictures = [];
+    for (let k = 0; k < DOA_PICTURES; k++) {
+        const pic = doaPicture(rom, S.pictures, rom.mainCpuView.getInt16(S.stages + stage * 8 + k * 2, true));
+        if (!pic) return null;
+        pictures.push(pic);
+    }
+    const width = pictures.reduce((w, p) => w + p.width, 0);
+    const height = Math.max(...pictures.map((p) => p.height));
+    const rgba = new Uint8Array(width * height * 4);
+    let x0 = 0;
+    for (const p of pictures) {
+        for (let y = 0; y < p.height; y++) {
+            rgba.set(p.rgba.subarray(y * p.width * 4, (y + 1) * p.width * 4), (y * width + x0) * 4);
+        }
+        x0 += p.width;
+    }
+    return {
+        width, height, rgba, topColor: commonestColour(rgba, 0, width),
+        horizon: DOA_LEVEL_ROW, focal: DOA_FOCAL, centre: DOA_CENTRE_COL,
+    };
+}
+
+/* One scroll picture of the table at `table`, as RGBA. */
+function doaPicture(rom, table, n) {
+    const word = (addr) => { const t = at(rom, addr); return t.view.getUint32(t.off, true); };
+    const [tiles, colours] = doaTiles(rom, word(table + n * 12), word(table + n * 12 + 4));
+    const M = at(rom, word(table + n * 12 + 8));
+    const w = M.view.getUint16(M.off, true);
+    const h = M.view.getUint16(M.off + 2, true);
+    const width = w * 8;
+    const rgba = new Uint8Array(width * h * 8 * 4);
+    for (let ty = 0; ty < h; ty++) {
+        for (let tx = 0; tx < w; tx++) {
+            const t = M.view.getUint16(M.off + 4 + (ty * w + tx) * 2, true) & DOA_TILE_MASK;
+            const pal = colours[t >> 7];
+            if (!pal || t >= tiles.length) continue;
+            drawDoaTile(rgba, width, tx * 8, ty * 8, tiles[t], pal);
+        }
+    }
+    return { width, height: h * 8, rgba };
+}
+
+/* The picture's tiles, as character RAM holds them from its first block, and
+ * each block's 16 colours as [r, g, b]. */
+function doaTiles(rom, tileList, palList) {
+    const tiles = [];
+    const colours = [];
+    let t = at(rom, tileList);
+    let p = at(rom, palList);
+    for (let i = 0; i < MAX_LIST_ENTRIES; i++) {
+        const count = t.view.getUint32(t.off, true);
+        if (!count) break;
+        const blocks = Math.ceil(count / DOA_BLOCK);
+        for (let k = 0; k < count; k++) tiles.push(t.u8.subarray(t.off + 4 + k * TILE_BYTES, t.off + 4 + (k + 1) * TILE_BYTES));
+        while (tiles.length < (colours.length + blocks) * DOA_BLOCK) tiles.push(null);
+        const pal = [];
+        for (let c = 0; c < 16; c++) pal.push(palette555ToBytes(null, p.view.getUint16(p.off + c * 2, true) & 0x7fff));
+        for (let b = 0; b < blocks; b++) colours.push(pal);
+        t = { ...t, off: t.off + 4 + count * TILE_BYTES };
+        p = { ...p, off: p.off + 32 };
+    }
+    return [tiles, colours];
+}
+
+function drawDoaTile(rgba, width, x0, y0, tile, pal) {
+    if (!tile) return;
+    for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+            const byte = tile[py * 4 + ((px >> 1) ^ 1)];
+            const [r, g, b] = pal[(px & 1) ? (byte & 15) : (byte >> 4)];
+            const o = ((y0 + py) * width + x0 + px) * 4;
+            rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = b; rgba[o + 3] = 255;
+        }
+    }
+}
+
 /**
  * What _ScrollCG_Initialize and _ScrollColor_Initialize leave in the tile
  * chip's character RAM and palette, starting from both clear.
