@@ -202,6 +202,16 @@ function glassOf(rom, rail, s, list, k) {
  * and 0x27 up there its first ten (0x453C0's mask once it comes, 0x3FF). The other types a MAME run of the attract spawns keep every part
  * (0x31CA0's mask). */
 const INTACT = new Map([[0x00, 2], [0x01, 2], [0x03, 2], [0x26, 1], [0x27, 10]]);
+/* And the parts that loader rescales (its switch at 0x31674), in x and y,
+ * after the spawn has set every part's scale (slot +0xB5C, three floats a
+ * part) to 1: 0x326D0's matrix takes it last, after the part's turns. The
+ * drums' shadows (part 1); and the booth's two panes at stage 1's gate (0x0B),
+ * whose model 0x423 is a 6.25 by 5 pane (type 0x2B shows it whole), squeezed
+ * to the booth's 0.72 by 0.75. MAME's slots hold the same. */
+const PART_SCALES = new Map([
+    [0x00, [[1, 0.9]]], [0x01, [[1, 0.9]]], [0x02, [[1, 0.9]]], [0x03, [[1, 1.35]]],
+    [0x0b, [[0, 0.1155, 0.15]]], [0x34, [[1, 1.2]]],
+]);
 /* The scripts: a record that stands for an event — the helicopter that comes
  * over (0x38F10 spawns it at 0x4F060) — and draws none of its own parts where
  * it stands, in mid-air, in MAME's draws of all three stages. */
@@ -247,6 +257,7 @@ function typeParts(rom, type) {
     if (!at) return [];
     const models = dataU32(rom, at), offs = dataU32(rom, at + 4), turns = dataU32(rom, at + 8);
     const dv = rom.mainDataView;
+    const scales = new Map((PART_SCALES.get(type) ?? []).map(([i, x, y = x]) => [i, [x, y, 1]]));
     const out = [];
     for (let i = 0; i < (INTACT.get(type) ?? MAX_PARTS); i++) {
         const model = dataU32(rom, models + i * 4);
@@ -256,6 +267,7 @@ function typeParts(rom, type) {
             model,
             x: dv.getFloat32(o, true), y: dv.getFloat32(o + 4, true), z: dv.getFloat32(o + 8, true),
             ax: dv.getInt32(t, true), ay: dv.getInt32(t + 4, true), az: dv.getInt32(t + 8, true),
+            scale: scales.get(i),
         });
     }
     return out;
@@ -285,7 +297,7 @@ function stageObjects(rom, n, set, segments, rail) {
             const points = glassOf(rom, rail, s, list, k);
             for (const part of typeParts(rom, r.type)) {
                 if (part.model >= count) continue;
-                const partOps = [...ops, ...recordOps(part)];
+                const partOps = [...ops, ...recordOps(part), ...(part.scale ? [['s', part.scale]] : [])];
                 const key = JSON.stringify([part.model, partOps]);
                 if (!byKey.has(key)) {
                     byKey.set(key, { model: part.model, pos: [r.x, r.y, r.z], set, ops: partOps, zones: new Set() });
