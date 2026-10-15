@@ -417,20 +417,42 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
  * is the viewer's +x (js/pose.js turns the one into the other), so in the
  * fighter's viewer frame the opponent's (x, y, z) is (2 - x, y, -z), and
  * the other way round the same.
+ *
+ * Ahead is where the fight mostly has it, not where a motion says it is. The
+ * move script turns a fighter round (0x1B454: with move flag +0x1A4 bit 20
+ * set, it flips bit 15 of the facing at +0x26), and a back-turned fighter
+ * plays its motions with the other one behind: measured over MAME's attract
+ * mode, the opponent stands at the motions' -z through sixteen of the
+ * motions played, and the motions' own face target does not tell those from
+ * the rest. So the explorer can stand it behind as well, 2 back along -z and
+ * facing the fighter's back: (x - 2, y, z).
  */
 export const OPPONENT_DISTANCE = 2;
 
 /** Where the opponent's parts go: its viewer frame into the fighter's. */
-export function opponentMatrix(distance = OPPONENT_DISTANCE) {
-    return [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, distance, 0, 0, 1];
+export function opponentMatrix({ behind = false, distance = OPPONENT_DISTANCE } = {}) {
+    return behind
+        ? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -distance, 0, 0, 1]
+        : [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, distance, 0, 0, 1];
+}
+
+/* A point through a placement (column-major 4x4), or back through it: the
+ * placement is a turn and a step, so its inverse is the turn transposed. */
+function placed(P, [x, y, z]) {
+    return [0, 1, 2].map((k) => P[k] * x + P[k + 4] * y + P[k + 8] * z + P[k + 12]);
+}
+function unplaced(P, v) {
+    const d = [0, 1, 2].map((k) => v[k] - P[k + 12]);
+    return [0, 1, 2].map((k) => P[k * 4] * d[0] + P[k * 4 + 1] * d[1] + P[k * 4 + 2] * d[2]);
 }
 
 /* The other fighter's head, as last posed, in the motions' space of the one
- * looking at it: its viewer (x, y, z) across to the looker's, then as
- * (z, y, x). */
-function headSeenFrom(other, distance) {
+ * looking at it: across to the looker's viewer frame, then as (z, y, x). */
+function headSeenFrom(other, across) {
     const h = LIVE.get(other)?.head;
-    return h && [-h[2], h[1], distance - h[0]];
+    if (!h) return undefined;
+    const [x, y, z] = across(h);
+    return [z, y, x];
 }
 
 /**
@@ -449,11 +471,14 @@ function headSeenFrom(other, distance) {
  * where the game keeps the motion's own target the head turns where the
  * game's doesn't.
  *
+ * @param {number[]} [place]  where the second stands, opponentMatrix()'s
  * @returns {Array<{matrices: number[][], origins: number[][]}>} each in its
- *   own viewer frame; opponentMatrix() places the second.
+ *   own viewer frame; `place` puts the second in the first's.
  */
-export function poseBout(rom, [first, second], distance = OPPONENT_DISTANCE) {
-    const one = poseFighter(rom, first.body, first.motion, first.frame, { faceTarget: headSeenFrom(second.body, distance) });
-    const two = poseFighter(rom, second.body, second.motion, second.frame, { faceTarget: headSeenFrom(first.body, distance) });
+export function poseBout(rom, [first, second], place = opponentMatrix()) {
+    const one = poseFighter(rom, first.body, first.motion, first.frame,
+        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)) });
+    const two = poseFighter(rom, second.body, second.motion, second.frame,
+        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)) });
     return [one, two];
 }
