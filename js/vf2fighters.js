@@ -318,14 +318,15 @@ function readPads(rom, A, i) {
  * kosi_mino_disp (slot 9), for the characters it names: four panels from
  * 0x6421DE0[char * 16] (models at +0..+6, a float at +8), placed by the
  * constants action_init writes to 0x50A324..0x50A378, the same for everyone.
- * Panels 3 and 4 step a further +8 / -(+8) along Z. A thigh has to lift past
- * a panel's limit before it swings, so standing they hang at these turns.
+ * Panels 3 and 4 step a further +8 / -(+8) along Z. Each swings about one
+ * axis (`swing`: the turn it adds to, and which way) once a thigh lifts it
+ * past its limit; skirtSwings works out how far.
  */
 const SKIRT_PANELS = [
-    { at: 4, offset: [0.013, 0.087, 0], z: 0 },
-    { at: 6, offset: [0.013, -0.088, 0], z: 0 },
-    { at: 2, offset: [0, -0.017, 0.107], z: 1 },
-    { at: 0, offset: [0, -0.017, -0.107], z: -1 },
+    { at: 4, offset: [0.013, 0.087, 0], z: 0, swing: [0, 1], limit: 0x3000 },
+    { at: 6, offset: [0.013, -0.088, 0], z: 0, swing: [0, -1], limit: 0x1e00 },
+    { at: 2, offset: [0, -0.017, 0.107], z: 1, swing: [1, 1], limit: 0x1000 },
+    { at: 0, offset: [0, -0.017, -0.107], z: -1, swing: [1, -1], limit: 0x1000 },
 ];
 const SKIRT_TURN = [0x4000, 0xc000, 0], HIPS = 9;
 
@@ -333,10 +334,56 @@ function readSkirt(rom, A, i) {
     const r = A.skirt?.chars.includes(i) ? dataAt(rom, A.skirt.table + i * 16) : null;
     if (!r) return [];
     const dv = r.view, f = dv.getFloat32(r.off + 8, true);
-    return SKIRT_PANELS.map(({ at, offset, z }) => ({
-        slot: HIPS, hiddenBy: HIPS, model: dv.getInt16(r.off + at, true),
+    return SKIRT_PANELS.map(({ at, offset, z }, panel) => ({
+        slot: HIPS, hiddenBy: HIPS, model: dv.getInt16(r.off + at, true), panel,
         offset: [offset[0], offset[1], offset[2] + z * f], turn: SKIRT_TURN,
     })).filter((e) => e.model > 0);
+}
+
+/*
+ * How far each panel swings this frame (kosi_mino_disp, 0x31E54; TECHNICAL.md,
+ * "The skirt"). calc_unit_mat reads back each matrix's roll, Fn_get_glo_ang's
+ * third angle, atan2(col0.y, col1.y): the hips' less a half turn (+0xAD4), the
+ * thighs' (slot 13 +0xADA, slot 10 +0xAE0). A thigh's spread is hips + thigh +
+ * a half turn: from 0 up it pushes panels 1 and 3 (or 1 and 4), below 0 panels
+ * 2 and 3 (2 and 4). Its lift (+0xAD8, +0xADE) is atan2(x, sin(hips) z +
+ * cos(hips) y) of the thigh's bone vector as the motion turns it, before the
+ * facing's quarter turn. The board takes slot 13's lift for slot 10's share
+ * of panel 4, and so does this. Measured against MAME's attract mode, the
+ * thighs' rolls and lifts come out as the board's, and the hips' roll as the
+ * board's negated, so it is taken that way round.
+ */
+const SKIRT_THIGHS = [13, 10];
+const roll = (s) => brad(Math.atan2(s.r[1], s.r[4]));
+
+function thighLift(r, o, hips) {
+    // The explorer's (x, y, z) is the board's (z, y, -x): undo the facing.
+    const [z, y, x] = [0, 1, 2].map((k) => r[k] * o[0] + r[k + 3] * o[1] + r[k + 6] * o[2]);
+    return brad(Math.atan2(-x, Math.sin(rad(hips)) * z + Math.cos(rad(hips)) * y));
+}
+
+function skirtSwings(pose, offsets) {
+    const hips = s16(0x8000 - roll(pose[HIPS]));
+    const [a, b] = SKIRT_THIGHS.map((slot) => {
+        const d = s16(hips + roll(pose[slot]) + 0x8000);
+        return { lift: thighLift(pose[slot].r, offsets[slot + 1], hips), out: Math.max(d, 0), back: Math.max(-d, 0) };
+    });
+    const cos = (w) => Math.cos(rad(w)), sin = (w) => Math.sin(rad(w));
+    const by = (spread, f) => (f >= 0 ? Math.trunc(spread * f) : 0);
+    const reach = [
+        [by(a.out, cos(a.lift + 0x8000)), by(b.out, cos(b.lift + 0x8000))],
+        [by(a.back, cos(a.lift)), by(b.back, cos(b.lift))],
+        [by(a.out, sin(a.lift + 0x8000)), by(a.back, sin(a.lift + 0x8000))],
+        [by(b.out, -sin(b.lift + 0x8000)), by(b.back, sin(a.lift + 0x8000))],
+    ];
+    return reach.map((r, k) => Math.max(0, Math.max(...r) - SKIRT_PANELS[k].limit));
+}
+
+/* A panel turned by its swing; a pad, or a panel with none, as it is. */
+function swungExtra(e, swings) {
+    if (e.panel === undefined || !swings) return e;
+    const [axis, sign] = SKIRT_PANELS[e.panel].swing;
+    return { ...e, turn: e.turn.map((v, k) => (k === axis ? (v + sign * swings[e.panel]) & 0xffff : v)) };
 }
 
 /*
@@ -756,7 +803,8 @@ function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
  *   the motion's (float object 2, in the targets' space), as the fight writes
  *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
- *   `extras` places body.extras (the pads and skirt), one each; `chest`,
+ *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
+ *   a fighter with one, is each panel's swing this frame; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
  *   for a fighter koshi_unit_change names, is the hips' model this frame.
  */
@@ -780,8 +828,9 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
-    const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
-    return { matrices, origins, extras, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    const swings = body.extras?.some((e) => e.panel !== undefined) ? skirtSwings(pose, body.offsets) : null;
+    const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], swungExtra(e, swings))));
+    return { matrices, origins, extras, skirt: swings, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*
