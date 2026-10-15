@@ -546,13 +546,15 @@ export function skinMesh(skin, matrices) {
     return { bytes, uvPtr: skin.uvPtr, matPtr: skin.matPtr };
 }
 
-/** Line segments from each part to its parent, for the skeleton overlay. */
-export function bodySkeletonLines(body, origins) {
+/** Line segments from each part to its parent, for the skeleton overlay;
+ * `parents` (by part) when the pose works them out rather than the body. */
+export function bodySkeletonLines(body, origins, parents = null) {
     const out = new Float32Array(Math.max(0, body.parts.length - 1) * 6);
     let n = 0;
     for (const p of body.parts) {
-        if (p.parent < 0) continue;
-        out.set(origins[p.parent], n);
+        const parent = parents ? parents[p.index] : p.parent;
+        if (parent < 0) continue;
+        out.set(origins[parent], n);
         out.set(origins[p.index], n + 3);
         n += 6;
     }

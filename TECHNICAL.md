@@ -1646,6 +1646,45 @@ included, to 0.001 radians in their turn and 0.001 in place.
 
 Not read yet: Revision A's fight code.
 
+On the Animation tab a part is a place in that draw order, and the body
+routine works out every matrix whole (the copro's stack stays flat), so the
+skeleton is not in the ROM to read. `jointsOf` in `js/doafighters.js` finds
+it from the motion: a joint is fixed on its parent's bone, so a part's parent
+is the earlier part in whose frame its place holds still through every frame.
+A joint the motion never bends holds still in several; of those the parent is
+the one whose model comes nearest the joint, the bone it is the end of. That
+gives hips, chest, head, two arms and two legs of three, and the chains that
+hang (Tina's ribbons, Kasumi's sash and ponytail, Jann Lee's belt), the same
+in every motion tried. A part
+drawn on its parent's very matrix in every frame is laid on it: the face
+(eyes and mouth) on the head, the bust on the chest. The board's sort puts
+those over the skin in the order they are sent, so the explorer ranks each
+such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
+ranked one part at a time, the head's skin hid the eyes.
+
+### Dead or Alive's pictures (`js/cells.js`)
+
+The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its
+own tiles, colours and map. The table at data 0x20C0000 (data ROM 0xC0000)
+holds 242 entries of three pointers, 12 bytes each:
+
+- tiles: chunks of a u32 count and that many 32-byte tiles, ending with a
+  count of 0; each chunk starts a fresh block of 128 tiles;
+- palette: 16 colours (32 bytes) a chunk, for every block the chunk fills;
+- map: u16 width and height in tiles, then a u16 entry a tile, the low 13
+  bits the picture's own tile number.
+
+The loader (`0x9000` on Revision B) takes free blocks from its bitmap at
+`0x54F980`, writes the tiles to `0x1080000 + block * 0x1000` and the colours
+to `0x1800000 + block * 32`; the draw (`0x9250`) adds the block to each
+entry's character (`block << 7`) and makes it the palette group too. Every
+map's highest tile number is its own tile count less one, so a picture needs
+nothing loaded with it: the Cells tab gives cell n its own CG n, loaded from
+block 0. The pictures are the Tecmo logo and warnings, the profiles and name
+plates, portraits, the stage skies (named from `doa.sky`), the fight's
+messages, fonts, the rankings, endings, staff roll and title logos. The table
+is the same in every build.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
