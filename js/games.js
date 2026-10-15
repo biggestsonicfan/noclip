@@ -3283,10 +3283,14 @@ const doab = {
          * each player (`roundReset`: its health, 0xFF, and the round's
          * counts). `camera` is the camera task, `frameWait` the wait for the
          * next frame it loops on, `ai` the attract's AI task: its start and
-         * the head of its loop. */
+         * the head of its loop. `headCheck` is what the body routine asks
+         * before it draws the head and face (0x45FA8): no while the player's
+         * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
+         * that no action script has run on. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
+            motion: 0x420c0, headCheck: 0x51dc0,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -3352,10 +3356,59 @@ const doab = {
             ],
         },
     },
+    /*
+     * The sound board is the Model 2 board, its UART at 0x9C0000 on the 2B
+     * (sends queued at 0x94C0, sent at once by 0x9590). The round start
+     * (0x18480) sends the stage's song straight from the table at 0x90C10,
+     * by stage number: A01001-A01010, or A00001, all sound off, for stages
+     * 6, 7, 9 and 15. The song names are in the data ROM at 0x9C860: stage
+     * 5's A01010 is BGM_BOSS, and stage 9 is the name entry, whose setup
+     * (0x1C6F8) sends A0100E, BGM_NAME, itself. The attract skips the table (0x54FC94
+     * is 4 there) and plays A0100A on every stage. MAME, a coined game:
+     * stage 5 starts A01010, 6 A00001, 11 A01002.
+     *
+     * The boot sends A00001. The driver takes its first command about four
+     * seconds after a reset (`warmup`; MAME's i960 sends it nine seconds in).
+     * The 0xFF the i960 writes as it sets the UART up comes long before that
+     * and is never heard; sent once the driver listens, it eats the next
+     * command, so it is left out.
+     */
+    sound: {
+        program: ['epr-19328.31', 0x400bdbfb],
+        samples: [
+            ['mpr-19329.32', 0x8fd2708a], ['mpr-19330.33', 0x0c69787d],
+            ['mpr-19331.34', 0xc18ea0b8], ['mpr-19332.35', 0x2877f96f],
+        ],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        warmup: 5,
+        stageMusic: 0x90c10,
+        none: 0xa00001,
+        songs: { 9: 0xa0100e },
+        replaces: true,
+    },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    /* The fighters on the animation tab, posed by the fight code itself
+     * (js/doafighters.js): the roster (character number, name), the model
+     * banks and the loads that pick a row of them, the two motion tables
+     * ([pointer, first id, count]), the action scripts and the group
+     * everyone shares. */
+    rig: {
+        kind: 'doa',
+        note: 'doa',
+        roster: [
+            [0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'],
+            [6, 'Genfu'], [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang'],
+        ],
+        banks: 0xc59d2,
+        loads: 0xc3380,
+        motions: [[0x6000000, 0, 0x552], [0x6c00004, 0x552, 249]],
+        scripts: 0xd8000,
+        common: 13,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 /*
@@ -3391,6 +3444,10 @@ const doaa = {
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
+    rig: undefined,
+    features: { ...doab.features, motions: false, bodies: false },
+    /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
+    sound: { ...doab.sound, stageMusic: 0x89250 },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,

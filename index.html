@@ -483,6 +483,18 @@
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
       </div>
+      <div class="note" id="anim-note-doa" hidden>
+        The fighters are drawn by the game's own fight code, run in the
+        explorer: the attract's fight is set up with the fighter in player
+        one's place and the motion started as the player routine starts one
+        (<code>0x420C0</code>), then each frame runs the body routine
+        (<code>0x457C0</code>) and the hair and ribbon (<code>0x4FEB0</code>).
+        A motion id indexes the table at <code>0x6000010</code>, or from
+        <code>0x552</code> the one at <code>0x6FC7AC0</code>. A fighter's own
+        moves are the ones its action scripts (<code>0xD8000</code>) start.
+        The fighter steps as the motion does; the hair swings from the
+        frames before.
+      </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects
