@@ -1617,9 +1617,17 @@ in five colours: each has its own mesh pointer (17939 to 17943: `0x92BA13`,
 `0x92BB1E`, ... `0x92BE3F`) and its own face records (`0x270330`,
 `0x270340`, ... `0x270370`), but the meshes decode to the same vertices and
 face count, and none of their faces is textured; the face records differ in
-colour. As the explorer decodes them, every character's variants are blue,
-green, orange, dark grey and pink, each beside white (17939 and 17940:
-blue and white, green and white).
+colour. Each model has two face records, which differ only in their last
+word, the colour base (bits 6-15); its faces are untextured (bit 14 of the
+first word clear), so the board colours them from palette RAM entry
+`0x1000 + base`, shaded by the face's light. The second record is base 7
+in all five, palette `0xFFFF` (31, 31, 31: white); the first is base 441
+(`0x6E40`) in 17939, palette `0xFDC0` (red 0, green 14, blue 31), 482
+(`0x7880`) in 17940, `0xBBE0` (0, 31, 14), 93 in 17941, `0x81DF` (31, 14,
+0), 84 in 17942, `0x98C6` (6, 6, 6) and 483 in 17943, `0xB81F` (31, 0, 14):
+blue, green, orange, dark grey and pink, each beside white. MAME's palette
+RAM holds the same six values (read in `doab`'s attract, frames 600 to
+5400; the game has one palette table, uploaded at boot).
 Stage 6 passes variant 0 (loaded from `0xC75D0`, a ROM word holding 0) at
 `0x6C614`, `0x6C6A0` and `0x6C70C`. The only other caller is the name entry
 routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`): its grid of the
@@ -1630,8 +1638,11 @@ makes from `0x557D68` (`0x1DFE4`, `0x1E0A4`, `0x1E170`), the `.` at
 `0x1E524`) and a letter at `0x1E690`, and 4 for the letters at `0x1E8A0`.
 Those 14 are every direct `call` to `0x63270` in the program; no instruction
 loads its address and no word in the program or data ROMs holds it, so no
-indirect call reaches it through a stored pointer. No call passes 3, nothing
-else reads `0xC5A70`, and no code names those entries by address, so each
+indirect call reaches it through a stored pointer. No direct call passes 3,
+nothing else reads `0xC5A70`, and no code names those entries by address.
+The program's indirect calls (343 `callx`, `bx` and `balx` in a linear
+disassembly, many of them data read as code) were not traced one by one,
+so a target worked out by arithmetic is not ruled out; short of that, each
 character's dark grey variant is never drawn. As a stage, 6 shows variant 0
 only, which is what the explorer draws.
 
