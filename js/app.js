@@ -3388,6 +3388,14 @@ function placeExtras(parts, body, matrices) {
     if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
 }
 
+/* What each part draws this frame, with a bouncing chest's model (slot 1)
+ * the one its spring picked. */
+function bouncedDraws(body, posed, m) {
+    const draws = partDraws(state.rom, body, m.decoded, m.frame, m.tick);
+    if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
+    return draws;
+}
+
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3400,8 +3408,7 @@ function poseFighterAndRival(body, m) {
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
-    const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
-    placeBodyParts(m.rival.parts, draws, placed);
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed);
     placeExtras(m.rival.extras, m.rival.body,
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
     return mine;
@@ -3411,8 +3418,10 @@ function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    const { matrices, origins, extras } = poseFighterAndRival(body, m);
-    placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    const posed = poseFighterAndRival(body, m);
+    const { matrices, origins, extras } = posed;
+    m.spring = posed.spring;
+    placeBodyParts(m.parts, bouncedDraws(body, posed, m), matrices);
     placeExtras(m.extras, body, extras ?? []);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
@@ -3868,6 +3877,8 @@ function renderArmourPanel() {
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
         + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (state.character.bounce ? '<br><span id="bounce-now"></span>'
+            + '<br>spring only: the per-frame list needs move flags the explorer lacks' : '')
         + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
@@ -4143,6 +4154,15 @@ function renderTrailPanel() {
         + `<br><span id="trail-live"></span>`;
 }
 
+/* A bouncing chest's spring on this frame. */
+function updateBounceReadout(m) {
+    const out = $('#bounce-now');
+    const sp = m.spring;
+    if (!out || sp?.model == null) return;
+    out.textContent = `frame ${m.frame}: chest ${sp.model} (entry ${sp.index}),`
+        + ` spring ${sp.p.toFixed(2)}, speed ${sp.v.toFixed(2)}`;
+}
+
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
@@ -4155,6 +4175,7 @@ function updateMotionFrameReadout() {
             + (m.chestFromScript ? ' from the script' : ' carried in')
             + (exhaustDrawn(m.chestNow) ? ' — flame up' : ' — no flame');
     }
+    updateBounceReadout(m);
     const heli = $('#tails-now');
     if (heli && m.tails) {
         const mode = m.scriptState?.propeller ?? 0;
