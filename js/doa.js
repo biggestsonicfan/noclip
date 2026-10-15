@@ -382,10 +382,6 @@ const SPEED = 0x56ada0, HEADING = 0x56ac28, HEIGHT = 0x589b80, RATE = 0x10;
  * frame and the low bit of the frame count (0x54B158) to 0x589DB1: the chains
  * swing only on frames of their parity, so every other frame. */
 const LIGHT = 0x5555b0, FRAME_COUNT = 0x54b158;
-/* What the attract's computer players decide each frame, which the explorer
- * does not work out (it is the AI's): the command it gives (+0x2C) and
- * whether it holds guard (+0x3A). */
-const COMMAND = 0x2c, GUARD = 0x3a;
 
 /* A player record as the round start leaves it: character, costume, where it
  * stands (y 1.0 is the floor), three angles (the body faces the first; the
@@ -432,14 +428,6 @@ function openPlayer(rv, p, { angles, state = [] }) {
     for (let k = 0; k < state.length; k += 2) rv.setUint8(PLAYER + p * PLAYER_SIZE + state[k] - RAM_BASE, state[k + 1]);
 }
 
-/* The AI's word for frame `n`: a command on the frames it gives one, guard
- * from the frame it takes it on. */
-function decide(rv, p, f, n) {
-    const at = PLAYER + p * PLAYER_SIZE - RAM_BASE;
-    rv.setUint8(at + GUARD, f.guard !== undefined && n >= f.guard ? 1 : 0);
-    for (const [when, cmd] of f.commands ?? []) if (when === n) rv.setUint8(at + COMMAND, cmd);
-}
-
 /* What the stage setup (0x70764) copies for the stage: a grid of 14 x 14
  * cells, two singles a cell (0x5A6F00) and a byte (0x5A7520), that the
  * ribbon's swing reads under the player's feet. */
@@ -453,17 +441,20 @@ function copyStageGrid(M, G, stage) {
     }
 }
 
-/* Run the camera task (0x7D1B0) for one frame: it loops forever, waiting
- * for the next frame at 0x8240, so the second wait ends it. */
-function cameraFrame(M, F) {
-    let waits = 0;
+/* Run a task from `entry` until its `waits`-th wait for the next frame
+ * (0x8240). The tasks loop forever, waiting at the loop's head, so the camera
+ * task (0x7D1B0) runs a frame from its start to its second wait, the AI's
+ * (`ai.start`) sets up to its first, and a pass of the AI's loop runs from
+ * the loop's head (`ai.frame`, which waits first) to the next wait. */
+function taskFrame(M, F, entry, waits) {
+    let seen = 0;
     M.cpu.hooks.set(F.frameWait, () => {
-        if (++waits > 1) throw new Error('camera done');
+        if (++seen >= waits) throw new Error('task done');
     });
     try {
-        M.cpu.call(F.camera, [], { maxSteps: 5_000_000 });
+        M.cpu.call(entry, [], { maxSteps: 5_000_000 });
     } catch (e) {
-        if (e.message !== 'camera done') throw e;
+        if (e.message !== 'task done') throw e;
     } finally {
         M.cpu.frames.length = 0;
         M.cpu.hooks.delete(F.frameWait);
@@ -504,21 +495,25 @@ function startFight(rom, M, fighters, scene) {
  * camera task, then the fight's tasks (`fight`: the hits, the reactions, the
  * throws and the ring) and the movers that push the players apart (the
  * knockback at 0x2F5E0, the push of fighters in contact at 0x2F670 and the
- * rest of the task at 0x2F4F0's). The one thing not run is the attract's AI:
- * its commands come from the profile, as MAME logged them. The hair and
+ * rest of the task at 0x2F4F0's). The attract's AI is a task of its own
+ * (`ai`), which gives each computer player its command (+0x2C) and guard
+ * (+0x3A); it starts once the fight is set up and the bytes the attract's
+ * script sets before the fight are in (`scene.ai`), then runs a pass each
+ * frame after the camera task, as on the board. The hair and
  * ribbon are chains the code swings from frame to frame, so how they hang
  * depends on everything before.
  *
  * @param {object} rom
  * @param {{char:number, costume?:number, base:number, pos:number[], angles:number[],
- *          expression?:number, open:object, commands?:number[][], guard?:number}[]} fighters
+ *          expression?:number, open:object}[]} fighters
  *        `pos` where the round starts the player, `open` its record on the
- *        first frame (openPlayer), `commands` the AI's [frame, command] and
- *        `guard` the frame it holds guard from
- * @param {{stage:number, light:number[], first:number, frame:number, camera:number[][]}} scene
+ *        first frame (openPlayer)
+ * @param {{stage:number, light:number[], first:number, frame:number, camera:number[][],
+ *          ai:number[][]}} scene
  *        the stage, its light (0x5555B0), the board's frame count (0x54B158)
- *        on the fight's first and last frames, and the camera task's state
- *        on the first ([address, word] ...)
+ *        on the fight's first and last frames, the camera task's state on the
+ *        first ([address, word] ...) and the bytes the attract's script sets
+ *        for the AI ([address, byte] ...)
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[]}}
  */
 export function runDoaFighters(rom, fighters, scene) {
@@ -529,14 +524,16 @@ export function runDoaFighters(rom, fighters, scene) {
     startFight(rom, M, fighters, scene);
     endFrame(M, F, scene.first);
     fighters.forEach((f, p) => openPlayer(rv, p, f.open));
+    for (const [a, v] of scene.ai) rv.setUint8(a - RAM_BASE, v);
+    taskFrame(M, F, F.ai.start, 1);
     let byPlayer = [];
     for (let n = scene.first; n <= scene.frame; n++) {
         byPlayer = fighters.map(() => []);
         fightFrame(M, F, byPlayer);
         endFrame(M, F, n);
         for (const r of F.collision) call(r);
-        cameraFrame(M, F);
-        fighters.forEach((f, p) => decide(rv, p, f, n));
+        taskFrame(M, F, F.camera, 2);
+        taskFrame(M, F, F.ai.frame, 2);
         for (const r of [...F.fight, ...F.movers]) call(r);
     }
     return { draws: byPlayer.flat(), unknown: [...M.unknown] };

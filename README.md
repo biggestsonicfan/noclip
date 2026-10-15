@@ -523,8 +523,7 @@ stages have none.
 
 On Revision B, stage 1 has the two fighters of the attract fight MAME shows
 there, Zack against Tina, played from the round's start by the game's own
-fight code, hits, camera and all, with only the attract's AI's commands taken
-from MAME: textured, coloured, with their shadows, and posed as MAME has them
+fight code, hits, camera, attract AI and all: textured, coloured, with their shadows, and posed as MAME has them
 at that frame, Tina's ribbon included. They hold that one pose; Revision A's
 fighters are not read yet.
 

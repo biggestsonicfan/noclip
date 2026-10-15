@@ -3123,7 +3123,8 @@ const doab = {
          * under the feet, from a second table on stages 2 and 5) and resets
          * each player (`roundReset`: its health, 0xFF, and the round's
          * counts). `camera` is the camera task, `frameWait` the wait for the
-         * next frame it loops on. */
+         * next frame it loops on, `ai` the attract's AI task: its start and
+         * the head of its loop. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
@@ -3131,7 +3132,7 @@ const doab = {
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
             roundReset: 0x1b430,
-            camera: 0x7d1b0, frameWait: 0x8240,
+            camera: 0x7d1b0, frameWait: 0x8240, ai: { start: 0x25bd0, frame: 0x25cf4 },
             /* The hit and push checks, then the fight's tasks: the hits
              * (0x1FDD0), the reactions to them (0x24FD0) and the rest. */
             collision: [0x3e1e0],
@@ -3143,14 +3144,16 @@ const doab = {
         /* The attract fight MAME shows at frame 2000 on stage 1: Zack against
          * Tina, from the round's start. `base` is the player's model bank
          * (0x5A6ED0), `pos` and `angles` where the round starts it,
-         * `expression` the face model (0x58828C), `open` its record on the
-         * fight's first frame, and `commands` and `guard` what the attract's
-         * AI decided, as MAME logged it (js/doa.js decide). `light` is the
+         * `expression` the face model (0x58828C) and `open` its record on the
+         * fight's first frame. `light` is the
          * stage's light, `first` and `frame` the board's frame count
          * (0x54B158) on the fight's first frame and on the one drawn: the
          * board shows a frame's display list on the next, so MAME's frame
          * 2000 is loop 0x75F's. `camera` is the camera task's state on the
-         * first frame, from MAME's RAM. */
+         * first frame, from MAME's RAM. `ai` is what the attract's script
+         * sets for the AI before the fight: its op 0x1A370 each player's start
+         * flag (0x5555F2/F3) and pattern (0x5555F4/F5, from the table at
+         * 0x90E50: Zack 0, Tina 1), its op 0x1AEE0 0x5555CB. */
         attract: {
             stage: 1,
             light: [0.2387, 0.8988, -0.3677],
@@ -3169,17 +3172,15 @@ const doab = {
                 [0x55559c, 0x400dc87c], [0x5555a0, 0x3f8bde4e], [0x5555a4, 0x3fef6f83],
                 [0x5555a8, 0x40083127], [0x5555ac, 0x3db9b7a7],
             ],
+            ai: [[0x5555f2, 1], [0x5555f3, 1], [0x5555f4, 0], [0x5555f5, 1], [0x5555cb, 2]],
             fighters: [
                 {
                     char: 0, base: 80, pos: [5.5, 1, 0.5], angles: [0, 0, 0],
                     open: { state: [0x28, 0, 0x29, 0, 0x2d, 0, 0x36, 1] },
-                    commands: [[0x6f2, 0x40], [0x72a, 0x03], [0x735, 0x53], [0x736, 0xa8], [0x740, 0xa9], [0x74a, 0xaa]],
-                    guard: 0x6c6,
                 },
                 {
                     char: 1, base: 798, pos: [6.5, 1, 0.5], angles: [0x9f48, 0x9f48, 0x9f48], expression: 1,
                     open: { angles: [0x8000, 0x9f48, 0x9f48], state: [0x29, 8, 0x36, 1] },
-                    commands: [[0x6c4, 0xa6], [0x6c5, 0xa7], [0x6d3, 0xa8]],
                 },
             ],
         },

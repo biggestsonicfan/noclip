@@ -1234,9 +1234,19 @@ into it), the board's frame count on the fight's first frame (0x6B0) and on
 the one drawn (0x75F: the board shows a frame's display list on the next),
 the camera task's state on the first frame as MAME has it, and each player's
 record on that frame (Zack starting action 0; Tina turned, starting action
-0x800). The rest is the fight code's, except the attract's AI, which the
-explorer does not run: its commands (+0x2C) and guard (+0x3A), as MAME
-logged them, are the profile's `commands` and `guard`. Against MAME's
+0x800). The rest is the fight code's, the attract's AI included. The AI is
+a task of its own: its start (0x25BD0) sets it up, and each frame the loop
+from 0x25CF4 runs a byte-code per player whose ops 0x2B28C and 0x2B3E0 give
+the command (+0x2C), then 0x2F2E0 clears guard (+0x3A) and sets it again
+from the AI's state (0x56471A), the other player's +0x46 and its own +0x2E.
+It reads five bytes the attract's script sets before the fight, the
+profile's `ai`: script op 0x1A370 sets each player's start flag
+(0x5555F2/F3) to 1 and its pattern (0x5555F4/F5) from the table at 0x90E50
+(Zack 0, Tina 1), and op 0x1AEE0 sets 0x5555CB to 2. It draws no random
+number in this fight. Run after the camera task, it gives Tina 0xA6, 0xA7
+and 0xA8 on frames 0x6C4, 0x6C5 and 0x6D3, and Zack guard from 0x6C6 and
+0x40, 0x03, 0x53, 0xA8, 0xA9 and 0xAA on 0x6F2, 0x72A, 0x735, 0x736, 0x740
+and 0x74A, the frames MAME has them on. Against MAME's
 display list for that frame all 69 draws match, the ribbon's links
 included, to 0.001 radians in their turn and 0.001 in place.
 
