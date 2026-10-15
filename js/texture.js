@@ -30,6 +30,7 @@
 
 import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
+import { doaLoadId } from './colors.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -812,13 +813,18 @@ function buildDaytonaTexram(rom, texSets) {
 /*
  * Texture RAM for Dead or Alive. The program copies 128-row strips out of
  * 0xC0000-byte slabs in the data ROMs (0x7CBA0): a slab's first and last
- * quarters are a character's, two strips side by side, and its middle half is
+ * quarters are a fighter's, two strips side by side, and its middle half is
  * a stage's. Rows 0-255 and 512-767 of a sheet take the two fighters' strips,
- * rows 256-511 the stage's. The stage's slab is `stageSlabs[stage]`, a
- * fighter's `charSlabs[char]`; the fighters are `fighters` (player 1 first),
- * by default the first two, which the attract mode loads at boot.
+ * rows 256-511 the stage's. The stage's slab is `stageSlabs[stage]`. A
+ * fighter's is `charSlabs[id & 0x7F]` and its strip the second when bit 7 of
+ * `id` is set, `id` its load id (js/colors.js doaLoadId): costume 0's Jann
+ * Lee is 0x82, slab 2's second strip, its first being costume 2's. The game
+ * writes the strips to one sheet, whichever the double buffer is on; the
+ * explorer writes both, so a model reads them on either page. The fighters
+ * are `fighters` (player 1 first), by default the first two in costume 0,
+ * which the attract mode loads at boot.
  */
-function buildDoaTexram(rom, texSets, fighters = [0, 1]) {
+function buildDoaTexram(rom, texSets, fighters = [{ char: 0 }, { char: 1 }]) {
     const md = rom.mainData;
     const cv = rom.mainCpuView;
     const raw = rom.game.texture.raw;
@@ -829,9 +835,10 @@ function buildDoaTexram(rom, texSets, fighters = [0, 1]) {
             tex.set(md.subarray(src, src + rows * ROW_PAIR), sheet * SHEET_BYTES + row * ROW_PAIR);
         }
     };
-    for (let sheet = 0; sheet < 2; sheet++) {
-        for (let half = 0; half < 2; half++) {
-            const src = slab(raw.charSlabs, fighters[half] ?? half) + 0x20000 * (1 - sheet);
+    for (let half = 0; half < 2; half++) {
+        const id = doaLoadId(rom, fighters[half] ?? { char: half });
+        const src = slab(raw.charSlabs, id & 0x7f) + 0x20000 * (id >> 7);
+        for (let sheet = 0; sheet < 2; sheet++) {
             copy(src, sheet, 128 * half, 128);
             copy(src + 0x80000, sheet, 512 + 128 * half, 128);
         }
@@ -1015,7 +1022,8 @@ export function programTextureSets(rom, index, decoded) {
  *
  * @param {object} rom              loaded ROM set
  * @param {number|number[]} texSets texture number(s), each 0..0x11
- * @param {number[]} [fighters]     the characters on screen, player 1 first
+ * @param {{char:number, costume?:number}[]} [fighters]  the fighters on
+ *                                  screen, player 1 first
  *                                  (Dead or Alive's sheets hold theirs)
  * @returns {{sheet0: Uint8Array, sheet1: Uint8Array, pages: number}}
  */

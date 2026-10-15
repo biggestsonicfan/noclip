@@ -2279,6 +2279,7 @@ const DAYTONA_SOUND = {
     music: {
         region: 'mainData', table: 0x8050f0, slotMask: 3,
         buttons: ['VR1 (red)', 'VR3 (yellow)', 'VR2 (blue)', 'VR4 (green)'],
+        hint: 'The song the race starts with. The game plays the course\'s own unless a VR button is held as the race starts, which picks one itself — this is that choice',
     },
 };
 
@@ -3386,6 +3387,17 @@ const doab = {
         none: 0xa00001,
         songs: { 9: 0xa0100e },
         replaces: true,
+        /* The fight only goes to nine stages, the fighters' own (the orders at
+         * 0x90BE0 and 0x90BF0: 11 3 8 10 0 2 1 4 5), each with its fighter's
+         * theme, which the table by character at 0x90C40 also names; 6 and 7
+         * are never fought on and have none. The explorer lets any theme play
+         * on any stage. */
+        music: {
+            region: 'mainCpu', table: 0x90c40, own: "the stage's own",
+            picks: [[0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'], [6, 'Genfu'],
+                [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang']],
+            hint: 'The song the stage plays. The game plays the stage\'s own, its fighter\'s theme; stages 6 and 7 are never fought on and have none. This plays any fighter\'s theme instead',
+        },
     },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
@@ -3447,7 +3459,7 @@ const doaa = {
     rig: undefined,
     features: { ...doab.features, motions: false, bodies: false },
     /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
-    sound: { ...doab.sound, stageMusic: 0x89250 },
+    sound: { ...doab.sound, stageMusic: 0x89250, music: { ...doab.sound.music, table: 0x89280 } },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
