@@ -1747,7 +1747,10 @@ const OBJECT_ROUTINES = new Map([
 const FV_NO_PLATFORM_SLOTS = [7, 14];
 const FV_NO_POLE_SLOT = 7;
 const FV_TURNING = 1 << 0x10;
-const FV_TURN = (f) => 10 * f;
+/* 0x1EFA8's ten a frame, on the round's clock: the round start (0xC568), like
+ * change_scene, puts word_50A022 back to 0, so the town snaps home with the
+ * objects each FV_ROUND. */
+const FV_TURN = (f) => 10 * (f % FV_ROUND);
 const FV_TURNING_LAYERS = new Set(['upper', 'ground', 'floor']);
 
 export function buildFlatDisplayList(stage, { region = 0 } = {}) {
