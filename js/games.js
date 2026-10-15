@@ -757,15 +757,21 @@ const fvipers = {
         standardRig: 0x2c194,
         fighters: {
             records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20,
-            /* The break table (0x640EDAC) and mune_unit_change's chests
-             * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
+            /* The break table (0x640EDAC), mune_unit_change's chests
+             * (0x6421F80) and koshi_unit_change's hips (0x6422400);
+             * js/vf2fighters.js, readArmour, readHips. The shoulder pads
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
              * 0x6421DE0, drawn for the characters it compares against;
-             * 14 is past the roster); readPads, readSkirt. */
+             * 14 is past the roster); readPads, readSkirt. Picky's hair,
+             * pky_kami_disp's, for the characters rob_disp names (18 is past
+             * the roster too); its models are immediates, HAIR_PIECES. */
             armour: {
-                table: 0x0640edac, chest: 0x06421f80, rest: 15,
-                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+                table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
             },
+            /* The midriff, record +0x24, and the one a broken chest draws
+             * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */
+            midriff: { at: 0x24, broken: 0x0642f9ec },
         },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },
