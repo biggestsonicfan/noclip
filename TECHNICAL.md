@@ -1094,6 +1094,48 @@ motion's own target. That is fight state (see When the game looks above), so
 the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
 frames match. The misses are the fight's blend choices above.
 
+### Fighting Vipers' fighters (`js/vf2fighters.js`)
+
+Fighting Vipers poses its fighters the way Virtua Fighter 2 does, and the
+explorer runs them through the same code on the profile's own addresses.
+Walking both call trees side by side with the disassembler, the pose routine
+`calc_rob_angle` (`0x2AA84`) is VF2's `0x27CE0` instruction for instruction
+once the addresses are normalised out, `calc_unit_1` (`0x2BBE0`) is its
+`0x2901C`, and `calc_unit_mat` (`0x17160`) its draw placement, stepping each
+part out along the fighter's own skeleton at player `+0x8C`.
+
+- **Records**: `ld 0x640D2B0[char*4]` in `action_init` (`0x1243C`): the parts
+  at `+0`, the skeleton at `+4` (as VF2), the texture set at `+0x20` (VF2:
+  `+0x30`).
+- **Motions**: `offset_list_motions` is `ld 0x6C00004[g0*4]` (`set_mot_dat`,
+  `calc_rob_angle_int`, `get_kamae_value`), in the second data bank, the
+  XTRA window's high half. Entry 0 points at the table's end, 1055 entries
+  on. The blocks are in both the data ROM and that bank, so `js/motion.js`
+  now resolves every address through the profile's XTRA banks and reads a
+  block through the view of the region it is in. 1052 of the 1054 hold the
+  pelvis at a latched angle, as VF2's do.
+- **Standard rig**: `lda 0x2C194, g6` before op `0x6B`.
+- **Roster**: the profile cards in the data ROM at `0x3023A1C` run JANE, GRACE,
+  HONEY, TOKIO, BAHN, PICKY, RAXEL, SANMAN, MAHLER, B.M., then SONIC & TAILS.
+  The records' `+0x1C` (72, 55, 40, 69, 85, 48, 54, 120, 95, 95) runs with the
+  cards' weights, `pky_kami_disp` (Picky's hair) is drawn for character 5,
+  Mahler and B.M. share texture set 17, and each record drawn on its own sets
+  is the fighter the card names. 10 is Sonic. 11 and 12 are untextured
+  stand-ins, and 13 is Jane in jeans.
+- **Crouch**: `adj_taikaku` (`0x2BF4C`) is VF2's `0x29414` with other
+  constants: B.M. (9) is drawn at 1.1 of the motion's height, Sonic (10) at
+  0.56, everyone else at 1.
+- **Head**: one difference. `0x2B274` clears player `+0x7D7` and sets it
+  only when the fight lets the head look at the other fighter. While it is
+  clear, `0x2BE0C` steps the head up to `0x2000` a frame in both yaw and
+  pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
+  motion's own target faster than one looking at an opponent (`rig.look`).
+
+Not drawn: the skin at record `+0x24` (VF2 has one at `+0x38`, not drawn
+either), and the special parts `rob_disp`
+(`0x19F10`) swaps in: feet and hands (`set_ashi_ptn`, `set_te_ptn`), chest
+and hips (`mune_unit_change`, `koshi_unit_change`), Picky's hair.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

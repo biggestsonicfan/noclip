@@ -1076,8 +1076,8 @@ function modelsInDisplayList(list) {
  * it can be shaded, and the roster answers that for 210 of the models the
  * scan finds with such a face.
  */
-/* Virtua Fighter 2's roster, each record's sixteen parts; nothing for a game
- * with no fighters read. */
+/* The solved rig's roster (Virtua Fighter 2's, Fighting Vipers'), each
+ * record's sixteen parts; nothing for a game with no fighters read. */
 function fighterRigModels(add, out) {
     if (state.rom.game.rig?.kind !== 'vf2') return out;
     for (const f of readFighters(state.rom)) for (const p of f.parts) add(p.model, f.index);
@@ -4650,7 +4650,9 @@ function applyGameFeatures() {
     $('#char-rival-field').hidden = !solved;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
-    $('#anim-note-vf2').hidden = !solved;
+    /* The solved rig's note names the game's own addresses. */
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
+    for (const n of ['vf2', 'fv']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;

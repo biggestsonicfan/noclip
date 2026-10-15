@@ -404,6 +404,11 @@ const schamp = {
  * socket — .27 over .25, .28 over .26. Sockets .29 and .30 hold neither
  * polygons nor anything the model table points at, and are left out.
  */
+const FV_NAMES = [
+    'Jane', 'Grace', 'Honey', 'Tokio', 'Bahn', 'Picky', 'Raxel', 'Sanman', 'Mahler', 'B.M.',
+    'Sonic', 'Dummy (11)', 'Dummy (12)', 'Jane (jeans)',
+];
+
 const fvipers = {
     id: 'fvipers',
     name: 'Fighting Vipers',
@@ -560,6 +565,23 @@ const fvipers = {
     stageTable: {
         source: 'xtra', at: 0x06ce1048, stride: 256, count: 16,
         lists: { upper: [0x24, 32], ground: [0x64, 16], cage: [0x84, 24] },
+        /*
+         * The names, by slot. The sound test lists the stage songs at
+         * 0x68EAB8x in slot order — western, factory, ufo_diner, airport,
+         * western2, bay_side, elevator, observation_deck, tower — and the ROM
+         * agrees wherever else it names a stage: the stage-sound table at
+         * 0x6425680 (sqo_western, sqo_factory, sqo_ufo, sqo_airport by
+         * stage_num), the object lists (ufo_int on slot 2), and the debug
+         * menu's FACTORY, WESTERN, AIRPORT and CUTYHALL, which go by the
+         * record's stage_NUM (1, 2, 3 and 4 on slots 1, 0, 3 and 6). Slots 9
+         * to 11 are the airport's record again with no objects, and 13 is the
+         * name entry (stage_NUM 99). 12, 14 and 15 are not named anywhere.
+         */
+        names: {
+            0: 'Western', 1: 'Factory', 2: 'UFO Diner', 3: 'Airport', 4: 'Western 2',
+            5: 'Bay Side', 6: 'City Hall Elevator', 7: 'Observation Deck', 8: 'Tower',
+            9: 'Airport (copy)', 10: 'Airport (copy)', 11: 'Airport (copy)', 13: 'Name Entry',
+        },
         /* A second array indexed the same way: sub_24878 walks 32 slots out
          * of `off_6CE33A4[stage_num*4]`. */
         materials: { source: 'xtra', ptrs: 0x06ce33a4 },
@@ -668,10 +690,48 @@ const fvipers = {
      */
     depth: { recede: 0, nearMin: 0.1 },
     scenes: null,
-    /* The stage table is read, so the Stages tab is on. Rigs and motions are
-     * still this game's own and not located, and neither is the object list a
-     * record points at — a stage here stands still. */
-    features: { stages: true, characters: false, motions: false },
+    /*
+     * The fighters, on Virtua Fighter 2's rig: calc_rob_angle (0x2AA84) is
+     * VF2's 0x27CE0 instruction for instruction once the addresses are taken
+     * out, calc_unit_1 (0x2BBE0) its 0x2901C, and calc_unit_mat (0x17160) its
+     * draw placement, stepping each part out along the fighter's own skeleton
+     * (player +0x8C). So js/vf2fighters.js poses them, on this game's tables.
+     *
+     * `motionTable` is offset_list_motions, `ld 0x6C00004[g0*4]` in
+     * set_mot_dat (0x1B880), calc_rob_angle_int and get_kamae_value: in the
+     * second bank, the XTRA window's high half. Entry 0 points at the table's
+     * end, 1055 entries on; every one of the other 1054 is a block of
+     * Sonic The Fighters' format, in the data ROM or the second bank.
+     *
+     * `standardRig` is the table calc_rob_angle_cont hands op 0x6B
+     * (`lda 0x2C194, g6`). The records are `ld 0x640D2B0[char*4]` in
+     * action_init (0x1243C), with the parts at +0 and the skeleton at +4 as in
+     * VF2, but the texture set at +0x20.
+     *
+     * The roster is in the order of the profile cards in the data ROM at
+     * 0x3023A1C — JANE, GRACE, HONEY, TOKIO, BAHN, PICKY, RAXEL, SANMAN,
+     * MAHLER, B.M. — which the records bear out: their +0x1C (72, 55, 40, 69,
+     * 85, 48, 54, 120, 95, 95) runs with the cards' weights, Picky's hair is
+     * drawn for character 5 (pky_kami_disp), and Mahler and B.M. share texture
+     * set 17. 10 is Sonic, on a set of its own (93) and drawn at 0.56 of his
+     * motions' height; the card after B.M.'s is SONIC & TAILS, and the
+     * models are plainly him. 11 and 12 have no card: one set of untextured
+     * stand-in parts on Honey's and Jane's skeletons. 13 is Jane on her own
+     * skeleton and texture set in other clothes, jeans for the fatigues.
+     *
+     * The crouch is adj_taikaku (0x2BF4C), VF2's 0x29414 with other
+     * constants: character 9, B.M., stands at 1.1 and 10, Sonic, at 0.56.
+     */
+    motionTable: { list: 0x06c00004, count: 1055 },
+    rig: {
+        kind: 'vf2',
+        standardRig: 0x2c194,
+        fighters: { records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20 },
+        crouch: { 9: 1.1, 10: 0.56 },
+        look: { own: 0x2000 },
+        note: 'fv',
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 /* ---- The House of the Dead (prototype) ----------------------------------- */

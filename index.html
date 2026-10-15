@@ -461,6 +461,18 @@
         fight state allows, which the explorer does not track, so with it on,
         a head can turn where the game's doesn't.
       </div>
+      <div class="note" id="anim-note-fv" hidden>
+        A fighter is the record at <code>0x640D2B0</code>: sixteen part
+        models and the skeleton they hang on. A motion id indexes the table
+        at <code>0x6C00004</code>, keyframes in the format Sonic The Fighters
+        kept. The pose is Virtua Fighter 2's: solved on one standard rig for
+        everyone (<code>0x2C194</code>), then the parts placed along the
+        fighter's own skeleton. The roster ends in Sonic, drawn at 0.56 of
+        the motion's height (B.M. at 1.1), two untextured dummies and Jane in
+        other clothes. With the <em>opponent</em> on, each head
+        turns toward the other's every frame, which the game does only when
+        the fight allows; alone, a head follows the motion's own target.
+      </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects

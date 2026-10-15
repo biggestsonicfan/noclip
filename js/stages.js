@@ -344,10 +344,10 @@ export function readStageTable(rom) {
         const upper = list('upper');
 
         const num = u8[b + F.num];
-        /* The names are one game's, keyed off its own slot numbers, so they
-         * are only applied to it. Another game's stages are shown by the
-         * stage_NUM in their record until someone identifies them. */
-        const named = T.source === 'maincpu' ? SFIGHT_STAGE_NAMES[s] : undefined;
+        /* The names are keyed off slot numbers, so each game brings its own
+         * (`names` in its profile); this one's are applied only to it. A stage
+         * nobody has named is shown by the stage_NUM in its record. */
+        const named = T.names ? T.names[s] : T.source === 'maincpu' ? SFIGHT_STAGE_NAMES[s] : undefined;
 
         const bright = dv.getFloat32(b + F.bright, true);
         /* Kept raw as well as built, because one stage rewrites VECTER_Y every
