@@ -1232,6 +1232,92 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
   picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
   Once the chest breaks the game reads `0x642F9EC[char]` instead.
 
+#### Shoulder pads and skirt: how they are placed (read from the ROM, not drawn yet)
+
+Both are drawn from `rob_disp`'s per-slot jump table (`0x1A0EC`), straight
+after the slot's own `set_obj`: slot 1 jumps to `kata_pat_disp`, slot 9 (after
+the record `+0x24` geometrizer block) to `kosi_mino_disp`. Each routine starts
+with `0x21804343, 3`, which saves the current matrix (the chest's, or the
+hips') to inner slot 3, and draws every piece as
+
+    push; 0x03 identity; translate; ang_z; ang_y; ang_x;
+    0x05 (read back into the player, for the shadow); 0x46 3; set_obj; pop
+
+`0x46 3` is `current = inner[3] * current`, so each piece is the slot's matrix
+times its own translate and turns. The three `0x13` writes before `0x03` are
+an add whose result is thrown away: a wait. Op names are m2-hle2's
+(`tests/cop_replay.c`): `0x69` is `Fn_mul_mot_yrot` (a bone's rotation from TGP
+memory, with `Ry(arg)` in front), `0x0F` reads the point back, `0x24`/`0x25` are
+`a*sin`/`a*cos`, `0x27` atan, `0x1A` sqrt. Bone `n` of player `p` is at TGP word
+`0x3A00 + 0x100p + 12n`, and the player's `+0x8C + 12n` is that bone's vector.
+
+**Shoulder pads** (`kata_pat_disp`, `0x32A90`). `0x642147C[char]` points at
+two records, left then right. `sub_32A0C`, called from `action_init`, copies
+them into `mod_fa_effect` (`+0x60` for player 2). A record is `0x24` bytes:
+`+0` model (`-1` none), `+2` swing limit, `+4` translate, `+0x10` X turn,
+`+0x12` Y turn, `+0x14` Z turn, `+0x16` second model (0 none), `+0x18` its
+translate.
+
+| Char | Left (drawn until slot 6 breaks) | Right (until slot 3 breaks) | Limit; turns X/Y/Z |
+|---|---|---|---|
+| 6 Raxel | 959 at (0.35, 0, 0.14) | 960 at (0.35, 0, -0.14) | `0x3800`; `0xC000`/0/`0x4000` |
+| 8 Mahler | 3889 at (0.39, 0, 0.17), then 3888 at (0, 0.05, 0.06) | 3891 at (0.39, 0, -0.17), then 3890 at (0, -0.05, 0.06) | the same |
+| 9 B.M. | 3592 at (0.45, 0, 0.17), then 3888 as Mahler's | 3595 at (0.45, 0, -0.17), then 3890 as Mahler's | the same |
+
+Every other fighter points at `0x64216CC`, whose model is `-1`: nothing is
+drawn. A pad is the chest's matrix, its translate, `ang_z(Z)`, `ang_y(-Y)` on
+the left and `ang_y(Y)` on the right, then `ang_x(X + swing)` on the left and
+`ang_x(X - swing)` on the right. The second model follows on the pad's own
+matrix, translated by `+0x18` with no turn. A pad is skipped (and `+0x1B28` /
+`+0x1B2A` cleared) once bit 6 / bit 3 of `+0x1F48` is set, so one break of
+the upper half takes both.
+
+The swing, each frame: the lean `+0xAC8`/`+0xACA` is the pitch and yaw (`0x27`)
+of head (`+0x20C`) minus waist (`+0x1F4`). The upper arm's vector (`+0xD4`,
+bone 6, on the left; `+0xB0`, bone 3, on the right) is turned by that bone's
+rotation and the facing (`0x69`) into `+0xA9C`/`+0xAA8`, and `p` is its
+component along the lean (`+0xAE0`/`+0xAD4`). If `p` is negative the swing is
+0; otherwise it is `atan(sqrt(L^2 - p^2), p)` (`L` the vector's x), at most the
+limit. That is my reading of the ops; the swing in a standing pose has not
+been measured.
+
+**Skirt** (`kosi_mino_disp`, `0x31E54`). Drawn for characters 0, 1, 13 and 14
+only, and not once bit 9 of `+0x1F48` (hips broken) is set; then
+`+0x1B20..0x1B26` are cleared. `0x6421DE0[char * 16]` holds four model numbers
+(`+0`, `+2`, `+4`, `+6`) and a float at `+8`:
+
+| Char | +0 | +2 | +4 | +6 | +8 |
+|---|---|---|---|---|---|
+| 0 Jane | 3045 | 3044 | 0 | 0 | 0.025 |
+| 1 Grace | 2446 | 2445 | 2444 | 2443 | 0 |
+| 13 Jane (jeans) | 3037 | 3036 | 0 | 0 | 0.025 |
+| 14 | 2439 | 2438 | 2437 | 2436 | 0 |
+
+The routine does not check for 0, so for Jane it calls `set_obj` with model 0
+for two panels. 14 is past the roster's 13 and not a fighter the explorer
+lists; its models sit beside Grace's. The placement is the same for everyone:
+`action_init` (`0x12768`) writes constants to `0x50A324..0x50A378`:
+
+| Panel (draw order) | Model | Translate | Turns Z, Y, X | Limit |
+|---|---|---|---|---|
+| 1 | `+4` | (0.013, 0.087, 0) | 0, `0xC000`, `0x4000 + s1` | `0x3000` |
+| 2 | `+6` | (0.013, -0.088, 0) | 0, `0xC000`, `0x4000 - s2` | `0x1E00` |
+| 3 | `+2` | (0, -0.017, 0.107), then (0, 0, `+8`) | 0, `0xC000 + s3`, `0x4000` | `0x1000` |
+| 4 | `+0` | (0, -0.017, -0.107), then (0, 0, `-(+8)`) | 0, `0xC000 - s4`, `0x4000` | `0x1000` |
+
+All are on the hips' matrix. Each swing is `max(0, max(a, b) - limit)`, so a
+panel stays at its base angles until a thigh lifts past the limit. `a` and `b`
+come from the two thighs (bone 13, `+0x128`, and bone 10, `+0x104`, turned by
+`0x69` with the facing word `0x50A398`, which nothing writes, so 0): their
+angles against the hips' `+0xAD4` give `+0xAD8`/`+0xADE` and the terms at
+`0x50A380..0x50A388`, scaled by `sin`/`cos` (`0x21`/`0x22`) through a float
+round trip (`0x17`/`0x18`). This has not been measured either.
+
+So both are drawn on a slot's matrix with fixed offsets and turns, and only
+the swing depends on the pose. At rest the skirt's swing should be 0, because
+a thigh has to pass its limit first. The pads' rest swing depends on `p`, and
+that has not been measured.
+
 **What the explorer draws.** `readArmour` (`js/vf2fighters.js`) reads
 `0x640EDAC` per fighter (`rig.fighters.armour` in the profile) into each
 slot's models by stage, and `0x6421F80`'s `+4` entry 15 as the broken chest
