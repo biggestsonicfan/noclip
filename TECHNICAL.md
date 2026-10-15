@@ -1349,10 +1349,10 @@ value; for the pads it is not measured, so they sit at the fixed offsets and
 turns. Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the swings, the chest spring and the hip lists by motion, Picky's
+own steps: the swings, the chest's per-frame list and the hip lists by motion, Picky's
 hair, and the flying pieces.
 
-**The chest bounce (read from the ROM; not drawn).** `rob_disp` calls
+**The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
 own model (`+0x44`) in `g0`, and draws whatever comes back in `g0` on the
 slot's own matrix: the chest's, already sent (`0x19FD0`, slot × `0xC`). The
@@ -1475,9 +1475,32 @@ frame back measures the distance against the one from before the list
 set-up and script (see "When the chest twists"); which moves leave it at
 exactly `0x200` was not read.
 
-To draw it, the explorer would need per frame: the head and waist positions
-(from the matrices it already builds), the five steps, the index, and for
-the list the motion frame and `+0x1A4`.
+*What the explorer draws.* The spring, and not the list. With the Armour
+switch on upper or all broken, Jane, Grace, Honey and Jane in jeans draw
+their chest as the 31 models' entry 15 + `int(position + 0.5)`, stepped once
+per frame of playback (`bounceStep`/`bounceChest` in `js/vf2fighters.js`)
+with the five steps above in 32-bit floats. The head is slot 2's translation
+in the posed skeleton and the waist slot 0's, the waist as the frame before
+left it. An intact chest keeps its slot model. Worked from 0/0 with no kick,
+the code settles within -0.25..0.21, entry 15, as above. The Animation
+panel's armour readout shows the model, entry, position and velocity per
+frame.
+
+These are the explorer's choices, not read from the ROM:
+
+- The spring starts at position 0, velocity 0 whenever the fighter is
+  loaded or its armour switched (the explorer's round start). The last
+  distance (`+0xC64`) starts at the first frame's, so it starts with no kick.
+- When a motion starts or loops, the explorer stands the fighter back where
+  the motion starts, which the board's fighter does not do. On that frame the
+  waist is that frame's own, not the one before.
+- A frame picked on its own (scrubbing) holds the spring and only takes the
+  new distance.
+
+The per-frame list is not followed. It needs `+0x1A4` to be exactly `0x200`,
+and the explorer has no move flags. In a moving motion the spring often
+reaches the ±15 walls. Where the board would switch to the list in a stance,
+the explorer keeps the spring.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

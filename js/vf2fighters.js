@@ -191,7 +191,7 @@ function readFighter(rom, F, record, char) {
  * +0x40), so that is the model the slot shows from then on. `chest` is
  * mune_unit_change's 0x6421F80[char]: for the four fighters it names, a
  * broken chest is one of 31 models (its +4, signed halfwords) a spring picks,
- * 15 + round(spring + 0.5); at rest that is entry `rest`.
+ * 15 + trunc(position + 0.5) (see bounceStep); at rest that is entry `rest`.
  */
 const ARMOUR_ENTRY = 8, ARMOUR_PIECE = 0x28, ARMOUR_STAGES = 4;
 
@@ -219,13 +219,17 @@ function readArmourSlots(rom, table) {
     return slots;
 }
 
-/* The broken chest's model at rest, or null for a fighter with no spring. */
-function readRestingChest(rom, A, i) {
+/* A chest spring: 0x6421F80[char] +4 points at 31 signed halfwords, the
+ * models the spring picks by index. Null for a fighter with no spring. */
+const BOUNCE_MODELS = 31;
+
+function readChestModels(rom, A, i) {
     const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
     const rec = A.chest ? u32(A.chest + i * 4) : 0;
     const list = rec ? u32(rec + 4) : 0;
-    const r = list ? dataAt(rom, list + A.rest * 2) : null;
-    return r ? r.view.getInt16(r.off, true) : null;
+    const r = list ? dataAt(rom, list) : null;
+    if (!r || r.off + BOUNCE_MODELS * 2 > r.data.length) return null;
+    return Array.from({ length: BOUNCE_MODELS }, (_, k) => r.view.getInt16(r.off + k * 2, true));
 }
 
 /*
@@ -253,7 +257,8 @@ function readArmour(rom, A, i) {
     const table = r ? r.view.getUint32(r.off, true) : 0;
     const slots = readArmourSlots(rom, table);
     if (!slots.some((x) => x.length)) return null;
-    return { table, slots, chest: readRestingChest(rom, A, i), streakHips: readStreakHips(rom, A, i) };
+    const bounce = readChestModels(rom, A, i);
+    return { table, slots, bounce, chest: bounce ? bounce[A.rest] : null, streakHips: readStreakHips(rom, A, i) };
 }
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
@@ -340,7 +345,8 @@ export function armourHalves(body) {
 /**
  * The fighter as a hit that breaks a half leaves it: in the board one hit runs
  * every slot of the half through all its stages, so each broken slot shows
- * its last stage's model, and a chest with a spring its resting model.
+ * its last stage's model, and a chest with a spring its resting model, which
+ * `bounce` (the 31 models) lets the spring change frame by frame.
  *
  * @param {object} body from readFighters
  * @param {{upper: boolean, lower: boolean, streak?: boolean}} which the
@@ -360,7 +366,10 @@ export function armouredFighter(body, which) {
             : p.index === HIPS && which.streak && A.streakHips > 0 ? A.streakHips : last;
         return { ...p, model: model > 0 ? model : 0 };
     });
-    return { ...body, parts, extras };
+    /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
+     * slot model, as mune_unit_change returns it unchanged. */
+    const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
+    return { ...body, parts, extras, bounce };
 }
 
 /**
@@ -537,7 +546,10 @@ const ZERO_BLEND = Array.from({ length: 12 }, () => [0, 0, 0]);
 function liveFor(body) {
     let live = LIVE.get(body);
     if (!live) {
-        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0] };
+        live = {
+            motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0],
+            spring: null,
+        };
         LIVE.set(body, live);
     }
     return live;
@@ -570,6 +582,71 @@ function blendFor(live, rom, motion, frame, sample) {
     return (live.blend = blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND);
 }
 
+/*
+ * The chest bounce (TECHNICAL.md, "The chest bounce"): mune_unit_change
+ * (0x31888) swaps a broken chest's model on the chest's own matrix, picked by
+ * a spring, +0xC6C the position and +0xC68 the velocity, floats. It is driven
+ * by the distance from the head (+0x20C, this frame's) to +0xC7C, the waist
+ * (+0x1F4) as calc_unit_mat found it before storing this frame's; +0xC64 is
+ * the distance it measured last frame. The per-frame list (0x6421F80 +0) is
+ * not followed: it needs the move flags at +0x1A4 to be exactly 0x200, and
+ * the explorer has no move flags, so this is the spring alone.
+ *
+ * The spring starts at 0/0 whenever the fighter is loaded or its armour
+ * switched, the explorer's round start. That reset is the explorer's choice:
+ * the ROM was not found to clear these at a round start. So is the first
+ * distance being taken as the last one, which starts the spring without a
+ * kick.
+ */
+const f32 = Math.fround;
+const KICK = f32(160), KICK_CAP = f32(4.2), DAMP = f32(0.935);
+const WALL = 15, BOUNCE_BACK = f32(0.78), PULL_UP = f32(0.14), PULL_DOWN = f32(-0.1);
+const BOUNCE_REST = 15;
+
+/* One frame of the spring, the five steps from loc_3191C, in floats. */
+export function bounceStep(s, d) {
+    const k = Math.min(f32(Math.abs(f32(s.last - d)) * KICK), KICK_CAP);
+    s.last = d;
+    let v = s.v;
+    if (v === 0) v = k;
+    else if (k >= Math.abs(v)) v = v < 0 ? -k : k;
+    let p = f32(s.p + v);
+    v = f32(v * DAMP);
+    if (p >= WALL || p <= -WALL) {
+        p = p >= WALL ? WALL : -WALL;
+        v = f32(-v * BOUNCE_BACK);
+    }
+    const negative = p < 0 || Object.is(p, -0);
+    s.v = f32(v + (negative ? PULL_UP : PULL_DOWN));
+    s.p = p;
+    return s;
+}
+
+/* The index into the 31: fix truncates toward zero (MODE1 TRUNC). */
+export function bounceIndex(p) {
+    return BOUNCE_REST + Math.trunc(f32(p + 0.5));
+}
+
+const WAIST_SLOT = 0, HEAD_SLOT = 2;
+const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+
+/* The chest's model this frame, stepping the spring once when playback has
+ * moved on a frame. A frame picked on its own holds the spring and takes its
+ * distances afresh, so a jump does not kick it. */
+function bounceChest(body, live, pose, frame, stepped) {
+    const head = pose[HEAD_SLOT].t, waist = pose[WAIST_SLOT].t.slice();
+    let s = live.spring;
+    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist };
+    /* A motion starting (or looping) stands the explorer's fighter back where
+     * its motion starts, a jump the board's fighter does not make, so on that
+     * frame the waist is this frame's. */
+    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : s.waist));
+    else s.last = distance(head, waist);
+    s.waist = waist;
+    s.index = bounceIndex(s.p);
+    return (s.model = body.bounce[s.index]);
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
@@ -585,7 +662,8 @@ function blendFor(live, rom, motion, frame, sample) {
  *   the motion's (float object 2, in the targets' space), as the fight writes
  *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
- *   `extras` places body.extras (the pads and skirt), one each.
+ *   `extras` places body.extras (the pads and skirt), one each; `chest`,
+ *   for a broken chest that bounces, is the model the spring picks.
  */
 export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
@@ -608,7 +686,9 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
     const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
-    return { matrices, origins, extras };
+    const held = !fresh && live.spring?.model != null;
+    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
+    return { matrices, origins, extras, chest, spring: live.spring };
 }
 
 /*
