@@ -285,6 +285,7 @@ function makeBus(rom, ram, copro, geo, models) {
     };
     const lane = (a, bytes) => [a & ~3, (a & 3) * 8, bytes === 1 ? 0xff : 0xffff];
     return {
+        other,
         read32,
         write32,
         read8: (a) => { const [w, s] = lane(a, 1); return (read32(w) >>> s) & 0xff; },
@@ -372,8 +373,9 @@ export function runStageRoutine(rom, entry, opts = {}) {
 /*
  * A stage routine set up and run to its frame, that goes on running: `step()`
  * is one more pass (the board's next frame), with the frame count one on.
- * `rewind()` puts RAM back as the first run left it. `most` is the most
- * pieces any pass drew; `ram` is the board RAM it runs in.
+ * `rewind()` puts RAM (and the rest it wrote) back as the first run left it. `most` is the most
+ * pieces any pass drew; `ram` is the board RAM it runs in, and `read16` reads
+ * what the routines wrote anywhere else (the tile chip's line table).
  */
 function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock, after = [], tick } = {}) {
     const D = rom.game.doa;
@@ -387,7 +389,8 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
     const copro = new Copro(unknown);
     const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
     const geo = new Geo(copro, models);
-    const cpu = new I960(makeBus(rom, ram, copro, geo, models));
+    const bus = makeBus(rom, ram, copro, geo, models);
+    const cpu = new I960(bus);
     /* The culling helpers: "in view", as a dot product well in front. */
     for (const at of D.visible ?? []) cpu.hooks.set(at, (c) => { c.setReg(16, floatToBits(1000)); });
     for (const at of D.skip ?? []) cpu.hooks.set(at, () => {});
@@ -395,7 +398,7 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
      * drawn: the stage setup (`init`) clears it, then each pass of the
      * routine is a frame, and the last pass's draws are the ones shown. */
     for (const at of [init ?? []].flat()) cpu.call(at, [], { maxSteps: 5_000_000 });
-    const run = { draws: [], unknown: [], done: true, most: 0, ram };
+    const run = { draws: [], unknown: [], done: true, most: 0, ram, read16: bus.read16 };
     let n = clock === undefined ? undefined : (clock - frames) >>> 0;
     run.step = () => {
         geo.draws = [];
@@ -409,9 +412,11 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
     };
     for (let k = 0; k < frames; k++) run.step();
     run.unknown = [...unknown];
-    const saved = { ram: ram.slice(), n, draws: run.draws };
+    const saved = { ram: ram.slice(), other: new Map(bus.other), n, draws: run.draws };
     run.rewind = () => {
         ram.set(saved.ram);
+        bus.other.clear();
+        for (const [a, v] of saved.other) bus.other.set(a, v);
         n = saved.n;
         run.draws = saved.draws;
     };
@@ -694,6 +699,38 @@ function liveScenery(scenery, run) {
             return p ? { model: p.model, ops: boardToOps(p.m) } : { model: d.model, ops: d.ops, hidden: true };
         };
     });
+    return at;
+}
+
+/*
+ * A sky the tile chip scrolls line by line (stage 11's sea, games.js
+ * `doa.sky.lines`): each panorama row's shift at a frame, read from the line
+ * table the stage's own run wrote that pass. The chip shows tilemap row
+ * line + vertical scroll (mod 512) on a screen line, and the panorama's rows
+ * are the tilemap's; the shift is the line's scroll less the one every line has,
+ * which the explorer's camera turn stands for. 9 bits, as the chip reads it.
+ */
+function doaLineShift(L, run, at, rows) {
+    const rv = new DataView(run.ram.buffer);
+    const out = new Float32Array(rows);
+    const nine = (v) => (v << 23) >> 23;
+    return (frame) => {
+        at(frame);
+        const base = rv.getUint16(L.scroll - RAM_BASE, true);
+        const v = rv.getUint16(L.vscroll - RAM_BASE, true);
+        for (let p = 0; p < rows; p++) {
+            const y = (p - v) & 0x1ff;
+            out[p] = y < L.count ? nine(run.read16(L.table + 2 * y) - base) : 0;
+        }
+        return out;
+    };
+}
+
+function doaSky(rom, n, run, at) {
+    const pano = buildDoaSky(rom, n);
+    const L = rom.game.doa.sky?.lines;
+    if (pano && at && L?.stages.includes(n)) pano.lineShift = doaLineShift(L, run, at, pano.height);
+    return pano;
 }
 
 /* The attract fight's two fighters, posed, if this is its stage. */
@@ -717,7 +754,7 @@ function stageOf(rom, n, entry, run) {
     });
     const fight = attractOf(rom, n);
     const scenery = run.draws.map(placed('scenery'));
-    if (stageMoves(rom, n)) liveScenery(scenery, run.run);
+    const at = stageMoves(rom, n) ? liveScenery(scenery, run.run) : null;
     const draws = [...scenery, ...(fight?.run.draws.map(placed('fighters')) ?? [])];
     return {
         slot: n,
@@ -730,7 +767,7 @@ function stageOf(rom, n, entry, run) {
         objects: [],
         sky: null,
         /* The tile layer's panorama (js/scroll.js); its colours are raw. */
-        panorama: () => buildDoaSky(rom, n),
+        panorama: () => doaSky(rom, n, run.run, at),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',

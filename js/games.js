@@ -3225,8 +3225,17 @@ const doab = {
          * the one drawn) and row 3's x and z. */
         fixes: doaConveyorFix(0),
         /* The sky: four scroll pictures a stage, named in the program, out of
-         * the table of pictures in the data (js/scroll.js buildDoaSky). */
-        sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+         * the table of pictures in the data (js/scroll.js buildDoaSky).
+         * `lines`: the stages whose sky the tile chip scrolls line by line
+         * (11: the sky routine sets bit 15 of layer 2's scroll, 0x6FE70), from
+         * the line table the stage's `after` routine fills (layer 2's, tile RAM
+         * 0x1008800, a short a screen line), with the layer's vertical scroll
+         * (0x54F950, the program's copy of the register) and the scroll the
+         * routine keeps for every line (0x5A0140). js/doa.js doaLineShift. */
+        sky: {
+            pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15],
+            lines: { stages: [11], table: 0x1008800, count: 384, vscroll: 0x54f950, scroll: 0x5a0140 },
+        },
         /* The stages whose routines move pieces of them each pass (state at
          * 0x5A0000-0x5A7667, stage 8's one piece also by the frame count),
          * and the game's setups for them: the stage task's common one
@@ -3240,9 +3249,9 @@ const doab = {
          * sky scroll 0x702E0, which steps its wave (0x5A0144, a byte a pass
          * and 0x5A0145 every fourth) and keeps the camera's sky scroll
          * (0x54F948) in 0x5A0140. Graded against MAME's attract
-         * (tools/doa-stages): 1, 3, 4, 5, 6, 7, 8 and 11 match it word for
-         * word over 299 frames (11 given the camera's scroll); 0, 2 and 10
-         * follow the camera. */
+         * (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it word for word
+         * over 299 frames; 0, 2, 10 and 11 (0x5A0140 alone) differ only where
+         * they follow the camera. */
         stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one

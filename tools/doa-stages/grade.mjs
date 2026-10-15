@@ -12,9 +12,8 @@
 // backdrop follows the camera, which these runs hold still, and so do stage
 // 10's (0x6D3A4) and stage 2's ring of eight (0x67388, run only while the
 // camera is in range). Stage 11's sky routine (0x702E0, the stage's `after`)
-// keeps the camera's sky scroll 0x54F948 in 0x5A0140, so that is given the
-// board's from the frame graded against (CAMERA=0 leaves it out). N=80 lists
-// more of the words that differ.
+// keeps the camera's sky scroll 0x54F948 in 0x5A0140, which differs for the
+// same reason. N=80 lists more of the words that differ.
 import fs from 'fs';
 import path from 'path';
 import { loadRomSet } from '../../js/romset.js';
@@ -24,7 +23,7 @@ const [zip, dir] = process.argv.slice(2);
 const buf = fs.readFileSync(zip);
 const rom = await loadRomSet([buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)]);
 const D = rom.game.doa, S = D.stageSetup, cv = rom.mainCpuView;
-const RAM = 0x500000, STAGE = 0x5a0000, LEN = 0x7668, TICK = 0x5a75f0, SKY_SCROLL = 0x54f948;
+const RAM = 0x500000, STAGE = 0x5a0000, LEN = 0x7668, TICK = 0x5a75f0;
 const dumps = fs.readdirSync(dir);
 const dump = (s, k) => {
     const f = dumps.find((x) => x.startsWith(`s${s}_k${k}_`));
@@ -38,14 +37,7 @@ function differ(s, from, to, passes) {
     const { run } = runStageRoutine(rom, entry, { init: [S.common, own], frames: 0, clock: from.clock, after, tick: S.tick });
     run.ram.set(from.ram);
     const rv = new DataView(run.ram.buffer);
-    for (let k = 0; k < passes; k++) {
-        /* The camera's sky scroll, which stage 11 keeps: the board's, as the
-         * frame graded left it (the camera is not the explorer's). */
-        if (k === passes - 1 && process.env.CAMERA !== '0') {
-            rv.setUint16(SKY_SCROLL - RAM, to.ram.readUInt16LE(SKY_SCROLL - RAM), true);
-        }
-        run.step();
-    }
+    for (let k = 0; k < passes; k++) run.step();
     const out = [];
     for (let o = STAGE - RAM; o < STAGE - RAM + LEN; o += 4) {
         if (rv.getUint32(o, true) !== to.ram.readUInt32LE(o)) out.push(o + RAM);
