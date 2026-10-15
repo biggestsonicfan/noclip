@@ -1576,8 +1576,16 @@ floor at 0. So:
   (3233..3242 broken) in motions 548, 632, 633, 656 and 832.
 
 The Animation panel's armour readout shows the hips' model per frame. Not
-checked against MAME: the swing lists of step 6, which take over in the air
-(`fix_hara`) and on some moves, and the ring, are not drawn.
+checked against MAME. Every list picked by motion id (with or without the
+frame) is drawn; the three left out hang on fight state, not on the motion:
+
+- `+8`, the swing: needs `+0x1A4` bit 4, in the air (set by `fix_hara`,
+  `0x19B44`, cleared on landing by `rob_check_stage`, `0x18950`). Its index
+  is `+0x7FA`, which `rob_disp` (`0x19F44`) counts up only while that bit is
+  set, or with bit 14 `+0xAEC`, `rob_disp`'s count of frames drawn (`0x19F38`).
+- `+0x14`, the ring: needs `+0xC8C`, set by `kuc_sukebo_check` (`0x31DEC`)
+  from the ring at `0x50A420`/`0x50A42C`.
+- `+4`: needs `+0x1A4` bit 9; neither Honey nor Bahn has the list.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
