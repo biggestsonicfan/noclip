@@ -1338,6 +1338,28 @@ entry 14 is never read. The Armour switch hides both pads with the upper half
 own steps: the swings, the chest spring and the hip lists by motion, Picky's
 hair, and the flying pieces.
 
+**The chest bounce: what is missing before it can be drawn.** Everything this
+document says about it is the `mune_unit_change` entry above. That is enough
+to know the part (slot 1), the fighters (0, 1, 2, 13) and two of the models
+(Jane's entries 15 and 16, 772 and 773), but not enough to draw a bounce:
+
+- *Intact or broken.* As written, `mune_unit_change` runs only once the chest
+  is broken. Nothing here says an intact chest bounces or names a model for
+  one, so as far as this document goes the bounce is a broken chest's only.
+- *The 31 models.* Only Jane's entries 15 and 16 are named, and entry 15 for
+  the other three (2844, 2978, 1597). Which way the index runs (which end is
+  up) is not said.
+- *The spring.* `+0xC68`/`+0xC6C` are named and clamped to +-15, but not how
+  they step each frame: which of the two is the velocity, what drives them
+  ("the body's movement": which bone, vector or flag), the stiffness, the
+  damping, the starting value, or whether `action_init` resets them.
+- *The per-frame list.* Table `+0` is used while `+0x1A4` is exactly `0x200`;
+  its length, its entries (model numbers or indices), and how the frame into
+  it is counted are not said, nor what `0x200` means as a move.
+
+Until those are read from `0x31888` (and whatever writes `+0xC68`/`+0xC6C`),
+the explorer keeps the resting model, entry 15, on a broken chest.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named
