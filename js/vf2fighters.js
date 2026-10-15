@@ -82,6 +82,7 @@
 
 import { buildPose, poseMatrices, viewerMatrix, turnedBy, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
+import { readModelEntry } from './romset.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -156,6 +157,7 @@ export function readFighters(rom) {
             texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
             armour: F.armour ? readArmour(rom, F.armour, i) : null,
             extras: F.armour ? [...readPads(rom, F.armour, i), ...readSkirt(rom, F.armour, i)] : [],
+            midriff: F.midriff ? readMidriff(rom, F.midriff, root, i) : null,
             offsets,
             parts: offsets.map((offset, s) => ({
                 index: s, model: u32(list + s * 4), offset, joint: s,
@@ -337,6 +339,51 @@ function readSkirt(rom, A, i) {
     })).filter((e) => e.model > 0);
 }
 
+/*
+ * The midriff (TECHNICAL.md, "The midriff"): a strip of triangles from a ring
+ * on the hips to a ring on the chest, in the hips' frame, which calc_unit_mat
+ * (0x17A30) writes into polygon RAM every frame and rob_disp (0x1A2D8) draws
+ * on the hips' matrix. `at` is the record's pointer to it: +8 the model whose
+ * texture points and material it is drawn with, +0x70 the chest's ring, +0xD0
+ * the link count and +0xD4 the links, 0x28 bytes each (an attribute, a normal,
+ * two points), then a closing word and two index bytes a link. An index from 8
+ * up is chest point index - 8, put in the hips' frame; below 8 the link's own
+ * point, already in it. The draw starts 4 words in, past the first attribute
+ * and normal, so the bytes are model.js's records as they stand. A broken
+ * chest (+0x1F48 bit 1) takes `broken[char]`'s model: same points, other
+ * material.
+ */
+const MIDRIFF = { model: 8, ring: 0x70, count: 0xd0, links: 0xd4, link: 0x28, first: 8, ringPoints: 16 };
+
+function midriffLook(rom, dv, at) {
+    const model = dv.getInt32(at + MIDRIFF.model, true);
+    const { uvPtr, matPtr } = readModelEntry(rom, model);
+    return { model, uvPtr, matPtr };
+}
+
+function readMidriff(rom, M, root, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const r = dataAt(rom, u32(root + M.at));
+    if (!r) return null;
+    const dv = r.view, o = r.off, count = dv.getUint32(o + MIDRIFF.count, true);
+    const links = o + MIDRIFF.links, index = links + (10 * count + 1) * 4;
+    if (count < 1 || index + 2 * count > r.data.length) return null;
+    const template = new Uint8Array(MIDRIFF.link * count);
+    template.set(r.data.subarray(links + 16, links + MIDRIFF.link * count + 4));
+    const byPoint = new Map();
+    for (let k = 0; k < 2 * count; k++) {
+        const n = r.data[index + k] - MIDRIFF.first;
+        if (n < 0 || n >= MIDRIFF.ringPoints) continue;
+        if (!byPoint.has(n)) byPoint.set(n, { p: vec(dv, o + MIDRIFF.ring + n * 12), to: [] });
+        byPoint.get(n).to.push(MIDRIFF.link * (k >> 1) + 12 * (k & 1));
+    }
+    const b = dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at));
+    return {
+        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST,
+        ...midriffLook(rom, dv, o), broken: midriffLook(rom, (b ?? r).view, (b ?? r).off),
+    };
+}
+
 /* A pad or panel's board-frame transform on its slot's. */
 function placeExtra(slot, e) {
     const at = (r, t, o) => [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
@@ -377,7 +424,8 @@ export function armouredFighter(body, state) {
     /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
      * slot model, as mune_unit_change returns it unchanged. */
     const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
-    return { ...body, parts, extras, bounce, hipsBroken: broken(HIPS) };
+    const midriff = broken(CHEST) && body.midriff ? { ...body.midriff, ...body.midriff.broken } : body.midriff;
+    return { ...body, parts, extras, bounce, midriff, hipsBroken: broken(HIPS) };
 }
 
 /**

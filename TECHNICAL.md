@@ -1602,10 +1602,83 @@ look. The explorer's matches it step for step: `buildPose` turns slot 9 from
 the waist's rotation by `A(9)`, the blend and the held look or aim, and
 `onOwnSkeleton` places it at the waist plus the waist's matrix times
 `offsets[9]` (the same entry 8), with `SLOT_PARENT[9] = 0`; the hip model is
-drawn on that matrix as it stands. Nothing to change. The extra routine
-`rob_disp` runs after slot 9 (`0x1A2D8`, from the table at `0x1A0EC`) draws
-the record's `+0x24` mesh in matrix mode 3 on the spring's own vectors, not
-on slot 9's matrix.
+drawn on that matrix as it stands. Nothing to change.
+
+**The midriff.** `rob_disp` calls one more routine after each slot's model,
+picked by the table at `0x1A0EC`: `0x1A1E0` for slot 1, `0x1A12C` for slot
+2, `0x1A2D8` for slot 9 and `0x1A4B4` for the rest. `0x1A2D8` draws the band
+that closes the gap between the chest and the hips, on slot 9's matrix as
+it still stands from the hip model. (An earlier note here had it on "the
+spring's own vectors"; there is no spring, and the matrix is slot 9's.)
+
+The player's `+0x190` is its character record (`0x640D2B0[char]`, set at
+`0x1244C`); the record's `+0x24` points at the midriff, a ROM struct. Characters 10
+to 12 have none, so nothing is drawn; 0 to 9 and 13 to 15 all have one. Jane's is `0x642B3CC`:
+
+| Offset | What |
+|---|---|
+| `+8` | the model whose texture points and material it is drawn with (the only field `0x1A2D8` reads) |
+| `+0x70` | the chest's ring: 12-byte points in the chest's frame |
+| `+0xD0` | `n`, the link count (20) |
+| `+0xD4` | `n` links of `0x28` bytes: an attribute, a normal, two points |
+| `+0xD4 + 10n × 4` | a closing word |
+| `+0xD4 + (10n + 1) × 4` | two index bytes a link |
+
+The work is split. `calc_unit_mat`, once slot 9's matrix is stored
+(`0x178E0`) and its collision ball sent (`0x18304`), runs `0x17A30` ..
+`0x17BA4` with slot 9's matrix still current:
+
+1. `0x800101` pushes, `0x6000C0C` inverts it in place and `0x9801313` (a
+   float add) waits for the inverse: H⁻¹.
+2. `0x1B803737` multiplies by the stored slot 1 (the chest, C): H⁻¹·C, the
+   chest's frame seen from the hips'.
+3. `0x14802929` for each of the 16 points at `+0x70`, read back into the
+   player's `+0x1860` + 12 per point: the chest's ring, now in the hips'
+   frame. Only 8 are ever used.
+4. Geometrizer command 5, polygon data, to address `player << 8`, `10n + 1`
+   words: each link's attribute and normal, then its two points, each taken
+   from `+0x1800 + index × 12` (chest point `index - 8`) when its index byte
+   is 8 or more, else the link's own point, which is the hips' ring and
+   already in the hips' frame; then the closing word.
+5. `0x1000202` pops.
+
+`0x1A2D8` itself takes `r4 = record +0x24`, or `0x642F9EC[char]` when
+`+0x1F48` bit 1 (the chest broken) is set, and returns if it is 0. It sets
+geometrizer mode 3 (`0x58F0`), which makes the board work out each face's
+normal from its points and skip the stored one. It reads the model table
+entry `0x20E0004 + (+8) × 16` and sends `0x101` with the entry's texture
+points, its material (plus `hi16` of its fourth word × 4 for player 2, the
+other player's colours), the object address `player × 0x100 + 4` (the
+polygon RAM written above, past the first attribute and normal) and a count
+of -1 (to the closing word). In some move states it swaps the material word
+for `1 << 23` or `0x802000`. Then it sets mode 1 again, and calls
+`kosi_mino_disp` (`0x31E54`, the skirt panels) and the default `0x1CB2C`.
+
+So the midriff is drawn in the hips' frame on the hips' matrix: the hips'
+ring stands as stored, and the chest's ring is H⁻¹·C·p. Every link is a
+triangle (`attr & 3 = 2`), which reads its first point and skips the second
+(each link stores the point twice). The link types alternate 3 (`0x1702`)
+and 1 (`0x1502`), so the strip zig-zags between the two rings and closes the
+waist in 16 triangles; the last links add two slivers by the hips' origin.
+In the rest pose the chest's ring lands on the points the links store for
+it, a band 0.008 tall (the ring is 0.15 across) that the chest and hip
+models cover. It shows when the chest bends away from the hips: Bahn's
+motion 360, or 362 for anyone. A broken chest keeps the same points; only
+the model, and so the texture and material, change (for characters 2, 4, 7
+and 15 the struct differs). For Honey that is her bare midriff (2461 for
+2521), for Bahn 691 for 2406.
+
+**What the explorer draws** (`readMidriff` in `js/vf2fighters.js`, `skinMesh`
+in `js/bodies.js`). It reads the struct as above and keeps the links from
+the first link's points on: those are `js/model.js`'s 40-byte records as
+they stand (points, then the next link's attribute and normal). Every frame
+it writes the chest's ring into the points the index bytes name, carried by
+H⁻¹·C as The House of the Dead's chest-to-hips skin is, and draws the result
+on slot 9 with the model's texture points and material, or the broken one's
+when the Armour switch breaks the upper half. The opponent gets the same.
+Not checked against MAME. Player 2's material offset is not drawn, the move
+states' material swaps are left out, and the stored normals are used for
+lighting where the board works them out from the points.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

@@ -767,6 +767,9 @@ const fvipers = {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
                 pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
             },
+            /* The midriff, record +0x24, and the one a broken chest draws
+             * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */
+            midriff: { at: 0x24, broken: 0x0642f9ec },
         },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },

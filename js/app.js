@@ -3297,9 +3297,11 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body),
+            skin: body.midriff ?? null, skinMesh: null }
         : null;
-    m.skin = readSkin(state.rom, body);
+    /* A Fighting Vipers fighter's midriff is built the same way. */
+    m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
     applyWireVisibility();
 
@@ -3414,7 +3416,28 @@ function poseFighterAndRival(body, m) {
     placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed);
     placeExtras(m.rival.extras, m.rival.body,
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
+    placeSkin(m.rival, placed);
     return mine;
+}
+
+/* The skin is rebuilt every frame, as the board rebuilds it: its points on
+ * the chest side move with the pose. `holder` keeps the skin and its mesh. */
+function placeSkin(holder, matrices) {
+    if (!holder.skin) return;
+    const d = decodeModel(state.rom, null, null, skinMesh(holder.skin, matrices));
+    if (!d) return;
+    d.index = null;
+    if (!holder.skinMesh) {
+        holder.skinMesh = addRigPart(d);
+    } else {
+        holder.skinMesh.mesh.geometry.dispose();
+        holder.skinMesh.mesh.geometry = buildGeometry(d);
+        if (holder.skinMesh.lines) {
+            holder.skinMesh.lines.geometry.dispose();
+            holder.skinMesh.lines.geometry = buildEdgeGeometry(d);
+        }
+    }
+    placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
 function poseBodyRig() {
@@ -3428,25 +3451,7 @@ function poseBodyRig() {
     placeBodyParts(m.parts, bouncedDraws(body, posed, m), matrices);
     placeExtras(m.extras, body, extras ?? []);
 
-    /* The skin is rebuilt every frame, as the board rebuilds it: its points on
-     * the chest side move with the pose. */
-    if (m.skin) {
-        const d = decodeModel(state.rom, null, null, skinMesh(m.skin, matrices));
-        if (d) {
-            d.index = null;
-            if (!m.skinMesh) {
-                m.skinMesh = addRigPart(d);
-            } else {
-                m.skinMesh.mesh.geometry.dispose();
-                m.skinMesh.mesh.geometry = buildGeometry(d);
-                if (m.skinMesh.lines) {
-                    m.skinMesh.lines.geometry.dispose();
-                    m.skinMesh.lines.geometry = buildEdgeGeometry(d);
-                }
-            }
-            placePartAt(m.skinMesh, matrices[m.skin.hips]);
-        }
-    }
+    placeSkin(m, matrices);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
