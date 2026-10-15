@@ -689,10 +689,14 @@ const fvipers = {
      * porch boards 0.002 over the dirt, a lip 0.27 over the floor — and the depth
      * buffer puts those on top unaided.
      *
-     * What it does have is lettering 0.002 in front of its sign, and that is the
-     * near plane's to hold: see setDepthProfile in js/viewer.js.
+     * What it does have is lettering 0.002 in front of its sign, shadows and
+     * stains laid on the ground in its own plane, and plates of one layer
+     * overlapping each other. The near plane alone held the lettering close
+     * up and lost it across the arena, and on a phone's depth buffer sooner;
+     * `layers` puts each such face over the one under it the way the board's
+     * sort does (js/layers.js), whatever the distance.
      */
-    depth: { recede: 0, nearMin: 0.1 },
+    depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
     /*
      * The fighters, on Virtua Fighter 2's rig: calc_rob_angle (0x2AA84) is
