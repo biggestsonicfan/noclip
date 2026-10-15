@@ -1601,8 +1601,35 @@ entry names in another order; stage 9 itself never shows them. Stage 6 draws
 every fifth entry from 17889 to 18109; the four after each are consecutive
 meshes with the same face count, and nothing the explorer runs picks them:
 not the ring size (`0x5A75F4`, 0-4), not the culling helpers' answer (0.5 to
-5000), and not 400 passes of the stage task's tick. What would pick them has
-not been found.
+5000), and not 400 passes of the stage task's tick.
+
+They are picked by the caller, not by game state. Stage 6's pieces from 17889
+to 18104 are letters: its routine (`0x6C500`) draws a 7 by 7 board of
+characters, a byte each from the string at `0xC75E0` ("A" to "Z", `,`, `.`,
+"0" to "9", `!`, `?`, then spaces), through `0x63270(char, variant)`, which
+draws entry `0xC5A70[char] + variant`. That table gives each character its
+first entry, five apart ("0" 17889 to "9" 17934, "A" 17939 to "Z" 18064, `,`
+18069, `!` 18079, `.` 18084, space 18094, `?` 18099). The five entries of a
+character are the same glyph, each with its own mesh and its own texture
+points (17939 to 17943 point at `0x270330`, `0x270340`, ... `0x270370`): a
+variant is a differently textured copy of the letter. Stage 6 passes variant
+0 (loaded from `0xC75D0`, a ROM word holding 0). The only other caller is
+the name entry routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`),
+which draws its own grid of the same letters (string `0x91BA0`) with variant
+1, and with variant 2 the letter under the cursor (`0x557D48`), the three
+initials (`0x557D58`-`0x557D5C`) and the digits it makes from `0x557D68`; it
+passes 4 for the letters it draws at `0x1E8A0`. No call passes 3, nothing
+else reads `0xC5A70`, and no code names those entries by address, so each
+character's fourth entry is never drawn. As a stage, 6 shows variant 0 only,
+which is what the explorer draws.
+
+Its one piece outside the letters, 18109 (stage 9's too), is drawn as
+`18109 + [0x5A6EE0]`, like other stages' pieces. That word is the texture
+slot offset the stage loader sets (`0x715EC`-`0x71608`): 0 while the stage
+sits in the first of two slots (`0x5A6EEE` = 0), `0xC5960[stage]` (250 for
+stage 6) in the second, whose entries are the same meshes with their
+texture points moved on (18359 is 18109's). It does not touch the letters;
+the explorer draws the first slot.
 
 Every build draws the same stages. `readDoaStages` run on `doab`, `doa`,
 `doaa`, `doaab` and `doaae` gives the same models, matrices and texture points
