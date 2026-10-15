@@ -129,8 +129,9 @@ with no matrix. So the draw list is the lists themselves.
 The object list a record points at is what animates, and it is walked: the
 Airport's planes taxi and take off, the Tower's helicopter keeps itself in
 view, the trucks come and go at the UFO Diner, the elevator rises through its
-shaft past the city, and both Westerns turn the town round the arena. The
-light moves as the board moves it: with the town, with the camera on Bay Side,
+shaft past the city, and on both Westerns the arena and its cage turn inside
+a town that stands still. The light moves as the board moves it: with the
+camera on Bay Side,
 to the trucks' headlights at the diner, and round the Observation Deck's four
 corners, which also change its platform, poles, cage and colours. Take the
 camera up to the Western's bear and it hops, once. The panel's Region picks the

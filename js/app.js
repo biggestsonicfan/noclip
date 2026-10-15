@@ -1401,9 +1401,13 @@ function addSkyPanorama(slot) {
      * board centres at Yang 0 lies down the board's +Z, the explorer's -Z. */
     mesh.scale.z = -1;
     mesh.rotation.y = (2 * Math.PI * sky.centre) / sky.width;
+    mesh.userData.turn = mesh.quaternion.clone();
     if (sky.footColor) mesh.add(skyFloor(sky.footColor, height));
     v.root.add(mesh);
-    state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance, lines: sky.lines, images: sky.images };
+    state.sky = {
+        mesh, height, horizon: sky.horizon, distance: sky.distance, lines: sky.lines, images: sky.images,
+        still: Boolean(stage?.flat && stageMoves(stage)),
+    };
     stepSkyLines(Math.max(0, state.anim.frame));
     stepSkyImage(Math.max(0, state.anim.frame));
     stepSky();
@@ -1531,6 +1535,16 @@ function stepSky() {
         y -= SKY_RADIUS * SKY_EYE.y / sky.distance;
     }
     sky.mesh.position.set(c.position.x, y, c.position.z);
+    if (sky.still) holdSkyStill(sky.mesh, root);
+}
+
+/* The Westerns' sky stays with the town, which stands still here while the
+ * arena, and the root with it, turns: the strip is carried back out of the
+ * root's turn so it stays put round the camera. */
+function holdSkyStill(mesh, root) {
+    SKY_INV.copy(root.matrix).invert();
+    mesh.position.applyMatrix4(SKY_INV);
+    mesh.quaternion.setFromRotationMatrix(SKY_INV).multiply(mesh.userData.turn);
 }
 
 /* ---- Stage view ---------------------------------------------------------- */
@@ -1846,6 +1860,7 @@ function setRideStage(on) {
     RIDE_OLD.copy(v.root.matrix);
     const frame = state.anim.frame > 0 ? state.anim.frame : 0;
     RIDE_DELTA.copy(setWorldFrame(frame)).multiply(RIDE_OLD.invert());
+    stepStageLight(frame);
     v.camera.position.applyMatrix4(RIDE_DELTA);
     v.camera.quaternion.premultiply(RIDE_TURN.setFromRotationMatrix(RIDE_DELTA));
     v.orbit.target.applyMatrix4(RIDE_DELTA);
@@ -2315,11 +2330,16 @@ function stepEyeLight() {
  * in the world. Rebuilt from the record each time rather than rotated in place,
  * because that is the arithmetic camera_init does.
  */
+const LIGHT_ROOT = new THREE.Matrix3();
 function stepStageLight(frame) {
     const stage = state.stages[state.stageIndex];
     if (!stage) return;
     if (stage.lightAt) {
-        state.viewer.material.uniforms.uLight.value.set(...stage.lightAt(frame));
+        /* Built in the board's frame, as the normals are; the root carries
+         * both into the explorer's, as on the Westerns, whose light turns with
+         * the town. */
+        LIGHT_ROOT.setFromMatrix4(state.viewer.root.matrix);
+        state.viewer.material.uniforms.uLight.value.set(...stage.lightAt(frame)).applyMatrix3(LIGHT_ROOT);
         return;
     }
     const yaw = stageLightYaw(stage, frame, state.frames);
@@ -3462,7 +3482,7 @@ function renderStagePanel(stage, counts, totals, list) {
         $('#view-label').textContent = stage.zones ? 'Zone' : 'Blocks drawn';
     }
     if (rides) {
-        $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
+        $('#ride-label').textContent = (!stage.flat && RIDE_LABEL[stage.slot]) || 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
     }
 

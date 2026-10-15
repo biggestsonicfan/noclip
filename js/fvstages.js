@@ -126,8 +126,9 @@ export function hallState(f) {
  *   platform  sub_235BC     u16 0x2369C + lit·2 + dark·8
  *   poles     pole_disp     u16 0x23014 + lit·32 + dark·8 + k·2, pole k under
  *                           Ry(k·0x4000) (0x22ECC; pole_disp_f the rest)
- *   cage      boss_cage     eight panels at 0x22908 + lit·16 while lit, the
- *                           eight at 0x22948 once it fades
+ *   cage      boss_cage     two panels a side, at 0x22908 + lit·16 + side·4
+ *                           while lit; once it fades, the two at 0x22948 on
+ *                           every side
  *
  * The light (0x1F124) turns to the lit corner: VECTER_Y = ((4 - lit) & 3) ·
  * 0x4000 + 0x2000.
@@ -284,10 +285,12 @@ function elevatorDraws({ walls, pillars, panels }) {
 /*
  * The Observation Deck's arena, in place of the record's: sub_235BC's
  * platform, the four poles (pole_disp and pole_disp_f between them draw all
- * four, by the same mask, in two windows) and boss_cage's eight panels under
- * cage_clip_m's six-unit push.
+ * four, by the same mask, in two windows) and boss_cage's panels, two to each
+ * of cage_display's four sides.
  */
-function hallDraws({ platform, poles, cage, cageDark }, cagePush) {
+const HALL_PANELS = 2;
+
+function hallDraws({ platform, poles, cage, cageDark }, cageSides) {
     const at = (f) => hallState(f);
     const out = [{
         model: platform[0][0], layer: 'platform', planeBias: 0,
@@ -301,19 +304,21 @@ function hallDraws({ platform, poles, cage, cageDark }, cagePush) {
             anim: { frames, index: (f) => at(f).lit * 4 + at(f).dark },
         });
     }
-    for (let i = 0; i < 8; i++) {
-        const frames = [...cage.map((l) => l[i]), cageDark[i]];
-        out.push({
-            model: frames[0], layer: 'cage', ops: cagePush,
-            anim: { frames, index: (f) => (at(f).dark ? 4 : at(f).lit) },
-        });
-    }
+    cageSides.forEach((ops, k) => {
+        for (let i = 0; i < HALL_PANELS; i++) {
+            const frames = [...cage.map((l) => l[k * HALL_PANELS + i]), cageDark[i]];
+            out.push({
+                model: frames[0], layer: 'cage', ops,
+                anim: { frames, index: (f) => (at(f).dark ? 4 : at(f).lit) },
+            });
+        }
+    });
     return out;
 }
 
 /* What fvStageHooks found to draw, as display-list entries. */
-export function fvStageDraws(stage, cagePush) {
-    if (stage.hall) return hallDraws(stage.hall, cagePush);
+export function fvStageDraws(stage, cageSides) {
+    if (stage.hall) return hallDraws(stage.hall, cageSides);
     if (stage.elevator) return elevatorDraws(stage.elevator);
     return [];
 }
