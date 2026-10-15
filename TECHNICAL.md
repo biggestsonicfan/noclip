@@ -1603,25 +1603,37 @@ meshes with the same face count, and nothing the explorer runs picks them:
 not the ring size (`0x5A75F4`, 0-4), not the culling helpers' answer (0.5 to
 5000), and not 400 passes of the stage task's tick.
 
-They are picked by the caller, not by game state. Stage 6's pieces from 17889
-to 18104 are letters: its routine (`0x6C500`) draws a 7 by 7 board of
-characters, a byte each from the string at `0xC75E0` ("A" to "Z", `,`, `.`,
-"0" to "9", `!`, `?`, then spaces), through `0x63270(char, variant)`, which
-draws entry `0xC5A70[char] + variant`. That table gives each character its
-first entry, five apart ("0" 17889 to "9" 17934, "A" 17939 to "Z" 18064, `,`
-18069, `!` 18079, `.` 18084, space 18094, `?` 18099). The five entries of a
-character are the same glyph, each with its own mesh and its own texture
-points (17939 to 17943 point at `0x270330`, `0x270340`, ... `0x270370`): a
-variant is a differently textured copy of the letter. Stage 6 passes variant
-0 (loaded from `0xC75D0`, a ROM word holding 0). The only other caller is
-the name entry routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`),
-which draws its own grid of the same letters (string `0x91BA0`) with variant
-1, and with variant 2 the letter under the cursor (`0x557D48`), the three
-initials (`0x557D58`-`0x557D5C`) and the digits it makes from `0x557D68`; it
-passes 4 for the letters it draws at `0x1E8A0`. No call passes 3, nothing
+They are picked by the caller, not by game state. Entries 17889 to 18108
+are 44 characters of five entries each (44 x 5 = 220), and 18109 is the
+one piece outside them. Stage 6's routine (`0x6C500`) draws a 7 by 7 board
+of characters, a byte each from the string at `0xC75E0` ("A" to "Z", `,`,
+`.`, "0" to "9", `!`, `?`, six spaces, then codes 2, 1 and 0), through
+`0x63270(char, variant)`, which draws entry `0xC5A70[char] + variant`. That
+table gives each character its first entry, five apart: "0" 17889 to "9"
+17934, "A" 17939 to "Z" 18064, `,` 18069, code 0 18074, `!` 18079, `.`
+18084, `?` 18089, space 18094 (and every code it has no glyph for), code 2
+and `_` 18099, code 1 18104. The five entries of a character are one shape
+in five colours: each has its own mesh pointer (17939 to 17943: `0x92BA13`,
+`0x92BB1E`, ... `0x92BE3F`) and its own face records (`0x270330`,
+`0x270340`, ... `0x270370`), but the meshes decode to the same vertices and
+face count, and none of their faces is textured; the face records differ in
+colour. As the explorer decodes them, every character's variants are blue,
+green, orange, dark grey and pink, each beside white (17939 and 17940:
+blue and white, green and white).
+Stage 6 passes variant 0 (loaded from `0xC75D0`, a ROM word holding 0) at
+`0x6C614`, `0x6C6A0` and `0x6C70C`. The only other caller is the name entry
+routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`): its grid of the
+same letters (string `0x91BA0`) passes 1 at `0x1DEAC` and 2 for the letter
+under the cursor (`0x557D48`) at `0x1DE98`; it passes 2 for the digits it
+makes from `0x557D68` (`0x1DFE4`, `0x1E0A4`, `0x1E170`), the `.` at
+`0x1E218`, the three initials `0x557D58`-`0x557D5C` (`0x1E30C`, `0x1E414`,
+`0x1E524`) and a letter at `0x1E690`, and 4 for the letters at `0x1E8A0`.
+Those 14 are every direct `call` to `0x63270` in the program; no instruction
+loads its address and no word in the program or data ROMs holds it, so no
+indirect call reaches it through a stored pointer. No call passes 3, nothing
 else reads `0xC5A70`, and no code names those entries by address, so each
-character's fourth entry is never drawn. As a stage, 6 shows variant 0 only,
-which is what the explorer draws.
+character's dark grey variant is never drawn. As a stage, 6 shows variant 0
+only, which is what the explorer draws.
 
 Its one piece outside the letters, 18109 (stage 9's too), is drawn as
 `18109 + [0x5A6EE0]`, like other stages' pieces. That word is the texture
