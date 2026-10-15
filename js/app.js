@@ -47,7 +47,10 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
-import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
+import {
+    readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
+    armouredFighter, ARMOUR_STATES,
+} from './vf2fighters.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -105,6 +108,9 @@ const state = {
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
+    /* Fighting Vipers: which halves of the fighter's armour are broken, one of
+     * ARMOUR_STATES' ids (see armouredFighter). */
+    armour: 'intact',
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -351,6 +357,7 @@ function resetRomState() {
     state.motion.list = null;
     state.motion.decoded = null;
     state.motion.parts = [];
+    state.motion.extras = [];
     state.motion.skeleton = null;
     /* What a fighter carries across a change of tab is this build's: its slot,
      * its chain and the trail it laid. */
@@ -1106,10 +1113,16 @@ function modelsInDisplayList(list) {
  * scan finds with such a face.
  */
 /* The solved rig's roster (Virtua Fighter 2's, Fighting Vipers'), each
- * record's sixteen parts; nothing for a game with no fighters read. */
+ * record's sixteen parts and the broken armour's; nothing for a game with no
+ * fighters read. */
 function fighterRigModels(add, out) {
     if (state.rom.game.rig?.kind !== 'vf2') return out;
-    for (const f of readFighters(state.rom)) for (const p of f.parts) add(p.model, f.index);
+    for (const f of readFighters(state.rom)) {
+        for (const p of f.parts) add(p.model, f.index);
+        for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
+        if (f.armour?.chest) add(f.armour.chest, f.index);
+        for (const e of f.extras) add(e.model, f.index);
+    }
     return out;
 }
 
@@ -3249,9 +3262,16 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
-function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
+/* The body as the panel shows it: a fighter with armour wears the broken
+ * parts the armour switch asks for. */
+function shownBody(index) {
     /* Dead or Alive's roster skips the empty character numbers. */
     const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
+    return body.armour ? armouredFighter(body, state.armour) : body;
+}
+
+function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
+    const body = shownBody(index);
     state.charIndex = body.index;
     state.character = body;
     const m = state.motion;
@@ -3322,10 +3342,11 @@ function rebuildBody({ keepCamera = true } = {}) {
      * frame, so each keeps a slot per model it has drawn so far and swaps their
      * geometry — the coat alone is a hundred models. */
     m.parts = body.parts.map((p) => ({ part: p.index, slots: [] }));
+    m.extras = extraParts(body);
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })) }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
         : null;
     m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
@@ -3336,7 +3357,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     poseRig();
 
     if (!keepCamera) {
-        const drawn = [...m.parts, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
+        const drawn = [...m.parts, ...m.extras, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
         frameRig(drawn, 10);
     }
@@ -3407,6 +3428,16 @@ function placeBodyParts(parts, draws, matrices) {
     }
 }
 
+/* A fighter's pads and skirt (body.extras), each a part of its own whose
+ * matrix the pose gives beside the slots'. */
+function extraParts(body) {
+    return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
+}
+
+function placeExtras(parts, body, matrices) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
+}
+
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3421,6 +3452,8 @@ function poseFighterAndRival(body, m) {
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
+    placeExtras(m.rival.extras, m.rival.body,
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
     return mine;
 }
 
@@ -3430,8 +3463,9 @@ function poseBodyRig() {
     if (!body) return;
     /* A rig whose pose says what each part draws (Dead or Alive's) is
      * taken at its word. */
-    const { matrices, origins, draws } = poseFighterAndRival(body, m);
+    const { matrices, origins, draws, extras } = poseFighterAndRival(body, m);
     placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    placeExtras(m.extras, body, extras ?? []);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */
@@ -3862,7 +3896,32 @@ function renderBodyPanel() {
         }
         list.appendChild(row);
     }
+    renderArmourPanel();
     renderMotionPanel();
+}
+
+/* The armour switch, shown only for a fighter whose break table has entries:
+ * which slots each half breaks, and what they show once broken. */
+function renderArmourPanel() {
+    const own = state.bodies?.find((b) => b.index === state.charIndex);
+    const A = own?.armour;
+    $('#armour-field').hidden = !A;
+    if (!A) return;
+    const sel = $('#armour-select');
+    if (!sel.options.length) {
+        for (const x of ARMOUR_STATES) {
+            const o = el('option');
+            o.value = x.id;
+            o.textContent = x.label;
+            sel.appendChild(o);
+        }
+    }
+    sel.value = state.armour;
+    const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
+        .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
+    $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
+        + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
 /* A Dead or Alive fighter has no record of parts: what it draws comes
@@ -4477,6 +4536,12 @@ function wireOptions() {
     $('#char-behind').addEventListener('change', (e) => {
         state.opponentBehind = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: false });
+    });
+    $('#armour-select').addEventListener('change', (e) => {
+        state.armour = e.target.value;
+        state.character = shownBody(state.charIndex);
+        rebuildBody({ keepCamera: true });
+        renderAnimPanel();
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;

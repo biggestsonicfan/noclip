@@ -755,7 +755,18 @@ const fvipers = {
     rig: {
         kind: 'vf2',
         standardRig: 0x2c194,
-        fighters: { records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20 },
+        fighters: {
+            records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20,
+            /* The break table (0x640EDAC) and mune_unit_change's chests
+             * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
+             * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
+             * 0x6421DE0, drawn for the characters it compares against;
+             * 14 is past the roster); readPads, readSkirt. */
+            armour: {
+                table: 0x0640edac, chest: 0x06421f80, rest: 15,
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+            },
+        },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },
         note: 'fv',
