@@ -1145,10 +1145,107 @@ part out along the fighter's own skeleton at player `+0x8C`.
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
 
-Not drawn: the skin at record `+0x24` (VF2 has one at `+0x38`, not drawn
-either), and the special parts `rob_disp`
-(`0x19F10`) swaps in: feet and hands (`set_ashi_ptn`, `set_te_ptn`), chest
-and hips (`mune_unit_change`, `koshi_unit_change`), Picky's hair.
+Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
+the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
+(`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
+`koshi_unit_change`), Picky's hair, and broken armour (below).
+
+#### Armour breaking (read from the ROM, not drawn yet)
+
+`rob_disp` draws slot `s` with the model in player `+0x40 + 4s`, not the
+record's list. `action_init` (`0x12554`) copies the record's sixteen parts
+there, and breaking armour overwrites them. Slots are the rig's: 1 chest,
+2 head, 3/6 upper arms, 4/7 forearms, 9 hips, 10/13 thighs, 11/14 shins.
+
+**When it breaks** (`damage_unit`, `0x26A44`, on the fighter hit):
+
+- Each hit adds its damage (`+0x822` of the attack) to `+0x1F00[slot]`, the
+  slot being the lowest bit of the hit mask `+0x704` that is in the attack's
+  height class (`0x27324[+0x821]`: 0 upper, 1 lower; slot 9 and up is lower).
+- `calc_up_down_damage` (`0x2735C`) keeps the old sums in `+0x1F7C`/`+0x1F80`
+  and sums slots 0-8 into `+0x1F74` (upper) and 9-15 into `+0x1F78` (lower).
+- The limits are `+0xAF0`/`+0xAF4`: the record's `+0x3C` pair times the
+  rounds to win (`0x500052`). Upper/lower: Jane, Tokio, Raxel 200/75; Grace,
+  Honey, Picky 150/50; Bahn 250/100; Sanman 250/50; Mahler, B.M. 500/200.
+- A half breaks on a hit whose attack has `+0x26C` bit 1 or 4, from an attacker
+  with `+0x720` bit 5, once both the old and new sum of that half are at the
+  limit. Then every slot of that half with a break entry breaks, and the loop
+  stays on the slot (`b 0x26B9C`), so as read it runs through all of the
+  slot's stages in one go. Bits 2/3 of `+0x7F4` mark the upper/lower half
+  broken, both together set bit 28 of the player's flags.
+- On the deciding round (`+0x1F5C` = rounds to win - 1) with `+0x7D6` bit 0,
+  `mod_fa_effect + 0xA74` is set, every slot's damage becomes `0x1000` and
+  everything breaks with no attack check: the finishing blow strips the lot.
+- `zibaku_ckeck` (`0x270FC`) is a second path that breaks pieces the same way.
+- `action_init` clears it all (`+0x1F48`, `+0x1F4C..`, `+0x1F60..`) only while
+  `0x500055` is 0 or 1.
+
+**What it swaps in** (`0x640EDAC[char]`): 16 entries of 8 bytes, one a slot.
+Bytes 0-3 are the pieces each stage throws off (0 ends the list), `+4` points
+at the pieces, `0x28` bytes each. `+0x1F20[slot]` is the stage reached,
+`+0x1F4C[slot]` the pieces used. On a break `damage_unit` sets bit `slot` in
+`+0x1F48` and calls `efc_crush_parts_set` (`0x2D390`), which launches the
+stage's pieces (`+6` each one's model) and writes the stage's first piece's
+`+4` into `+0x40[slot]`: that is the slot's new model. It skips the write in
+`also_mode` `0xC`/`0xD` and some sub-modes of 3 and 9 (`0x2D4D0`).
+
+| Char | Slots that break (base -> broken model) |
+|---|---|
+| 0 Jane | chest 732 -> 730 -> 729 -> 731 (three stages), 4: 738 -> 737, 5: 576 -> 734, 9: 493 (same), 11: 711 -> 710, 14: 709 -> 708 |
+| 1 Grace | 1: 915 -> 1982, 2: 883 -> 2448, 3: 911 -> 1980, 4: 919 -> 1987, 6: 910 -> 1978, 7: 918 -> 1986, 9: 1736 (same, four pieces), 10: 1743 -> 914, 11: 882 -> 1975, 13: 1742 -> 913, 14: 881 -> 1974 |
+| 2 Honey | 1: 2464 -> 2540, 2: 2435 -> 2552, 3: 2459 -> 2536, 4: 2468 -> 2550, 6: 2458 -> 2535, 7: 2467 -> 2549, 9: same, 10/13: -> 2463, 11: 2434 -> 2530, 14: 2433 -> 2529 |
+| 3 Tokio | 1: 2480 -> 2662, 3: 2475 -> 2659, 4: 2484 -> 2668, 6: 2474 -> 2658, 7: 2483 -> 2667, 10/13: -> 2479, 11: 2472 -> 2654, 14: 2471 -> 2653 |
+| 4 Bahn | 1: 694 -> 2398, 2: 687 -> 31, 3: 689 -> 2397, 6: 688 -> 2396, 9: 2405 -> 690, 11: 686 -> 2394, 14: 685 -> 2393 |
+| 5 Picky | 1: 902 -> 450, 2: 894 -> 893, 3: 899 -> 446, 4: 907 -> 454, 6: 898 -> 445, 7: 906 -> 453, 10: 2414 -> 449, 11: 891 -> 443, 13: 2413 -> 448, 14: 890 -> 442 |
+| 6 Raxel | 1: 966 -> 470, 2: 1538 -> 700, 3: 1540 -> 461, 4: 974 -> 474, 6: 1539 -> 460, 7: 973 -> 473, 9: 1541 -> 964, 11: 1535 -> 458, 12: 1533 -> 456, 14: 1534 -> 457, 15: 1532 -> 455 |
+| 7 Sanman | 1: 1075 -> 1074, 2: 1061 -> 1060, 3: 1068 -> 1067, 4: 1084 -> 1083, 6: 1066 -> 1065, 7: 1082 -> 1081, 11: 1056 -> 1057 -> 1055, 14: 1053 -> 1054 -> 1052 |
+| 8 Mahler | 2: 1497 -> 3887, 3/6: same, 4: 1516 -> 3893, 7: 1515 -> 3892, 11: 1496 -> 3886, 14: 1399 -> 3885 |
+| 9 B.M. | 2: 3589 -> 3588, 3/6: same, 4: 3619 -> 3618, 7: 3617 -> 3616, 11: 3587 -> 3586, 14: 3585 -> 3584 |
+| 13 Jane (jeans) | as Jane: chest 1613 -> 1580 -> 1579 -> 1581, 4: 1620 -> 1619, 5: 1617 -> 1616, 11: 1563 -> 1562, 14: 1561 -> 1560 |
+
+Sonic and the two stand-ins (10-12) have no armour (all entries 0).
+
+**Drawn on top of the slot model**, all keyed on `+0x1F48`:
+
+- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken, and
+  only for Jane, Grace, Honey and Jane in jeans (`0x6421F80[char]`). It then
+  replaces the chest with one of 31 models (table `+4`), picked by a spring
+  (`+0xC68`/`+0xC6C`, clamped to +-15) the body's movement drives: index
+  `15 + round(+0xC6C + 0.5)`. At rest that is entry 15 or 16 (Jane 772/773).
+  Table `+0` is a per-frame list it uses while the move flags `+0x1A4` are
+  exactly `0x200`.
+- `koshi_unit_change` (`0x31ADC`, slot 9): Honey and Bahn (`0x6422400[char]`).
+  It picks the hip model per motion (fixed lists for motions (`+0x1A8`) `0x31` and `0x180`,
+  a 50-frame swing, a per-motion table at `+0x1C`), taking the second of each
+  pair once the hips are broken (`+0x1F48` bit 9). Bahn's pair is 2405/690,
+  the same swap as the break table.
+- `kata_pat_disp` (`0x32A90`, slot 1): shoulder pads on their own swing
+  (`0x642147C[char]`, left then right: model, limit, a second model and its
+  offset at `+0x16`/`+0x18`). Raxel (959/960), Mahler (3889/3891 + 3888/3890)
+  and B.M. (3592/3595 + 3888/3890) have them. The first pad goes when slot 6
+  breaks, the second when slot 3 does.
+- `kosi_mino_disp` (`0x31E54`, slot 9): the skirt panels of characters 0, 1,
+  13 and 14 (`0x6421DE0[char*16]`), gone once the hips break (bit 9).
+- `pky_kami_disp` (`0x1ADDC`, slot 2): Picky's hair is drawn only once his head armour
+  (slot 2, the helmet) has broken.
+- Record `+0x24` is read on slot 9 too, and it is not a model: its `+8`
+  picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
+  Once the chest breaks the game reads `0x642F9EC[char]` instead.
+
+**What the explorer would need** to draw broken armour, first step:
+
+1. Read `0x640EDAC` per fighter into a list of broken models per slot and stage
+   (`rig.fighters.armour` in the profile, read in `readFighters`).
+2. A switch in the rig panel (intact / upper broken / lower broken / all),
+   which in the board is one hit per half, all stages at once. It sets each
+   slot's `model` to its last stage's, and the meshes are rebuilt the way a
+   new fighter's are (`app.js`, `body.parts`).
+3. For a broken chest on Jane, Grace, Honey and Jane in jeans, the resting
+   model from `mune_unit_change`'s table `+4`, entry 15 (the spring is
+   motion physics, a later step).
+4. Later, as their own steps: the shoulder pads and skirt (drawn while
+   intact, so they are missing from the intact fighters now too), Picky's
+   hair, Honey's and Bahn's hip lists, and the flying pieces.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
