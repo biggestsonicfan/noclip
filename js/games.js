@@ -3443,7 +3443,15 @@ const doab = {
         scripts: 0xd8000,
         common: 13,
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The 2D pictures (js/cells.js): the 242 pictures of data 0xC0000, three
+     * pointers each, tiles, colours and map, the table the sky's pictures
+     * come from too. Each brings its own tiles, so a cell's CG is its own.
+     * The loader (0x9000) keeps a bitmap of the 128 blocks of character RAM
+     * (0x54F980) and puts each picture in the first free run, so pictures on
+     * screen together never share tiles. The data is the same in every
+     * build. */
+    cells: { pictures: { table: 0x020c0000, count: 242 }, charBytes: 0x80000 },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /*
