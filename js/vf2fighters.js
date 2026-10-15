@@ -281,16 +281,21 @@ const LOWER_FIRST = 9, CHEST = 1;
  * Shoulder pads and skirt (TECHNICAL.md, "Shoulder pads and skirt"). Each is
  * drawn on a slot's matrix as rob_disp leaves it: translate, ang_z, ang_y,
  * ang_x, set_obj; a pad's second model is translated again on the pad's own
- * matrix. The swing each routine adds from the arms or thighs is left out:
- * this is the standing fighter. `hiddenBy` is the slot whose bit in +0x1F48
- * skips the piece. A model of 0 (or -1) is no model, as for the parts.
+ * matrix. Each routine adds a swing from the arms or thighs (padSwings,
+ * skirtSwings). `hiddenBy` is the slot whose bit in +0x1F48 skips the piece.
+ * A model of 0 (or -1) is no model, as for the parts.
  *
  * kata_pat_disp (slot 1): 0x642147C[char] points at a left and a right
- * record, 0x24 bytes: +0 model, +4 translate, +0x10/+0x12/+0x14 the X/Y/Z
- * turns (the left's Y negated), +0x16 a second model, +0x18 its translate.
- * The left goes when slot 6 breaks, the right when slot 3 does.
+ * record, 0x24 bytes: +0 model, +2 the swing's limit, +4 translate,
+ * +0x10/+0x12/+0x14 the X/Y/Z turns (the left's Y negated), +0x16 a second
+ * model, +0x18 its translate. The left goes when slot 6 breaks, the right
+ * when slot 3 does; each swings with that upper arm, the left's added to its
+ * X turn and the right's taken off.
  */
-const PAD_SIDES = [{ hiddenBy: 6, flipY: true }, { hiddenBy: 3, flipY: false }];
+const PAD_SIDES = [
+    { hiddenBy: 6, flipY: true, arm: 6, sign: 1 },
+    { hiddenBy: 3, flipY: false, arm: 3, sign: -1 },
+];
 
 function readPads(rom, A, i) {
     const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
@@ -304,7 +309,7 @@ function readPads(rom, A, i) {
         if (model <= 0) return;
         const y = dv.getUint16(o + 0x12, true);
         const pad = {
-            slot: CHEST, hiddenBy, model, offset: vec(dv, o + 4),
+            slot: CHEST, hiddenBy, model, offset: vec(dv, o + 4), pad: side, limit: dv.getInt16(o + 2, true),
             turn: [dv.getUint16(o + 0x10, true), flipY ? -y & 0xffff : y, dv.getUint16(o + 0x14, true)],
         };
         out.push(pad);
@@ -379,8 +384,32 @@ function skirtSwings(pose, offsets) {
     return reach.map((r, k) => Math.max(0, Math.max(...r) - SKIRT_PANELS[k].limit));
 }
 
-/* A panel turned by its swing; a pad, or a panel with none, as it is. */
-function swungExtra(e, swings) {
+/*
+ * How far each pad swings this frame (kata_pat_disp, 0x32A90; TECHNICAL.md,
+ * "The shoulder pads"). The lean is the head's origin less the waist's
+ * (player +0x20C less +0x1F4, slots 2 and 0); p is the upper arm's reach to
+ * the elbow (slot 7's offset, +0xD4, turned by slot 6; slot 4's, +0xB0, by
+ * slot 3) along it. The swing is atan2(p, sqrt(L^2 - p^2)), asin(p / L) with
+ * L that offset's x: 0 while p is below 0, at most the pad's limit. Facing
+ * turns the lean and the arm alike, so the explorer's frame does as well.
+ */
+function padSwing(pose, offsets, arm, limit) {
+    const { r } = pose[arm], o = offsets[arm + 1];
+    const v = [0, 1, 2].map((k) => r[k] * o[0] + r[k + 3] * o[1] + r[k + 6] * o[2]);
+    const lean = [0, 1, 2].map((k) => pose[2].t[k] - pose[0].t[k]);
+    const p = (v[0] * lean[0] + v[1] * lean[1] + v[2] * lean[2]) / Math.hypot(...lean);
+    if (!(p >= 0)) return 0;
+    const L = o[0];
+    return Math.min(p < L ? brad(Math.atan2(p, Math.sqrt(L * L - p * p))) : 0x4000, limit);
+}
+
+/* A pad or panel turned by its swing; one with none, as it is. */
+function swungExtra(e, swings, pose, offsets) {
+    if (e.pad !== undefined) {
+        const { arm, sign } = PAD_SIDES[e.pad];
+        const s = padSwing(pose, offsets, arm, e.limit);
+        return { ...e, swing: s, turn: [(e.turn[0] + sign * s) & 0xffff, e.turn[1], e.turn[2]] };
+    }
     if (e.panel === undefined || !swings) return e;
     const [axis, sign] = SKIRT_PANELS[e.panel].swing;
     return { ...e, turn: e.turn.map((v, k) => (k === axis ? (v + sign * swings[e.panel]) & 0xffff : v)) };
@@ -804,7 +833,8 @@ function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
  *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
- *   a fighter with one, is each panel's swing this frame; `chest`,
+ *   a fighter with one, is each panel's swing this frame, and `pads` each
+ *   shoulder pad's (left, right); `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
  *   for a fighter koshi_unit_change names, is the hips' model this frame.
  */
@@ -829,8 +859,10 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
     const swings = body.extras?.some((e) => e.panel !== undefined) ? skirtSwings(pose, body.offsets) : null;
-    const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], swungExtra(e, swings))));
-    return { matrices, origins, extras, skirt: swings, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets));
+    const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
+    const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
+    return { matrices, origins, extras, skirt: swings, pads, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*
