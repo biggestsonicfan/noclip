@@ -3113,6 +3113,18 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/* Dead or Alive's stage 4 conveyor fix (doab's `doa.fixes`), for a program
+ * `shift` bytes below Revision B's. */
+function doaConveyorFix(shift) {
+    return [
+        [0x6a0b4, 0x5a7628, 0x5a761c], // ld row 2's height, g4
+        [0x6a0bc, 0x5a761c, 0x5a7628], // ld row 3's height, g7
+        [0x6a0c0, 0x6805e294, 0x68052297], // cmpr g7, g4
+        [0x6a0cc, 0x5a7620, 0x5a762c], // ld row 3's z
+        [0x6a0dc, 0x5a7618, 0x5a7624], // ld row 3's x
+    ].map(([a, was, now]) => [a - shift, was, now]);
+}
+
 /*
  * Dead or Alive, Revision B: the Model 2B board.
  *
@@ -3204,6 +3216,14 @@ const doab = {
         stageByte: 0x5555be,
         visible: [0x72600, 0x72680],
         pokes: [[0x54fcdd, 1]],
+        /* Stage 4's conveyor (rows of x y z, 12 bytes each from 0x5A7600)
+         * draws a copy of the row that has just wrapped, a lap lower, so it
+         * reads as one belt. The fourth of those copies (0x6A0B0) tests row 3
+         * against row 2 but then draws row 2's place: a copy-paste slip that
+         * leaves a row hanging 80 below the rest for a quarter of the cycle.
+         * The fix loads the two heights the other way round (g7 = row 3's,
+         * the one drawn) and row 3's x and z. */
+        fixes: doaConveyorFix(0),
         /* The sky: four scroll pictures a stage, named in the program, out of
          * the table of pictures in the data (js/scroll.js buildDoaSky). */
         sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
@@ -3333,7 +3353,7 @@ const doaa = {
         doa: { ...doab.colors.doa, stages: 0x72da0, fighters: { ...doab.colors.doa.fighters, table: 0x72d20 } },
     },
     doa: {
-        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
+        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
         stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */

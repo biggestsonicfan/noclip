@@ -1228,6 +1228,26 @@ multiplier op 15 (frame ~5500-6000), so these six are the code's word and
 are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
 moves, and are drawn once from cleared RAM.
 
+The moving stages, stage 1 among them, go on moving in the viewer: the routine
+keeps running, one pass a frame from the baked one, and each piece takes the
+model and matrix of the piece the pass drew in its place in the list (`live`
+on each draw, `liveScenery` in `js/doa.js`; a pass costs about half a
+millisecond). Stage 4 draws 82 to 92 pieces depending on the pass, so its list
+has a slot for the most the 924 passes drew, and a slot a pass leaves empty is
+hidden. Stage 1's fighters hold their pose while the ropes go on swinging. If
+the clock starts over, RAM goes back to the baked pass.
+
+Stage 4's belt has four rows (x y z, 12 bytes each from 0x5A7600) stepped at
+0x6BD0C, which wrap only at the top (y > 60). To keep the belt whole, four
+blocks each draw a copy of a row 80 lower: row n's copy when row n stands above
+row n-1. The fourth (0x6A0B0, 2A 0x62670) tests row 3 against row 2 and then
+draws row 2's place, so for a quarter of the cycle a lone row hangs 80 below
+the rest. The explorer runs the routine with that slip fixed
+(`doa.fixes`, five words: the two heights loaded the other way round, the
+compare's operands swapped, and row 3's x and z), patched into its own copy of
+the program; the ROM's other users see it as it is. With the fix the copy sits
+right under the belt's lowest row.
+
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
 The fighters are drawn by the game's own code too, on two players set up the

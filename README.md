@@ -541,8 +541,11 @@ are not read yet.
 
 Stages 0, 2, 3, 4, 8 and 11 have pieces of their own that move (stage 4 is a
 conveyor). The game's own stage code runs them from its setup to the same
-moment of a fight, on both revisions. MAME's attract never reaches those
-stages, so they have not been checked against it.
+moment of a fight, on both revisions, and keeps running them a frame at a time
+while you watch, as it does stage 1's ropes. MAME's attract never reaches those
+stages, so they have not been checked against it. Stage 4's code has a
+copy-paste slip that leaves one row of the belt hanging far below the rest for
+part of each cycle; the explorer fixes it, so the belt stays whole.
 
 ## Running it
 

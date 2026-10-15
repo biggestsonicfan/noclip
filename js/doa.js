@@ -235,8 +235,26 @@ class Geo {
 
 /* The bus: program ROM at 0, the data ROMs at 0x2000000, work RAM, and the
  * two ports. Anything else reads back what was last written to it. */
+/* The program the routines run, with the game's own slips fixed (the
+ * game's `fixes`: [address, word the ROM holds, word put there]). A fix is
+ * left out if the ROM doesn't hold what it expects. */
+const fixedPrograms = new WeakMap();
+function fixedProgram(rom) {
+    const fixes = rom.game.doa?.fixes ?? [];
+    if (!fixes.length) return rom.mainCpuView;
+    let cv = fixedPrograms.get(rom);
+    if (cv) return cv;
+    const src = rom.mainCpuView;
+    cv = new DataView(src.buffer.slice(src.byteOffset, src.byteOffset + src.byteLength));
+    if (fixes.every(([a, was]) => cv.getUint32(a, true) === was)) {
+        for (const [a, , now] of fixes) cv.setUint32(a, now, true);
+    } else console.warn('doa: the program differs from what its fixes expect; left as it is');
+    fixedPrograms.set(rom, cv);
+    return cv;
+}
+
 function makeBus(rom, ram, copro, geo, models) {
-    const cv = rom.mainCpuView, dv = rom.mainDataView;
+    const cv = fixedProgram(rom), dv = rom.mainDataView;
     const rv = new DataView(ram.buffer);
     const other = new Map();
     const inRam = (a) => a >= RAM_BASE && a < RAM_BASE + RAM_SIZE;
@@ -343,7 +361,18 @@ export function doaMachine(rom) {
     return { ram, rv: new DataView(ram.buffer), unknown, copro, geo, cpu };
 }
 
-export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock } = {}) {
+export function runStageRoutine(rom, entry, opts = {}) {
+    const run = stageRun(rom, entry, opts);
+    return { draws: run.draws, unknown: run.unknown, done: run.done, run };
+}
+
+/*
+ * A stage routine set up and run to its frame, that goes on running: `step()`
+ * is one more pass (the board's next frame), with the frame count one on.
+ * `rewind()` puts RAM back as the first run left it. `most` is the most
+ * pieces any pass drew.
+ */
+function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
@@ -363,13 +392,25 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, f
      * drawn: the stage setup (`init`) clears it, then each pass of the
      * routine is a frame, and the last pass's draws are the ones shown. */
     for (const at of [init ?? []].flat()) cpu.call(at, [], { maxSteps: 5_000_000 });
-    let done = true;
-    for (let n = 0; n < frames; n++) {
+    const run = { draws: [], unknown: [], done: true, most: 0 };
+    let n = clock === undefined ? undefined : (clock - frames) >>> 0;
+    run.step = () => {
         geo.draws = [];
-        if (clock !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (clock - frames + 1 + n) >>> 0, true);
-        done = cpu.call(entry, [], { maxSteps });
-    }
-    return { draws: geo.draws, unknown: [...unknown], done };
+        if (n !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (n = (n + 1) >>> 0), true);
+        run.done = cpu.call(entry, [], { maxSteps });
+        run.draws = geo.draws;
+        run.most = Math.max(run.most, run.draws.length);
+        return run.draws;
+    };
+    for (let k = 0; k < frames; k++) run.step();
+    run.unknown = [...unknown];
+    const saved = { ram: ram.slice(), n, draws: run.draws };
+    run.rewind = () => {
+        ram.set(saved.ram);
+        n = saved.n;
+        run.draws = saved.draws;
+    };
+    return run;
 }
 
 /* ---- the fighters: the game's own skeleton code on a posed player ---- */
@@ -616,6 +657,39 @@ function stageClock(rom, n) {
     return { init: [S.common, own], frames: S.frames, clock: S.clock };
 }
 
+function stageMoves(rom, n) {
+    const D = rom.game.doa;
+    return D.attract?.stage === n || !!D.stageSetup?.moving.includes(n);
+}
+
+/*
+ * A moving stage goes on moving in the viewer: the routine runs on a pass a
+ * frame from the one baked, and each piece is the piece the pass drew in its
+ * place in the list. A pass can draw fewer pieces than another (stage 4's
+ * belt), so the list has a slot for the most any pass drew, and a slot the
+ * pass leaves empty is hidden. Going back in time (the clock starting over)
+ * rewinds RAM to the baked pass; a long gap is caught up a few hundred passes
+ * a frame.
+ */
+const CATCH_UP = 300;
+
+function liveScenery(scenery, run) {
+    let pass = 0;
+    const at = (f) => {
+        if (f < pass) { run.rewind(); pass = 0; }
+        for (const end = Math.min(f, pass + CATCH_UP); pass < end; pass++) run.step();
+        return run.draws;
+    };
+    const last = scenery[scenery.length - 1];
+    while (scenery.length < run.most) scenery.push({ ...last });
+    scenery.forEach((d, i) => {
+        d.live = (f) => {
+            const p = at(f)[i];
+            return p ? { model: p.model, ops: boardToOps(p.m) } : { model: d.model, ops: d.ops, hidden: true };
+        };
+    });
+}
+
 /* The attract fight's two fighters, posed, if this is its stage. */
 function attractOf(rom, n) {
     const A = rom.game.doa.attract;
@@ -636,7 +710,9 @@ function stageOf(rom, n, entry, run) {
         model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer, ops: boardToOps(d.m),
     });
     const fight = attractOf(rom, n);
-    const draws = [...run.draws.map(placed('scenery')), ...(fight?.run.draws.map(placed('fighters')) ?? [])];
+    const scenery = run.draws.map(placed('scenery'));
+    if (stageMoves(rom, n)) liveScenery(scenery, run.run);
+    const draws = [...scenery, ...(fight?.run.draws.map(placed('fighters')) ?? [])];
     return {
         slot: n,
         placements: true,
