@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves,
+    armouredFighter, armourHalves, hipModels,
 } from './vf2fighters.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
@@ -1130,6 +1130,7 @@ function fighterRigModels(add, out) {
         for (const p of f.parts) add(p.model, f.index);
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
+        for (const m of hipModels(f.armour?.hips)) add(m, f.index);
         for (const e of f.extras) add(e.model, f.index);
     }
     return out;
@@ -3275,7 +3276,7 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
-/* The hips a long win streak leaves Honey in (readStreakHips) are behind a
+/* The hips a long win streak leaves Honey in (readHips' `broken`) are behind a
  * switch the page shows only when its address asks for it. */
 const STREAK_UNLOCKED = new URLSearchParams(location.search).get('hentai') === 'baka';
 
@@ -3564,11 +3565,13 @@ function placeExtras(parts, body, matrices, material = null) {
 }
 
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
- * the one its spring picked. A rig whose pose says what each part draws
- * (Dead or Alive's) is taken at its word. */
+ * the one its spring picked, and the hips' (slot 9) the one their motion
+ * picked. A rig whose pose says what each part draws (Dead or Alive's) is
+ * taken at its word. */
 function bouncedDraws(body, posed, m) {
     const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
+    if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
     return draws;
 }
 
@@ -3597,6 +3600,7 @@ function poseBodyRig() {
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
+    m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
     placeExtras(m.extras, body, extras ?? []);
 
@@ -4070,6 +4074,7 @@ function renderArmourPanel() {
         + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
         + (state.character.bounce ? '<br><span id="bounce-now"></span>'
             + '<br>spring only: the per-frame list needs move flags the explorer lacks' : '')
+        + (A.hips ? '<br><span id="hips-now"></span>' : '')
         + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
@@ -4367,6 +4372,12 @@ function updateBounceReadout(m) {
         + ` spring ${sp.p.toFixed(2)}, speed ${sp.v.toFixed(2)}`;
 }
 
+/* The hips' model koshi_unit_change picks on this frame. */
+function updateHipsReadout(m) {
+    const out = $('#hips-now');
+    if (out && m.hips != null) out.textContent = `frame ${m.frame}: hips ${m.hips}`;
+}
+
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
@@ -4380,6 +4391,7 @@ function updateMotionFrameReadout() {
             + (exhaustDrawn(m.chestNow) ? ' — flame up' : ' — no flame');
     }
     updateBounceReadout(m);
+    updateHipsReadout(m);
     const heli = $('#tails-now');
     if (heli && m.tails) {
         const mode = m.scriptState?.propeller ?? 0;

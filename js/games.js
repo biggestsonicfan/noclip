@@ -765,12 +765,13 @@ const fvipers = {
         standardRig: 0x2c194,
         fighters: {
             records: 0x0640d2b0, count: 13, p2: 13, names: FV_NAMES, texSet: 0x20,
-            /* The break table (0x640EDAC) and mune_unit_change's chests
-             * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
+            /* The break table (0x640EDAC), mune_unit_change's chests
+             * (0x6421F80) and koshi_unit_change's hips (0x6422400);
+             * js/vf2fighters.js, readArmour, readHips. The shoulder pads
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
              * 0x6421DE0, drawn for the characters it compares against;
              * 14 is past the roster); readPads, readSkirt. koshi_unit_change's
-             * hips (0x6422400) for the win streak's hips; readStreakHips. */
+             * hips (0x6422400) for the win streak's hips; readHips. */
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
                 pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
