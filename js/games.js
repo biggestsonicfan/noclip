@@ -3240,6 +3240,15 @@ const doab = {
         routines: 0x719e0,
         count: 16,
         stageByte: 0x5555be,
+        /* RAM js/doa.js sets by hand: the view vector the culls dot with,
+         * the board's frame count, the stage's light, and the fight code's
+         * per-player records and tables (js/doa.js startPlayer). */
+        ram: {
+            viewVector: 0x5b9870, frameCount: 0x54b158, light: 0x5555b0,
+            player: 0x54fbe0, facing: 0x550124, bodyScales: [0x56ac50, 0x588ee0],
+            modelBase: 0x5a6ed0, expression: 0x58828c,
+            speed: 0x56ada0, heading: 0x56ac28, height: 0x589b80,
+        },
         visible: [0x72600, 0x72680],
         pokes: [[0x54fcdd, 1], [0x5a75f4, 2]],
         /* Stage 4's conveyor (rows of x y z, 12 bytes each from 0x5A7600)
@@ -3355,6 +3364,9 @@ const doab = {
                 [0x55559c, 0x400dc87c], [0x5555a0, 0x3f8bde4e], [0x5555a4, 0x3fef6f83],
                 [0x5555a8, 0x40083127], [0x5555ac, 0x3db9b7a7],
             ],
+            /* The words of `camera` that hold a program address (the path
+             * the camera follows), for a build whose program has moved. */
+            programWords: [0x5bf8f8],
             ai: [[0x5555f2, 1], [0x5555f3, 1], [0x5555f4, 0], [0x5555f5, 1], [0x5555cb, 2]],
             fighters: [
                 {
@@ -3435,9 +3447,27 @@ const doab = {
 };
 
 /*
+ * The 2A board seats the same data, model, texture and sound chips in other
+ * sockets, so MAME's 2A sets name them by those: Revision B's name, the 2A's.
+ * A 2A set and a 2B set dropped together find each other's by checksum.
+ */
+const DOA_2A_SOCKETS = {
+    'mpr-19318.11': 'mpr-19318.10', 'mpr-19319.12': 'mpr-19319.11', 'mpr-19316.9': 'mpr-19316.8',
+    'mpr-19317.10': 'mpr-19317.9', 'mpr-19314.7': 'mpr-19314.6', 'mpr-19315.8': 'mpr-19315.7',
+    'mpr-19312.5': 'mpr-19312.4', 'mpr-19313.6': 'mpr-19313.5', 'mpr-19322.17': 'mpr-19322.16',
+    'mpr-19325.21': 'mpr-19325.20', 'mpr-19323.18': 'mpr-19323.17', 'mpr-19326.22': 'mpr-19326.21',
+    'mpr-19324.19': 'mpr-19324.18', 'mpr-19327.23': 'mpr-19327.22', 'mpr-19321.27': 'mpr-19321.25',
+    'mpr-19320.25': 'mpr-19320.24', 'epr-19328.31': 'epr-19328.30', 'mpr-19329.32': 'mpr-19329.31',
+    'mpr-19330.33': 'mpr-19330.32', 'mpr-19331.34': 'mpr-19331.36', 'mpr-19332.35': 'mpr-19332.37',
+};
+const doa2A = (chip) => chip.map((x) => DOA_2A_SOCKETS[x] ?? x);
+const doa2ARegions = (regions) => Object.fromEntries(Object.entries(regions)
+    .map(([k, r]) => [k, { ...r, parts: r.parts.map(doa2A) }]));
+
+/*
  * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
- * the data, model and texture chips are doab's, so the set needs doa.zip
- * beside it. The model table is in those data chips, so it has not moved;
+ * the data, model and texture chips are doab's, in the 2A's sockets. The
+ * model table is in those data chips, so it has not moved;
  * the stage code and the program's tables sit 0x7A40 lower than Revision B's
  * (the sky's stage table 0x79C0), and its RAM is laid out the same.
  */
@@ -3448,7 +3478,7 @@ const doaa = {
     identify: ['epr-19310a.12', 'epr-19311a.13'],
     identifyCrc: [0x06486f7a, 0x1be62912],
     regions: {
-        ...doab.regions,
+        ...doa2ARegions(doab.regions),
         maincpu: {
             size: 0x100000,
             parts: [[0x00000, 'epr-19310a.12', 0x06486f7a, 'epr-19311a.13', 0x1be62912]],
@@ -3470,11 +3500,151 @@ const doaa = {
     rig: undefined,
     features: { ...doab.features, motions: false, bodies: false },
     /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
-    sound: { ...doab.sound, stageMusic: 0x89250, music: { ...doab.sound.music, table: 0x89280 } },
+    sound: {
+        ...doab.sound, program: doa2A(doab.sound.program), samples: doab.sound.samples.map(doa2A),
+        stageMusic: 0x89250, music: { ...doab.sound.music, table: 0x89280 },
+    },
 };
 
+/*
+ * The other Dead or Alive builds MAME knows, each a build above with its
+ * program moved: code put in or taken out in places, so what follows sits
+ * further on (or back), as with Sonic Championship. The runs were found the
+ * same way, matching the two programs 16 bytes at a time; each run starts at
+ * the first block that matched with that shift, and everything the explorer
+ * names falls well inside one (checked address by address). Revision C also
+ * moved its RAM: the runs `ram` gives, found by pairing the RAM addresses the
+ * two programs' matched instructions name. The 2A builds keep doaa's RAM.
+ */
+const DOA_C_PROGRAM = [
+    [0x00000, 0x0], [0x02780, 0x10], [0x08430, 0x20], [0x09370, 0x30],
+    [0x1a9f0, 0x70], [0x1b530, 0x80], [0x1bb50, 0xd0], [0x288f0, 0xb0],
+    [0x91280, 0xd0], [0x91b80, 0x3af0], [0xd8000, 0x0],
+];
+const DOA_C_RAM = [[0x500000, 0x0], [0x5420d0, 0x20], [0x557c60, 0x30], [0x600000, 0x0]];
+const DOAAB_PROGRAM = [
+    [0x003d0, 0x1c0], [0x04560, 0xe0], [0x06520, -0x14], [0x06990, -0x34],
+    [0x06be0, -0x30], [0x11150, -0x70], [0x820e0, -0x180], [0x82750, -0x18c],
+    [0x82890, -0x190], [0x82ba0, -0x1f0], [0x83550, -0x340], [0x88cb0, -0x370],
+    [0xd8000, 0x0],
+];
+const DOAAE_PROGRAM = [
+    [0x003d0, 0x1c0], [0x03020, 0x180], [0x04490, 0xa0], [0x06520, -0x54],
+    [0x06990, -0x74], [0x06be0, -0x70], [0x0f7c0, -0xd0], [0x10b40, -0x140],
+    [0x11150, -0x180], [0x309c0, -0xb0], [0x3bdc0, -0x8c], [0x3c8d0, -0x60],
+    [0x814c0, 0x1b0], [0x81750, 0x1c0], [0x81bb0, 0x150], [0x820e0, 0x40],
+    [0x82750, 0x34], [0x82890, 0x30], [0x82ba0, -0x30], [0x83550, -0x180],
+    [0x88cb0, -0x1b0], [0xd8000, 0x0],
+];
+
+/* The fight code's routines: every one a program address. */
+const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
+    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
+
+function relocateDoaFighters(F, at, ram) {
+    if (!F) return F;
+    const out = { ...F };
+    for (const k of DOA_FIGHT_CODE) out[k] = at(F[k]);
+    const ramPairs = (l) => l.map(([a, v]) => [ram(a), v]);
+    return {
+        ...out,
+        tables: { ...F.tables, at: at(F.tables.at) },
+        grid: {
+            cells: ram(F.grid.cells), bytes: ram(F.grid.bytes), from: F.grid.from.map(at),
+            alt: { ...F.grid.alt, from: F.grid.alt.from.map(at) },
+        },
+        ai: { start: at(F.ai.start), frame: at(F.ai.frame) },
+        collision: F.collision.map(at), fight: F.fight.map(at), movers: F.movers.map(at),
+        boot: ramPairs(F.boot), pokes: ramPairs(F.pokes),
+    };
+}
+
+function relocateDoaAttract(A, at, ram) {
+    if (!A) return A;
+    return {
+        ...A,
+        stageInit: at(A.stageInit),
+        camera: A.camera.map(([a, v]) => [ram(a), A.programWords.includes(a) ? at(v) : v]),
+        programWords: A.programWords.map(ram),
+        ai: A.ai.map(([a, v]) => [ram(a), v]),
+    };
+}
+
+function relocateDoaStages(D, at, ram) {
+    const S = D.stageSetup;
+    const after = Object.fromEntries(Object.entries(S.after).map(([k, l]) => [k, l.map(at)]));
+    return {
+        ...D,
+        routines: at(D.routines),
+        stageByte: ram(D.stageByte),
+        ram: Object.fromEntries(Object.entries(D.ram).map(([k, v]) => [k, Array.isArray(v) ? v.map(ram) : ram(v)])),
+        visible: D.visible.map(at),
+        pokes: D.pokes.map(([a, v]) => [ram(a), v]),
+        fixes: D.fixes.map(([a, was, now]) => [at(a), ram(was), ram(now)]),
+        sky: { ...D.sky, stages: at(D.sky.stages), lines: { ...D.sky.lines, vscroll: ram(D.sky.lines.vscroll), scroll: ram(D.sky.lines.scroll) } },
+        stageSetup: { ...S, common: at(S.common), table: at(S.table), after, tick: at(S.tick) },
+        fighters: relocateDoaFighters(D.fighters, at, ram),
+        attract: relocateDoaAttract(D.attract, at, ram),
+    };
+}
+
+/**
+ * `base` with its program moved by the `program` runs and its RAM by `ram`:
+ * every address the profile names, and nothing else, goes through them.
+ */
+function relocateDoa(base, { id, name, maincpu, program, ram: ramRuns = [] }) {
+    const at = (a) => relocate({ relocation: program }, a);
+    const ram = (a) => relocate({ relocation: ramRuns }, a);
+    const { palette, texture, colors, sound, rig } = base;
+    return {
+        ...base,
+        id, name,
+        identify: [maincpu[1], maincpu[3]],
+        identifyCrc: [maincpu[2], maincpu[4]],
+        regions: { ...base.regions, maincpu: { size: 0x100000, parts: [maincpu] } },
+        palette: { ...palette, tables: at(palette.tables) },
+        texture: { ...texture, raw: { ...texture.raw, stageSlabs: at(texture.raw.stageSlabs), charSlabs: at(texture.raw.charSlabs) } },
+        colors: {
+            ...colors,
+            doa: { ...colors.doa, stages: at(colors.doa.stages), fighters: { ...colors.doa.fighters, table: at(colors.doa.fighters.table) } },
+        },
+        lighting: { ...base.lighting, materials: { ...base.lighting.materials, at: at(base.lighting.materials.at) } },
+        doa: relocateDoaStages(base.doa, at, ram),
+        sound: { ...sound, stageMusic: at(sound.stageMusic), music: { ...sound.music, table: at(sound.music.table) } },
+        rig: rig && { ...rig, banks: at(rig.banks), loads: at(rig.loads), scripts: at(rig.scripts) },
+    };
+}
+
+/* Revision C, Jan 10 1997: MAME's parent set, so the one a merged set holds
+ * at the top. Revision B moved, fighters and all. */
+const doa = relocateDoa(doab, {
+    id: 'doa',
+    name: 'Dead or Alive (Model 2B, Revision C)',
+    maincpu: [0x00000, 'epr-19379c.15', 0x5cc62fbe, 'epr-19380c.16', 0x58cfeaa9],
+    program: DOA_C_PROGRAM,
+    ram: DOA_C_RAM,
+});
+
+/* The two other 2A builds: Nov 3 1996, the Japanese one and the export. */
+const doaab = relocateDoa(doaa, {
+    id: 'doaab',
+    name: 'Dead or Alive (Model 2A)',
+    maincpu: [0x00000, 'epr-19310.12', 0x3c571e75, 'epr-19311.13', 0x8818363d],
+    program: DOAAB_PROGRAM,
+});
+const doaae = relocateDoa(doaa, {
+    id: 'doaae',
+    name: 'Dead or Alive (Export, Model 2A, Revision A)',
+    maincpu: [0x00000, 'epr-19383a.12', 0x42e61481, 'epr-19384a.13', 0x034a3ab9],
+    program: DOAAE_PROGRAM,
+});
+
+/* Revision C first: a merged set is MAME's parent with its clones beside it,
+ * and the parent is the one it is named for. Then the build with the most to
+ * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2, doaa, doab];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    doa, doab, doaa, doaab, doaae];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
