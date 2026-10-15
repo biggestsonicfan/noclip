@@ -540,10 +540,15 @@ at that frame, Tina's ribbon included. The stage's ropes and banners hang as
 they swing at that frame too. They hold that one pose; Revision A's fighters
 are not read yet.
 
-Stages 0, 2, 3, 4, 8 and 11 have pieces of their own that move (stage 4 is a
-conveyor). The game's own stage code runs them from its setup to the same
-moment of a fight, on both revisions. MAME's attract never reaches those
-stages, so they have not been checked against it.
+Stages 0, 2, 3, 4, 8, 10 and 11 have pieces of their own that move (stage 4 is
+a conveyor). The game's own stage code runs them from its setup to the same
+moment of a fight, on both revisions, and keeps running them a frame at a time
+while you watch, as it does stage 1's ropes. Checked against MAME's attract
+(with the stages swapped in), they move as the board moves them, word for
+word over 300 frames, except where they follow the game's camera (0, 2 and
+10) or scroll the sky (11). Stage 4's code has a
+copy-paste slip that leaves one row of the belt hanging far below the rest for
+part of each cycle; the explorer fixes it, so the belt stays whole.
 
 ## Running it
 

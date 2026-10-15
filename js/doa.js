@@ -228,15 +228,33 @@ class Geo {
     }
 
     object() {
-        const model = this.models.lastIndex(this.words);
-        if (model !== null) this.draws.push({ model, m: this.m.slice() });
+        const named = this.models.lastIndex(this.words);
+        if (named) this.draws.push({ ...named, m: this.m.slice() });
     }
 }
 
 /* The bus: program ROM at 0, the data ROMs at 0x2000000, work RAM, and the
  * two ports. Anything else reads back what was last written to it. */
+/* The program the routines run, with the game's own slips fixed (the
+ * game's `fixes`: [address, word the ROM holds, word put there]). A fix is
+ * left out if the ROM doesn't hold what it expects. */
+const fixedPrograms = new WeakMap();
+function fixedProgram(rom) {
+    const fixes = rom.game.doa?.fixes ?? [];
+    if (!fixes.length) return rom.mainCpuView;
+    let cv = fixedPrograms.get(rom);
+    if (cv) return cv;
+    const src = rom.mainCpuView;
+    cv = new DataView(src.buffer.slice(src.byteOffset, src.byteOffset + src.byteLength));
+    if (fixes.every(([a, was]) => cv.getUint32(a, true) === was)) {
+        for (const [a, , now] of fixes) cv.setUint32(a, now, true);
+    } else console.warn('doa: the program differs from what its fixes expect; left as it is');
+    fixedPrograms.set(rom, cv);
+    return cv;
+}
+
 function makeBus(rom, ram, copro, geo, models) {
-    const cv = rom.mainCpuView, dv = rom.mainDataView;
+    const cv = fixedProgram(rom), dv = rom.mainDataView;
     const rv = new DataView(ram.buffer);
     const other = new Map();
     const inRam = (a) => a >= RAM_BASE && a < RAM_BASE + RAM_SIZE;
@@ -267,6 +285,7 @@ function makeBus(rom, ram, copro, geo, models) {
     };
     const lane = (a, bytes) => [a & ~3, (a & 3) * 8, bytes === 1 ? 0xff : 0xffff];
     return {
+        other,
         read32,
         write32,
         read8: (a) => { const [w, s] = lane(a, 1); return (read32(w) >>> s) & 0xff; },
@@ -285,20 +304,67 @@ function makeBus(rom, ram, copro, geo, models) {
 }
 
 /* Which model an object command names: the model table entry its four words
- * were last read from (the routines `ldq` the entry and `stq` it on). */
-function modelTracker(table) {
+ * were last read from (the routines `ldq` the entry and `stq` it on).
+ *
+ * Stages 0 and 10 hand some pieces over from RAM instead: the five entries
+ * the routine copies from 0x2099D90 to 0x59FFC0, a table model's material,
+ * mesh and face count with other texture points (the first word), the glass
+ * tower's picked by the yaw it keeps (0x5A0064, into 0x2098B90). Those are the
+ * table's first model with the same material, mesh and face count, drawn with
+ * the points at `uv`. */
+const meshIndexes = new WeakMap();
+function meshIndex(table, dv) {
+    let index = meshIndexes.get(dv);
+    if (index) return index;
+    index = new Map();
+    for (let i = table.count - 1; i >= 0; i--) index.set(meshKey(entryWords(table, dv, i)), i);
+    meshIndexes.set(dv, index);
+    return index;
+}
+
+function entryWords(table, dv, i) {
+    const off = table.offset + i * table.stride;
+    return [0, 4, 8, 12].map((k) => dv.getUint32(off + k, true));
+}
+
+const meshKey = (w) => `${w[1]},${w[2]},${w[3]}`;
+
+function modelTracker(table, dv) {
     let last = null;
+    /* The model, and the points it is drawn with when they are not its own. */
+    const named = (i, w) => {
+        const uv = entryWords(table, dv, i)[0];
+        return uv === w[0] ? { model: i } : { model: i, uv: w[0] };
+    };
     return {
         noteRead(off) {
             const i = Math.floor((off - table.offset) / table.stride);
             if (off >= table.offset && i < table.count) last = i;
         },
-        lastIndex() {
+        lastIndex(w) {
             const i = last;
             last = null;
-            return i;
+            if (i !== null && meshKey(entryWords(table, dv, i)) === meshKey(w)) return named(i, w);
+            const j = meshIndex(table, dv).get(meshKey(w));
+            if (j !== undefined) return named(j, w);
+            return i === null ? null : { model: i };
         },
     };
+}
+
+/* The texture points a piece is drawn with in place of its model's own: the
+ * texture ROM from `uv` on (js/model.js decodeModel reads as far as the model
+ * needs), one block a pointer. */
+const pointBlocks = new WeakMap();
+export function doaPoints(rom, uv) {
+    if (uv === undefined || (uv & 0x800000) !== 0 || uv * 2 >= rom.textures.byteLength) return undefined;
+    let blocks = pointBlocks.get(rom);
+    if (!blocks) pointBlocks.set(rom, (blocks = new Map()));
+    if (!blocks.has(uv)) {
+        const t = rom.textures, at = t.byteOffset + uv * 2;
+        blocks.set(uv, { words: new Uint16Array(t.buffer, at, (t.byteLength - uv * 2) >> 1), key: `uv${uv.toString(16)}` });
+    }
+    return blocks.get(uv);
 }
 
 /* ---- a board matrix as explorer ops ---- */
@@ -330,20 +396,35 @@ export function boardToOps(m) {
  *        init: a routine, or a list of them, to run first (the stage setup);
  *        frames: the passes of the routine, the last one's draws returned;
  *        clock: the board's frame count (0x54B158) on the last pass, counted
- *        up a pass at a time to it, for the routines that read it
+ *        up a pass at a time to it, for the routines that read it;
+ *        after: the stage's own routines the stage task runs after each
+ *        pass (stage 11's sky scroll), then
+ *        tick: the stage task's own count-up, run after each pass
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
 export function doaMachine(rom) {
     const ram = new Uint8Array(RAM_SIZE);
     const unknown = new Set();
     const copro = new Copro(unknown);
-    const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
+    const models = modelTracker(rom.game.modelTable, rom.mainDataView);
     const geo = new Geo(copro, models);
     const cpu = new I960(makeBus(rom, ram, copro, geo, models));
     return { ram, rv: new DataView(ram.buffer), unknown, copro, geo, cpu };
 }
 
-export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock } = {}) {
+export function runStageRoutine(rom, entry, opts = {}) {
+    const run = stageRun(rom, entry, opts);
+    return { draws: run.draws, unknown: run.unknown, done: run.done, run };
+}
+
+/*
+ * A stage routine set up and run to its frame, that goes on running: `step()`
+ * is one more pass (the board's next frame), with the frame count one on.
+ * `rewind()` puts RAM (and the rest it wrote) back as the first run left it. `most` is the most
+ * pieces any pass drew; `ram` is the board RAM it runs in, and `read16` reads
+ * what the routines wrote anywhere else (the tile chip's line table).
+ */
+function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock, after = [], tick } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
@@ -353,9 +434,10 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, f
     for (let k = 0; k < 3; k++) rv.setFloat32(VIEW_VECTOR - RAM_BASE + 4 * k, 1, true);
     const unknown = new Set();
     const copro = new Copro(unknown);
-    const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
+    const models = modelTracker(rom.game.modelTable, rom.mainDataView);
     const geo = new Geo(copro, models);
-    const cpu = new I960(makeBus(rom, ram, copro, geo, models));
+    const bus = makeBus(rom, ram, copro, geo, models);
+    const cpu = new I960(bus);
     /* The culling helpers: "in view", as a dot product well in front. */
     for (const at of D.visible ?? []) cpu.hooks.set(at, (c) => { c.setReg(16, floatToBits(1000)); });
     for (const at of D.skip ?? []) cpu.hooks.set(at, () => {});
@@ -363,13 +445,29 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, f
      * drawn: the stage setup (`init`) clears it, then each pass of the
      * routine is a frame, and the last pass's draws are the ones shown. */
     for (const at of [init ?? []].flat()) cpu.call(at, [], { maxSteps: 5_000_000 });
-    let done = true;
-    for (let n = 0; n < frames; n++) {
+    const run = { draws: [], unknown: [], done: true, most: 0, ram, read16: bus.read16 };
+    let n = clock === undefined ? undefined : (clock - frames) >>> 0;
+    run.step = () => {
         geo.draws = [];
-        if (clock !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (clock - frames + 1 + n) >>> 0, true);
-        done = cpu.call(entry, [], { maxSteps });
-    }
-    return { draws: geo.draws, unknown: [...unknown], done };
+        if (n !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (n = (n + 1) >>> 0), true);
+        run.done = cpu.call(entry, [], { maxSteps });
+        for (const at of after) cpu.call(at, [], { maxSteps });
+        if (tick) cpu.call(tick, [], { maxSteps });
+        run.draws = geo.draws;
+        run.most = Math.max(run.most, run.draws.length);
+        return run.draws;
+    };
+    for (let k = 0; k < frames; k++) run.step();
+    run.unknown = [...unknown];
+    const saved = { ram: ram.slice(), other: new Map(bus.other), n, draws: run.draws };
+    run.rewind = () => {
+        ram.set(saved.ram);
+        bus.other.clear();
+        for (const [a, v] of saved.other) bus.other.set(a, v);
+        n = saved.n;
+        run.draws = saved.draws;
+    };
+    return run;
 }
 
 /* ---- the fighters: the game's own skeleton code on a posed player ---- */
@@ -606,14 +704,81 @@ export function readDoaStages(rom) {
  * what swings is where it was. The other stages that move run the same way,
  * through the game's own setups (the common one, then the stage's from the
  * table the round start calls), for as many frames and to the same frame
- * count; nothing on the board was captured to grade them by. The rest are
+ * count; tools/doa-stages grades them against MAME's attract. The rest are
  * drawn once, at rest. */
 function stageClock(rom, n) {
     const D = rom.game.doa, A = D.attract, S = D.stageSetup;
-    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames };
+    const after = S?.after?.[n] ?? [];
+    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames, after, tick: S?.tick };
     if (!S?.moving.includes(n)) return {};
     const own = rom.mainCpuView.getUint32(S.table + 4 * n, true);
-    return { init: [S.common, own], frames: S.frames, clock: S.clock };
+    return { init: [S.common, own], frames: S.frames, clock: S.clock, after, tick: S.tick };
+}
+
+function stageMoves(rom, n) {
+    const D = rom.game.doa;
+    return D.attract?.stage === n || !!D.stageSetup?.moving.includes(n);
+}
+
+/*
+ * A moving stage goes on moving in the viewer: the routine runs on a pass a
+ * frame from the one baked, and each piece is the piece the pass drew in its
+ * place in the list, with its texture points. A pass can draw fewer pieces
+ * than another (stage 4's belt), so the list has a slot for the most any pass
+ * drew, and a slot the pass leaves empty is hidden. Going back in time (the clock starting over)
+ * rewinds RAM to the baked pass; a long gap is caught up a few hundred passes
+ * a frame.
+ */
+const CATCH_UP = 300;
+
+function liveScenery(rom, scenery, run) {
+    let pass = 0;
+    const at = (f) => {
+        if (f < pass) { run.rewind(); pass = 0; }
+        for (const end = Math.min(f, pass + CATCH_UP); pass < end; pass++) run.step();
+        return run.draws;
+    };
+    const last = scenery[scenery.length - 1];
+    while (scenery.length < run.most) scenery.push({ ...last });
+    scenery.forEach((d, i) => {
+        d.live = (f) => {
+            const p = at(f)[i];
+            if (!p) return { model: d.model, points: d.points, ops: d.ops, hidden: true };
+            return { model: p.model, points: doaPoints(rom, p.uv), ops: boardToOps(p.m) };
+        };
+    });
+    return at;
+}
+
+/*
+ * A sky the tile chip scrolls line by line (stage 11's sea, games.js
+ * `doa.sky.lines`): each panorama row's shift at a frame, read from the line
+ * table the stage's own run wrote that pass. The chip shows tilemap row
+ * line + vertical scroll (mod 512) on a screen line, and the panorama's rows
+ * are the tilemap's; the shift is the line's scroll less the one every line has,
+ * which the explorer's camera turn stands for. 9 bits, as the chip reads it.
+ */
+function doaLineShift(L, run, at, rows) {
+    const rv = new DataView(run.ram.buffer);
+    const out = new Float32Array(rows);
+    const nine = (v) => (v << 23) >> 23;
+    return (frame) => {
+        at(frame);
+        const base = rv.getUint16(L.scroll - RAM_BASE, true);
+        const v = rv.getUint16(L.vscroll - RAM_BASE, true);
+        for (let p = 0; p < rows; p++) {
+            const y = (p - v) & 0x1ff;
+            out[p] = y < L.count ? nine(run.read16(L.table + 2 * y) - base) : 0;
+        }
+        return out;
+    };
+}
+
+function doaSky(rom, n, run, at) {
+    const pano = buildDoaSky(rom, n);
+    const L = rom.game.doa.sky?.lines;
+    if (pano && at && L?.stages.includes(n)) pano.lineShift = doaLineShift(L, run, at, pano.height);
+    return pano;
 }
 
 /* The attract fight's two fighters, posed, if this is its stage. */
@@ -634,9 +799,12 @@ function stageOf(rom, n, entry, run) {
     const set = n;
     const placed = (layer) => (d) => ({
         model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer, ops: boardToOps(d.m),
+        ...(d.uv !== undefined && { points: doaPoints(rom, d.uv) }),
     });
     const fight = attractOf(rom, n);
-    const draws = [...run.draws.map(placed('scenery')), ...(fight?.run.draws.map(placed('fighters')) ?? [])];
+    const scenery = run.draws.map(placed('scenery'));
+    const at = stageMoves(rom, n) ? liveScenery(rom, scenery, run.run) : null;
+    const draws = [...scenery, ...(fight?.run.draws.map(placed('fighters')) ?? [])];
     return {
         slot: n,
         placements: true,
@@ -648,7 +816,7 @@ function stageOf(rom, n, entry, run) {
         objects: [],
         sky: null,
         /* The tile layer's panorama (js/scroll.js); its colours are raw. */
-        panorama: () => buildDoaSky(rom, n),
+        panorama: () => doaSky(rom, n, run.run, at),
         zones: [],
         views: [['all', 'Everything']],
         view: 'all',

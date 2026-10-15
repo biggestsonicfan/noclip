@@ -1164,13 +1164,30 @@ listens on the two ports:
   as the routines chain them), and the geometrizer's draw command reads the
   current matrix and the model pointer, which the model table names;
 - the stage number goes in at `0x5555BE`, and `0x54FCDD = 1` has the
-  routines draw the banners and ropes as well;
+  routines draw the banners and ropes as well. `0x5A75F4 = 2` is what the
+  round start (`0x70950`) sets from the ring size float at `0x54FCE8` (10.0
+  from boot, so 2; 12.0 would be 0): nine stages index short model tables
+  with it to pick the ring floor and its border, so 2 draws the small inner
+  square and the wide Danger Zone MAME shows;
 - the two culling helpers, `0x72600` and `0x72680`, are answered "in view",
   and the view vector at `0x5B9870` is (1, 1, 1), so nothing is culled.
 
 Stages 0-11 draw; 12-15 point at a routine that draws nothing, and are
 skipped. A piece turned only about Y becomes a turn op; anything else becomes
 the new `m` op, a 3x3 by columns.
+
+A piece is named by the model table entry the routine last read before the
+draw. Stages 0 and 10 hand some over from RAM instead: on its first pass the
+routine copies five entries from 0x2099D90 to 0x59FFC0, each a table model's
+material, mesh and face count with another model's texture points, and the
+glass tower's three (models 15995-15997, night 18719-18721) take their points
+from 128 blocks picked by the yaw the routine keeps (0x5A0064 = 0x5A0018 >> 8,
+0x2098B90 for the first). That is the tower's reflection. On stage 10 two
+more pieces (18403) step through their blocks every pass. The explorer names
+such a draw by its material, mesh and face count (the table's first model
+with all three) and draws it with the points the routine sent (`doaPoints`).
+These were left out before: 5 pieces on stage 0 and 7 on stage 10, on both
+revisions.
 
 The textures are slabs of 0xC0000 bytes that the routine at `0x7CBA0` copies
 into texture RAM by mode: rows 0-127 and 512-639 (modes 0, 3), rows 128-255
@@ -1195,7 +1212,11 @@ Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
 model and texture chips are Revision B's; its RAM is laid out the same, and
 everything the explorer reads from the program sits 0x7A40 lower (the sky's
 stage table 0x79C0). All twelve stages draw the same pieces and render pixel
-for pixel the same as Revision B's.
+for pixel the same as Revision B's. Revision A has no attract fight mapped,
+so stage 1 runs from its setups like the other moving stages
+(`stageSetup.moving`): before that its 32 rope and banner pieces hung
+straight and still, up to 2.8 units from where the board's swing puts them.
+The two revisions now draw it the same, still and moving.
 
 The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
 `js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
@@ -1225,20 +1246,82 @@ fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
 draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
 off-screen there; their state is part of that byte-for-byte match.
 
-Six other stages move pieces the same way, each pass of their own routine:
+Seven other stages move pieces the same way, each pass of their own routine:
 0 (16004), 2 (16597 16600 16628 16644), 3 (16867-16870), 4 (a conveyor of
 33 pieces in 17013-17106 that slide on a 1:2 slope and wrap), 8 (17392 and
 17398-17414; some swap models as they go, 17316-17318, and 17392 also reads
-the frame count) and 11 (17704 17707 17715 17718), with their state at
+the frame count), 10 (two 18425s, turned by the stage tick below) and 11
+(17704 17707 17715 17718), with their state at
 0x5A0000-0x5A7667. The game sets them up in two steps: the stage task
 (0x64640) runs the common setup 0x70480 once, and the round start (0x705F0)
 calls the stage's own from the table at 0x70440 (stage 1's and 11's are a bare
 `ret`). The explorer runs both, then 924 passes to frame count 0x75F, the
 attract stage's count (`doa.stageSetup`; 2A's table at 0x68A00, setup 0x68A40).
-MAME's attract shows only stage 1 before it stops on the geometry DSP's
-multiplier op 15 (frame ~5500-6000), so these six are the code's word and
-are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
-moves, and are drawn once from cleared RAM.
+After each pass the stage task (0x71138; 2A 0x696F8) counts on: 0x5A6EDD a
+byte +1, 0x5A75F0 +0x80, 0x5B9720 +0x800 and 0x5B9724 +0x400, unless 0x54FCDE
+is set. Stage 4 picks its belt frame by `(0x5A6EDD >> 2) % 26`, and stages 0
+and 10 send 0x5A75F0 to the copro as an angle (function 0x1B), so stage 10
+turns too; the explorer runs the tick after each pass (`stageSetup.tick`).
+
+These are graded against MAME's attract: `tools/doa-stages/dump.lua` saves the
+board's RAM 300, 301 and 600 frames into each stage (`DOA_SWAP` forces other
+stages in), and `tools/doa-stages/grade.mjs` seeds the explorer with one dump
+and runs it to the next. The fork's shared MAME needs `M2_GEO_SHARC_OFF=1`:
+its real geometry SHARC, running beside the HLE geometry, takes a jump into
+data (handler 0x20C26) and stops the attract with a bogus "op 15". The board
+does not run a stage once a frame: it runs one twice when it falls behind and
+skips one now and then, so the passes are counted from 0x5A75F0. Stages 1, 3,
+4, 5, 6, 7 and 8 leave 0x5A0000-0x5A7667 exactly as MAME has it after 299
+frames, and stage 11 all but 0x5A0140, the camera's sky scroll (below). Stages 0 and 10 copy the camera's yaw and position into their state
+(0x5A0014, 0x5A00F4) and pick pieces by it; stage 2 runs its ring of eight
+(0x67388) only while the camera is in range. Those differ only there, since
+the explorer's camera is not the game's. Stage 9 was not reached.
+
+Stage 11's sky waves. After the stage's pass, the stage task (0x71124) calls
+0x702E0 (2A 0x688A0) when the stage is 11. That routine steps a byte at
+0x5A0144 each pass and, every fourth, the wave's phase at 0x5A0145. It keeps
+the camera's sky scroll 0x54F948 (made by the sky routine, 0x701C8, from the
+camera) in 0x5A0140. Then it fills the scroll chip's line table at 0x1008800:
+the lines above the horizon (0x54F950) at the last scroll, then four lines
+at half the wave (table 0xC76E0, by phase), then the rest at the full wave.
+The explorer runs it as the stage's `after` routine, before the tick.
+0x5A0140 follows the camera, as stages 0, 2 and 10's words do, and is left
+to differ.
+
+0x54F944-0x54F953 is the program's copy of the tile chip's scroll registers
+(0x100A000, uploaded at 0x84CC): 0x54F948 is layer 2's horizontal scroll and
+0x54F950 its vertical. The sky routine sets bit 15 of the horizontal one for
+stage 11 alone (0x6FE70, 2A 0x68430), and with it the chip scrolls each screen
+line by its own word of layer 2's line table (tile RAM word 0x4400 + line,
+segaic24.cpp). 0x702E0's table starts its wave at tilemap row 0xF4 whatever
+the vertical scroll: the lines above it count 0xF4 less that scroll. The
+explorer's panorama rows are the tilemap's, so its stage 11 sky reads the
+table the stage's own run wrote at each frame (`doa.sky.lines`, `doaLineShift`
+in js/doa.js) and shifts each row by its line's word less the scroll every
+line has, through the same row-shift texture as Virtua Fighter 2's sky. The
+sea below row 244 waves by up to two pixels, the four rows at its top by half
+that, and the wave rolls a step every fourth frame. Stages 5, 6, 7
+and 9 have nothing that moves, and are drawn once from cleared RAM.
+
+The moving stages, stage 1 among them, go on moving in the viewer: the routine
+keeps running, one pass a frame from the baked one, and each piece takes the
+model and matrix of the piece the pass drew in its place in the list (`live`
+on each draw, `liveScenery` in `js/doa.js`; a pass costs about half a
+millisecond). Stage 4 draws 82 to 92 pieces depending on the pass, so its list
+has a slot for the most the 924 passes drew, and a slot a pass leaves empty is
+hidden. Stage 1's fighters hold their pose while the ropes go on swinging. If
+the clock starts over, RAM goes back to the baked pass.
+
+Stage 4's belt has four rows (x y z, 12 bytes each from 0x5A7600) stepped at
+0x6BD0C, which wrap only at the top (y > 60). To keep the belt whole, four
+blocks each draw a copy of a row 80 lower: row n's copy when row n stands above
+row n-1. The fourth (0x6A0B0, 2A 0x62670) tests row 3 against row 2 and then
+draws row 2's place, so for a quarter of the cycle a lone row hangs 80 below
+the rest. The explorer runs the routine with that slip fixed
+(`doa.fixes`, five words: the two heights loaded the other way round, the
+compare's operands swapped, and row 3's x and z), patched into its own copy of
+the program; the ROM's other users see it as it is. With the fix the copy sits
+right under the belt's lowest row.
 
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
