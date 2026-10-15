@@ -1324,10 +1324,11 @@ come from the two thighs (bone 13, `+0x128`, and bone 10, `+0x104`, turned by
 `0x69` with the facing word `0x50A398`, which nothing writes, so 0): their
 angles against the hips' `+0xAD4` give `+0xAD8`/`+0xADE` and the terms at
 `0x50A380..0x50A388`, scaled by `sin`/`cos` (`0x21`/`0x22`) through a float
-round trip (`0x17`/`0x18`). This has not been measured either.
+round trip (`0x17`/`0x18`). The whole of it is under "The skirt", after
+the midriff below, measured against MAME.
 
 So both are drawn on a slot's matrix with fixed offsets and turns, and only
-the swing depends on the pose. At rest the skirt's swing should be 0, because
+the swing depends on the pose. At rest the skirt's swing is 0, because
 a thigh has to pass its limit first. The pads' rest swing depends on `p`, and
 that has not been measured.
 
@@ -1340,14 +1341,14 @@ once: `armouredFighter` gives each broken slot its last stage's model, the
 chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
 Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
 one is. The hips of Honey and Bahn are `koshi_unit_change`'s every frame
-(below, "The hips"). Not checked against MAME. The shoulder pads and skirt are drawn as above, at rest only:
+(below, "The hips"). Not checked against MAME. The shoulder pads and skirt are drawn as above:
 `readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
-matrix (`placeExtra`), with the swing left at 0. That is the skirt's own rest
-value; for the pads it is not measured, so they sit at the fixed offsets and
-turns. Jane's two model-0 panels are skipped like any other empty part, and
+matrix (`placeExtra`). The pads' swing is left at 0; it is not measured, so
+they sit at the fixed offsets and turns. The skirt swings with the thighs
+("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the swings, the chest's per-frame list, Picky's hair, and the
+own steps: the pads' swing, the chest's per-frame list, Picky's hair, and the
 flying pieces.
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
@@ -1694,6 +1695,69 @@ when the Armour switch breaks the upper half. The opponent gets the same.
 Not checked against MAME. Player 2's material offset is not drawn, the move
 states' material swaps are left out, and the stored normals are used for
 lighting where the board works them out from the points.
+
+**The skirt (read from the ROM, measured against MAME).** `kosi_mino_disp`
+(`0x31E54..0x32A08`) is the call at the end of `0x1A2D8`, the hips' draw. It
+draws the four skirt panels of `0x6421DE0` (the table, models and fixed
+placement are under "Shoulder pads and skirt" above) for characters 0, 1, 13
+and 14 while `+0x1F48` bit 9 (hips broken) is clear; otherwise it clears
+`+0x1B20..0x1B26` and draws nothing. Each panel is `set_obj` on the hips'
+matrix after its translate and `ang_z`, `ang_y`, `ang_x` (`0x0A`, `0x09`,
+`0x08`); the swings below are added to the turns there.
+
+What it reads. `calc_unit_mat` leaves each matrix's angles in the player
+struct, from `Fn_get_glo_ang` (`0x51`), whose third angle is the roll
+`atan2(col0.y, col1.y)`: the hips' (slot 9, `0x179A4`) less a half turn in
+`+0xAD4`, the left thigh's (slot 13, `0x1802C`) in `+0xADA`, the right
+thigh's (slot 10, `0x17CE4`) in `+0xAE0`. `kosi_mino_disp` then works out each
+thigh's lift from the thigh's bone vector, the skeleton entry for the knee
+(`+0x128` for slot 13, `+0x104` for slot 10), turned by the thigh's rotation
+(`0x69`, with `0x50A398`, which nothing writes, as the extra yaw):
+`lift = atan2(v.x, sin(AD4)·v.z + cos(AD4)·v.y)` (`0x27`, `0x24`, `0x25`).
+It stores the lifts over the board's own `+0xAD8` and `+0xADE`.
+
+The swings. `0x50A380..0x50A388` are zeroed, then each thigh's spread is
+`d = s16(AD4 + roll + 0x8000)`; a positive one goes to the "out" word
+(`0x50A380` for slot 13, `0x50A386` for slot 10), a negative one to the "back"
+word (`0x50A382`, `0x50A388`). With `by(s, f) = f ≥ 0 ? trunc(s·f) : 0`
+(`0x17`/`0x18`):
+
+| Panel | Terms | Swing applied | Final angle |
+|---|---|---|---|
+| 1 (`+4`) | `by(out13, cos(lift13+0x8000))`, `by(out10, cos(lift10+0x8000))` | X `0x4000 + s1` | `0x50A36E` |
+| 2 (`+6`) | `by(back13, cos lift13)`, `by(back10, cos lift10)` | X `0x4000 - s2` | `0x50A372` |
+| 3 (`+2`) | `by(out13, sin(lift13+0x8000))`, `by(back13, sin(lift13+0x8000))` | Y `0xC000 + s3` | `0x50A376` |
+| 4 (`+0`) | `by(out10, -sin(lift10+0x8000))`, `by(back10, sin(lift13+0x8000))` | Y `0xC000 - s4` | `0x50A37A` |
+
+Each `s` is `max(0, max(terms) - limit)` with the limits `0x3000`, `0x1E00`,
+`0x1000`, `0x1000`. The panel 3 terms go to `0x50A3B8`/`0x50A3BA` and the
+panel 4 terms to `0x50A3BC`/`0x50A3BE`. Panel 4's second term takes slot 13's
+lift, not slot 10's. That is how the code reads, and the explorer keeps it.
+
+Measured. A Lua tap on MAME's attract mode logged `+0xAD4..+0xAE0` and the
+`0x50A380` words for Jane in 40 frames of 20 motions. The spreads come out as
+above (Jane in one frame: `-16973 - 9058 + 0x8000 = 6737` in `0x50A380`,
+and with her lift `-17765` panel 3's angle `0x50A376` is `0xCA16`, a swing
+of `0xA16` = 2582, where the table gives `trunc(6737 · 0.991) - 0x1000`). The
+explorer's thigh rolls agree with the board's to a few units. Its hips' roll
+is the board's negated (the explorer's pelvis is built the other way about,
+so `+0xAD4` is `0x8000 - roll` there, `-0x4000` at rest). Its thigh vector is
+the board's after the facing's quarter turn, so the board's `(x, y, z)` is
+the explorer's `(-z, y, x)`. With those two, the swings worked out from the
+explorer's pose agree with those worked out from the board's own words to
+within about 150 in most frames (motion 610 frame 12: board 1743/0/10665/0,
+explorer 1657/0/10577/0). Some are a frame apart (motions 112, 29). Some
+differ more where the board blends from the previous motion and the explorer
+starts the motion fresh (116, 359, 477, 515, 620). Panels 1 and 3 swing in
+kicks and wide stances; panel 2 mostly stays put, behind its lower limit.
+
+**What the explorer draws** (`skirtSwings` and `swungExtra` in
+`js/vf2fighters.js`). `poseFighter` works out the four swings each frame for
+a fighter with a skirt, from the posed slots 9, 10 and 13 and the skeleton
+offsets, as above, and adds them to the panels' turns before `placeExtra`.
+It returns them as `skirt`. Jane's and Jane in jeans' empty panels 1 and 2
+are still skipped, so for them only panels 3 and 4 (her hip flaps) move.
+The hip matrix and the panels' fixed placement are as before.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
