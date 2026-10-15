@@ -42,6 +42,11 @@ tools/sound/
   model1.c       the Model 1 board: m2-hle2's 68000, the memory map, the UART
   model1_chips.cpp  MAME's MultiPCM and ymfm's YM3438 for it
   build.sh       emcc build of both
+tools/fbx/
+  export.mjs     a fighter, posed on a motion's frame, out as a skinned FBX
+  fbx.mjs        binary FBX 7.4 writer: mesh, skeleton, skin, embedded texture
+  bake.mjs       the board's colours baked into a texture atlas
+  png.mjs        RGBA PNG encoder
 ```
 
 The tools this document keeps citing are not in the tree. They live in
