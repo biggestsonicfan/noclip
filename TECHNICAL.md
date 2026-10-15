@@ -1572,6 +1572,41 @@ frame) is drawn; the three left out hang on fight state, not on the motion:
   from the ring at `0x50A420`/`0x50A42C`.
 - `+4`: needs `+0x1A4` bit 9; neither Honey nor Bahn has the list.
 
+**The hip matrix.** `koshi_unit_change` only picks the model; the matrix it
+is drawn on is slot 9's, built by `calc_unit_mat` (`0x17160`) once a frame
+and stored on the coprocessor. `rob_disp`'s part loop (`0x19F78`) adds
+nothing to it: for each slot it sends `0x1B803737`, the player byte `+4` and
+`slot × 0xC`, which loads the matrix `calc_unit_mat` stored under that index,
+then the model. Slot 9's stretch of `calc_unit_mat` is `0x17838`..`0x17910`:
+
+1. `0x1000202` pops back to the waist's matrix (slot 0, pushed at
+   `0x172E0` after it was stored): the hips hang off the waist, not the
+   chest.
+2. `0x3000606` moves by `+0xEC`, the skeleton's entry 8 (player `+0x8C` +
+   8 × 12, copied from the character record's `+4`): slot 9's offset in the
+   waist's frame.
+3. `0x1F803F3F` with `+0xBC4`, `+0xBC2`, `+0xBC0`: float object 9's euler, Z
+   then Y then X (the pose's angle table runs from `+0xB8A`, 6 bytes an
+   object; the head's is the same op with `+0xBAE`..).
+4. `0x4800909` `+0xC20`, `0x4000808` `+0xC1E`, `0x5000A0A` `+0xC22`: Y, X, Z
+   by object 9's blend (`+0xBE8` + 9 × 6), what is left of the last motion.
+5. `0x5000A0A` `+0x172`, then `0x4800909` `+0x170`: the pelvis look, Z then
+   Y; the motion's held angles (object 17, `+0xBDC`) or the aim 0x2901C
+   worked out, which for all but one motion is the quarter-turn roll.
+6. `0x1A803535`, player, `0x6C` (9 × 0xC) stores it; `0x7800F0F` reads the
+   translation back to `+0x260` for `set_coli_ball_data(9)`.
+
+No scale, and no offset or turn of its own on top of the bone. So the hip
+model's matrix is: waist × T(skeleton entry 8) × object 9's euler × blend ×
+look. The explorer's matches it step for step: `buildPose` turns slot 9 from
+the waist's rotation by `A(9)`, the blend and the held look or aim, and
+`onOwnSkeleton` places it at the waist plus the waist's matrix times
+`offsets[9]` (the same entry 8), with `SLOT_PARENT[9] = 0`; the hip model is
+drawn on that matrix as it stands. Nothing to change. The extra routine
+`rob_disp` runs after slot 9 (`0x1A2D8`, from the table at `0x1A0EC`) draws
+the record's `+0x24` mesh in matrix mode 3 on the spring's own vectors, not
+on slot 9's matrix.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named
