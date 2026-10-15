@@ -48,11 +48,14 @@ export function commandBytes(code) {
 }
 
 /* The songs the game can start a stage with, when it lets the player pick one
- * (Daytona's VR buttons): [{ code, label }], or null. */
+ * (Daytona's VR buttons), or the explorer does (Dead or Alive's fighters'
+ * themes): [{ code, label, index }], `index` the song's place in the table,
+ * or null. `buttons` are labels in table order, `picks` [index, label]. */
 export function musicChoices(rom) {
     const m = rom.game.sound?.music;
     if (!m) return null;
-    return m.buttons.map((label, i) => ({ label, code: songAt(rom, i) }));
+    const picks = m.picks ?? m.buttons.map((label, i) => [i, label]);
+    return picks.map(([index, label]) => ({ label, index, code: songAt(rom, index) }));
 }
 
 function songAt(rom, index) {
@@ -61,12 +64,15 @@ function songAt(rom, index) {
 }
 
 /* The song a stage slot starts with — its own, or `pick` (an index into
- * musicChoices) where the game lets the player choose — as { code, index },
- * code 0 for none. */
+ * musicChoices) — as { code, index }, code 0 for none. */
 export function stageMusic(rom, slot, pick = -1) {
     const spec = rom.game.sound;
-    if (spec?.music) {
-        const index = pick >= 0 ? pick : slot & spec.music.slotMask;
+    if (spec?.music && pick >= 0) {
+        const { code, index } = musicChoices(rom)[pick];
+        return { code, index };
+    }
+    if (spec?.music?.slotMask !== undefined) {
+        const index = slot & spec.music.slotMask;
         return { code: songAt(rom, index), index };
     }
     const at = spec?.stageMusic;

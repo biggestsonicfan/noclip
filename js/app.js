@@ -4718,10 +4718,11 @@ function resetMusic() {
     const choices = musicChoices(state.rom);
     const pick = $('#music-song');
     pick.replaceChildren();
-    pick.append(new Option("the course's own", '-1'));
+    pick.append(new Option(state.rom.game.sound?.music?.own ?? "the course's own", '-1'));
     (choices ?? []).forEach((c, i) => pick.append(new Option(`${c.label}: ${songName(c.code)}`, String(i))));
     pick.value = '-1';
     $('#music-song-field').hidden = !choices || $('#music-field').hidden;
+    if (choices) $('#music-song-field label').title = state.rom.game.sound.music.hint;
     $('#stage-sfx-label').hidden = !state.rom.game.sound?.ambience || $('#music-field').hidden;
 }
 
