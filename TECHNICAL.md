@@ -1262,7 +1262,9 @@ an add whose result is thrown away: a wait. Op names are m2-hle2's
 (`tests/cop_replay.c`): `0x69` is `Fn_mul_mot_yrot` (a bone's rotation from TGP
 memory, with `Ry(arg)` in front), `0x0F` reads the point back, `0x24`/`0x25` are
 `a*sin`/`a*cos`, `0x27` atan, `0x1A` sqrt. Bone `n` of player `p` is at TGP word
-`0x3A00 + 0x100p + 12n`, and the player's `+0x8C + 12n` is that bone's vector.
+`0x3A00 + 0x100p + 12n`, and the player's `+0x80 + 12n` is slot `n`'s
+skeleton offset in its parent's frame (the list copied to `+0x8C` starts at
+slot 1).
 
 **Shoulder pads** (`kata_pat_disp`, `0x32A90`). `0x642147C[char]` points at
 two records, left then right. `sub_32A0C`, called from `action_init`, copies
@@ -1285,14 +1287,8 @@ matrix, translated by `+0x18` with no turn. A pad is skipped (and `+0x1B28` /
 `+0x1B2A` cleared) once bit 6 / bit 3 of `+0x1F48` is set, so one break of
 the upper half takes both.
 
-The swing, each frame: the lean `+0xAC8`/`+0xACA` is the pitch and yaw (`0x27`)
-of head (`+0x20C`) minus waist (`+0x1F4`). The upper arm's vector (`+0xD4`,
-bone 6, on the left; `+0xB0`, bone 3, on the right) is turned by that bone's
-rotation and the facing (`0x69`) into `+0xA9C`/`+0xAA8`, and `p` is its
-component along the lean (`+0xAE0`/`+0xAD4`). If `p` is negative the swing is
-0; otherwise it is `atan(sqrt(L^2 - p^2), p)` (`L` the vector's x), at most the
-limit. That is my reading of the ops; the swing in a standing pose has not
-been measured.
+The swing works out how far each upper arm is raised; it is under "The
+shoulder pads", after the skirt below, measured against MAME.
 
 **Skirt** (`kosi_mino_disp`, `0x31E54`). Drawn for characters 0, 1, 13 and 14
 only, and not once bit 9 of `+0x1F48` (hips broken) is set; then
@@ -1329,8 +1325,8 @@ the midriff below, measured against MAME.
 
 So both are drawn on a slot's matrix with fixed offsets and turns, and only
 the swing depends on the pose. At rest the skirt's swing is 0, because
-a thigh has to pass its limit first. The pads' rest swing depends on `p`, and
-that has not been measured.
+a thigh has to pass its limit first. A pad swings once its upper arm rises
+past square to the body, which a guard often does.
 
 **What the explorer draws.** `readArmour` (`js/vf2fighters.js`) reads
 `0x640EDAC` per fighter (`rig.fighters.armour` in the profile) into each
@@ -1343,13 +1339,11 @@ Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
 one is. The hips of Honey and Bahn are `koshi_unit_change`'s every frame
 (below, "The hips"). Not checked against MAME. The shoulder pads and skirt are drawn as above:
 `readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
-matrix (`placeExtra`). The pads' swing is left at 0; it is not measured, so
-they sit at the fixed offsets and turns. The skirt swings with the thighs
-("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
+matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
+pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the pads' swing, the chest's per-frame list, Picky's hair, and the
-flying pieces.
+own steps: the chest's per-frame list, Picky's hair, and the flying pieces.
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
@@ -1758,6 +1752,57 @@ offsets, as above, and adds them to the panels' turns before `placeExtra`.
 It returns them as `skirt`. Jane's and Jane in jeans' empty panels 1 and 2
 are still skipped, so for them only panels 3 and 4 (her hip flaps) move.
 The hip matrix and the panels' fixed placement are as before.
+
+**The shoulder pads (read from the ROM, measured against MAME).**
+`kata_pat_disp` (`0x32A90..0x331B0`) is slot 1's entry in `rob_disp`'s
+table at `0x1A0EC`, after the chest's own `set_obj`. It draws Raxel's, Mahler's
+and B.M.'s pads (records, models and fixed placement are under "Shoulder pads
+and skirt" above) on the chest's matrix. Its working words are in the block
+whose pointer is at `0x500844` (`+0x60` for player 2), not in the player.
+
+What it reads. `calc_unit_mat` reads back each slot's origin into the player
+from `+0x1F4`, 12 bytes a slot (`0x172D4` slot 0, the waist; `0x17450` slot 2,
+the head). The lean is head less waist, `d`: its yaw `atan2(d.x, d.z)` goes to
+`+0xACA` and its pitch `atan2(d.y, d.x·sin(yaw) + d.z·cos(yaw))` to `+0xAC8`
+(`0x27` is `atan2(second, first)`, `0x24`/`0x25` `arg2·sin`/`arg2·cos` of
+`arg1`). For each pad the routine pushes, loads identity, loads the upper
+arm's rotation with the facing in front (`0x69`: bone 6 at TGP `0x3A48` for
+the left, bone 3 at `0x3A24` for the right, `+0x100` for player 2, and `+0x26`),
+translates by the elbow's skeleton offset (`+0xD4`, slot 7's, on the left;
+`+0xB0`, slot 4's, on the right) and reads the point back (`0x0F`) into
+`+0xA9C` / `+0xAA8`: the upper arm's vector, turned. Its component along the
+lean, `p = v.y·sin(pitch) + cos(pitch)·(v.x·sin(yaw) + v.z·cos(yaw))`, goes
+to `+0xAE0` (left) and `+0xAD4` (right), with its two terms in `+0xADC`/`+0xAD8`
+and `+0xAD0`/`+0xACC`.
+
+The swing. `p` below 0 (bit 31 set) is a swing of 0. Otherwise it is
+`atan2(p, sqrt(L² − p²))` (`0x1A`, `0x27`), `asin(p / L)` with `L` the offset's
+x (0.25 for Raxel and Mahler, 0.28 for B.M.), and at most the record's `+2`
+(`0x3800` for all three; an unsigned compare). The left pad's X turn is
+`+0xABA + swing`, the right's `+0xAB4 − swing`, written to `+0xAC0` before
+the draw. So a pad starts to swing out once its upper arm rises past square
+to the head-waist line and is at most 79° up. The second model follows on the
+pad's matrix, so it swings with it. Before `set_obj` the routine reads the
+pad's matrix back (`0x05`) into `+0x1AC0` (left) and `+0x1AF0` (right).
+
+Measured. A Lua tap on MAME's attract mode logged Raxel's block (`+0xAE0`,
+`+0xAD4`, `+0xAC0`, `+0xAC8`, `+0xACA`) in 35 motions. `+0xAC0`, the right
+pad's angle, is `0xC000 − asin(p / L)` from the logged `p`: motion 671
+frame 8, `p = 0.08512`, a swing of 3624 and `+0xAC0` = −20007. The explorer's
+swings from its own pose agree in which pad moves and which way in every
+sample, and at frame 30 to within about 300 in most motions (994: 3301
+against the board's 3301; 576: 8281 against 8314; 78: 10219 and 14336
+against 9927 and 14336). Motions 527, 620 and 676 differ by 600 to 3300,
+and at frame 8 more motions do, where the board is still blending from the
+previous motion and the explorer starts each motion fresh.
+
+**What the explorer draws** (`padSwing` and `swungExtra` in
+`js/vf2fighters.js`). `poseFighter` works out each pad's swing from the posed
+slots 0, 2 and the upper arm, and the elbow's offset, as above. The lean and
+the arm are both in the explorer's frame, so the facing's turn and the
+explorer's axes cancel in `p`, and nothing like the skirt's corrections is
+needed. It adds the swing to the left pad's X turn and takes it off the
+right's, for the second model as well, and returns the two swings as `pads`.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
