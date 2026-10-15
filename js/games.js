@@ -3248,11 +3248,13 @@ const doab = {
          * routines the stage task runs before the tick (0x71130): stage 11's
          * sky scroll 0x702E0, which steps its wave (0x5A0144, a byte a pass
          * and 0x5A0145 every fourth) and keeps the camera's sky scroll
-         * (0x54F948) in 0x5A0140. Graded against MAME's attract
-         * (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it word for word
-         * over 299 frames; 0, 2, 10 and 11 (0x5A0140 alone) differ only where
-         * they follow the camera. */
-        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
+         * (0x54F948) in 0x5A0140. Stage 1's ropes and banners swing the
+         * same way; on doab the attract's own run of it comes first, and
+         * doaa, which has no attract, runs it from here. Graded against
+         * MAME's attract (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it
+         * word for word over 299 frames; 0, 2, 10 and 11 (0x5A0140 alone)
+         * differ only where they follow the camera. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 1, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is

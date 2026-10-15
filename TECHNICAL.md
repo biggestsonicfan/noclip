@@ -1196,7 +1196,11 @@ Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
 model and texture chips are Revision B's; its RAM is laid out the same, and
 everything the explorer reads from the program sits 0x7A40 lower (the sky's
 stage table 0x79C0). All twelve stages draw the same pieces and render pixel
-for pixel the same as Revision B's.
+for pixel the same as Revision B's. Revision A has no attract fight mapped,
+so stage 1 runs from its setups like the other moving stages
+(`stageSetup.moving`): before that its 32 rope and banner pieces hung
+straight and still, up to 2.8 units from where the board's swing puts them.
+The two revisions now draw it the same, still and moving.
 
 The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
 `js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
