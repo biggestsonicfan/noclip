@@ -1832,8 +1832,11 @@ export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     pushFlatCage(push, stage, f);
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
-     * draws its own before that. */
-    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) push(stage.cagePole, 'poles');
+     * draws its own before that. It draws the pole, pushes ang_y 0x4000
+     * (0x22E30) and draws it again, four times: a post at each corner. */
+    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) {
+        for (let k = 0; k < 4; k++) push(stage.cagePole, 'poles', { ops: [angY(k * 0x4000)] });
+    }
 
     /*
      * The railing round the arena.
