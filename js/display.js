@@ -1890,11 +1890,28 @@ function fvCagePanels(flags) {
  * side, cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws
  * under the same six-unit push — the cage's top rail. */
 function pushFlatCage(push, stage, flags) {
+    if (stage.slot === FV_WALLED_SLOT) return pushWalls(push, stage);
     const panels = (stage.layers.cage ?? []).slice(0, fvCagePanels(flags));
     for (const ops of FV_CAGE_SIDES) {
         if (!stage.hall) for (const m of panels) push(m, 'cage', { ops });
         if (flags & (1 << 0x14)) push(stage.cageTop, 'cage', { ops });
     }
+}
+
+/* Bay Side's walls. cage_display sends stage 5 to 0x22690 instead of
+ * cage_clip_m: no ang_y and no six-unit push, only the scale every side gets,
+ * and then one model a side at the identity, as modelled in place — 0xA51 to
+ * 0xA54, the record's list at 0x84, with 0xBBB beside side 1. Each is drawn
+ * while the camera is inside its side (byte_500288), left out here as for
+ * the cage. */
+const FV_WALLED_SLOT = 5;
+const FV_WALL_EXTRA = [null, 0xbbb, null, null];
+
+function pushWalls(push, stage) {
+    (stage.layers.cage ?? []).slice(0, 4).forEach((m, k) => {
+        push(m, 'cage');
+        push(FV_WALL_EXTRA[k], 'cage');
+    });
 }
 
 /* Flags bit 3, the City Hall Elevator: 0x1EFBC adds 0.017 a frame to
