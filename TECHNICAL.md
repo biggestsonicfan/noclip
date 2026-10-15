@@ -1150,7 +1150,7 @@ the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
 (`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
 `koshi_unit_change`), Picky's hair, and broken armour (below).
 
-#### Armour breaking (read from the ROM, not drawn yet)
+#### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
 `rob_disp` draws slot `s` with the model in player `+0x40 + 4s`, not the
 record's list. `action_init` (`0x12554`) copies the record's sixteen parts
@@ -1232,20 +1232,19 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
   picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
   Once the chest breaks the game reads `0x642F9EC[char]` instead.
 
-**What the explorer would need** to draw broken armour, first step:
-
-1. Read `0x640EDAC` per fighter into a list of broken models per slot and stage
-   (`rig.fighters.armour` in the profile, read in `readFighters`).
-2. A switch in the rig panel (intact / upper broken / lower broken / all),
-   which in the board is one hit per half, all stages at once. It sets each
-   slot's `model` to its last stage's, and the meshes are rebuilt the way a
-   new fighter's are (`app.js`, `body.parts`).
-3. For a broken chest on Jane, Grace, Honey and Jane in jeans, the resting
-   model from `mune_unit_change`'s table `+4`, entry 15 (the spring is
-   motion physics, a later step).
-4. Later, as their own steps: the shoulder pads and skirt (drawn while
-   intact, so they are missing from the intact fighters now too), Picky's
-   hair, Honey's and Bahn's hip lists, and the flying pieces.
+**What the explorer draws.** `readArmour` (`js/vf2fighters.js`) reads
+`0x640EDAC` per fighter (`rig.fighters.armour` in the profile) into each
+slot's models by stage, and `0x6421F80`'s `+4` entry 15 as the broken chest
+at rest. The Animation tab's Armour switch (intact / upper broken / lower
+broken / all broken) is one hit per half as the board deals it, all stages at
+once: `armouredFighter` gives each broken slot its last stage's model, the
+chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
+Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
+one is. Bahn's broken hips are the table's 690, the same model
+`koshi_unit_change` takes; Honey's hips do not change. Not checked against
+MAME. Left for later, as their own steps: the chest spring and the hip lists
+by motion, the shoulder pads and skirt (drawn while intact, so they are
+missing from the intact fighters too), Picky's hair, and the flying pieces.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

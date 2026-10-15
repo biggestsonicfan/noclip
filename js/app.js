@@ -47,7 +47,10 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
-import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
+import {
+    readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
+    armouredFighter, ARMOUR_STATES,
+} from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -104,6 +107,9 @@ const state = {
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
+    /* Fighting Vipers: which halves of the fighter's armour are broken, one of
+     * ARMOUR_STATES' ids (see armouredFighter). */
+    armour: 'intact',
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -1085,10 +1091,15 @@ function modelsInDisplayList(list) {
  * scan finds with such a face.
  */
 /* The solved rig's roster (Virtua Fighter 2's, Fighting Vipers'), each
- * record's sixteen parts; nothing for a game with no fighters read. */
+ * record's sixteen parts and the broken armour's; nothing for a game with no
+ * fighters read. */
 function fighterRigModels(add, out) {
     if (state.rom.game.rig?.kind !== 'vf2') return out;
-    for (const f of readFighters(state.rom)) for (const p of f.parts) add(p.model, f.index);
+    for (const f of readFighters(state.rom)) {
+        for (const p of f.parts) add(p.model, f.index);
+        for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
+        if (f.armour?.chest) add(f.armour.chest, f.index);
+    }
     return out;
 }
 
@@ -3225,8 +3236,15 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
-function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
+/* The body as the panel shows it: a fighter with armour wears the broken
+ * parts the armour switch asks for. */
+function shownBody(index) {
     const body = state.bodies[index] ?? state.bodies[0];
+    return body.armour ? armouredFighter(body, state.armour) : body;
+}
+
+function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
+    const body = shownBody(index);
     state.charIndex = body.index;
     state.character = body;
     const m = state.motion;
@@ -3809,7 +3827,32 @@ function renderBodyPanel() {
         }
         list.appendChild(row);
     }
+    renderArmourPanel();
     renderMotionPanel();
+}
+
+/* The armour switch, shown only for a fighter whose break table has entries:
+ * which slots each half breaks, and what they show once broken. */
+function renderArmourPanel() {
+    const own = state.bodies?.[state.charIndex];
+    const A = own?.armour;
+    $('#armour-field').hidden = !A;
+    if (!A) return;
+    const sel = $('#armour-select');
+    if (!sel.options.length) {
+        for (const x of ARMOUR_STATES) {
+            const o = el('option');
+            o.value = x.id;
+            o.textContent = x.label;
+            sel.appendChild(o);
+        }
+    }
+    sel.value = state.armour;
+    const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
+        .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
+    $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
+        + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
 /* The motions written for the body's joint count, by name. */
@@ -4411,6 +4454,12 @@ function wireOptions() {
     $('#char-behind').addEventListener('change', (e) => {
         state.opponentBehind = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: false });
+    });
+    $('#armour-select').addEventListener('change', (e) => {
+        state.armour = e.target.value;
+        state.character = shownBody(state.charIndex);
+        rebuildBody({ keepCamera: true });
+        renderAnimPanel();
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
