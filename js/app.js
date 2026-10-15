@@ -101,6 +101,9 @@ const state = {
      * when fight state allows (see poseBout), and the explorer looks on every
      * frame, so with it on a head can turn where the game's doesn't. */
     opponent: false,
+    /* Where it stands: ahead, where a round starts it, or behind, where the
+     * fight has it once a fighter is turned round (see opponentMatrix). */
+    opponentBehind: false,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -3359,11 +3362,12 @@ function placeBodyParts(parts, draws, matrices) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
+    const at = opponentMatrix({ behind: state.opponentBehind });
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame },
         { body: m.rival.body, motion: m.decoded, frame: m.frame },
-    ]);
-    const place = new THREE.Matrix4().fromArray(opponentMatrix());
+    ], at);
+    const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
@@ -4400,8 +4404,13 @@ function wireOptions() {
     });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
+        $('#char-behind-field').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
+    });
+    $('#char-behind').addEventListener('change', (e) => {
+        state.opponentBehind = e.target.checked;
+        if (state.opponent) rebuildBody({ keepCamera: false });
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
@@ -4739,6 +4748,7 @@ function applyGameFeatures() {
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
     $('#char-rival-field').hidden = !solved;
+    $('#char-behind-field').hidden = !solved || !state.opponent;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     /* The solved rig's note names the game's own addresses. */
