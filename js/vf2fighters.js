@@ -80,7 +80,7 @@
  * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
  */
 
-import { buildPose, poseMatrices, viewerMatrix, turnedBy, SLOT_COUNT, SLOT_PARENT } from './pose.js';
+import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 
@@ -300,7 +300,56 @@ function readArmour(rom, A, i) {
     if (!slots.some((x) => x.length)) return null;
     const bounce = readChestModels(rom, A, i);
     const hips = readHips(rom, A, i);
-    return { table, slots, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null };
+    return {
+        table, slots, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
+        hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
+    };
+}
+
+/*
+ * Picky's hair (TECHNICAL.md, "Picky's hair"). pky_kami_disp (0x1ADDC) draws
+ * it on the head's matrix, for the characters rob_disp names (0x1A1C0), once
+ * the helmet (slot 2, +0x1F48 bit 2) has broken. The models, the translate
+ * and the turns are the immediates pky_kami_init (0x1AD08) writes to player
+ * +0xA70..+0xAA4, the same for anyone: three models, each drawn twice, at
+ * the swing (`s`, +0xA98) and at half of it (`s >> 1`), with the turns sent
+ * in the order listed after the translate.
+ */
+const HAIR_OFFSET = [0, 0, Math.fround(-0.2510)];
+const HAIR_PIECES = [
+    { model: 680, turns: (s) => [[1, 0x4000], [0, 0x8000], [2, -s]] },
+    { model: 680, turns: (s) => [[1, 0x4000], [0, 0x8000], [2, -(s >> 1)]] },
+    { model: 908, turns: (s) => [[1, 0xc000], [2, s]] },
+    { model: 908, turns: (s) => [[1, 0xc000], [2, s >> 1]] },
+    { model: 909, turns: (s) => [[1, s + 0x8000], [2, 0x4000]] },
+    { model: 909, turns: (s) => [[1, (s >> 1) + 0x8000], [2, 0x4000]] },
+];
+
+/*
+ * The hair's swing, stepped once a frame after the draw (0x1B18C), so a frame
+ * draws the swing the frame before left. It is kicked by the head's height
+ * (+0x210, slot 2's y): v is this frame's rise, the kick 180000 times its
+ * change from last frame's v (+0xA88 = 180.0, times 1000.0), negated unless
+ * last frame's v was negative (its sign bit), truncated to an integer. The
+ * swing's speed (+0xA9A) gains the kick, loses 48 (+0xA9C; three times that
+ * with move flags +0x1A4 bit 16 set and bit 15 clear, which the explorer
+ * never has), and is held to at most 0x300 (+0xA9E). The swing gains the
+ * speed; at 0x3000 or more it stops there, at 0 or less it rests at 0, and
+ * either way the speed is cleared. pky_kami_init starts all of it at 0, the
+ * last height too.
+ */
+const HAIR_KICK = Math.fround(180000), HAIR_DAMP = 48, HAIR_SPEED = 0x300, HAIR_TOP = 0x3000;
+
+export function hairStep(h, y) {
+    const v = f32(y - h.y);
+    let dv = f32(v - h.v);
+    if (!(h.v < 0 || Object.is(h.v, -0))) dv = -dv;
+    let w = Math.min(h.w + Math.trunc(f32(HAIR_KICK * dv)) - HAIR_DAMP, HAIR_SPEED);
+    let s = h.s + w;
+    if (s >= HAIR_TOP) { s = HAIR_TOP; w = 0; }
+    if (s <= 0) { s = 0; w = 0; }
+    Object.assign(h, { s, w, y, v });
+    return h;
 }
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
@@ -432,8 +481,9 @@ function padSwing(pose, offsets, arm, limit) {
     return Math.min(p < L ? brad(Math.atan2(p, Math.sqrt(L * L - p * p))) : 0x4000, limit);
 }
 
-/* A pad or panel turned by its swing; one with none, as it is. */
-function swungExtra(e, swings, pose, offsets) {
+/* A pad, panel or lock of hair turned by its swing; one with none, as it is. */
+function swungExtra(e, swings, pose, offsets, hair) {
+    if (e.hair !== undefined) return { ...e, turns: e.turns(hair) };
     if (e.pad !== undefined) {
         const { arm, sign } = PAD_SIDES[e.pad];
         const s = padSwing(pose, offsets, arm, e.limit);
@@ -493,7 +543,7 @@ function readMidriff(rom, M, root, i) {
 function placeExtra(slot, e) {
     const at = (r, t, o) => [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
     const t = at(slot.r, slot.t, e.offset);
-    const r = turnedBy(slot.r, e.turn[0], e.turn[1], e.turn[2]);
+    const r = e.turns ? turnedInOrder(slot.r, e.turns) : turnedBy(slot.r, e.turn[0], e.turn[1], e.turn[2]);
     return { r, t: e.then ? at(r, t, e.then) : t };
 }
 
@@ -522,6 +572,8 @@ export function armouredFighter(body, which) {
     if (!A || (!which.upper && !which.lower)) return body;
     const broken = (s) => (s < LOWER_FIRST ? which.upper : which.lower) && A.slots[s].length > 0;
     const extras = body.extras.filter((e) => !broken(e.hiddenBy));
+    /* Picky's hair shows once the helmet is off (+0x1F48 bit 2). */
+    if (A.hair && broken(HEAD_SLOT)) extras.push(...A.hair);
     const parts = body.parts.map((p) => {
         if (!broken(p.index)) return p;
         const last = A.slots[p.index][A.slots[p.index].length - 1];
@@ -840,6 +892,18 @@ function bounceChest(body, live, pose, frame, stepped) {
     return (s.model = body.bounce[s.index]);
 }
 
+/* The hair's swing to draw this frame: the one the last step left, then a
+ * step on this frame's head height when playback has moved on a frame. A
+ * frame picked on its own holds the swing and takes the height afresh. */
+function hairSwing(live, pose, stepped, fresh) {
+    const y = pose[HEAD_SLOT].t[1];
+    const h = (live.hair ??= { s: 0, w: 0, y: 0, v: 0 });
+    const drawn = fresh ? (live.hairDrawn = h.s) : live.hairDrawn;
+    if (stepped && fresh) hairStep(h, y);
+    else if (fresh) Object.assign(h, { y, v: 0 });
+    return drawn;
+}
+
 /* The chest's and hips' models this frame, for the fighters whose chest
  * bounces or whose hips koshi_unit_change names. */
 function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
@@ -866,7 +930,7 @@ function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each
- *   shoulder pad's (left, right); `chest`,
+ *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
  *   for a fighter koshi_unit_change names, is the hips' model this frame.
  */
@@ -891,10 +955,11 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
     const swings = body.extras?.some((e) => e.panel !== undefined) ? skirtSwings(pose, body.offsets) : null;
-    const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets));
+    const hair = body.extras?.some((e) => e.hair !== undefined) ? hairSwing(live, pose, stepped, fresh) : null;
+    const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    return { matrices, origins, extras, skirt: swings, pads, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    return { matrices, origins, extras, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

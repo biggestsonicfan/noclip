@@ -771,10 +771,12 @@ const fvipers = {
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
              * 0x6421DE0, drawn for the characters it compares against;
              * 14 is past the roster); readPads, readSkirt. koshi_unit_change's
-             * hips (0x6422400) for the win streak's hips; readHips. */
+             * hips (0x6422400) for the win streak's hips; readHips. Picky's
+             * hair, pky_kami_disp's, for the characters rob_disp names (18 is
+             * his P2 record); its models are immediates, HAIR_PIECES. */
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
-                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
             },
             /* The midriff, record +0x24, and the one a broken chest draws
              * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */

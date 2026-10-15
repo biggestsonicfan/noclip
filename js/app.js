@@ -1131,7 +1131,7 @@ function fighterRigModels(add, out) {
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
         for (const m of hipModels(f.armour?.hips)) add(m, f.index);
-        for (const e of f.extras) add(e.model, f.index);
+        for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
     }
     return out;
 }
