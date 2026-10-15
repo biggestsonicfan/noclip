@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, ARMOUR_STATES,
+    armouredFighter, ARMOUR_STATES, hipModels,
 } from './vf2fighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -1100,7 +1100,8 @@ function fighterRigModels(add, out) {
         for (const p of f.parts) add(p.model, f.index);
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
-        for (const e of f.extras) add(e.model, f.index);
+        for (const m of hipModels(f.armour?.hips)) add(m, f.index);
+        for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
     }
     return out;
 }
@@ -3296,9 +3297,11 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body),
+            skin: body.midriff ?? null, skinMesh: null }
         : null;
-    m.skin = readSkin(state.rom, body);
+    /* A Fighting Vipers fighter's midriff is built the same way. */
+    m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
     applyWireVisibility();
 
@@ -3388,6 +3391,16 @@ function placeExtras(parts, body, matrices) {
     if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
 }
 
+/* What each part draws this frame, with a bouncing chest's model (slot 1)
+ * the one its spring picked, and the hips' (slot 9) the one their motion
+ * picked. */
+function bouncedDraws(body, posed, m) {
+    const draws = partDraws(state.rom, body, m.decoded, m.frame, m.tick);
+    if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
+    if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
+    return draws;
+}
+
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3400,40 +3413,45 @@ function poseFighterAndRival(body, m) {
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
-    const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
-    placeBodyParts(m.rival.parts, draws, placed);
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed);
     placeExtras(m.rival.extras, m.rival.body,
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
+    placeSkin(m.rival, placed);
     return mine;
+}
+
+/* The skin is rebuilt every frame, as the board rebuilds it: its points on
+ * the chest side move with the pose. `holder` keeps the skin and its mesh. */
+function placeSkin(holder, matrices) {
+    if (!holder.skin) return;
+    const d = decodeModel(state.rom, null, null, skinMesh(holder.skin, matrices));
+    if (!d) return;
+    d.index = null;
+    if (!holder.skinMesh) {
+        holder.skinMesh = addRigPart(d);
+    } else {
+        holder.skinMesh.mesh.geometry.dispose();
+        holder.skinMesh.mesh.geometry = buildGeometry(d);
+        if (holder.skinMesh.lines) {
+            holder.skinMesh.lines.geometry.dispose();
+            holder.skinMesh.lines.geometry = buildEdgeGeometry(d);
+        }
+    }
+    placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    const { matrices, origins, extras } = poseFighterAndRival(body, m);
-    placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    const posed = poseFighterAndRival(body, m);
+    const { matrices, origins, extras } = posed;
+    m.spring = posed.spring;
+    m.hips = posed.hips;
+    placeBodyParts(m.parts, bouncedDraws(body, posed, m), matrices);
     placeExtras(m.extras, body, extras ?? []);
 
-    /* The skin is rebuilt every frame, as the board rebuilds it: its points on
-     * the chest side move with the pose. */
-    if (m.skin) {
-        const d = decodeModel(state.rom, null, null, skinMesh(m.skin, matrices));
-        if (d) {
-            d.index = null;
-            if (!m.skinMesh) {
-                m.skinMesh = addRigPart(d);
-            } else {
-                m.skinMesh.mesh.geometry.dispose();
-                m.skinMesh.mesh.geometry = buildGeometry(d);
-                if (m.skinMesh.lines) {
-                    m.skinMesh.lines.geometry.dispose();
-                    m.skinMesh.lines.geometry = buildEdgeGeometry(d);
-                }
-            }
-            placePartAt(m.skinMesh, matrices[m.skin.hips]);
-        }
-    }
+    placeSkin(m, matrices);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -3868,6 +3886,9 @@ function renderArmourPanel() {
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
         + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (state.character.bounce ? '<br><span id="bounce-now"></span>'
+            + '<br>spring only: the per-frame list needs move flags the explorer lacks' : '')
+        + (A.hips ? '<br><span id="hips-now"></span>' : '')
         + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
@@ -4143,6 +4164,21 @@ function renderTrailPanel() {
         + `<br><span id="trail-live"></span>`;
 }
 
+/* A bouncing chest's spring on this frame. */
+function updateBounceReadout(m) {
+    const out = $('#bounce-now');
+    const sp = m.spring;
+    if (!out || sp?.model == null) return;
+    out.textContent = `frame ${m.frame}: chest ${sp.model} (entry ${sp.index}),`
+        + ` spring ${sp.p.toFixed(2)}, speed ${sp.v.toFixed(2)}`;
+}
+
+/* The hips' model koshi_unit_change picks on this frame. */
+function updateHipsReadout(m) {
+    const out = $('#hips-now');
+    if (out && m.hips != null) out.textContent = `frame ${m.frame}: hips ${m.hips}`;
+}
+
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
@@ -4155,6 +4191,8 @@ function updateMotionFrameReadout() {
             + (m.chestFromScript ? ' from the script' : ' carried in')
             + (exhaustDrawn(m.chestNow) ? ' — flame up' : ' — no flame');
     }
+    updateBounceReadout(m);
+    updateHipsReadout(m);
     const heli = $('#tails-now');
     if (heli && m.tails) {
         const mode = m.scriptState?.propeller ?? 0;
