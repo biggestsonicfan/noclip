@@ -466,6 +466,18 @@
         fight state allows, which the explorer does not track, so with it on,
         a head can turn where the game's doesn't.
       </div>
+      <div class="note" id="anim-note-fv" hidden>
+        A fighter is the record at <code>0x640D2B0</code>: sixteen part
+        models and the skeleton they hang on. A motion id indexes the table
+        at <code>0x6C00004</code>, keyframes in the format Sonic The Fighters
+        kept. The pose is Virtua Fighter 2's: solved on one standard rig for
+        everyone (<code>0x2C194</code>), then the parts placed along the
+        fighter's own skeleton. The roster ends in Sonic, drawn at 0.56 of
+        the motion's height (B.M. at 1.1), two untextured dummies and Jane in
+        other clothes. With the <em>opponent</em> on, each head
+        turns toward the other's every frame, which the game does only when
+        the fight allows; alone, a head follows the motion's own target.
+      </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects
@@ -507,6 +519,10 @@
         <label title="The test menu's CABINET setting. The game builds its colour table from one of two sets of constants depending on it, so it moves every colour on screen, the sky's among them. MAME runs TWIN.">Cabinet</label>
         <select id="cabinet-mode"></select>
       </div>
+      <div class="field" id="country-field" hidden>
+        <label title="The test menu's COUNTRY setting. A few of the stage models are chosen by it: Fighting Vipers' signs and the trucks' cabs.">Region</label>
+        <select id="country-mode"></select>
+      </div>
       <div class="field row">
         <label class="check" title="Step the stage's frame tables at the board's 60 Hz: the palms, the carpet, its flames and rope, the fence, the drifting horizon, the palette rows the sea scrolls with and the texture running along Aurora Icefield's curtain &mdash; and fly the two stages that fly: the Flying Carpet round its circle, with the desert and the sphynx head going past it, and Canyon Cruise's boat down its canyon"><input type="checkbox" id="opt-anim" checked> animate</label>
         <label class="check"><input type="checkbox" id="opt-wire"> wireframe</label>
@@ -518,6 +534,7 @@
       <div class="field row">
         <label class="check"><input type="checkbox" id="opt-axes"> axes</label>
         <label class="check" title="Not the board. A transparent texture's holes are cut texel by texel, so a stippled one &mdash; Daytona's tire marks are a third holes &mdash; crawls as the camera moves, on the board as much as here. This averages the holes into an even translucency instead"><input type="checkbox" id="opt-smooth-holes"> smooth holes</label>
+        <label class="check" title="Blend a face's 128x128 detail square into its texture where the camera is close enough to magnify it, as the board does. The House of the Dead, prototype and final, draws its mansion's wallpaper and floor tiles with it; nothing else here uses it. Off shows the texture alone"><input type="checkbox" id="opt-micro" checked> microtextures</label>
       </div>
       <div class="field row" id="fix-field" hidden>
         <label class="check" title="Not the ROM as shipped. Apply m2emulator's fixes to Daytona's texture ROM: the flag animation, a tree and the banner pole. Off shows the bytes the game really has"><input type="checkbox" id="opt-fix-errors"> fix errors</label>

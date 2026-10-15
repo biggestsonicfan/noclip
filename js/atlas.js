@@ -85,6 +85,26 @@ export function buildAtlas(sheet0, sheet1) {
     return atlas;
 }
 
+/*
+ * The corner of each sheet the microtexture squares come from: two columns and
+ * four rows of 128x128 (model2_v.cpp, th2 bits 13-15), sheet 0 above sheet 1.
+ * The fill shader keeps them apart from the atlas because it wants them
+ * mipmapped and texture RAM holds no mip chain for them; each square is a
+ * power of two on a power-of-two boundary, so a level averages within a square
+ * all the way down to its single texel.
+ */
+export const MICRO_W = 256, MICRO_H = 1024;
+
+/** @param {Uint8Array} atlas buildAtlas's output */
+export function microAtlas(atlas) {
+    const out = new Uint8Array(MICRO_W * MICRO_H);
+    for (let y = 0; y < MICRO_H; y++) {
+        const src = (y >> 9) * SHEET_H + (y & 511);
+        out.set(atlas.subarray(src * ATLAS_W, src * ATLAS_W + MICRO_W), y * MICRO_W);
+    }
+    return out;
+}
+
 /**
  * Sort dropped files into the four roles: name first, then size (sheets are
  * 1 MB, lumaram 128 KB, colorxlat 48 KB), then the order given.

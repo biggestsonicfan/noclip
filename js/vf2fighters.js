@@ -71,16 +71,20 @@
  *     head of the frame before, and player 2 at player 1's of this one. The
  *     explorer stands an opponent where a round starts it (poseBout).
  *
+ * Fighting Vipers poses its fighters with the same routines (its profile's
+ * `rig` names the addresses, and the three things it does its own way: the
+ * texture set's field, the crouch table and how far the head steps).
+ *
  * Left out: when the fight lets the head look at the other fighter (0x500034,
  * +0 and +0x1A4's move flags), as the explorer's opponent is always looked
  * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
  */
 
 import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
-import { decodeMotion, sampleMotion } from './motion.js';
-import { MAIN_DATA_BASE } from './romset.js';
+import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 
-/* The record's fields. */
+/* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
+ * names its own (`rig.fighters.texSet`). */
 const PARTS = 0x00, SKELETON = 0x04, TEXTURE_SET = 0x30;
 
 /* The standard rig at 0x296A0: chest and head, 12 bytes each, then per limb a
@@ -89,9 +93,11 @@ const PARTS = 0x00, SKELETON = 0x04, TEXTURE_SET = 0x30;
 const RIG_LIMBS = [24, 44, 76, 96];
 const RIG_HEAD = 12;
 
-function dataView(rom, addr) {
-    const off = addr - MAIN_DATA_BASE;
-    return off >= 0 && off + 4 <= rom.mainData.length ? off : -1;
+/* A data address as {view, off}, in main data or through the XTRA window;
+ * null where it does not land. */
+function dataAt(rom, addr) {
+    const r = resolveData(rom, addr);
+    return r && r.off + 4 <= r.data.length ? r : null;
 }
 
 const vec = (dv, at) => [0, 4, 8].map((k) => dv.getFloat32(at + k, true));
@@ -112,8 +118,8 @@ export function standardRig(rom) {
  * the rest out of the record's fifteen. */
 function readOffsets(rom, at) {
     const out = [[0, 0, 0]];
-    const off = dataView(rom, at);
-    for (let j = 1; j < SLOT_COUNT; j++) out.push(off < 0 ? [0, 0, 0] : vec(rom.mainDataView, off + (j - 1) * 12));
+    const r = dataAt(rom, at);
+    for (let j = 1; j < SLOT_COUNT; j++) out.push(r ? vec(r.view, r.off + (j - 1) * 12) : [0, 0, 0]);
     return out;
 }
 
@@ -131,8 +137,7 @@ function depthOf(slot) {
  */
 export function readFighters(rom) {
     const F = rom.game.rig.fighters;
-    const md = rom.mainDataView;
-    const u32 = (addr) => { const o = dataView(rom, addr); return o < 0 ? 0 : md.getUint32(o, true); };
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
     const out = [];
     for (let i = 0; i < F.count; i++) {
         const root = u32(F.records + i * 4);
@@ -148,7 +153,7 @@ export function readFighters(rom) {
             hitMotions: [],
             start: -1,
             root,
-            texSet: u32(root + TEXTURE_SET),
+            texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
             offsets,
             parts: offsets.map((offset, s) => ({
                 index: s, model: u32(list + s * 4), offset, joint: s,
@@ -215,7 +220,7 @@ function heldAngles(rom, motion) {
     for (const [obj, slot] of HELD) {
         const ch = motion.channels.slice(obj * 3, obj * 3 + 3);
         if (ch.some((c) => c.type !== LATCHED_ANGLES)) continue;
-        const v = ch.map((c) => Math.round(rom.mainDataView.getFloat32(c.values, true)));
+        const v = ch.map((c) => Math.round(c.view.getFloat32(c.values, true)));
         held[slot] = [v[1], v[2]];
     }
     return held;
@@ -224,7 +229,8 @@ function heldAngles(rom, motion) {
 /*
  * The crouch (0x29414): three fighters stand lower than their motions, the
  * body's height scaled by a constant; the draw adds the difference (+0xC50).
- * Keyed by character, so Lion's other two slots stand at full height.
+ * Keyed by character, so Lion's other two slots stand at full height. A game
+ * with its own table names it as `rig.crouch`.
  */
 const CROUCH = { 6: 0.97, 8: 0.92, 10: 0.97 };
 
@@ -295,19 +301,33 @@ function pointSteps(from, to, shift) {
  * the steps would end.
  */
 const LOOK_TURN = 0x800, LOOK_PITCH = 0x400, LOOK_PITCH_LIMIT = 0x2000;
+const LOOK = { turn: LOOK_TURN, pitch: LOOK_PITCH };
 const s16 = (v) => (v << 16) >> 16;
 const stepTo = (from, to, max) => from + Math.max(-max, Math.min(max, to - from));
 
-export function headStep([ay, az], [d0, d1, d2], free = false) {
+export function headStep([ay, az], [d0, d1, d2], free = false, { turn, pitch } = LOOK) {
     let keep = false;
     if (d1 < 0) {
         d1 = 0;
         keep = d0 >= 0 ? d0 <= 0.5 && (az & 0xffff) === 0x8000 : d0 >= -0.5 && (az & 0xffff) === 0;
     }
     const turnTo = -brad(Math.atan2(d1, d0)), pitchTo = brad(Math.atan2(d2, Math.hypot(d0, d1)));
-    const z = keep ? az : s16(free ? turnTo : stepTo(az, turnTo, LOOK_TURN));
-    const y = free ? pitchTo : stepTo(ay, pitchTo, LOOK_PITCH);
+    const z = keep ? az : s16(free ? turnTo : stepTo(az, turnTo, turn));
+    const y = free ? pitchTo : stepTo(ay, pitchTo, pitch);
     return [Math.max(-LOOK_PITCH_LIMIT, Math.min(LOOK_PITCH_LIMIT, y)), z];
+}
+
+/*
+ * Fighting Vipers steps the head as far again when it is following the
+ * motion's own target: 0x2B274 clears player +0x7D7, sets it only where the
+ * fight writes the other fighter's head over the target (the same tests as
+ * 0x286A0 here), and 0x2BE0C steps 0x2000 in both while it is clear. Its
+ * profile gives that as `rig.look.own`; the explorer's fighter alone looks at
+ * its own target, one in a bout at the opponent's head.
+ */
+function lookLimits(rom, faceTarget) {
+    const own = rom.game.rig.look?.own;
+    return own && !faceTarget ? { turn: own, pitch: own } : LOOK;
 }
 
 /* What each fighter carries from one frame to the next under playback: the
@@ -377,12 +397,12 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const fight = {
         held: motion ? heldAngles(rom, motion) : {},
         blend: blendFor(live, rom, motion, frame, sample),
-        look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped)) : live.look),
+        look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped, lookLimits(rom, faceTarget))) : live.look),
     };
     live.motion = motion; live.frame = frame;
     if (faceTarget && motion) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });
     const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { levelFeet: true, fight }), body.offsets);
-    const crouch = CROUCH[body.index];
+    const crouch = (rom.game.rig.crouch ?? CROUCH)[body.index];
     if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);

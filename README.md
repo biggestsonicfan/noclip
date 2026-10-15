@@ -6,7 +6,7 @@ and renders the game's geometry with three.js. Drop a set on it and it works out
 which game it is from the program ROM inside.
 
 *Sonic The Fighters* (Model 2B) is the game it goes deepest on, and the three
-views below are its. *Fighting Vipers* has stages and models — see
+views below are its. *Fighting Vipers* has stages, models and motions — see
 [Fighting Vipers](#fighting-vipers) — and *Daytona USA*, the one title here on
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
@@ -104,7 +104,7 @@ per cent of one core. See [Music](TECHNICAL.md#music-jssound).
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
-Stages and Models tabs — sixteen arenas and 5413 table entries, 3601 of which
+Stages, Models and Animation tabs — sixteen arenas and 5413 table entries, 3601 of which
 carry geometry, textured and lit from the ROM.
 
 It works because the two games are built on the same Sega library, and that went
@@ -126,13 +126,24 @@ Two differences change what the viewer does with them. The geometry is already
 in world space: where the other game scales its arena and gives the cage, poles
 and platform a transform each, this one hands each list to `area_clip`, which is
 a cull and not a transform — it reads a visibility bitmap and calls `set_obj`
-with no matrix. So the draw list is the lists themselves. And a stage here
-stands still: the object list a record points at is what animates, and walking
-it is not written yet.
+with no matrix. So the draw list is the lists themselves.
 
-What else is missing: the character rigs and the motion tables, so there is no
-Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
-its own record until someone identifies it.
+The object list a record points at is what animates, and it is walked: the
+Airport's planes taxi and take off, the Tower's helicopter keeps itself in
+view, the trucks come and go at the UFO Diner, the elevator rises through its
+shaft past the city, and both Westerns turn the town round the arena. The
+light moves as the board moves it: with the town, with the camera on Bay Side,
+to the trucks' headlights at the diner, and round the Observation Deck's four
+corners, which also change its platform, poles, cage and colours. Take the
+camera up to the Western's bear and it hops, once. The panel's Region picks the
+signs and truck cabs the test menu's COUNTRY setting would. See
+[Fighting Vipers' stage objects](TECHNICAL.md#fighting-vipers-stage-objects-jsfvobjectsjs)
+for what each routine draws and what is left out.
+
+The Animation tab poses the fighters: Fighting Vipers' pose and draw routines
+are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
+motions. The stages carry their names, from the sound test's song list, and
+play their music and stage sounds on the emulated sound board.
 
 ## Daytona USA
 

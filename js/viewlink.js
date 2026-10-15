@@ -48,6 +48,7 @@ const CONTROLS = {
         { key: 'axes', sel: '#opt-axes' },
         { key: 'cull', sel: '#opt-cull' },
         { key: 'smooth', sel: '#opt-smooth-holes' },
+        { key: 'micro', sel: '#opt-micro' },
         { key: 'luma', sel: '#tex-luma' },
     ],
     stage: [

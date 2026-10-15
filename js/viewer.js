@@ -281,6 +281,7 @@ const FRAG_SHADER = /* glsl */`
     uniform float uBright;
     uniform int uShadeMode;     // 0 = lit palette, 1 = flat palette, 2 = normals, 3 = tile id
     uniform sampler2D uAtlas;
+    uniform sampler2D uMicro;   // the microtexture squares, with mips: see microAtlas
     uniform float uUseAtlas;
     uniform sampler2D uLuma;
     uniform sampler2D uCxlat;
@@ -303,6 +304,7 @@ const FRAG_SHADER = /* glsl */`
     uniform float uSmoothHoles;
     // 0 for a game whose texture RAM holds no mips: see setMipLevels.
     uniform float uMipLevels;
+    uniform float uMicroOn;
     // The viewport being drawn, in the framebuffer's pixels: x, y, width, height.
     uniform vec4 uViewport;
     uniform vec3 uFogColor;
@@ -458,17 +460,21 @@ const FRAG_SHADER = /* glsl */`
     // coordinate that has run into an odd copy of the tile is inverted, so that
     // copy reads back to front. Inverting the index is the same mapping,
     // texel q of an odd copy becoming size-1-q.
-    float tileTexel(ivec4 tile, ivec2 p) {
+    //
+    // A microtexture square is read the same way out of uMicro, at the level
+    // micro names; -1 is the atlas.
+    float tileTexel(ivec4 tile, ivec2 p, int micro) {
         ivec2 size = tile.zw;
         ivec2 s = p + size * 8;
         ivec2 q = s % size;
         ivec2 copy = s / size;
         if (flags(8) && (copy.x & 1) != 0) q.x = size.x - 1 - q.x;
         if (flags(16) && (copy.y & 1) != 0) q.y = size.y - 1 - q.y;
+        if (micro >= 0) return texelFetch(uMicro, tile.xy + q, micro).r;
         return texelFetch(uAtlas, (tile.xy + q) & 2047, 0).r;
     }
 
-    // Filtered texel of one level, as vec2(value, coverage).
+    // A filtered texel, as vec2(value, coverage).
     //
     // Coverage only means anything on the transparent renderer, where a texel of
     // 15 is a hole: it carries no colour of its own, so it takes a neighbour's,
@@ -476,8 +482,8 @@ const FRAG_SHADER = /* glsl */`
     // texel for the pixel to survive. That is what keeps a cut-out edge smooth
     // rather than stepped, and keeps the key from bleeding into the surface.
     const float KEY = 15.0 / 15.0;
-    vec2 sampleLevel(int L) {
-        ivec4 tile = levelTile(L);
+
+    vec2 boardTexel() {
         // The coordinate on the board's grid first: it carries 8 fractional
         // bits (draw_scanline_tex). Rounded to it rather than cut, because a
         // coordinate that is the same at every corner of a face does not come
@@ -488,8 +494,12 @@ const FRAG_SHADER = /* glsl */`
         // 64 wide -- and 63.99999 against 64.00001 is texel 63 against texel 0,
         // a column of the rail's dark border against one of its green, chosen
         // afresh at every pixel (issue 44). On the grid it is 64, every time.
-        vec2 grid = floor(vTexel * 256.0 + 0.5) / 256.0;
-        vec2 t = grid / exp2(float(L)) - 0.5;   // the board's half-texel offset
+        return floor(vTexel * 256.0 + 0.5) / 256.0;
+    }
+
+    // Bilinear filter of one tile at texel, in that tile's own texels.
+    vec2 sampleTile(ivec4 tile, vec2 texel, int micro) {
+        vec2 t = texel - 0.5;   // the board's half-texel offset
         ivec2 i0 = ivec2(floor(t));
         vec2 f = fract(t);
 
@@ -501,10 +511,10 @@ const FRAG_SHADER = /* glsl */`
         if (!flags(256) && edge.x == tile.z - 1) f.x = step(0.5, f.x);
         if (!flags(512) && edge.y == tile.w - 1) f.y = step(0.5, f.y);
 
-        float t00 = tileTexel(tile, i0);
-        float t10 = tileTexel(tile, i0 + ivec2(1, 0));
-        float t01 = tileTexel(tile, i0 + ivec2(0, 1));
-        float t11 = tileTexel(tile, i0 + ivec2(1, 1));
+        float t00 = tileTexel(tile, i0, micro);
+        float t10 = tileTexel(tile, i0 + ivec2(1, 0), micro);
+        float t01 = tileTexel(tile, i0 + ivec2(0, 1), micro);
+        float t11 = tileTexel(tile, i0 + ivec2(1, 1), micro);
 
         float a = 1.0;
         if (flags(1)) {
@@ -524,6 +534,48 @@ const FRAG_SHADER = /* glsl */`
             if (row1 == KEY) row1 = row0;
         }
         return vec2(mix(row0, row1, f.y), a);
+    }
+
+    // One level of the mip chain.
+    vec2 sampleLevel(int L) {
+        return sampleTile(levelTile(L), boardTexel() / exp2(float(L)), -1);
+    }
+
+    // ---- The microtexture -------------------------------------------------
+    //
+    // A face whose header turns it on has a 128x128 detail square blended into
+    // its texel where it is magnified past its full-size level: by
+    // min(-mml >> minlod, 127) / 256, mml being the level in 128ths and
+    // negative there, so it never quite reaches half (model2rd.ipp
+    // draw_scanline_tex). The square sits on the sheet the face's own tile is
+    // not on, at (128 * th2 bit 13, 128 * th2 bits 14-15), and is addressed by
+    // the face's coordinate shifted left by 1 << minlod: twice as fine at
+    // minlod 0, 256 times at 3 (fetch_bilinear_texel, miplevel -1).
+    //
+    // The board samples the square at its full size however fine that makes
+    // it; at 256 times a texel that is noise. The square has no mip chain in
+    // texture RAM, so the viewer keeps one of its own (microAtlas in
+    // js/atlas.js) and samples it at this pixel's footprint, which converges
+    // on the same average the noise has.
+    //
+    // lod is the unclamped level, negative where the face is magnified.
+    float microBlend(float value, float lod) {
+        int minlod = (int(vFlags + 0.5) >> 11) & 3;
+        float frac = min(float(int(-lod * 128.0) >> minlod), 127.0) / 256.0;
+        if (frac <= 0.0) return value;
+        int sheet = flags(4) ? 0 : 1;
+        int f = int(vFlags + 0.5);
+        ivec2 at = ivec2(((f >> 13) & 1) * 128, ((f >> 14) & 3) * 128 + sheet * 512);
+        float scale = exp2(float(1 << minlod));
+        // Wrapped to two copies first, which keeps the mirror's parity, so the
+        // multiply cannot run a far coordinate out of float precision.
+        vec2 t = mod(boardTexel(), 256.0 / scale) * scale;
+        float ml = clamp(lod + float(1 << minlod), 0.0, 7.0);
+        int k = int(floor(ml));
+        float m0 = sampleTile(ivec4(at >> k, 128 >> k, 128 >> k), t / exp2(float(k)), k).x;
+        float m1 = sampleTile(ivec4(at >> min(k + 1, 7), 128 >> min(k + 1, 7), 128 >> min(k + 1, 7)),
+                              t / exp2(float(min(k + 1, 7))), min(k + 1, 7)).x;
+        return mix(value, mix(m0, m1, fract(ml)), frac);
     }
 
     void main() {
@@ -647,8 +699,8 @@ const FRAG_SHADER = /* glsl */`
             // side, so its log2 is a whole number, but a float log2 can land a
             // hair either side of it on some drivers. Rounding takes it back.
             float lmax = max(floor(log2(min(vTile.z, vTile.w)) + 0.5) - 1.0, 0.0) * uMipLevels;
-            float lod = clamp(log2(max(length(dFdx(vTexel)), length(dFdy(vTexel)))),
-                              0.0, lmax);
+            float rawLod = log2(max(length(dFdx(vTexel)), length(dFdy(vTexel))));
+            float lod = clamp(rawLod, 0.0, lmax);
             int L0 = int(floor(lod));
             vec2 texel = mix(sampleLevel(L0), sampleLevel(L0 + 1), fract(lod));
             if (flags(1) && uSmoothHoles > 0.5) {
@@ -664,6 +716,7 @@ const FRAG_SHADER = /* glsl */`
                 if (coverage < 0.0625) discard;
             } else if (flags(1) && texel.y < 0.5) discard;
             float al = texel.x;
+            if (uMicroOn > 0.5 && flags(1024) && rawLod < 0.0) al = microBlend(al, rawLod);
 
             if (uUseRamp > 0.5 && vLumaBase >= 0.0) {
                 // MAME filters the texel first and indexes the band with the
@@ -789,6 +842,7 @@ export function createModelMaterial() {
             uBright: { value: 1 },
             uShadeMode: { value: 0 },
             uAtlas: { value: placeholderTexture() },
+            uMicro: { value: placeholderTexture() },
             uUseAtlas: { value: 0 },
             uLuma: { value: placeholderTexture() },
             uCxlat: { value: placeholderTexture() },
@@ -807,6 +861,7 @@ export function createModelMaterial() {
             uBoardCull: { value: 1 },
             uSmoothHoles: { value: 0 },
             uMipLevels: { value: 1 },
+            uMicroOn: { value: 1 },
             /* Set as each render starts; see the scene's onBeforeRender. */
             uViewport: { value: new THREE.Vector4(0, 0, 0, 0) },
             uZPass: { value: 0 },
@@ -1147,8 +1202,7 @@ export class Viewer {
          * kept in front, higher indices submitted earlier and pushed behind.
          * A unit is a depth-buffer step, so this settles ties and nothing more.
          */
-        this.planeMaterials = [0, 1, 2, 3].map((n) => (n === 0 ? this.material
-            : this.variantMaterial({ polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n })));
+        this.planeMaterials = new Map([[0, this.material]]);
         /* One more copy per texture set, for a stage that spans several — see
          * setMaterial. */
         this.setMaterials = new Map();
@@ -1230,11 +1284,27 @@ export class Viewer {
         this.material.uniforms.uMipLevels.value = on ? 1 : 0;
     }
 
+    /** Blend in the faces' microtextures, or leave them out (see microBlend). */
+    microTextures(on) {
+        this.material.uniforms.uMicroOn.value = on ? 1 : 0;
+    }
+
     /*
      * The model material again with some settings of its own, on the same
      * uniforms object rather than a clone of it, so every per-stage uniform
      * the panel and the colour pipeline write lands on it too.
      */
+    /* The plane material for submission slot n, made the first time it is
+     * asked for. A negative n is submitted after slot 0 and goes in front. */
+    planeMaterial(n) {
+        if (!this.planeMaterials.has(n)) {
+            this.planeMaterials.set(n, this.variantMaterial({
+                polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n,
+            }));
+        }
+        return this.planeMaterials.get(n);
+    }
+
     variantMaterial(props) {
         const m = Object.assign(createModelMaterial(), props);
         m.uniforms = this.material.uniforms;
@@ -1261,7 +1331,11 @@ export class Viewer {
         const have = this.setMaterials.get(key);
         if (have) return have;
         const m = createModelMaterial();
-        m.uniforms = { ...this.material.uniforms, uAtlas: { value: atlas } };
+        m.uniforms = {
+            ...this.material.uniforms,
+            uAtlas: { value: atlas },
+            uMicro: { value: atlas.userData.micro ?? placeholderTexture() },
+        };
         if (cxlat) m.uniforms.uCxlat = { value: cxlat };
         m.defines = { ...(this.material.defines ?? {}) };
         this.setMaterials.set(key, m);
