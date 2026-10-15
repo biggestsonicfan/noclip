@@ -215,13 +215,61 @@ function readChestModels(rom, A, i) {
     return Array.from({ length: BOUNCE_MODELS }, (_, k) => r.view.getInt16(r.off + k * 2, true));
 }
 
+/*
+ * koshi_unit_change's 0x6422400[char] (Honey and Bahn): eight pointers.
+ * +0 the standing and the low pair, +0xC motion 0x31's list (41 halfwords),
+ * +0x10 motion 0x180's (indexed by frame, unbounded: read for the motion's
+ * frames), +0x18 Honey's broken hips, +0x1C a list of (motion, list) ending
+ * in motion 0, each list a count and then that many pairs. A pair is the
+ * intact model and the broken one. +4, +8 and +0x14 need move flags or fight
+ * state the explorer lacks (TECHNICAL.md, "The hips"), so they are not read.
+ */
+const HIPS_M31 = 0x31, HIPS_M180 = 0x180, HIPS_M31_LAST = 40;
+
+function readHalves(rom, addr, n) {
+    const r = addr ? dataAt(rom, addr) : null;
+    if (!r || r.off + n * 2 > r.data.length) return null;
+    return Array.from({ length: n }, (_, k) => r.view.getInt16(r.off + k * 2, true));
+}
+
+const toPairs = (flat) => flat && Array.from({ length: flat.length >> 1 }, (_, k) => [flat[2 * k], flat[2 * k + 1]]);
+
+function readHips(rom, A, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const t = A.hips ? u32(A.hips + i * 4) : 0;
+    if (!t) return null;
+    const [base, low] = toPairs(readHalves(rom, u32(t), 4)) ?? [];
+    const byMotion = new Map();
+    for (let e = u32(t + 0x1C); e && u32(e); e += 8) {
+        const list = u32(e + 4), n = u32(list);
+        const got = n ? toPairs(readHalves(rom, list + 4, n * 2)) : null;
+        if (got) byMotion.set(u32(e), got);
+    }
+    const m180 = decodeMotion(rom, HIPS_M180);
+    return {
+        base, low, byMotion,
+        m31: readHalves(rom, u32(t + 0xC), HIPS_M31_LAST + 1),
+        m180: m180 ? readHalves(rom, u32(t + 0x10), m180.frames + 1) : null,
+        broken: readHalves(rom, u32(t + 0x18), 1)?.[0] ?? null,
+    };
+}
+
+/* Every model readHips can pick, for the roster's model list. */
+export function hipModels(H) {
+    if (!H) return [];
+    const out = [...(H.base ?? []), ...(H.low ?? []), ...(H.m31 ?? []), ...(H.m180 ?? [])];
+    for (const list of H.byMotion.values()) for (const p of list) out.push(...p);
+    if (H.broken != null) out.push(H.broken);
+    return [...new Set(out)].filter((m) => m > 0);
+}
+
 function readArmour(rom, A, i) {
     const r = dataAt(rom, A.table + i * 4);
     const table = r ? r.view.getUint32(r.off, true) : 0;
     const slots = readArmourSlots(rom, table);
     if (!slots.some((x) => x.length)) return null;
     const bounce = readChestModels(rom, A, i);
-    return { table, slots, bounce, chest: bounce ? bounce[A.rest] : null };
+    return { table, slots, bounce, chest: bounce ? bounce[A.rest] : null, hips: readHips(rom, A, i) };
 }
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
@@ -329,7 +377,7 @@ export function armouredFighter(body, state) {
     /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
      * slot model, as mune_unit_change returns it unchanged. */
     const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
-    return { ...body, parts, extras, bounce };
+    return { ...body, parts, extras, bounce, hipsBroken: broken(HIPS) };
 }
 
 /**
@@ -588,6 +636,35 @@ export function bounceIndex(p) {
 }
 
 const WAIST_SLOT = 0, HEAD_SLOT = 2;
+
+/*
+ * The hips (TECHNICAL.md, "The hips"): koshi_unit_change (0x31ADC) swaps slot
+ * 9's model on the hips' own matrix, as mune_unit_change does the chest's.
+ * In its order, with the move flags (+0x1A4) all clear, as the explorer has
+ * them, and the fight well under way (0x5000A2, the frames since the game
+ * state changed, past 100): Honey's broken hips; motion 0x31's list by frame
+ * (to 40); motion 0x180's by frame; the motion's own list by frame (to its
+ * last), taken only when it differs from the slot's model; then the standing
+ * pair, or the low one while the waist (+0x1F8) is under 0.4. A missing list
+ * leaves the slot's model. The frame is +0x1AA, which set_motion starts at 1,
+ * as the explorer does.
+ */
+const HIPS_LOW = 0.4;
+
+function hipsModel(body, motion, frame, waistY) {
+    const H = body.armour.hips, k = body.hipsBroken ? 1 : 0;
+    const own = body.parts[HIPS].model;
+    const id = motion?.id;
+    if (k && H.broken != null) return H.broken;
+    if (id === HIPS_M31) return H.m31 ? H.m31[Math.min(frame, HIPS_M31_LAST)] : own;
+    if (id === HIPS_M180) return H.m180?.[frame] ?? own;
+    const list = H.byMotion.get(id);
+    const listed = list ? list[Math.min(frame, list.length - 1)][k] : own;
+    if (listed !== own) return listed;
+    if (!H.base) return own;
+    return (waistY < HIPS_LOW ? H.low : H.base)[k];
+}
+
 const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
 
 /* The chest's model this frame, stepping the spring once when playback has
@@ -607,6 +684,15 @@ function bounceChest(body, live, pose, frame, stepped) {
     return (s.model = body.bounce[s.index]);
 }
 
+/* The chest's and hips' models this frame, for the fighters whose chest
+ * bounces or whose hips koshi_unit_change names. */
+function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
+    const held = !fresh && live.spring?.model != null;
+    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
+    const hips = body.armour?.hips ? hipsModel(body, motion, frame, pose[WAIST_SLOT].t[1]) : undefined;
+    return { chest, hips, spring: live.spring };
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
@@ -623,7 +709,8 @@ function bounceChest(body, live, pose, frame, stepped) {
  *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `chest`,
- *   for a broken chest that bounces, is the model the spring picks.
+ *   for a broken chest that bounces, is the model the spring picks; `hips`,
+ *   for a fighter koshi_unit_change names, is the hips' model this frame.
  */
 export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
@@ -646,9 +733,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
     const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
-    const held = !fresh && live.spring?.model != null;
-    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
-    return { matrices, origins, extras, chest, spring: live.spring };
+    return { matrices, origins, extras, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

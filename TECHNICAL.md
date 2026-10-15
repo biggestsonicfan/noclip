@@ -1214,10 +1214,9 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
   per-frame list on some moves. The whole routine is below, under "The
   chest bounce".
 - `koshi_unit_change` (`0x31ADC`, slot 9): Honey and Bahn (`0x6422400[char]`).
-  It picks the hip model per motion (fixed lists for motions (`+0x1A8`) `0x31` and `0x180`,
-  a 50-frame swing, a per-motion table at `+0x1C`), taking the second of each
-  pair once the hips are broken (`+0x1F48` bit 9). Bahn's pair is 2405/690,
-  the same swap as the break table.
+  It swaps the hips' model by motion and frame, by the waist's height and by
+  move flags, taking the second of each pair once the hips are broken
+  (`+0x1F48` bit 9). The whole routine is below, under "The hips".
 - `kata_pat_disp` (`0x32A90`, slot 1): shoulder pads on their own swing
   (`0x642147C[char]`, left then right: model, limit, a second model and its
   offset at `+0x16`/`+0x18`). Raxel (959/960), Mahler (3889/3891 + 3888/3890)
@@ -1325,17 +1324,16 @@ broken / all broken) is one hit per half as the board deals it, all stages at
 once: `armouredFighter` gives each broken slot its last stage's model, the
 chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
 Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
-one is. Bahn's broken hips are the table's 690, the same model
-`koshi_unit_change` takes; Honey's hips do not change. Not checked against
-MAME. The shoulder pads and skirt are drawn as above, at rest only:
+one is. The hips of Honey and Bahn are `koshi_unit_change`'s every frame
+(below, "The hips"). Not checked against MAME. The shoulder pads and skirt are drawn as above, at rest only:
 `readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
 matrix (`placeExtra`), with the swing left at 0. That is the skirt's own rest
 value; for the pads it is not measured, so they sit at the fixed offsets and
 turns. Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the swings, the chest's per-frame list and the hip lists by motion, Picky's
-hair, and the flying pieces.
+own steps: the swings, the chest's per-frame list, Picky's hair, and the
+flying pieces.
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
@@ -1486,6 +1484,85 @@ The per-frame list is not followed. It needs `+0x1A4` to be exactly `0x200`,
 and the explorer has no move flags. In a moving motion the spring often
 reaches the ±15 walls. Where the board would switch to the list in a stance,
 the explorer keeps the spring.
+
+**The hips (read from the ROM; drawn).** `rob_disp` calls
+`koshi_unit_change` (`0x31ADC`) for slot 9 only (`0x1A024`), the same way as
+the chest: the slot's own model (`+0x64`) in `g0`, and whatever comes back is
+drawn on the hips' own matrix, already sent. The routine sends no matrix,
+offset or scale; it is a model swap.
+
+`0x6422400[char]` is 0 for everyone but Honey (2, `0x64224A8`), Bahn (4,
+`0x6422468`) and entry 15. A table is eight pointers (0 is none):
+
+| Offset | What | Honey | Bahn |
+|---|---|---|---|
+| `+0` | two pairs: standing, low | 2927/2927, 2931/2931 | 2405/690, 2407/1788 |
+| `+4` | 80 pairs by frame (move flag bit 9) | none | none |
+| `+8` | two pointers: 48 pairs by `+0x7FA`, 12 pairs by `+0xAEC` (move flag bit 4) | 2932..2962; 2932..2937 | 3189..3219/3243..3273; 3179..3184/3233..3238 |
+| `+0xC` | motion `0x31`: halfwords by frame | none | 3223 to frame 30, then 3224..3232 from 31 to 39 |
+| `+0x10` | motion `0x180`: halfwords by frame | 2932, up to 2962 at 21, back to 2932 | none |
+| `+0x14` | 50 halfwords, a count at `+0xC8C` | 2932..2962..2932 | none |
+| `+0x18` | broken hips | 2537 | none |
+| `+0x1C` | per-motion lists: (motion, list) pairs to motion 0; a list is a count, then that many pairs | 302 and 1014 (90: 2932 to frame 74, then up to 2955), 1029 (2: 2927) | 548, 632, 633, 656, 832 (41: 3179 up to 3188 at 10, back to 3179; broken 3233..3242) |
+
+A pair is the intact model, then the broken one; the routine adds 2 to the
+address once `+0x1F48` bit 9 is set. Honey's own slot-9 model is 2460, which
+the routine replaces in nearly every frame; Bahn's is 2405 (690 once broken).
+
+The routine, in order (`g7` the player, `+0x1A8` the motion, `+0x1AA` its
+frame, which `set_motion` starts at 1; `0x5000A2` counts the frames since the
+game state `0x50004E` changed):
+
+1. *The ring.* When this fighter's `+0x1B1` is 5, `0x5000A2` is at least 20,
+   the motion is `0x19D` or `0x19E` at frame 17, and `+0x5B8` bit 0 is clear,
+   `+0x254` is saved to `0x50A420` and a radius `0x50A42C` set to 0.01. Each
+   call it grows 0.16 and goes back to 0 past 15. `kuc_sukebo_check`
+   (`0x31DEC`) sets `+0xC8C` to 1 while the distance from that point to the
+   waist (`+0x1F4`) is within 0.4 inside the radius: a ring sweeping out
+   from where that move was played. Who has `+0x1B1` = 5 was not read. Then the table is looked up; with none, the
+   slot's model is drawn.
+2. Honey's broken hips: with `+0x18`, `0x5000A2` at least 100 and the hips
+   broken, `+0x18`'s first halfword (2537), whatever the motion.
+3. Motion `0x31` with `+0x1A4` bit 29 clear: `+0xC` halfword
+   [min(frame, 40)], or the slot's model with no list. `+0xC8C` cleared.
+4. Motion `0x180`: the slot's model until `0x5000A2` is 10, then `+0x10`
+   halfword [frame] (no limit), or the slot's model with no list.
+5. `kuc_motion`: the first `+0x1C` entry for the motion, pair
+   [min(frame, count - 1)]. Taken only if it differs from the slot's model;
+   otherwise on to 6.
+6. By the move flags `+0x1A4`: bit 4 (set by `fix_hara`, `0x19B44`, with the
+   fighter's place on the waist), `+0x8`, unless `+0x1C` equals `+0xC5C` or
+   `+0xA0E` is set: with bit 14 the `+0xAEC` list [`+0xAEC` mod 12];
+   otherwise, unless status `+0` bit 3 or `+0x7FA` is 0, the `+0x7FA` list
+   [`+0x7FA`, or 31 + (`+0x7FA` mod 17) from 31 on]. Bit 16: 7 below. With
+   `+0xC8C` set, the `+0x14` list [`+0xC8C` + 1], counting `+0xC8C` up and
+   back to 0 (and the slot's model) at 50. Bit 9: `+4` [min(frame - 1, 79)],
+   or the slot's model with no list.
+7. The standing pair, or the low pair while the waist's height `+0x1F8` is
+   under 0.4 (0.6 with `+0x1A4` bit 15; plus the raised floor `0x50A010` when
+   `+0x624` is set).
+
+**What the explorer draws** (`readHips`, `hipsModel` in `js/vf2fighters.js`).
+`readHips` reads `+0`, `+0xC`, `+0x10` (as many entries as motion `0x180`
+has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
+and 7 every frame, the hips broken when the Armour switch breaks the lower
+half. The explorer has no move flags, other fighter or game state, so it
+takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), `0x5000A2` as past
+100 (a fight under way), no ring (`+0xC8C` 0) and no raised floor. The waist
+height is the explorer's slot 0 `y`, which is the board's `+0x1F8` above a
+floor at 0. So:
+
+- Honey stands on 2927 and drops to 2931 when her waist goes under 0.4
+  (motion 1 from frame 26 to 48); her skirt lifts through motion 384 and the
+  end of 302 and 1014; once her lower half breaks, she wears 2537 in every
+  motion. In motion 49 (`0x31`) she has no list and shows her own 2460.
+- Bahn stands on 2405 (690 broken), drops to 2407 (1788 broken) under 0.4,
+  plays 3223..3232 through motion 49 and his coat swings through 3179..3188
+  (3233..3242 broken) in motions 548, 632, 633, 656 and 832.
+
+The Animation panel's armour readout shows the hips' model per frame. Not
+checked against MAME: the swing lists of step 6, which take over in the air
+(`fix_hara`) and on some moves, and the ring, are not drawn.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
