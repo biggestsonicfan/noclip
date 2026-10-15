@@ -1161,10 +1161,21 @@ part out along the fighter's own skeleton at player `+0x8C`.
   motion's own target faster than one looking at an opponent (`rig.look`).
 
 Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
-the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
-(`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
-`koshi_unit_change`), and broken armour (below). Picky's hair is drawn,
-below.
+the flying armour pieces (below). The special parts `rob_disp` (`0x19F10`)
+swaps in for the chest and hips (`mune_unit_change`, `koshi_unit_change`),
+broken armour and Picky's hair are drawn, below.
+
+**Hands and feet are never swapped.** `rob_disp` calls the foot routine
+(`set_ashi_ptn`, `0x1AB74`: slots 12 and 15, 32 models from player `+0x5F0`
+picked by the foot's turn and height) only while `+0x5F0` is set, and the
+hand routine (`set_te_ptn`, `0x1AC80`: slots 5 and 8, `+0x6AC` entry
+`+0x6FD`/`+0x6F7` & 31, the right hand `+0x180` on, as VF2's `0x19E34`)
+only while `+0x6AC` is set. `action_init` (`0x125EC..0x12624`) copies them
+from the record's `+0x10` and `+0x28`, with `+0x0C` (an upper-arm table read
+by `0x1ACB8`, which nothing calls) beside them, and all three are 0 in all
+sixteen records at `0x640D2B0`. So both are skipped and every fighter draws
+its part list's hands and feet, as the explorer does. Even with a table the
+feet would not change: `rob_disp` drops what `0x1AB74` returns (`0x19FEC`).
 
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
@@ -1204,6 +1215,17 @@ at the pieces, `0x28` bytes each. `+0x1F20[slot]` is the stage reached,
 stage's pieces (`+6` each one's model) and writes the stage's first piece's
 `+4` into `+0x40[slot]`: that is the slot's new model. It skips the write in
 `also_mode` `0xC`/`0xD` and some sub-modes of 3 and 9 (`0x2D4D0`).
+
+**The flying pieces are not drawn: they need the hit.** `0x2D374` (from
+`damage_unit`) gives each piece a launch speed (`0x2D614`) from the
+attacker's attack, its damage `+0x83D`, kind `+0x843` and direction `+0x82A`
+(set by the move script, `0x1BB20`), and `0x2D390` puts it in one of eight
+`0x48`-byte slots at `mod_fa_effect + 0x88`, at the broken slot's place
+(`+0x1F4 + 12·slot`). Each frame `0x2CE68` drops them on the stage's gravity,
+floor and ring walls (`0x50A000`, `0x50A00C`, `0x50A010`) and spins them, and
+`0x2E17C` draws model `+0x22` at the piece's place turned Y, X, Z, with a
+floor shadow (`+0x44`, `0x77E48`/`0x78384`). The explorer's Armour switch
+breaks armour with no attack, so it has no launch to follow.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|
@@ -1344,9 +1366,11 @@ one is. The hips of Honey and Bahn are `koshi_unit_change`'s every frame
 matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
 pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
-(slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the chest's per-frame list and the flying pieces. Picky's hair
-swings with the head ("Picky's hair", below).
+(slots 6 and 3) and the skirt with the lower (slot 9). Picky's hair
+swings with the head ("Picky's hair", below). Not drawn, and not drawable
+from what the explorer has: the chest's per-frame list needs the move flags
+(below), and the flying pieces need the attack that broke the armour (above).
+Hands and feet have nothing to swap (above).
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
