@@ -1027,16 +1027,22 @@ function composeOps(out, ops) {
 /* Geometry for one frame of an animated draw, kept for the life of the stage.
  * A palm walks 32 models and a carpet flame 64, so each is decoded and uploaded
  * once rather than once a frame; a table is only paid for as it is reached. */
-function frameGeometry(index) {
-    let g = state.anim.geom.get(index);
+function frameGeometry(index, points = null) {
+    const key = frameKey(index, points);
+    let g = state.anim.geom.get(key);
     if (!g) {
-        const d = getModel(index);
+        const d = points ? getTpdModel(index, points.words, points.key) : getModel(index);
         g = d
             ? { mesh: buildGeometry(d), edges: buildEdgeGeometry(d) }
             : { mesh: new THREE.BufferGeometry(), edges: new THREE.BufferGeometry() };
-        state.anim.geom.set(index, g);
+        state.anim.geom.set(key, g);
     }
     return g;
+}
+
+/* A frame is a model, or a model with texture points of its own. */
+function frameKey(index, points) {
+    return points ? `${index}:${points.key}` : index;
 }
 
 function unionBounds(list, fallbackRadius = 20) {
@@ -1719,7 +1725,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
     let item = null;
     if (moves) {
         item = {
-            entry, mesh, lines, model: entry.model,
+            entry, mesh, lines, model: entry.model, key: frameKey(entry.model, entry.points),
             uvs: entry.scroll || entry.slides ? d.uvs : null,
         };
         state.anim.entries.push(item);
@@ -2027,10 +2033,12 @@ function stepBlockWindow() {
 }
 
 /* Put a moving draw on another of its frames' models. */
-function swapFrame(it, model) {
-    if (model === it.model) return;
+function swapFrame(it, model, points = null) {
+    const key = frameKey(model, points);
+    if (key === (it.key ?? it.model)) return;
     it.model = model;
-    const g = frameGeometry(model);
+    it.key = key;
+    const g = frameGeometry(model, points);
     it.mesh.geometry = g.mesh;
     if (it.lines) it.lines.geometry = g.edges;
 }
@@ -2096,7 +2104,7 @@ function stepStageAnimation(now) {
             /* A draw with state of its own, stepped with the camera — the
              * Daytona horses, which bolt from it. It picks its own model. */
             const r = entry.live(frame, liveCamera(frame));
-            swapFrame(it, r.model);
+            swapFrame(it, r.model, r.points);
             it.shown = !r.hidden;
             it.block = r.block;
             it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;

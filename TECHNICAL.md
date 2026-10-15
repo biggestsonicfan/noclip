@@ -1160,6 +1160,19 @@ Stages 0-11 draw; 12-15 point at a routine that draws nothing, and are
 skipped. A piece turned only about Y becomes a turn op; anything else becomes
 the new `m` op, a 3x3 by columns.
 
+A piece is named by the model table entry the routine last read before the
+draw. Stages 0 and 10 hand some over from RAM instead: on its first pass the
+routine copies five entries from 0x2099D90 to 0x59FFC0, each a table model's
+material, mesh and face count with another model's texture points, and the
+glass tower's three (models 15995-15997, night 18719-18721) take their points
+from 128 blocks picked by the yaw the routine keeps (0x5A0064 = 0x5A0018 >> 8,
+0x2098B90 for the first). That is the tower's reflection. On stage 10 two
+more pieces (18403) step through their blocks every pass. The explorer names
+such a draw by its material, mesh and face count (the table's first model
+with all three) and draws it with the points the routine sent (`doaPoints`).
+These were left out before: 5 pieces on stage 0 and 7 on stage 10, on both
+revisions.
+
 The textures are slabs of 0xC0000 bytes that the routine at `0x7CBA0` copies
 into texture RAM by mode: rows 0-127 and 512-639 (modes 0, 3), rows 128-255
 and 640-767 (modes 1, 4), rows 256-511 (modes 2, 5), modes 3-5 to sheet 1.

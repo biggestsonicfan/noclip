@@ -228,8 +228,8 @@ class Geo {
     }
 
     object() {
-        const model = this.models.lastIndex(this.words);
-        if (model !== null) this.draws.push({ model, m: this.m.slice() });
+        const named = this.models.lastIndex(this.words);
+        if (named) this.draws.push({ ...named, m: this.m.slice() });
     }
 }
 
@@ -304,20 +304,67 @@ function makeBus(rom, ram, copro, geo, models) {
 }
 
 /* Which model an object command names: the model table entry its four words
- * were last read from (the routines `ldq` the entry and `stq` it on). */
-function modelTracker(table) {
+ * were last read from (the routines `ldq` the entry and `stq` it on).
+ *
+ * Stages 0 and 10 hand some pieces over from RAM instead: the five entries
+ * the routine copies from 0x2099D90 to 0x59FFC0, a table model's material,
+ * mesh and face count with other texture points (the first word), the glass
+ * tower's picked by the yaw it keeps (0x5A0064, into 0x2098B90). Those are the
+ * table's first model with the same material, mesh and face count, drawn with
+ * the points at `uv`. */
+const meshIndexes = new WeakMap();
+function meshIndex(table, dv) {
+    let index = meshIndexes.get(dv);
+    if (index) return index;
+    index = new Map();
+    for (let i = table.count - 1; i >= 0; i--) index.set(meshKey(entryWords(table, dv, i)), i);
+    meshIndexes.set(dv, index);
+    return index;
+}
+
+function entryWords(table, dv, i) {
+    const off = table.offset + i * table.stride;
+    return [0, 4, 8, 12].map((k) => dv.getUint32(off + k, true));
+}
+
+const meshKey = (w) => `${w[1]},${w[2]},${w[3]}`;
+
+function modelTracker(table, dv) {
     let last = null;
+    /* The model, and the points it is drawn with when they are not its own. */
+    const named = (i, w) => {
+        const uv = entryWords(table, dv, i)[0];
+        return uv === w[0] ? { model: i } : { model: i, uv: w[0] };
+    };
     return {
         noteRead(off) {
             const i = Math.floor((off - table.offset) / table.stride);
             if (off >= table.offset && i < table.count) last = i;
         },
-        lastIndex() {
+        lastIndex(w) {
             const i = last;
             last = null;
-            return i;
+            if (i !== null && meshKey(entryWords(table, dv, i)) === meshKey(w)) return named(i, w);
+            const j = meshIndex(table, dv).get(meshKey(w));
+            if (j !== undefined) return named(j, w);
+            return i === null ? null : { model: i };
         },
     };
+}
+
+/* The texture points a piece is drawn with in place of its model's own: the
+ * texture ROM from `uv` on (js/model.js decodeModel reads as far as the model
+ * needs), one block a pointer. */
+const pointBlocks = new WeakMap();
+export function doaPoints(rom, uv) {
+    if (uv === undefined || (uv & 0x800000) !== 0 || uv * 2 >= rom.textures.byteLength) return undefined;
+    let blocks = pointBlocks.get(rom);
+    if (!blocks) pointBlocks.set(rom, (blocks = new Map()));
+    if (!blocks.has(uv)) {
+        const t = rom.textures, at = t.byteOffset + uv * 2;
+        blocks.set(uv, { words: new Uint16Array(t.buffer, at, (t.byteLength - uv * 2) >> 1), key: `uv${uv.toString(16)}` });
+    }
+    return blocks.get(uv);
 }
 
 /* ---- a board matrix as explorer ops ---- */
@@ -359,7 +406,7 @@ export function doaMachine(rom) {
     const ram = new Uint8Array(RAM_SIZE);
     const unknown = new Set();
     const copro = new Copro(unknown);
-    const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
+    const models = modelTracker(rom.game.modelTable, rom.mainDataView);
     const geo = new Geo(copro, models);
     const cpu = new I960(makeBus(rom, ram, copro, geo, models));
     return { ram, rv: new DataView(ram.buffer), unknown, copro, geo, cpu };
@@ -387,7 +434,7 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
     for (let k = 0; k < 3; k++) rv.setFloat32(VIEW_VECTOR - RAM_BASE + 4 * k, 1, true);
     const unknown = new Set();
     const copro = new Copro(unknown);
-    const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
+    const models = modelTracker(rom.game.modelTable, rom.mainDataView);
     const geo = new Geo(copro, models);
     const bus = makeBus(rom, ram, copro, geo, models);
     const cpu = new I960(bus);
@@ -676,15 +723,15 @@ function stageMoves(rom, n) {
 /*
  * A moving stage goes on moving in the viewer: the routine runs on a pass a
  * frame from the one baked, and each piece is the piece the pass drew in its
- * place in the list. A pass can draw fewer pieces than another (stage 4's
- * belt), so the list has a slot for the most any pass drew, and a slot the
- * pass leaves empty is hidden. Going back in time (the clock starting over)
+ * place in the list, with its texture points. A pass can draw fewer pieces
+ * than another (stage 4's belt), so the list has a slot for the most any pass
+ * drew, and a slot the pass leaves empty is hidden. Going back in time (the clock starting over)
  * rewinds RAM to the baked pass; a long gap is caught up a few hundred passes
  * a frame.
  */
 const CATCH_UP = 300;
 
-function liveScenery(scenery, run) {
+function liveScenery(rom, scenery, run) {
     let pass = 0;
     const at = (f) => {
         if (f < pass) { run.rewind(); pass = 0; }
@@ -696,7 +743,8 @@ function liveScenery(scenery, run) {
     scenery.forEach((d, i) => {
         d.live = (f) => {
             const p = at(f)[i];
-            return p ? { model: p.model, ops: boardToOps(p.m) } : { model: d.model, ops: d.ops, hidden: true };
+            if (!p) return { model: d.model, points: d.points, ops: d.ops, hidden: true };
+            return { model: p.model, points: doaPoints(rom, p.uv), ops: boardToOps(p.m) };
         };
     });
     return at;
@@ -751,10 +799,11 @@ function stageOf(rom, n, entry, run) {
     const set = n;
     const placed = (layer) => (d) => ({
         model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer, ops: boardToOps(d.m),
+        ...(d.uv !== undefined && { points: doaPoints(rom, d.uv) }),
     });
     const fight = attractOf(rom, n);
     const scenery = run.draws.map(placed('scenery'));
-    const at = stageMoves(rom, n) ? liveScenery(scenery, run.run) : null;
+    const at = stageMoves(rom, n) ? liveScenery(rom, scenery, run.run) : null;
     const draws = [...scenery, ...(fight?.run.draws.map(placed('fighters')) ?? [])];
     return {
         slot: n,
