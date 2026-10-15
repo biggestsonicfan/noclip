@@ -3273,10 +3273,14 @@ const doab = {
          * each player (`roundReset`: its health, 0xFF, and the round's
          * counts). `camera` is the camera task, `frameWait` the wait for the
          * next frame it loops on, `ai` the attract's AI task: its start and
-         * the head of its loop. */
+         * the head of its loop. `headCheck` is what the body routine asks
+         * before it draws the head and face (0x45FA8): no while the player's
+         * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
+         * that no action script has run on. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
+            motion: 0x420c0, headCheck: 0x51dc0,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -3376,7 +3380,25 @@ const doab = {
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    /* The fighters on the animation tab, posed by the fight code itself
+     * (js/doafighters.js): the roster (character number, name), the model
+     * banks and the loads that pick a row of them, the two motion tables
+     * ([pointer, first id, count]), the action scripts and the group
+     * everyone shares. */
+    rig: {
+        kind: 'doa',
+        note: 'doa',
+        roster: [
+            [0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'],
+            [6, 'Genfu'], [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang'],
+        ],
+        banks: 0xc59d2,
+        loads: 0xc3380,
+        motions: [[0x6000000, 0, 0x552], [0x6c00004, 0x552, 249]],
+        scripts: 0xd8000,
+        common: 13,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 /*
@@ -3412,6 +3434,8 @@ const doaa = {
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
+    rig: undefined,
+    features: { ...doab.features, motions: false, bodies: false },
     /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
     sound: { ...doab.sound, stageMusic: 0x89250 },
 };

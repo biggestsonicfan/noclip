@@ -2,7 +2,7 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './romset.js';
+import { loadRomSet, meshOffsetOf, readModelEntry, readModelName, setRomPatches } from './romset.js';
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
@@ -48,6 +48,7 @@ import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
 import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -572,16 +573,16 @@ function texramQueue(texSets) {
  * first because the attract and character-select screens leave it resident,
  * and the stage sets do not overwrite its deepest mip levels — without it the
  * corner of the mip chain is blank rather than what the hardware holds. */
-function useRomTexram(texSets) {
+function useRomTexram(texSets, fighters) {
     /* Where a game ties its face palette to the texture set, the palette moves
      * with the set asked for — before the pinned and repeat checks, since a
      * dumped sheet says nothing about which palette is in RAM. */
     if (state.rom.game.palette && texSets.length) state.rom.paletteSet = texSets[texSets.length - 1];
     if (state.texramPinned) return;
-    const key = texSets.join(',');
+    const key = `${texSets.join(',')}${fighters ? `:${fighters.join(',')}` : ''}`;
     if (key === state.texramKey) return;
 
-    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets));
+    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets), fighters);
     setAtlasSheets(sheet0, sheet1);
     state.texramKey = key;
 
@@ -924,7 +925,20 @@ function modelCount() {
 /* A game whose face palette changes with the loaded set bakes different colours
  * into the same mesh under each, so the set is part of the key. */
 function getModel(idx) {
+    if (typeof idx === 'string') return getSwappedModel(idx);
     return cachedDecode(state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx, idx);
+}
+
+/* A table entry drawn over another mesh, `model/mesh` with the mesh pointer
+ * in hex: Dead or Alive's chests (js/doafighters.js). */
+function getSwappedModel(key) {
+    if (state.modelCache.has(key)) return state.modelCache.get(key);
+    const [model, meshPtr] = key.split('/');
+    const { uvPtr, matPtr } = readModelEntry(state.rom, +model);
+    const at = meshOffsetOf(state.rom, { meshPtr: parseInt(meshPtr, 16) });
+    const m = decodeModel(state.rom, +model, null, { bytes: state.rom.polygons.subarray(at), uvPtr, matPtr });
+    state.modelCache.set(key, m);
+    return m;
 }
 
 /* A draw whose texture points set_obj_tpd replaces gets a decode of its own,
@@ -3195,6 +3209,7 @@ const BODY_RIGS = {
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
     vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
+    doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
 };
 
 function bodyRig() {
@@ -3211,7 +3226,8 @@ function bodyMotions(body) {
 }
 
 function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
-    const body = state.bodies[index] ?? state.bodies[0];
+    /* Dead or Alive's roster skips the empty character numbers. */
+    const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
     state.charIndex = body.index;
     state.character = body;
     const m = state.motion;
@@ -3232,6 +3248,33 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     updateHud();
 }
 
+/* A Dead or Alive fighter is posed in the attract fight's place, against its
+ * player 2: its sheets go in the first fighter's strips and its colours in
+ * the first fighter's rows (js/texture.js, js/colors.js), under the attract
+ * stage's set and the game's one light. */
+function useDoaFighterScene(body) {
+    const u = state.viewer.material.uniforms;
+    const A = state.rom.game.doa.attract;
+    const rival = A.fighters[1];
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    const lit = gameLighting(state.rom);
+    if (lit) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    }
+    useRomTexram([A.stage], [body.index, rival.char]);
+    useRomColorLuts({
+        texSet: [A.stage, A.stage],
+        tint: [1, 1, 1],
+        fighters: [{ char: body.index }, { char: rival.char, costume: rival.costume }],
+    });
+    const status = $('#tex-status');
+    if (status) status.textContent = `sheets unpacked from ROM (${body.name}'s, and stage ${A.stage}'s set)`;
+}
+
 function bodySceneModel(body) {
     const models = body.parts.map((p) => p.model).filter(Boolean);
     if (body.texSet === undefined) return models[0];
@@ -3250,7 +3293,8 @@ function rebuildBody({ keepCamera = true } = {}) {
      * texture, which loads no sheets, so it is the first that is the
      * fighter's own. */
     const first = bodySceneModel(body);
-    if (first != null) useModelScene(first);
+    if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (first != null) useModelScene(first);
 
     const m = state.motion;
     /* A part can draw more than one model, and which ones changes with the
@@ -3312,7 +3356,7 @@ function setBodySlot(slot, model) {
     }
     const geom = frameGeometry(model);
     slot.mesh.geometry = geom.mesh;
-    slot.mesh.userData.modelIndex = model;
+    slot.mesh.userData.modelIndex = slot.decoded.index;
     if (slot.lines) {
         slot.lines.geometry = geom.edges;
         slot.lines.visible = state.wireframe;
@@ -3362,8 +3406,10 @@ function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    const { matrices, origins } = poseFighterAndRival(body, m);
-    placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    /* A rig whose pose says what each part draws (Dead or Alive's) is
+     * taken at its word. */
+    const { matrices, origins, draws } = poseFighterAndRival(body, m);
+    placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */
@@ -3762,6 +3808,7 @@ function renderOsagePanel() {
 function renderBodyPanel() {
     const body = state.character;
     if (!body) return;
+    if (state.rom.game.rig?.kind === 'doa') return renderDoaBodyPanel(body);
     const drawn = body.parts.filter((p) => p.model).length;
     const fighter = body.texSet !== undefined;
     const sets = fighter ? '<span>texture sets</span><b>' + body.texSet + ', ' + (body.texSet + 1) + '</b>' : '';
@@ -3793,6 +3840,19 @@ function renderBodyPanel() {
         }
         list.appendChild(row);
     }
+    renderMotionPanel();
+}
+
+/* A Dead or Alive fighter has no record of parts: what it draws comes
+ * out of the fight code frame by frame (js/doafighters.js). */
+function renderDoaBodyPanel(body) {
+    $('#char-meta').innerHTML = `
+        <span>character</span><b>${body.index}</b>
+        <span>model bank</span><b>${body.base}</b>
+        <span>joints</span><b>${body.joints}</b>
+        <span>motions</span><b>${bodyMotions(body).lead.length} its own and shared</b>
+    `;
+    $('#slot-list').innerHTML = '';
     renderMotionPanel();
 }
 
@@ -4722,16 +4782,16 @@ function applyGameFeatures() {
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
-    const solved = state.rom.game.rig?.kind === 'vf2';
+    const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
-    $('#char-rival-field').hidden = !solved;
+    $('#char-rival-field').hidden = state.rom.game.rig?.kind !== 'vf2';
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     /* The solved rig's note names the game's own addresses. */
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
-    for (const n of ['vf2', 'fv']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;

@@ -815,10 +815,10 @@ function buildDaytonaTexram(rom, texSets) {
  * quarters are a character's, two strips side by side, and its middle half is
  * a stage's. Rows 0-255 and 512-767 of a sheet take the two fighters' strips,
  * rows 256-511 the stage's. The stage's slab is `stageSlabs[stage]`, a
- * fighter's `charSlabs[char]`; the fighters here are the first two, which the
- * attract mode loads at boot.
+ * fighter's `charSlabs[char]`; the fighters are `fighters` (player 1 first),
+ * by default the first two, which the attract mode loads at boot.
  */
-function buildDoaTexram(rom, texSets) {
+function buildDoaTexram(rom, texSets, fighters = [0, 1]) {
     const md = rom.mainData;
     const cv = rom.mainCpuView;
     const raw = rom.game.texture.raw;
@@ -831,7 +831,7 @@ function buildDoaTexram(rom, texSets) {
     };
     for (let sheet = 0; sheet < 2; sheet++) {
         for (let half = 0; half < 2; half++) {
-            const src = slab(raw.charSlabs, half) + 0x20000 * (1 - sheet);
+            const src = slab(raw.charSlabs, fighters[half] ?? half) + 0x20000 * (1 - sheet);
             copy(src, sheet, 128 * half, 128);
             copy(src + 0x80000, sheet, 512 + 128 * half, 128);
         }
@@ -1015,13 +1015,15 @@ export function programTextureSets(rom, index, decoded) {
  *
  * @param {object} rom              loaded ROM set
  * @param {number|number[]} texSets texture number(s), each 0..0x11
+ * @param {number[]} [fighters]     the characters on screen, player 1 first
+ *                                  (Dead or Alive's sheets hold theirs)
  * @returns {{sheet0: Uint8Array, sheet1: Uint8Array, pages: number}}
  */
-export function buildTexram(rom, texSets) {
+export function buildTexram(rom, texSets, fighters) {
     if (rom.game.texture.raw) {
         const layout = rom.game.texture.raw.layout;
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
-        if (layout === 'doa') return buildDoaTexram(rom, texSets);
+        if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
         return buildRawTexram(rom, texSets);
     }
     const md = rom.mainData;

@@ -329,6 +329,21 @@ function entryWords(table, dv, i) {
 
 const meshKey = (w) => `${w[1]},${w[2]},${w[3]}`;
 
+/* A fighter's chest and head go out as one entry's texture points, material
+ * and face count over another mesh (Tina's: entry 673's over 0xA16E8E, the
+ * mesh entry 746 has), which no entry holds together: the draw is that entry
+ * with `mesh` in place of its own. */
+const swapIndexes = new WeakMap();
+const swapKey = (w) => `${w[0]},${w[1]},${w[3]}`;
+function swapIndex(table, dv) {
+    let index = swapIndexes.get(dv);
+    if (index) return index;
+    index = new Map();
+    for (let i = table.count - 1; i >= 0; i--) index.set(swapKey(entryWords(table, dv, i)), i);
+    swapIndexes.set(dv, index);
+    return index;
+}
+
 function modelTracker(table, dv) {
     let last = null;
     /* The model, and the points it is drawn with when they are not its own. */
@@ -347,7 +362,9 @@ function modelTracker(table, dv) {
             if (i !== null && meshKey(entryWords(table, dv, i)) === meshKey(w)) return named(i, w);
             const j = meshIndex(table, dv).get(meshKey(w));
             if (j !== undefined) return named(j, w);
-            return i === null ? null : { model: i };
+            if (i !== null) return { model: i };
+            const k = swapIndex(table, dv).get(swapKey(w));
+            return k === undefined ? null : { model: k, mesh: w[2] };
         },
     };
 }
@@ -835,4 +852,34 @@ function stageOf(rom, n, entry, run) {
             ...(fight ? [['fighters', fight.fighters.map((f) => f.char).join(' vs ')]] : []),
             ...(run.unknown.length ? [['unread', run.unknown.join(', ')]] : [])],
     };
+}
+
+/**
+ * Play one motion on one fighter, as the fight code plays it: the attract's
+ * fight is set up with the fighter in player 0's place, a frame runs, then
+ * the motion is started (0x420C0, which the player routine calls with the
+ * motion its action script picks) and each frame after runs the player and
+ * its chains. Nothing else runs, so no script and no AI picks another. With
+ * no script run, the body routine's head check (`headCheck`) would leave the
+ * head out, so it is answered yes.
+ * Returns the draws of each of the `frames` frames, in the stage's frame.
+ */
+export function runDoaMotion(rom, { char, base }, motion, frames) {
+    const F = rom.game.doa.fighters;
+    const A = rom.game.doa.attract;
+    const M = doaMachine(rom);
+    M.cpu.hooks.set(F.headCheck, (c) => c.setReg(16, 1));
+    const fighters = [{ char, base, pos: A.fighters[0].pos, angles: [0, 0, 0] }, A.fighters[1]];
+    startFight(rom, M, fighters, A);
+    endFrame(M, F, A.first);
+    taskFrame(M, F, F.camera, 2);
+    const run = (n) => {
+        const byPlayer = [[], []];
+        fightFrame(M, F, byPlayer);
+        endFrame(M, F, A.first + 1 + n);
+        return byPlayer[0];
+    };
+    run(0);
+    M.cpu.call(F.motion, [0, motion], { maxSteps: 5_000_000 });
+    return Array.from({ length: frames }, (_, n) => run(n + 1));
 }
