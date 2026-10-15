@@ -2324,6 +2324,59 @@ have, and those draws are skipped rather than guessed at:
   reproduced, and the viewer draws the plate on its own tile.
 
 
+### Fighting Vipers' stage objects (`js/fvobjects.js`)
+
+Fighting Vipers keeps the same object table at `+0xB4` of the record and the same
+`object_init` (`0x6AC74`) walking it, 24-byte entries `{type, RAM size, init,
+disp, arg, address}`. Two things differ from the other game, and the port follows
+them:
+
+- **One clock.** There is no per-object counter at `+6`. Every routine reads a
+  single u16 at `mod_fa_obj0+6`, stepped once a frame after the routines run and
+  reset at the start of each round. The viewer gives it a round of 3600 frames,
+  so the trucks and the planes come back.
+- **One turn.** `object_control` draws all the objects under `ang_y` of
+  `-word_50A022`, the stage's yaw. On the two Westerns (flags bit 16) `0x1EFA8`
+  takes 10 off that word a frame, so the ground (`sub_238E4`), the `0x24` list
+  (`ground_upper_disp`) and the objects turn by `10·f` while the platform
+  (`sub_235BC` skips the turn on that bit) and the cage stand still: the town
+  goes round the arena. The routines' culls see the camera turned into that
+  frame.
+
+The paths are `object_move_int`'s: 0x1C-byte keys `{u16 type, u16 frame, f32
+pos[3], f32 ang[3]}`, read from the entry's `arg`. Type 0 holds, 1 is linear, 2
+is Hermite (tangents from the neighbouring keys, scaled by span/30 with the
+board's `>>5` integer divisor), 3 coasts on the last slope, and 4 stops.
+
+| disp | stage | what it draws |
+|------|-------|---------------|
+| `0x6B260`, `0x6B4F4` | Factory | the machinery (`0x1B5` only while the camera is past `x = 8`), and four walls pushed out to the arena, each shown while the camera is outside it |
+| `0x6B7BC`, `0x6C198` | Airport | two planes on paths, one taxiing with its gear down, one taking off over the arena and folding its gear; their shadows; the still buildings |
+| `0x6C49C`, `0x6C400` | Western, Western 2 | the bear on its integer pendulum, culled when it faces away |
+| `0x6C67C` | City Hall Elevator | the lights outside, a three-group flipbook on `f & 0x7F`, and the shaft's walls, both sliding down 0.017 a frame so the car seems to rise |
+| `0x6CAF8` | Bay Side | sixteen still models |
+| `0x6CCE0` | Observation Deck | a still model and two spinners, `0x60` a frame |
+| `0x6CF38`, `0x6E908` | Tower | the lights on four sides (fade up, hold, fade down), and the helicopter |
+| `0x6D0C4`, `0x6D2FC`, `0x6D6E4`, `0x6DAC0`, `0x6E3F8` | UFO Diner | the sign blinking and flickering, the cab and the Pepsi trailer on their paths with steered and turning wheels, the trucks passing on the road, the UFO turning |
+
+The helicopter is the one routine with state of its own: `0x6E5BC` picks the
+heading on a circle of radius 15 that puts it in front of the camera, and a
+bang-bang controller steps the turn rate towards it, banking and leaning as it
+goes. The port is the same integers, run forward from the round's start with the
+camera as it stands.
+
+Left out, because they need a fight or are not draws:
+
+- the bear's hop when a fighter is knocked down near it;
+- the helicopter glass's reflection (`sub_6EC0C` rewrites its UVs a frame);
+- the Observation Deck's four light phases (`hall_stage_cont`) and the
+  Western's light yaw: lighting, not models;
+- the board's window placement: FV's draws go by depth, so the viewer's own
+  sort is used;
+- the model variants a few routines pick by the region byte (region 0 is drawn);
+- the airport planes' on-screen cull, and the other readers of `stage_ypos` on
+  the elevator.
+
 ### Character rigs (`js/characters.js`, `js/pose.js`)
 
 `CHAR_PARTS` at `0x000C5268` points at one 48-byte record per fighter:

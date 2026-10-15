@@ -41,6 +41,7 @@
  */
 
 import { progAddr } from './romset.js';
+import { FV_OBJECT_ROUTINES } from './fvobjects.js';
 
 /* stage_x is set to 8.0 wherever the game enters a stage, and never varies. */
 const STAGE_X = 8.0;
@@ -1732,12 +1733,14 @@ const OBJECT_ROUTINES = new Map([
  * arena the board never puts there: a figure standing on a fence post, a wedge
  * lying in the dirt. The bit each function tests is named beside it below.
  *
- * Still missing is the object list at 0xB4, which animates: a stage built here
- * is the stage standing still.
+ * The object list at 0xB4 comes last, as object_control runs after the arena:
+ * the ports are in js/fvobjects.js.
  */
 /* Fighting Vipers' own slots, which sub_235BC and pole_disp test by number. */
 const FV_NO_PLATFORM_SLOTS = [7, 14];
 const FV_NO_POLE_SLOT = 7;
+const FV_TURN = (f) => 10 * f;
+const FV_TURNING_LAYERS = new Set(['upper', 'ground', 'floor']);
 
 export function buildFlatDisplayList(stage) {
     const out = [];
@@ -1840,7 +1843,86 @@ export function buildFlatDisplayList(stage) {
         }
     }
 
+    /* On a stage with flags bit 16 — both Westerns — 0x1EFA8 takes 10 off
+     * the stage yaw (word_50A022) every frame, and the ground (sub_238E4), the
+     * 0x24 list (ground_upper_disp) and object_control all draw under ang_y of
+     * its negation: the town turns round the arena. The platform does not
+     * (sub_235BC skips the turn on that bit), nor does the cage. */
+    addFlatObjects(out, stage, f);
     return out;
+}
+
+function addFlatObjects(out, stage, flags) {
+    const turn = flags & (1 << 0x10) ? FV_TURN : null;
+    if (turn) {
+        for (const e of out) {
+            if (FV_TURNING_LAYERS.has(e.layer)) {
+                const ops = e.ops;
+                e.ops = (fr) => [angY(turn(fr)), ...ops];
+            }
+        }
+    }
+    for (const object of stage.objects ?? []) {
+        FV_OBJECT_ROUTINES.get(object.routine)?.(flatObjectContext(out, object, turn));
+    }
+}
+
+/*
+ * What an FV object routine draws through. `push` takes ops or a function of
+ * the frame, and optionally `shown(frame, camera)` for a draw the routine
+ * leaves out on some frames, which makes it a live draw; `pushFrames` is a
+ * model picked out of a list by `index(frame)`; `pushLive` a draw whose ops
+ * depend on the camera as well.
+ *
+ * The routines see the objects' clock, which starts over at each round; a
+ * minute (FV_ROUND) stands in for one here, so the trucks and the planes come
+ * back. They also see the camera in the objects' frame: on a turning stage
+ * object_control turns them all by the stage's yaw, and the routines' culls and
+ * plane tests are against the camera as that frame has it.
+ */
+const FV_ROUND = 3600;
+
+function flatObjectContext(out, object, turn) {
+    /* The ops at frame f: the stage's turn on the real frame, then the
+     * routine's on the round's clock. */
+    const opsAt = (ops, f) => {
+        const own = typeof ops === 'function' ? ops(f % FV_ROUND) : ops;
+        return turn ? [angY(turn(f)), ...own] : own;
+    };
+    const moving = (ops) => typeof ops === 'function' || turn;
+    const camAt = (f, cam) => {
+        if (!turn || !cam) return cam;
+        const r = ((turn(f) & 0xffff) * 2 * Math.PI) / 65536, c = Math.cos(r), sn = Math.sin(r);
+        return { ...cam, x: c * cam.x + sn * cam.z, z: -sn * cam.x + c * cam.z };
+    };
+    const entryFor = (model, ops, shown, frames = null, index = null) => {
+        const entry = { model, layer: OBJECT_LAYER, ops: moving(ops) ? (f) => opsAt(ops, f) : ops };
+        if (frames) entry.anim = { frames, index: (f) => index(f % FV_ROUND) };
+        if (shown) {
+            entry.ops = opsAt(ops, 0);
+            entry.live = (f, cam) => ({
+                model: frames ? frames[index(f % FV_ROUND)] : model,
+                ops: opsAt(ops, f),
+                hidden: !shown(f % FV_ROUND, camAt(f, cam)),
+            });
+        }
+        return entry;
+    };
+    return {
+        object,
+        push: (model, ops, shown = null) => {
+            if (model) out.push(entryFor(model, ops, shown));
+        },
+        pushFrames: (frames, index, ops, shown = null) => {
+            out.push(entryFor(frames[0], ops, shown, frames, index));
+        },
+        pushLive: (model, live) => {
+            const entry = entryFor(model, [], null);
+            entry.ops = [];
+            entry.live = (f, cam) => ({ model, ops: opsAt((g) => live(g, camAt(f, cam)), f) });
+            out.push(entry);
+        },
+    };
 }
 
 /*
