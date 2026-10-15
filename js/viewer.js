@@ -1199,8 +1199,7 @@ export class Viewer {
          * kept in front, higher indices submitted earlier and pushed behind.
          * A unit is a depth-buffer step, so this settles ties and nothing more.
          */
-        this.planeMaterials = [0, 1, 2, 3].map((n) => (n === 0 ? this.material
-            : this.variantMaterial({ polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n })));
+        this.planeMaterials = new Map([[0, this.material]]);
         /* One more copy per texture set, for a stage that spans several — see
          * setMaterial. */
         this.setMaterials = new Map();
@@ -1284,6 +1283,17 @@ export class Viewer {
      * uniforms object rather than a clone of it, so every per-stage uniform
      * the panel and the colour pipeline write lands on it too.
      */
+    /* The plane material for submission slot n, made the first time it is
+     * asked for. A negative n is submitted after slot 0 and goes in front. */
+    planeMaterial(n) {
+        if (!this.planeMaterials.has(n)) {
+            this.planeMaterials.set(n, this.variantMaterial({
+                polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n,
+            }));
+        }
+        return this.planeMaterials.get(n);
+    }
+
     variantMaterial(props) {
         const m = Object.assign(createModelMaterial(), props);
         m.uniforms = this.material.uniforms;

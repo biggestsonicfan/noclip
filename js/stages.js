@@ -13,8 +13,10 @@
  */
 
 import { xtraResolve, MAIN_DATA_BASE, sfightAddr } from './romset.js';
+import { fvStageHooks } from './fvstages.js';
 import { readObjectRecords, courseObjectDraws, courseGround, courseReach, courseArea } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
+import { readObjectPath } from './fvobjects.js';
 
 /* set_material (0x29154) uploads 32 material slots to the geometry engine, and
  * sub_29110 picks which table to upload with the stage slot. A slot is one
@@ -82,6 +84,7 @@ function readStageObjects(rom, base) {
      * somewhere else has its own object list at the same field, but nothing
      * here knows how to walk it, so it is left empty rather than read against
      * the wrong ROM. */
+    if (rom.game.stageTable.source === 'xtra') return readXtraObjects(rom, base);
     if (rom.game.stageTable.source !== 'maincpu') return [];
     const dv = rom.mainCpuView;
     const ptr = dv.getUint32(base + F.setup, true);
@@ -98,6 +101,35 @@ function readStageObjects(rom, base) {
              * dispatches on. */
             routine: sfightAddr(rom, dv.getUint32(b + 12, true)),
             arg: dv.getUint32(b + 16, true),
+        });
+    }
+    return objects;
+}
+
+/* Fighting Vipers' list, which lives in the XTRA bank with the records: the
+ * pointer at +0xB4 is an XTRA address, and so is the table it names. The
+ * entries are the same 24 bytes. display.js dispatches on fvipers' own disp
+ * address, since there is no sfight routine to map it onto. */
+function readXtraObjects(rom, base) {
+    const rec = xtraResolve(rom, rom.game.stageTable.at);
+    const ptr = rec.view.getUint32(base + F.setup, true);
+    const t = xtraResolve(rom, ptr);
+    if (!t || t.off + 4 > t.data.length) return [];
+    const count = t.view.getUint32(t.off, true);
+    const objects = [];
+    for (let i = 0; i < count && i < 8; i++) {
+        const b = t.off + 4 + i * 24;
+        if (b + 24 > t.data.length) break;
+        const disp = t.view.getUint32(b + 12, true);
+        objects.push({
+            /* Read only by the Airport's plane dsp, which picks a plane by it. */
+            type: t.view.getUint32(b, true),
+            init: t.view.getUint32(b + 8, true),
+            disp,
+            routine: disp,
+            arg: t.view.getUint32(b + 16, true),
+            /* An object_move_int path, when the argument is one. */
+            path: readObjectPath(rom, t.view.getUint32(b + 16, true)),
         });
     }
     return objects;
@@ -344,10 +376,10 @@ export function readStageTable(rom) {
         const upper = list('upper');
 
         const num = u8[b + F.num];
-        /* The names are one game's, keyed off its own slot numbers, so they
-         * are only applied to it. Another game's stages are shown by the
-         * stage_NUM in their record until someone identifies them. */
-        const named = T.source === 'maincpu' ? SFIGHT_STAGE_NAMES[s] : undefined;
+        /* The names are keyed off slot numbers, so each game brings its own
+         * (`names` in its profile); this one's are applied only to it. A stage
+         * nobody has named is shown by the stage_NUM in its record. */
+        const named = T.names ? T.names[s] : T.source === 'maincpu' ? SFIGHT_STAGE_NAMES[s] : undefined;
 
         const bright = dv.getFloat32(b + F.bright, true);
         /* Kept raw as well as built, because one stage rewrites VECTER_Y every
@@ -360,7 +392,7 @@ export function readStageTable(rom) {
         if (T.source === 'maincpu' && s === TAILS_LAB_SLOT) vecter[1] = TAILS_LAB_VECTER_Y;
         const materials = readMaterials(rom, s);
 
-        stages.push({
+        const stage = {
             slot: s,
             num,
             /* Geometry already in world space: see stageTable.flat. */
@@ -404,7 +436,10 @@ export function readStageTable(rom) {
                 extra: [dv.getUint16(b + F.extra, true)].filter((m) => m !== 0),
                 sky: [...new Set(sky)].filter((m) => m !== 0),
             },
-        });
+        };
+        /* Fighting Vipers rewrites its light as a fight goes on: js/fvstages.js. */
+        if (T.source === 'xtra') Object.assign(stage, fvStageHooks(rom, stage));
+        stages.push(stage);
     }
 
     if (T.source === 'maincpu' && stages[TAILS_LAB_SLOT]) stages.push(eggLabStage(stages[TAILS_LAB_SLOT]));

@@ -21,6 +21,14 @@
  * last played and throws the game's 16-bit random number (0x94D0) every frame;
  * the throws here are the page's own, so the timing is the game's in kind but
  * not frame for frame.
+ *
+ * Fighting Vipers (`kind: 'fv'`) plays its stage sounds from 0x420B4 instead:
+ * a 16-byte record a stage at data 0x1025E5C, slots 0-11, whose +0 the match
+ * opens with (the Factory's machinery, the Airport, the elevator, the
+ * helicopter), and a player through the jump table at 0x1025680 that is not
+ * random at all — it plays the cues the stage objects set on their clock. Its
+ * +4 is sent as the fight starts and turns the Factory's and the elevator's
+ * loops off; the viewer keeps them, as the stage stands before the fight.
  */
 
 import { commandBytes } from './sound.js';
@@ -75,6 +83,18 @@ const PLAYERS = {
     },
 };
 
+/*
+ * Fighting Vipers' players, by jump-table target: the objects' clock frame each
+ * cue fires on, and the command. sqo_ufo (0x42140): trailer_cont (0x6D15C) sets
+ * the drive-by at 360 and 2300 and the truck stop on at 640 and off at 960, and
+ * the passing truck's int (0x6DA28) the drive-by at 1039. sqo_airport (0x42180):
+ * the planes set the jet at 448 (0x6BAF8), when the plane is on the screen.
+ */
+const FV_CUES = {
+    0x42140: new Map([[360, 0xae1126], [640, 0xae113b], [960, 0xae113c], [1039, 0xae1126], [2300, 0xae1126]]),
+    0x42180: new Map([[448, 0xae1159]]),
+};
+
 /**
  * The stage sounds of one stage, sent to a running board.
  */
@@ -98,10 +118,15 @@ export class StageSounds {
         if (code) this.board.send(commandBytes(code));
     }
 
-    /* The scene and the round start: the two one-shots, then the player. */
-    start(stage) {
+    /* The scene and the round start: the two one-shots, then the player.
+     * `clock` is the stage objects' frame, which Fighting Vipers' cues fire on. */
+    start(stage, clock = null) {
         this.stop();
         const A = this.spec;
+        if (A.kind === 'fv') {
+            this.startFv(stage, clock);
+            return;
+        }
         this.send(this.code(A.scene, stage));
         this.send(this.code(A.round, stage));
         const at = this.rom.mainCpuView.getUint32(A.players + (stage & 0xf) * 4, true);
@@ -127,6 +152,23 @@ export class StageSounds {
         }, FRAME_MS);
     }
 
+    startFv(stage, clock) {
+        const A = this.spec;
+        if (stage >= A.count) return;
+        const view = this.rom.mainDataView;
+        this.send(view.getUint32(A.table + stage * A.stride, true));
+        const cues = FV_CUES[view.getUint32(A.players + stage * 4, true)];
+        if (!cues || !clock) return;
+        let last = clock();
+        this.timer = setInterval(() => {
+            const now = clock();
+            /* Back past a cue — the clock went round — starts the count again. */
+            if (now < last) last = now - 1;
+            for (let f = Math.max(last + 1, now - MAX_CATCH_UP); f <= now; f++) this.send(cues.get(f) ?? 0);
+            last = now;
+        }, FRAME_MS);
+    }
+
     stop() {
         clearInterval(this.timer);
         this.timer = null;
@@ -136,6 +178,12 @@ export class StageSounds {
     static any(rom, stage) {
         const A = rom.game.sound?.ambience;
         if (!A) return false;
+        if (A.kind === 'fv') {
+            if (stage >= A.count) return false;
+            const view = rom.mainDataView;
+            return view.getUint32(A.table + stage * A.stride, true) !== 0 ||
+                !!FV_CUES[view.getUint32(A.players + stage * 4, true)];
+        }
         const at = rom.mainCpuView.getUint32(A.players + (stage & 0xf) * 4, true);
         const one = (table) => rom.mainDataView.getUint32(table + (stage & 0xf) * 4, true) !== 0;
         return !!PLAYERS[at] || one(A.scene) || one(A.round);

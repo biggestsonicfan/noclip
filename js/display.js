@@ -41,6 +41,8 @@
  */
 
 import { progAddr } from './romset.js';
+import { FV_OBJECT_ROUTINES, RISE } from './fvobjects.js';
+import { fvStageDraws } from './fvstages.js';
 
 /* stage_x is set to 8.0 wherever the game enters a stage, and never varies. */
 const STAGE_X = 8.0;
@@ -1732,14 +1734,16 @@ const OBJECT_ROUTINES = new Map([
  * arena the board never puts there: a figure standing on a fence post, a wedge
  * lying in the dirt. The bit each function tests is named beside it below.
  *
- * Still missing is the object list at 0xB4, which animates: a stage built here
- * is the stage standing still.
+ * The object list at 0xB4 comes last, as object_control runs after the arena:
+ * the ports are in js/fvobjects.js.
  */
 /* Fighting Vipers' own slots, which sub_235BC and pole_disp test by number. */
 const FV_NO_PLATFORM_SLOTS = [7, 14];
 const FV_NO_POLE_SLOT = 7;
+const FV_TURN = (f) => 10 * f;
+const FV_TURNING_LAYERS = new Set(['upper', 'ground', 'floor']);
 
-export function buildFlatDisplayList(stage) {
+export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     const out = [];
     const f = stage.flags;
     const push = (m, layer, extra = {}) => {
@@ -1763,7 +1767,9 @@ export function buildFlatDisplayList(stage) {
      * and then draws the single model at 0x18, and ground_upper_disp after it,
      * which area_clips the list at 0x24. Later submitted wins, so the sixteen
      * go furthest back, the floor sits between, and the 0x24 list keeps the
-     * front.
+     * front. Between the floor and that list there is room for the Airport's
+     * ground decal (1), and in front of it for the plane's shadow (-1): see
+     * planeDsp in js/fvobjects.js.
      *
      * This is not the other game's arrangement and must not borrow its floor
      * material. There, camera_init lays the floor down before every other pass
@@ -1779,14 +1785,15 @@ export function buildFlatDisplayList(stage) {
      * but the single model at 0x18 is drawn either way — it is past the branch
      * target, not inside it. */
     if (!(f & (1 << 0xd))) {
-        for (const m of stage.layers.ground ?? []) push(m, 'ground', { planeBias: 2 });
+        for (const m of stage.layers.ground ?? []) push(m, 'ground', { planeBias: 3 });
     }
 
-    for (const m of stage.layers.floor ?? []) push(m, 'floor', { planeBias: 1 });
+    for (const m of stage.layers.floor ?? []) push(m, 'floor', { planeBias: 2 });
 
-    /* sub_235BC: no flag of its own, but stages 7 and 14 return before the
-     * read at 0x1A. It runs after both of the ground passes, so the platform
-     * keeps the front of the plane like the 0x24 list. */
+    /* sub_235BC: no flag of its own, but stage 14 returns before the read at
+     * 0x1A and stage 7 picks its platform by the lit corner instead (below).
+     * It runs after both of the ground passes, so the platform keeps the
+     * front of the plane like the 0x24 list. */
     if (!FV_NO_PLATFORM_SLOTS.includes(stage.slot)) {
         for (const m of stage.layers.platform ?? []) push(m, 'platform', { planeBias: 0 });
     }
@@ -1809,15 +1816,10 @@ export function buildFlatDisplayList(stage) {
      * wall's hit timer gives group 0 at rest, and on every stage the three
      * groups hold the same eight models anyway. The reader keeps the first.
      */
-    const CAGE_PUSH = [['t', [0, 0, 6.0]]];
-    for (const m of stage.layers.cage ?? []) push(m, 'cage', { ops: CAGE_PUSH });
-
-    /* cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws under
-     * the same six-unit push — the cage's top rail. */
-    if (f & (1 << 0x14)) push(stage.cageTop, 'cage', { ops: CAGE_PUSH });
+    pushFlatCage(push, stage, f);
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
-     * returns before that. */
+     * draws its own before that. */
     if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) push(stage.cagePole, 'poles');
 
     /*
@@ -1840,7 +1842,129 @@ export function buildFlatDisplayList(stage) {
         }
     }
 
+    /* The Observation Deck's platform, poles and cage by its lit corner, and
+     * the City Hall Elevator's shaft and city: see js/fvstages.js. */
+    rideElevator(out, f);
+    out.push(...fvStageDraws(stage, FV_CAGE_PUSH));
+
+    /* On a stage with flags bit 16 — both Westerns — 0x1EFA8 takes 10 off
+     * the stage yaw (word_50A022) every frame, and the ground (sub_238E4), the
+     * 0x24 list (ground_upper_disp) and object_control all draw under ang_y of
+     * its negation: the town turns round the arena. The platform does not
+     * (sub_235BC skips the turn on that bit), nor does the cage. */
+    addFlatObjects(out, stage, f, region);
     return out;
+}
+
+const FV_CAGE_PUSH = [['t', [0, 0, 6.0]]];
+
+/* The Observation Deck draws its own eight (js/fvstages.js). Then
+ * cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws under
+ * the same six-unit push — the cage's top rail. */
+function pushFlatCage(push, stage, flags) {
+    if (!stage.hall) for (const m of stage.layers.cage ?? []) push(m, 'cage', { ops: FV_CAGE_PUSH });
+    if (flags & (1 << 0x14)) push(stage.cageTop, 'cage', { ops: FV_CAGE_PUSH });
+}
+
+/* Flags bit 3, the City Hall Elevator: 0x1EFBC adds 0.017 a frame to
+ * stage_ypos, and sub_238E4 draws the ground under translate(0, -ypos, 0).
+ * The board never takes it back but at change_scene; here it starts over with
+ * the objects' clock, so the lights and walls (js/fvobjects.js elevatorDsp)
+ * stay with it. */
+function rideElevator(out, flags) {
+    if (!(flags & (1 << 3))) return;
+    for (const e of out) {
+        if (e.layer !== 'ground' && e.layer !== 'floor') continue;
+        const ops = e.ops;
+        e.ops = (fr) => [['t', [0, -RISE * (fr % FV_ROUND), 0]], ...ops];
+    }
+}
+
+function addFlatObjects(out, stage, flags, region) {
+    const turn = flags & (1 << 0x10) ? FV_TURN : null;
+    if (turn) {
+        for (const e of out) {
+            if (FV_TURNING_LAYERS.has(e.layer)) {
+                const ops = e.ops;
+                e.ops = (fr) => [angY(turn(fr)), ...ops];
+            }
+        }
+    }
+    for (const object of stage.objects ?? []) {
+        FV_OBJECT_ROUTINES.get(object.routine)?.(flatObjectContext(out, object, turn, region));
+    }
+}
+
+/*
+ * What an FV object routine draws through. `push` takes ops or a function of
+ * the frame, and optionally `shown(frame, camera)` for a draw the routine
+ * leaves out on some frames, which makes it a live draw; `pushFrames` is a
+ * model picked out of a list by `index(frame)`; `pushLive` a draw whose ops
+ * depend on the camera as well.
+ *
+ * A live draw's ops get the camera too, as `ops(frame, camera)`.
+ *
+ * The routines see the objects' clock, which starts over at each match; a
+ * minute (FV_ROUND, for the stretch a round lasts) stands in for one here, so
+ * the trucks and the planes come back. They also see the camera in the objects' frame: on a turning stage
+ * object_control turns them all by the stage's yaw, and the routines' culls and
+ * plane tests are against the camera as that frame has it.
+ */
+export const FV_ROUND = 3600;
+
+function flatObjectContext(out, object, turn, region) {
+    /* The ops at frame f: the stage's turn on the real frame, then the
+     * routine's on the objects' clock. */
+    const opsAt = (ops, f, cam = null) => {
+        const own = typeof ops === 'function' ? ops(f % FV_ROUND, cam) : ops;
+        return turn ? [angY(turn(f)), ...own] : own;
+    };
+    const moving = (ops) => typeof ops === 'function' || turn;
+    const camAt = (f, cam) => {
+        if (!turn || !cam) return cam;
+        const r = ((turn(f) & 0xffff) * 2 * Math.PI) / 65536, c = Math.cos(r), sn = Math.sin(r);
+        const view = cam.view && ((x, y, z) => cam.view(c * x - sn * z, y, sn * x + c * z));
+        return { ...cam, x: c * cam.x + sn * cam.z, z: -sn * cam.x + c * cam.z, view };
+    };
+    const entryFor = (model, ops, shown, frames = null, index = null) => {
+        const entry = { model, layer: OBJECT_LAYER, ops: moving(ops) ? (f) => opsAt(ops, f) : ops };
+        if (frames) entry.anim = { frames, index: (f) => index(f % FV_ROUND) };
+        if (shown) {
+            entry.ops = opsAt(ops, 0);
+            entry.live = (f, cam) => ({
+                model: frames ? frames[index(f % FV_ROUND)] : model,
+                ops: opsAt(ops, f, camAt(f, cam)),
+                hidden: !shown(f % FV_ROUND, camAt(f, cam)),
+            });
+        }
+        return entry;
+    };
+    return {
+        object,
+        region,
+        push: (model, ops, shown = null, extra = null) => {
+            if (model) out.push({ ...entryFor(model, ops, shown), ...extra });
+        },
+        pushFrames: (frames, index, ops, shown = null) => {
+            out.push(entryFor(frames[0], ops, shown, frames, index));
+        },
+        /* `live` returns the ops, or `{ops, uv}` with `slides` set: uv is a
+         * (u, v) texel offset of all the model's texture points. */
+        pushLive: (model, live, slides = false) => {
+            const entry = entryFor(model, [], null);
+            entry.ops = [];
+            if (slides) {
+                entry.slides = true;
+                entry.live = (f, cam) => {
+                    const r = live(f % FV_ROUND, camAt(f, cam));
+                    return { model, ops: opsAt(r.ops, f), uv: r.uv };
+                };
+            } else {
+                entry.live = (f, cam) => ({ model, ops: opsAt((g) => live(g, camAt(f, cam)), f) });
+            }
+            out.push(entry);
+        },
+    };
 }
 
 /*

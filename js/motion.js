@@ -40,7 +40,7 @@
  * targets the pose engine solves against — see `js/pose.js`.
  */
 
-import { xtraToMainData, XTRA_DATA_BASE, MAIN_DATA_BASE, progAddr } from './romset.js';
+import { xtraResolve, XTRA_DATA_BASE, MAIN_DATA_BASE, progAddr } from './romset.js';
 
 export const MOTION_LIST_ADDR = 0x06400004;
 export const MOTION_COUNT = 519;
@@ -235,29 +235,36 @@ export const ZERO = 3, CONST = 4, LINEAR = 5, HERMITE = 6;
  * ends carry that segment's own secant times thirty. */
 export const TANGENT_RATE = 30;
 
-/* Where a block address lands in the assembled main-data region, or -1. */
-function blockOffset(addr) {
-    if (addr >= MAIN_DATA_BASE && addr < 0x03000000) return addr - MAIN_DATA_BASE;
-    if (addr >= XTRA_DATA_BASE) return xtraToMainData(addr);
-    return -1;
+/* Where a data address lands: the region that holds it, its view and the
+ * offset in it, or null. Data ROM addresses are main data; the XTRA window
+ * goes through the profile's banks, so Fighting Vipers' upper half reads its
+ * own bank rather than main data. */
+export function resolveData(rom, addr) {
+    if (addr >= MAIN_DATA_BASE && addr < 0x03000000) {
+        return { data: rom.mainData, view: rom.mainDataView, off: addr - MAIN_DATA_BASE };
+    }
+    if (addr >= XTRA_DATA_BASE && addr < 0x07000000) {
+        const r = xtraResolve(rom, addr);
+        return r.data ? r : null;
+    }
+    return null;
 }
 
 /*
  * Where the table is and how long. Sonic The Fighters' is the default; another
- * game in the same format names its own as `motionTable` in its profile, with
- * the table in main data.
+ * game in the same format names its own as `motionTable` in its profile.
  */
 function motionTable(rom) {
     const M = rom.game.motionTable;
-    if (!M) return { at: xtraToMainData(MOTION_LIST_ADDR), count: MOTION_COUNT };
-    return { at: M.list - MAIN_DATA_BASE, count: M.count };
+    return M ? { list: M.list, count: M.count } : { list: MOTION_LIST_ADDR, count: MOTION_COUNT };
 }
 
 /** The raw `offset_list_motions` entry for a motion id. */
 export function motionBlockAddress(rom, motionId) {
-    const { at, count } = motionTable(rom);
+    const { list, count } = motionTable(rom);
     if (!(motionId > 0 && motionId < count)) return 0;
-    return rom.mainDataView.getUint32(at + motionId * 4, true);
+    const r = resolveData(rom, list + motionId * 4);
+    return r ? r.view.getUint32(r.off, true) : 0;
 }
 
 /**
@@ -266,19 +273,22 @@ export function motionBlockAddress(rom, motionId) {
  *
  * @returns {?{id:number, address:number, offset:number, frames:number,
  *             channels:Array<{type:number,count:number,times:number,values:number}>}}
+ *   Offsets are into the region the block is in; `view` (and each channel's
+ *   own) reads it.
  */
 export function decodeMotion(rom, motionId) {
     const address = motionBlockAddress(rom, motionId);
-    const off = blockOffset(address);
+    const r = resolveData(rom, address);
     /* Slot 0 and the empty slots point at the table's own tail rather than a
      * block; a real one has room for a header and says it has frames. */
-    if (off < 0 || off + 22 > rom.mainData.length) return null;
-    const frames = rom.mainDataView.getUint16(off, true);
+    if (!r || r.off + 22 > r.data.length) return null;
+    const { data, view, off } = r;
+    const frames = view.getUint16(off, true);
     if (frames === 0) return null;
 
     const types = new Uint8Array(CHANNEL_COUNT);
     for (let j = 0; j < OBJECT_COUNT; j++) {
-        const b = rom.mainData[off + 2 + j];
+        const b = data[off + 2 + j];
         const top2 = (b >> 6) & 3;
         for (let a = 0; a < 3; a++) {
             types[j * 3 + a] = top2 === 0 ? ((b >> (a * 2)) & 3) + 3 : top2 - 1;
@@ -290,7 +300,7 @@ export function decodeMotion(rom, motionId) {
     const counts = new Uint8Array(CHANNEL_COUNT);
     let n = 0;
     for (let i = 0; i < CHANNEL_COUNT; i++) {
-        if (types[i] === LINEAR || types[i] === HERMITE) counts[i] = rom.mainData[off + 22 + n++];
+        if (types[i] === LINEAR || types[i] === HERMITE) counts[i] = data[off + 22 + n++];
     }
 
     let p = off + ((22 + n + 3) & ~3);
@@ -309,13 +319,13 @@ export function decodeMotion(rom, motionId) {
             default: values[i] = p; p += 4; break;              /* latched constant */
         }
     }
-    if (p > rom.mainData.length) return null;
+    if (p > data.length) return null;
 
     const channels = [];
     for (let i = 0; i < CHANNEL_COUNT; i++) {
-        channels.push({ type: types[i], count: counts[i], times: times[i], values: values[i] });
+        channels.push({ type: types[i], count: counts[i], times: times[i], values: values[i], view });
     }
-    return { id: motionId, address, offset: off, frames, end: p, channels };
+    return { id: motionId, address, offset: off, frames, end: p, channels, view };
 }
 
 /** Every motion id that resolves to a real block, for browsing. */
@@ -331,7 +341,7 @@ export function listMotions(rom) {
 
 /** One channel at frame `f`, held flat outside its first and last key. */
 export function evalChannel(rom, ch, f) {
-    const dv = rom.mainDataView;
+    const dv = ch.view ?? rom.mainDataView;
     if (ch.type === ZERO) return 0;
     if (ch.type === CONST) return dv.getFloat32(ch.values, true);
     if (ch.type < ZERO) return 0;              /* latched constant: not ours to read */
