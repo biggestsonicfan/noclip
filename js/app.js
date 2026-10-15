@@ -356,6 +356,7 @@ function resetRomState() {
     state.motion.list = null;
     state.motion.decoded = null;
     state.motion.parts = [];
+    state.motion.extras = [];
     state.motion.skeleton = null;
     /* What a fighter carries across a change of tab is this build's: its slot,
      * its chain and the trail it laid. */
@@ -1099,6 +1100,7 @@ function fighterRigModels(add, out) {
         for (const p of f.parts) add(p.model, f.index);
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
+        for (const e of f.extras) add(e.model, f.index);
     }
     return out;
 }
@@ -3290,10 +3292,11 @@ function rebuildBody({ keepCamera = true } = {}) {
      * frame, so each keeps a slot per model it has drawn so far and swaps their
      * geometry — the coat alone is a hundred models. */
     m.parts = body.parts.map((p) => ({ part: p.index, slots: [] }));
+    m.extras = extraParts(body);
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })) }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
         : null;
     m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
@@ -3304,7 +3307,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     poseRig();
 
     if (!keepCamera) {
-        const drawn = [...m.parts, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
+        const drawn = [...m.parts, ...m.extras, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
         frameRig(drawn, 10);
     }
@@ -3375,6 +3378,16 @@ function placeBodyParts(parts, draws, matrices) {
     }
 }
 
+/* A fighter's pads and skirt (body.extras), each a part of its own whose
+ * matrix the pose gives beside the slots'. */
+function extraParts(body) {
+    return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
+}
+
+function placeExtras(parts, body, matrices) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
+}
+
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3389,6 +3402,8 @@ function poseFighterAndRival(body, m) {
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
+    placeExtras(m.rival.extras, m.rival.body,
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
     return mine;
 }
 
@@ -3396,8 +3411,9 @@ function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    const { matrices, origins } = poseFighterAndRival(body, m);
+    const { matrices, origins, extras } = poseFighterAndRival(body, m);
     placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    placeExtras(m.extras, body, extras ?? []);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */

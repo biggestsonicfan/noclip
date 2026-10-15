@@ -1232,7 +1232,7 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
   picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
   Once the chest breaks the game reads `0x642F9EC[char]` instead.
 
-#### Shoulder pads and skirt: how they are placed (read from the ROM, not drawn yet)
+#### Shoulder pads and skirt: how they are placed (read from the ROM)
 
 Both are drawn from `rob_disp`'s per-slot jump table (`0x1A0EC`), straight
 after the slot's own `set_obj`: slot 1 jumps to `kata_pat_disp`, slot 9 (after
@@ -1328,9 +1328,15 @@ chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
 Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
 one is. Bahn's broken hips are the table's 690, the same model
 `koshi_unit_change` takes; Honey's hips do not change. Not checked against
-MAME. Left for later, as their own steps: the chest spring and the hip lists
-by motion, the shoulder pads and skirt (drawn while intact, so they are
-missing from the intact fighters too), Picky's hair, and the flying pieces.
+MAME. The shoulder pads and skirt are drawn as above, at rest only:
+`readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
+matrix (`placeExtra`), with the swing left at 0. That is the skirt's own rest
+value; for the pads it is not measured, so they sit at the fixed offsets and
+turns. Jane's two model-0 panels are skipped like any other empty part, and
+entry 14 is never read. The Armour switch hides both pads with the upper half
+(slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
+own steps: the swings, the chest spring and the hip lists by motion, Picky's
+hair, and the flying pieces.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

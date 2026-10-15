@@ -80,7 +80,7 @@
  * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
  */
 
-import { buildPose, poseMatrices, SLOT_COUNT, SLOT_PARENT } from './pose.js';
+import { buildPose, poseMatrices, viewerMatrix, turnedBy, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
@@ -155,6 +155,7 @@ export function readFighters(rom) {
             root,
             texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
             armour: F.armour ? readArmour(rom, F.armour, i) : null,
+            extras: F.armour ? [...readPads(rom, F.armour, i), ...readSkirt(rom, F.armour, i)] : [],
             offsets,
             parts: offsets.map((offset, s) => ({
                 index: s, model: u32(list + s * 4), offset, joint: s,
@@ -220,6 +221,77 @@ function readArmour(rom, A, i) {
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
 const LOWER_FIRST = 9, CHEST = 1;
+
+/*
+ * Shoulder pads and skirt (TECHNICAL.md, "Shoulder pads and skirt"). Each is
+ * drawn on a slot's matrix as rob_disp leaves it: translate, ang_z, ang_y,
+ * ang_x, set_obj; a pad's second model is translated again on the pad's own
+ * matrix. The swing each routine adds from the arms or thighs is left out:
+ * this is the standing fighter. `hiddenBy` is the slot whose bit in +0x1F48
+ * skips the piece. A model of 0 (or -1) is no model, as for the parts.
+ *
+ * kata_pat_disp (slot 1): 0x642147C[char] points at a left and a right
+ * record, 0x24 bytes: +0 model, +4 translate, +0x10/+0x12/+0x14 the X/Y/Z
+ * turns (the left's Y negated), +0x16 a second model, +0x18 its translate.
+ * The left goes when slot 6 breaks, the right when slot 3 does.
+ */
+const PAD_SIDES = [{ hiddenBy: 6, flipY: true }, { hiddenBy: 3, flipY: false }];
+
+function readPads(rom, A, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const list = A.pads ? u32(A.pads + i * 4) : 0;
+    const out = [];
+    PAD_SIDES.forEach(({ hiddenBy, flipY }, side) => {
+        const r = list ? dataAt(rom, u32(list + side * 4)) : null;
+        if (!r || r.off + 0x24 > r.data.length) return;
+        const dv = r.view, o = r.off;
+        const model = dv.getInt16(o, true);
+        if (model <= 0) return;
+        const y = dv.getUint16(o + 0x12, true);
+        const pad = {
+            slot: CHEST, hiddenBy, model, offset: vec(dv, o + 4),
+            turn: [dv.getUint16(o + 0x10, true), flipY ? -y & 0xffff : y, dv.getUint16(o + 0x14, true)],
+        };
+        out.push(pad);
+        const second = dv.getInt16(o + 0x16, true);
+        if (second > 0) out.push({ ...pad, model: second, then: vec(dv, o + 0x18) });
+    });
+    return out;
+}
+
+/*
+ * kosi_mino_disp (slot 9), for the characters it names: four panels from
+ * 0x6421DE0[char * 16] (models at +0..+6, a float at +8), placed by the
+ * constants action_init writes to 0x50A324..0x50A378, the same for everyone.
+ * Panels 3 and 4 step a further +8 / -(+8) along Z. A thigh has to lift past
+ * a panel's limit before it swings, so standing they hang at these turns.
+ */
+const SKIRT_PANELS = [
+    { at: 4, offset: [0.013, 0.087, 0], z: 0 },
+    { at: 6, offset: [0.013, -0.088, 0], z: 0 },
+    { at: 2, offset: [0, -0.017, 0.107], z: 1 },
+    { at: 0, offset: [0, -0.017, -0.107], z: -1 },
+];
+const SKIRT_TURN = [0x4000, 0xc000, 0], HIPS = 9;
+
+function readSkirt(rom, A, i) {
+    const r = A.skirt?.chars.includes(i) ? dataAt(rom, A.skirt.table + i * 16) : null;
+    if (!r) return [];
+    const dv = r.view, f = dv.getFloat32(r.off + 8, true);
+    return SKIRT_PANELS.map(({ at, offset, z }) => ({
+        slot: HIPS, hiddenBy: HIPS, model: dv.getInt16(r.off + at, true),
+        offset: [offset[0], offset[1], offset[2] + z * f], turn: SKIRT_TURN,
+    })).filter((e) => e.model > 0);
+}
+
+/* A pad or panel's board-frame transform on its slot's. */
+function placeExtra(slot, e) {
+    const at = (r, t, o) => [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
+    const t = at(slot.r, slot.t, e.offset);
+    const r = turnedBy(slot.r, e.turn[0], e.turn[1], e.turn[2]);
+    return { r, t: e.then ? at(r, t, e.then) : t };
+}
+
 export const ARMOUR_STATES = [
     { id: 'intact', label: 'Intact', upper: false, lower: false },
     { id: 'upper', label: 'Upper broken', upper: true, lower: false },
@@ -241,13 +313,14 @@ export function armouredFighter(body, state) {
     const which = ARMOUR_STATES.find((x) => x.id === state);
     if (!A || !which || (!which.upper && !which.lower)) return body;
     const broken = (s) => (s < LOWER_FIRST ? which.upper : which.lower) && A.slots[s].length > 0;
+    const extras = body.extras.filter((e) => !broken(e.hiddenBy));
     const parts = body.parts.map((p) => {
         if (!broken(p.index)) return p;
         const last = A.slots[p.index][A.slots[p.index].length - 1];
         const model = p.index === CHEST && A.chest != null ? A.chest : last;
         return { ...p, model: model > 0 ? model : 0 };
     });
-    return { ...body, parts };
+    return { ...body, parts, extras };
 }
 
 /**
@@ -471,7 +544,8 @@ function blendFor(live, rom, motion, frame, sample) {
  * @param {{faceTarget?: number[]}} [opts]  `faceTarget` takes the place of
  *   the motion's (float object 2, in the targets' space), as the fight writes
  *   the other fighter's head over it at player +0xB0C.
- * @returns {{matrices: number[][], origins: number[][]}}
+ * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
+ *   `extras` places body.extras (the pads and skirt), one each.
  */
 export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
@@ -493,7 +567,8 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
-    return { matrices, origins };
+    const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
+    return { matrices, origins, extras };
 }
 
 /*
