@@ -1550,6 +1550,78 @@ compare's operands swapped, and row 3's x and z), patched into its own copy of
 the program; the ROM's other users see it as it is. With the fix the copy sits
 right under the belt's lowest row.
 
+### Dead or Alive's stage pieces (`readDoaStages` in `js/doa.js`)
+
+A stage is put together from five tables, each indexed by the stage number
+(Revision B addresses; the program ones move with the build, the data ones
+do not):
+
+- the routine, `0x719E0 + 4 * stage`, which draws the pieces;
+- the model table at data `0x3A160`: 19330 entries of 16 bytes, the texture
+  points, the material, the mesh and the face count. A piece is the entry the
+  routine sent (above), so the explorer names it by that entry's number;
+- the texture slab, `0xCADA0[stage]`, a data pointer whose rows from `0x40000`
+  on fill texture rows 256-511;
+- the five colour rows, `0x7A7E0[stage]`, and the 32 material slots at `0x6B0`
+  that every stage shares;
+- the four sky pictures, `0xC7660 + 8 * stage`, out of the 242 pictures.
+
+The explorer calls a stage "Stage n", in chapter n: the profile has no names
+for them, and the game shows none. Its info lists the stage, the routine's
+address, the pieces drawn and, on the attract stage, the fighters. Stages
+12-15 are not listed: their routine (`0x6F130`) draws nothing.
+
+| stage | pieces | models | model range | slab | sky pictures |
+|---|---|---|---|---|---|
+| 0 | 54 | 40 | 15665-16004 | 0x25C0000 | 52 53 54 55 |
+| 1 | 87 | 68 | 16347-16437 | 0x2680000 | 125 126 127 128 |
+| 2 | 70 | 54 | 16587-16669 | 0x2740000 | 60 61 60 61 |
+| 3 | 82 | 34 | 16814-16881 | 0x2800000 | 121 122 123 124 |
+| 4 | 92 | 45 | 17013-17114 | 0x28C0000 | none |
+| 5 | 25 | 25 | 19071-19175 | 0x2EC0000 | none |
+| 6 | 50 | 45 | 17889-18109 | 0x2B00000 | one plain tile |
+| 7 | 4 | 4 | 16372-16386 | 0x2680000 | none |
+| 8 | 46 | 45 | 17277-17414 | 0x2980000 | 62 63 64 65 |
+| 9 | 1 | 1 | 18109 | 0x2B00000 | none |
+| 10 | 57 | 42 | 18389-18722 | 0x2BC0000 | 67 69 66 68 |
+| 11 | 35 | 35 | 17633-17731 | 0x2A40000 | 134 135 136 133 |
+
+Pieces are the draws of the explorer's pass (stage 4's belt draws 82 to 92;
+the table counts the most), models the distinct entries among them. Each
+stage keeps to its own run of the table, except for the two small ones:
+
+- stage 7 is four of stage 1's models (16372, 16381, 16383, 16386) on stage
+  1's slab, with stage 8's colour rows;
+- stage 9 is one model, 18109, the first piece stage 6 draws, on stage 6's
+  slab and with stage 6's colour rows.
+
+Both are skyless; neither was reached in MAME's attract (above). Stage 2's
+sky is two pictures twice, and stage 10's is the four (66-69) that stage 9's
+entry names in another order; stage 9 itself never shows them. Stage 6 draws
+every fifth entry from 17889 to 18109; the four after each are consecutive
+meshes with the same face count, and nothing the explorer runs picks them:
+not the ring size (`0x5A75F4`, 0-4), not the culling helpers' answer (0.5 to
+5000), and not 400 passes of the stage task's tick. What would pick them has
+not been found.
+
+Every build draws the same stages. `readDoaStages` run on `doab`, `doa`,
+`doaa`, `doaab` and `doaae` gives the same models, matrices and texture points
+for every scenery piece of all twelve stages (one hash a stage, the same in
+all five), and the five tables above hold the same values in each: the same
+slab pointers, the same sky pictures, the same colour rows byte for byte and
+the same material slots (at 0x6B0 on the 2B builds and `doaa`, 0x870 on
+`doaab` and `doaae`). The model table is the shared data chips', so a model
+number means the same model in every build. The one difference is stage 1's
+fighters: `doab` and `doa` play the attract fight there and draw its two
+fighters (70 more pieces), while the 2A builds have no attract mapped and
+show the stage empty. The colour pointers of stages 12-15 differ by build,
+but those stages draw nothing. The routines sit at:
+
+| stage | `doab` | `doa` | `doaa` | `doaab` | `doaae` |
+|---|---|---|---|---|---|
+| 0 | 0x646C0 | 0x64770 | 0x5CC80 | 0x5CC10 | 0x5CC20 |
+| 11 | 0x6E8E0 | 0x6E990 | 0x66EA0 | 0x66E30 | 0x66E40 |
+
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
 The fighters are drawn by the game's own code too, on two players set up the
