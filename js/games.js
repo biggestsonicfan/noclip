@@ -3207,6 +3207,16 @@ const doab = {
         /* The sky: four scroll pictures a stage, named in the program, out of
          * the table of pictures in the data (js/scroll.js buildDoaSky). */
         sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+        /* The stages whose routines move pieces of them each pass (state at
+         * 0x5A0000-0x5A7667, stage 8's one piece also by the frame count),
+         * and the game's setups for them: the stage task's common one
+         * (0x70480, 0x64640 runs it) and each stage's own, from the table
+         * the round start (0x705F0) calls by stage number. Those stages are
+         * run as many passes as the attract's stage, to the same frame
+         * count (attract.frame); MAME's attract shows only stage 1 before it
+         * stops (geo_adsp multiplier op 15), so these are the code's word,
+         * not graded against the board. Stage 6 is left at rest. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 11], frames: 924, clock: 0x75f },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is
@@ -3325,6 +3335,7 @@ const doaa = {
     doa: {
         ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },

@@ -1211,8 +1211,22 @@ fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
 `stageFrames`). After that, 0x5A02F0-0x5A14A0 is MAME's RAM at board frame
 0x75F byte for byte (639 passes give 0x640's). The eight rope pieces MAME
 draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
-off-screen there; their state is part of that byte-for-byte match. The other
-stages are drawn once, from cleared RAM.
+off-screen there; their state is part of that byte-for-byte match.
+
+Six other stages move pieces the same way, each pass of their own routine:
+0 (16004), 2 (16597 16600 16628 16644), 3 (16867-16870), 4 (a conveyor of
+33 pieces in 17013-17106 that slide on a 1:2 slope and wrap), 8 (17392 and
+17398-17414; some swap models as they go, 17316-17318, and 17392 also reads
+the frame count) and 11 (17704 17707 17715 17718), with their state at
+0x5A0000-0x5A7667. The game sets them up in two steps: the stage task
+(0x64640) runs the common setup 0x70480 once, and the round start (0x705F0)
+calls the stage's own from the table at 0x70440 (stage 1's and 11's are a bare
+`ret`). The explorer runs both, then 924 passes to frame count 0x75F, the
+attract stage's count (`doa.stageSetup`; 2A's table at 0x68A00, setup 0x68A40).
+MAME's attract shows only stage 1 before it stops on the geometry DSP's
+multiplier op 15 (frame ~5500-6000), so these six are the code's word and
+are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
+moves, and are drawn once from cleared RAM.
 
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 

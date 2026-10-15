@@ -539,6 +539,11 @@ at that frame, Tina's ribbon included. The stage's ropes and banners hang as
 they swing at that frame too. They hold that one pose; Revision A's fighters
 are not read yet.
 
+Stages 0, 2, 3, 4, 8 and 11 have pieces of their own that move (stage 4 is a
+conveyor). The game's own stage code runs them from its setup to the same
+moment of a fight, on both revisions. MAME's attract never reaches those
+stages, so they have not been checked against it.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
