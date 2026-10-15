@@ -3342,6 +3342,37 @@ const doab = {
             ],
         },
     },
+    /*
+     * The sound board is the Model 2 board, its UART at 0x9C0000 on the 2B
+     * (sends queued at 0x94C0, sent at once by 0x9590). The round start
+     * (0x18480) sends the stage's song straight from the table at 0x90C10,
+     * by stage number: A01001-A01010, or A00001, all sound off, for stages
+     * 6, 7, 9 and 15. The song names are in the data ROM at 0x9C860: stage
+     * 5's A01010 is BGM_BOSS, and stage 9 is the name entry, whose setup
+     * (0x1C6F8) sends A0100E, BGM_NAME, itself. The attract skips the table (0x54FC94
+     * is 4 there) and plays A0100A on every stage. MAME, a coined game:
+     * stage 5 starts A01010, 6 A00001, 11 A01002.
+     *
+     * The boot sends A00001. The driver takes its first command about four
+     * seconds after a reset (`warmup`; MAME's i960 sends it nine seconds in).
+     * The 0xFF the i960 writes as it sets the UART up comes long before that
+     * and is never heard; sent once the driver listens, it eats the next
+     * command, so it is left out.
+     */
+    sound: {
+        program: ['epr-19328.31', 0x400bdbfb],
+        samples: [
+            ['mpr-19329.32', 0x8fd2708a], ['mpr-19330.33', 0x0c69787d],
+            ['mpr-19331.34', 0xc18ea0b8], ['mpr-19332.35', 0x2877f96f],
+        ],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        warmup: 5,
+        stageMusic: 0x90c10,
+        none: 0xa00001,
+        songs: { 9: 0xa0100e },
+        replaces: true,
+    },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
@@ -3381,6 +3412,8 @@ const doaa = {
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
+    /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
+    sound: { ...doab.sound, stageMusic: 0x89250 },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,

@@ -15,6 +15,11 @@
  *   MultiPCM sample chips and a YM3438. model1.wasm is MAME's own chips on
  *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA.
  *
+ * A game whose driver names its own boot commands (Dead or Alive's) gives them
+ * as `boot` and `stop` for the Model 2 board too, and `warmup`, the seconds
+ * its driver takes to start listening after a reset: the board runs that long
+ * before the first command goes down.
+ *
  * It costs nothing until it is switched on. Then it reads the sound ROMs out of
  * the zips — the program and 8 MB of samples, which the views never touch —
  * and runs the board at a few per cent of one core. Switched off, the audio
@@ -33,7 +38,7 @@ const MODEL2 = {
 };
 
 function boardOf(spec) {
-    if (spec.board !== 'model1') return MODEL2;
+    if (spec.board !== 'model1') return { ...MODEL2, boot: spec.boot ?? MODEL2.boot, stop: spec.stop ?? MODEL2.stop };
     return { wasm: 'model1.wasm', boot: spec.boot, stop: spec.stop };
 }
 
@@ -66,10 +71,16 @@ export function stageMusic(rom, slot, pick = -1) {
     }
     const at = spec?.stageMusic;
     if (at === undefined) return { code: 0, index: -1 };
+    /* `songs` are the stages a game starts somewhere other than its table
+     * (Dead or Alive's boss fight); `none` the code a table holds for a stage
+     * with no song, if not 0. */
+    const own = spec.songs?.[slot];
+    if (own !== undefined) return { code: own, index: slot & 0xF };
     /* The program ROM's for every game but Virtua Fighter 2 and Fighting
      * Vipers, whose tables are in the data ROM. */
     const view = rom[`${spec.stageMusicRegion ?? 'mainCpu'}View`];
-    return { code: view.getUint32(at + (slot & 0xF) * 4, true), index: slot & 0xF };
+    const code = view.getUint32(at + (slot & 0xF) * 4, true);
+    return { code: code === spec.none ? 0 : code, index: slot & 0xF };
 }
 
 export function soundSupported(game) {
@@ -145,7 +156,8 @@ export class SoundBoard {
             };
         });
         const prog = program.slice().buffer;
-        node.port.postMessage({ type: 'init', wasm, program: prog, samples: samples.buffer },
+        if (spec.warmup) onProgress('starting the sound program');
+        node.port.postMessage({ type: 'init', wasm, program: prog, samples: samples.buffer, warmup: spec.warmup ?? 0 },
             [wasm, prog, samples.buffer]);
         await ready;
         this.gain = new GainNode(ctx, { gain: this.volume ?? 2 });
@@ -166,7 +178,9 @@ export class SoundBoard {
         const stop = this.kind.stop;
         if (!code) { this.send(stop); return; }
         const after = this.spec.after;
-        this.send([...stop, ...commandBytes(code),
+        /* `replaces`: a song takes over from the one playing by itself, and
+         * a stop sent just ahead of it swallows it (DOA's driver). */
+        this.send([...(this.spec.replaces ? [] : stop), ...commandBytes(code),
             ...(after?.song?.[index] ?? []), ...(after?.every ?? [])]);
     }
 
