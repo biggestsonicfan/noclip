@@ -3135,7 +3135,11 @@ function doaConveyorFix(shift) {
  * coprocessor that does the routines' arithmetic. `visible` are the two cull
  * tests the routines call, answered "in front"; `pokes` is RAM the routines
  * read — 0x54FCDD is set, which draws the Danger Zone's banners and ropes
- * (0x65F70) as the attract mode's fights do.
+ * (0x65F70) as the attract mode's fights do. 0x5A75F4 is 2: the round start
+ * (0x7086C calls 0x70950) sets it from the float at 0x54FCE8, which boot leaves
+ * at 10.0 (0x44D8), and nine stages index short model tables with it (stage
+ * 1's floor at 0x65F08 and 0x66AF8), so it picks which version of two
+ * pieces they send. MAME holds 2 there through the attract.
  */
 const doab = {
     id: 'doab',
@@ -3215,7 +3219,7 @@ const doab = {
         count: 16,
         stageByte: 0x5555be,
         visible: [0x72600, 0x72680],
-        pokes: [[0x54fcdd, 1]],
+        pokes: [[0x54fcdd, 1], [0x5a75f4, 2]],
         /* Stage 4's conveyor (rows of x y z, 12 bytes each from 0x5A7600)
          * draws a copy of the row that has just wrapped, a lap lower, so it
          * reads as one belt. The fourth of those copies (0x6A0B0) tests row 3

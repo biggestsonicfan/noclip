@@ -1152,7 +1152,11 @@ listens on the two ports:
   as the routines chain them), and the geometrizer's draw command reads the
   current matrix and the model pointer, which the model table names;
 - the stage number goes in at `0x5555BE`, and `0x54FCDD = 1` has the
-  routines draw the banners and ropes as well;
+  routines draw the banners and ropes as well. `0x5A75F4 = 2` is what the
+  round start (`0x70950`) sets from the ring size float at `0x54FCE8` (10.0
+  from boot, so 2; 12.0 would be 0): nine stages index short model tables
+  with it to pick the ring floor and its border, so 2 draws the small inner
+  square and the wide Danger Zone MAME shows;
 - the two culling helpers, `0x72600` and `0x72680`, are answered "in view",
   and the view vector at `0x5B9870` is (1, 1, 1), so nothing is culled.
 
