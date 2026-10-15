@@ -1198,6 +1198,22 @@ and a positive yaw turns toward -X (the camera's eye and target at
 explorer shows the same arena and the same clouds over it. The colours are
 the raw palette, as MAME shows them.
 
+Stage 1's ropes and banners (models 16393-16424: four ropes of eight pieces)
+swing, and the stage routine moves them itself each time it draws them
+(`0x74000`, culled or not). The first piece of the first rope is a pendulum
+(`0x74460`): its angle speeds up by one a frame toward `-0x500`, and above
+`0x468` it is held there and stopped. Each piece keeps its last 32 angles
+(`+0xC`, a ring indexed by `0x5A02F0`), and the piece below it takes one of
+them, so the swing runs down the rope late; each rope then takes the one
+before it the same way. The stage setup (`0x70480`) clears it all. So the
+state is nothing but the routine's passes since the setup. For the attract
+fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
+`stageFrames`). After that, 0x5A02F0-0x5A14A0 is MAME's RAM at board frame
+0x75F byte for byte (639 passes give 0x640's). The eight rope pieces MAME
+draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
+off-screen there; their state is part of that byte-for-byte match. The other
+stages are drawn once, from cleared RAM.
+
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
 The fighters are drawn by the game's own code too, on two players set up the

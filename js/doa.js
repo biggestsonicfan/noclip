@@ -326,7 +326,9 @@ export function boardToOps(m) {
  *
  * @param {object} rom
  * @param {number} entry  the routine
- * @param {object} [opts] ram: bytes to poke first, as [[addr, u8], ...]
+ * @param {object} [opts] ram: bytes to poke first, as [[addr, u8], ...];
+ *        init: a routine to run first (the stage setup); frames: the passes
+ *        of the routine, the last one's draws returned
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
 export function doaMachine(rom) {
@@ -339,7 +341,7 @@ export function doaMachine(rom) {
     return { ram, rv: new DataView(ram.buffer), unknown, copro, geo, cpu };
 }
 
-export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps } = {}) {
+export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1 } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
@@ -355,7 +357,15 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps } = {}) 
     /* The culling helpers: "in view", as a dot product well in front. */
     for (const at of D.visible ?? []) cpu.hooks.set(at, (c) => { c.setReg(16, floatToBits(1000)); });
     for (const at of D.skip ?? []) cpu.hooks.set(at, () => {});
-    const done = cpu.call(entry, [], { maxSteps });
+    /* A stage that moves keeps its state in RAM and steps it each time it is
+     * drawn: the stage setup (`init`) clears it, then each pass of the
+     * routine is a frame, and the last pass's draws are the ones shown. */
+    if (init) cpu.call(init, [], { maxSteps: 5_000_000 });
+    let done = true;
+    for (let n = 0; n < frames; n++) {
+        geo.draws = [];
+        done = cpu.call(entry, [], { maxSteps });
+    }
     return { draws: geo.draws, unknown: [...unknown], done };
 }
 
@@ -577,7 +587,7 @@ export function readDoaStages(rom) {
         seen.add(entry);
         let run;
         try {
-            run = runStageRoutine(rom, entry, { ram: [[D.stageByte, n], ...(D.pokes ?? [])] });
+            run = runStageRoutine(rom, entry, { ram: [[D.stageByte, n], ...(D.pokes ?? [])], ...stageClock(D, n) });
         } catch (e) {
             console.warn(`doa: stage ${n} (0x${entry.toString(16)}): ${e.message}`);
             continue;
@@ -587,6 +597,13 @@ export function readDoaStages(rom) {
     }
     stages.forEach((s, i) => { s.slot = i; });
     return stages;
+}
+
+/* The attract fight's stage runs from its setup to the frame drawn, so that
+ * what swings is where it was; the others are drawn once, at rest. */
+function stageClock(D, n) {
+    const A = D.attract;
+    return A?.stage === n && A.stageInit ? { init: A.stageInit, frames: A.stageFrames } : {};
 }
 
 /* The attract fight's two fighters, posed, if this is its stage. */

@@ -3250,9 +3250,17 @@ const doab = {
          * first frame, from MAME's RAM. `ai` is what the attract's script
          * sets for the AI before the fight: its op 0x1A370 each player's start
          * flag (0x5555F2/F3) and pattern (0x5555F4/F5, from the table at
-         * 0x90E50: Zack 0, Tina 1), its op 0x1AEE0 0x5555CB. */
+         * 0x90E50: Zack 0, Tina 1), its op 0x1AEE0 0x5555CB. The stage's
+         * ropes and banners swing in RAM the stage routine steps each time it
+         * draws (0x74460, a pendulum, and a 32-frame ring of its angles down
+         * each rope), from what the stage setup (`stageInit`, 0x70480) clears:
+         * `stageFrames` is the routine's passes from the setup to the frame
+         * drawn, 924, which is when MAME's RAM is the routine's own byte for
+         * byte. */
         attract: {
             stage: 1,
+            stageInit: 0x70480,
+            stageFrames: 924,
             light: [0.2387, 0.8988, -0.3677],
             first: 0x6b0,
             frame: 0x75f,
