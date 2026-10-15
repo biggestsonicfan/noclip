@@ -195,7 +195,8 @@ const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
  *   positions  bind-pose points, xyz, in the skeleton's world
  *   polygons   per polygon, its point indices
  *   normals, uvs  per polygon corner, in polygon order (xyz, uv)
- *   bones      [{name, parent, matrix (world, column-major), points: indices}]
+ *   bones      [{name, parent, matrix (world, column-major), points: indices,
+ *              none for a bone only there to end a chain}]
  *   texture    {file, png} the diffuse map, embedded and named beside
  */
 export function skinnedMeshFbx(doc) {
@@ -323,6 +324,7 @@ function addSkin(s, doc, { geoId, meshId, boneIds }) {
     ]));
     s.link(skinId, geoId);
     doc.bones.forEach((b, k) => {
+        if (!b.points.length) return;   /* an end bone: nothing hangs on it */
         const clusterId = s.id();
         s.objects.push(N('Deformer', [L(clusterId), name2(b.name, 'SubDeformer'), 'Cluster'], [
             N('Version', [100]),

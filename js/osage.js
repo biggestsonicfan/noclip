@@ -132,6 +132,9 @@ const IDENTITY = { r: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] };
 const rsqrt = (x) => (x === 0 ? 0 : 1 / Math.sqrt(x));
 const ltZero = (f) => f < -FLT_MIN;
 
+/* The per-character table: Sonic The Fighters', unless the game names its own. */
+const osageTable = (rom) => progAddr(rom, rom.game.osage ?? OSAGE_PER_CHARACTER);
+
 /**
  * Read a fighter's sway chains, or null if it has none.
  *
@@ -141,7 +144,7 @@ const ltZero = (f) => f < -FLT_MIN;
  */
 export function readOsage(rom, charIndex) {
     const dv = rom.mainCpuView;
-    const table = dv.getUint32(progAddr(rom, OSAGE_PER_CHARACTER) + charIndex * 4, true);
+    const table = dv.getUint32(osageTable(rom) + charIndex * 4, true);
     if (!table || table + 4 > rom.maincpu.length) return null;
 
     const records = [];

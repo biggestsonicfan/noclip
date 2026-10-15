@@ -732,6 +732,13 @@ const fvipers = {
      */
     motionTable: { list: 0x06c00004, count: 1055 },
     /*
+     * The sway chains (js/osage.js) are Sonic The Fighters' records in the
+     * same stream, out of a per-character table at 0x63E34 (`lda
+     * 0x63E34[char*4]` at 0x627E4): Grace's dreadlocks and earrings, Honey's
+     * pigtails, among others.
+     */
+    osage: 0x00063e34,
+    /*
      * The sound board is Sonic The Fighters', the ROMs laid out the same way
      * and the same three boot commands (0x8574, 0x8B9C, 0x8BAC). FIGHT_INT
      * sends the stage's song in round 1 (0xD5B4) out of level_music_list at

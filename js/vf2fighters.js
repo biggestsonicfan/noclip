@@ -407,7 +407,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
-    return { matrices, origins };
+    return { matrices, origins, pose };
 }
 
 /*
