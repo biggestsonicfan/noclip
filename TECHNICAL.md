@@ -1428,6 +1428,23 @@ so stage 1 runs from its setups like the other moving stages
 straight and still, up to 2.8 units from where the board's swing puts them.
 The two revisions now draw it the same, still and moving.
 
+Revision C (`doa`, MAME's parent, Jan 10 1997) and the other two 2A builds
+(`doaab`, Nov 3 1996, and the export `doaae`) are Revision B and Revision A
+with their programs moved: code put in or taken out in places, so everything
+after sits a little further on or back. `relocateDoa` in `js/games.js` builds
+their profiles from those two by runs, as Sonic Championship's are built from
+Sonic The Fighters': the two programs matched 16 bytes at a time, each run the
+shift from the first block that matched with it. Every program address a
+profile names falls well inside a run (checked one by one), and nothing else in
+it moves. Revision C moved its RAM as well: 0x20 on from 0x5420D0 and 0x30
+from 0x557C60, found by pairing the RAM addresses that the two programs'
+matched instructions name; the RAM `js/doa.js` sets by hand is the profile's
+`doa.ram` for that reason. The 2A builds keep Revision A's RAM. Revision C
+draws every stage, the attract fight on stage 1 included, pixel for pixel as
+Revision B does, and `doaab` and `doaae` every stage as Revision A does. The
+2A board seats the shared chips in other sockets, so its sets name them
+differently (`DOA_2A_SOCKETS`).
+
 The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
 `js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
 palette, map). As a stage starts, `0x6F558` lays four of them, named per
