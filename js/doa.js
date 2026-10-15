@@ -348,7 +348,8 @@ export function boardToOps(m) {
  *        init: a routine, or a list of them, to run first (the stage setup);
  *        frames: the passes of the routine, the last one's draws returned;
  *        clock: the board's frame count (0x54B158) on the last pass, counted
- *        up a pass at a time to it, for the routines that read it
+ *        up a pass at a time to it, for the routines that read it;
+ *        tick: the stage task's own count-up, run after each pass
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
 export function doaMachine(rom) {
@@ -370,9 +371,9 @@ export function runStageRoutine(rom, entry, opts = {}) {
  * A stage routine set up and run to its frame, that goes on running: `step()`
  * is one more pass (the board's next frame), with the frame count one on.
  * `rewind()` puts RAM back as the first run left it. `most` is the most
- * pieces any pass drew.
+ * pieces any pass drew; `ram` is the board RAM it runs in.
  */
-function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock } = {}) {
+function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock, tick } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
@@ -392,12 +393,13 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
      * drawn: the stage setup (`init`) clears it, then each pass of the
      * routine is a frame, and the last pass's draws are the ones shown. */
     for (const at of [init ?? []].flat()) cpu.call(at, [], { maxSteps: 5_000_000 });
-    const run = { draws: [], unknown: [], done: true, most: 0 };
+    const run = { draws: [], unknown: [], done: true, most: 0, ram };
     let n = clock === undefined ? undefined : (clock - frames) >>> 0;
     run.step = () => {
         geo.draws = [];
         if (n !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (n = (n + 1) >>> 0), true);
         run.done = cpu.call(entry, [], { maxSteps });
+        if (tick) cpu.call(tick, [], { maxSteps });
         run.draws = geo.draws;
         run.most = Math.max(run.most, run.draws.length);
         return run.draws;
@@ -647,14 +649,14 @@ export function readDoaStages(rom) {
  * what swings is where it was. The other stages that move run the same way,
  * through the game's own setups (the common one, then the stage's from the
  * table the round start calls), for as many frames and to the same frame
- * count; nothing on the board was captured to grade them by. The rest are
+ * count; tools/doa-stages grades them against MAME's attract. The rest are
  * drawn once, at rest. */
 function stageClock(rom, n) {
     const D = rom.game.doa, A = D.attract, S = D.stageSetup;
-    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames };
+    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames, tick: S?.tick };
     if (!S?.moving.includes(n)) return {};
     const own = rom.mainCpuView.getUint32(S.table + 4 * n, true);
-    return { init: [S.common, own], frames: S.frames, clock: S.clock };
+    return { init: [S.common, own], frames: S.frames, clock: S.clock, tick: S.tick };
 }
 
 function stageMoves(rom, n) {

@@ -3233,10 +3233,13 @@ const doab = {
          * (0x70480, 0x64640 runs it) and each stage's own, from the table
          * the round start (0x705F0) calls by stage number. Those stages are
          * run as many passes as the attract's stage, to the same frame
-         * count (attract.frame); MAME's attract shows only stage 1 before it
-         * stops (geo_adsp multiplier op 15), so these are the code's word,
-         * not graded against the board. Stage 6 is left at rest. */
-        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 11], frames: 924, clock: 0x75f },
+         * count (attract.frame). `tick` is the stage task's count-up after
+         * each pass (0x5A75F0 +0x80 and the byte 0x5A6EDD +1): stage 4's
+         * belt and stage 10's turn run on it. Graded against MAME's attract
+         * (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it word for word
+         * over 299 frames; 0, 2 and 10 follow the camera and 11's sky
+         * scrolls. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is
@@ -3355,7 +3358,7 @@ const doaa = {
     doa: {
         ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
-        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, tick: 0x696f8 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },

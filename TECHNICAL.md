@@ -1213,20 +1213,38 @@ fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
 draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
 off-screen there; their state is part of that byte-for-byte match.
 
-Six other stages move pieces the same way, each pass of their own routine:
+Seven other stages move pieces the same way, each pass of their own routine:
 0 (16004), 2 (16597 16600 16628 16644), 3 (16867-16870), 4 (a conveyor of
 33 pieces in 17013-17106 that slide on a 1:2 slope and wrap), 8 (17392 and
 17398-17414; some swap models as they go, 17316-17318, and 17392 also reads
-the frame count) and 11 (17704 17707 17715 17718), with their state at
+the frame count), 10 (two 18425s, turned by the stage tick below) and 11
+(17704 17707 17715 17718), with their state at
 0x5A0000-0x5A7667. The game sets them up in two steps: the stage task
 (0x64640) runs the common setup 0x70480 once, and the round start (0x705F0)
 calls the stage's own from the table at 0x70440 (stage 1's and 11's are a bare
 `ret`). The explorer runs both, then 924 passes to frame count 0x75F, the
 attract stage's count (`doa.stageSetup`; 2A's table at 0x68A00, setup 0x68A40).
-MAME's attract shows only stage 1 before it stops on the geometry DSP's
-multiplier op 15 (frame ~5500-6000), so these six are the code's word and
-are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
-moves, and are drawn once from cleared RAM.
+After each pass the stage task (0x71138; 2A 0x696F8) counts on: 0x5A6EDD a
+byte +1, 0x5A75F0 +0x80, 0x5B9720 +0x800 and 0x5B9724 +0x400, unless 0x54FCDE
+is set. Stage 4 picks its belt frame by `(0x5A6EDD >> 2) % 26`, and stages 0
+and 10 send 0x5A75F0 to the copro as an angle (function 0x1B), so stage 10
+turns too; the explorer runs the tick after each pass (`stageSetup.tick`).
+
+These are graded against MAME's attract: `tools/doa-stages/dump.lua` saves the
+board's RAM 300, 301 and 600 frames into each stage (`DOA_SWAP` forces other
+stages in), and `tools/doa-stages/grade.mjs` seeds the explorer with one dump
+and runs it to the next. The fork's shared MAME needs `M2_GEO_SHARC_OFF=1`:
+its real geometry SHARC, running beside the HLE geometry, takes a jump into
+data (handler 0x20C26) and stops the attract with a bogus "op 15". The board
+does not run a stage once a frame: it runs one twice when it falls behind and
+skips one now and then, so the passes are counted from 0x5A75F0. Stages 1, 3,
+4, 5, 6, 7 and 8 leave 0x5A0000-0x5A7667 exactly as MAME has it after 299
+frames. Stages 0 and 10 copy the camera's yaw and position into their state
+(0x5A0014, 0x5A00F4) and pick pieces by it; stage 2 runs its ring of eight
+(0x67388) only while the camera is in range; stage 11 also scrolls its sky
+(0x702E0) into the scroll hardware. Those differ only there, since the
+explorer's camera is not the game's. Stage 9 was not reached. Stages 5, 6, 7
+and 9 have nothing that moves, and are drawn once from cleared RAM.
 
 The moving stages, stage 1 among them, go on moving in the viewer: the routine
 keeps running, one pass a frame from the baked one, and each piece takes the
