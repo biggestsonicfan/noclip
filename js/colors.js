@@ -262,6 +262,20 @@ function buildRampColorxlat(rom, colorSet) {
     return out;
 }
 
+/**
+ * A Dead or Alive fighter's load id, the byte at the rig's `loads` + 13 *
+ * costume + char (0x70F40). The game loads everything of a fighter's by it,
+ * not by the character number: its model bank row, its colours (0x5D710) and
+ * its texture strips (0x7CBA0), the low bits naming the entry and bit 7 the
+ * second half of each. Without the table (Revision A's fight code is not
+ * mapped), the character number, which is the id of costume 0's first two.
+ * @param {{char:number, costume?:number}} f
+ */
+export function doaLoadId(rom, { char, costume = 0 }) {
+    const loads = rom.game.rig?.loads;
+    return loads ? rom.mainCpuView.getUint8(loads + 13 * costume + char) : char;
+}
+
 /*
  * Dead or Alive's colorxlat: a grey ramp the boot computes (0xFB0) and, over
  * its odd rows, colours copied whole out of the program ROM (0x5D710). Row r
@@ -269,8 +283,8 @@ function buildRampColorxlat(rom, colorSet) {
  * never under r; luma 64 on holds the last of it. The copies are 64 entries a
  * row, three bytes an entry (red, green, blue), five rows two apart: the
  * stage's at row 21 out of `stages[stage]`, the two fighters' at rows 1 and 11
- * out of `fighters[costume * perCostume + char]`. With no fighter in the scene
- * those rows stay grey.
+ * out of `fighters[(id >> 7) * perCostume + (id & 15)]`, `id` the fighter's
+ * load id (doaLoadId). With no fighter in the scene those rows stay grey.
  *
  * @param {{char:number, costume?:number}[]} fighters  player 1 first
  */
@@ -298,7 +312,8 @@ function buildDoaColorxlat(rom, stage, fighters) {
     copyRows(stage >= 0 && stage < C.count ? cv.getUint32(C.stages + stage * 4, true) : 0, C.row0);
     const F = C.fighters;
     if (F) fighters.forEach((f, p) => {
-        copyRows(cv.getUint32(F.table + ((f.costume ?? 0) * F.perCostume + f.char) * 4, true), F.rows[p]);
+        const id = doaLoadId(rom, f);
+        copyRows(cv.getUint32(F.table + ((id >> 7) * F.perCostume + (id & 15)) * 4, true), F.rows[p]);
     });
     return out;
 }

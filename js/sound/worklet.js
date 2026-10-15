@@ -44,7 +44,7 @@ class Model2Sound extends AudioWorkletProcessor {
         }
     }
 
-    async start({ wasm, program, samples }) {
+    async start({ wasm, program, samples, warmup }) {
         /* One import, and only if the heap ever has to grow — it does not:
          * the build's initial memory holds the sample ROMs outright. */
         const { instance: inst } = await WebAssembly.instantiate(wasm, {
@@ -59,7 +59,11 @@ class Model2Sound extends AudioWorkletProcessor {
         new Uint8Array(e.memory.buffer, pp, prog.length).set(prog);
         new Uint8Array(e.memory.buffer, sp, smp.length).set(smp);
         if (!e.snd_init(pp, prog.length, sp, smp.length)) throw new Error('the sound program did not load');
-        this.step = (e.snd_rate ? e.snd_rate() : BOARD_RATE) / sampleRate;
+        const rate = e.snd_rate ? e.snd_rate() : BOARD_RATE;
+        this.step = rate / sampleRate;
+        /* A driver deaf for a while after reset (sound.js `warmup`) runs
+         * through it here, unheard, ahead of the first command. */
+        for (let left = Math.round(warmup * rate); left > 0;) left -= e.snd_render(Math.min(left, 1024)) || left;
         this.board = e;
     }
 

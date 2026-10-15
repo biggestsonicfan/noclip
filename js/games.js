@@ -2290,6 +2290,7 @@ const DAYTONA_SOUND = {
     music: {
         region: 'mainData', table: 0x8050f0, slotMask: 3,
         buttons: ['VR1 (red)', 'VR3 (yellow)', 'VR2 (blue)', 'VR4 (green)'],
+        hint: 'The song the race starts with. The game plays the course\'s own unless a VR button is held as the race starts, which picks one itself — this is that choice',
     },
 };
 
@@ -3134,6 +3135,18 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/* Dead or Alive's stage 4 conveyor fix (doab's `doa.fixes`), for a program
+ * `shift` bytes below Revision B's. */
+function doaConveyorFix(shift) {
+    return [
+        [0x6a0b4, 0x5a7628, 0x5a761c], // ld row 2's height, g4
+        [0x6a0bc, 0x5a761c, 0x5a7628], // ld row 3's height, g7
+        [0x6a0c0, 0x6805e294, 0x68052297], // cmpr g7, g4
+        [0x6a0cc, 0x5a7620, 0x5a762c], // ld row 3's z
+        [0x6a0dc, 0x5a7618, 0x5a7624], // ld row 3's x
+    ].map(([a, was, now]) => [a - shift, was, now]);
+}
+
 /*
  * Dead or Alive, Revision B: the Model 2B board.
  *
@@ -3144,7 +3157,11 @@ const vf2 = {
  * coprocessor that does the routines' arithmetic. `visible` are the two cull
  * tests the routines call, answered "in front"; `pokes` is RAM the routines
  * read — 0x54FCDD is set, which draws the Danger Zone's banners and ropes
- * (0x65F70) as the attract mode's fights do.
+ * (0x65F70) as the attract mode's fights do. 0x5A75F4 is 2: the round start
+ * (0x7086C calls 0x70950) sets it from the float at 0x54FCE8, which boot leaves
+ * at 10.0 (0x44D8), and nine stages index short model tables with it (stage
+ * 1's floor at 0x65F08 and 0x66AF8), so it picks which version of two
+ * pieces they send. MAME holds 2 there through the attract.
  */
 const doab = {
     id: 'doab',
@@ -3224,20 +3241,46 @@ const doab = {
         count: 16,
         stageByte: 0x5555be,
         visible: [0x72600, 0x72680],
-        pokes: [[0x54fcdd, 1]],
+        pokes: [[0x54fcdd, 1], [0x5a75f4, 2]],
+        /* Stage 4's conveyor (rows of x y z, 12 bytes each from 0x5A7600)
+         * draws a copy of the row that has just wrapped, a lap lower, so it
+         * reads as one belt. The fourth of those copies (0x6A0B0) tests row 3
+         * against row 2 but then draws row 2's place: a copy-paste slip that
+         * leaves a row hanging 80 below the rest for a quarter of the cycle.
+         * The fix loads the two heights the other way round (g7 = row 3's,
+         * the one drawn) and row 3's x and z. */
+        fixes: doaConveyorFix(0),
         /* The sky: four scroll pictures a stage, named in the program, out of
-         * the table of pictures in the data (js/scroll.js buildDoaSky). */
-        sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+         * the table of pictures in the data (js/scroll.js buildDoaSky).
+         * `lines`: the stages whose sky the tile chip scrolls line by line
+         * (11: the sky routine sets bit 15 of layer 2's scroll, 0x6FE70), from
+         * the line table the stage's `after` routine fills (layer 2's, tile RAM
+         * 0x1008800, a short a screen line), with the layer's vertical scroll
+         * (0x54F950, the program's copy of the register) and the scroll the
+         * routine keeps for every line (0x5A0140). js/doa.js doaLineShift. */
+        sky: {
+            pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15],
+            lines: { stages: [11], table: 0x1008800, count: 384, vscroll: 0x54f950, scroll: 0x5a0140 },
+        },
         /* The stages whose routines move pieces of them each pass (state at
          * 0x5A0000-0x5A7667, stage 8's one piece also by the frame count),
          * and the game's setups for them: the stage task's common one
          * (0x70480, 0x64640 runs it) and each stage's own, from the table
          * the round start (0x705F0) calls by stage number. Those stages are
          * run as many passes as the attract's stage, to the same frame
-         * count (attract.frame); MAME's attract shows only stage 1 before it
-         * stops (geo_adsp multiplier op 15), so these are the code's word,
-         * not graded against the board. Stage 6 is left at rest. */
-        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 11], frames: 924, clock: 0x75f },
+         * count (attract.frame). `tick` is the stage task's count-up after
+         * each pass (0x5A75F0 +0x80 and the byte 0x5A6EDD +1): stage 4's
+         * belt and stage 10's turn run on it. `after` are a stage's own
+         * routines the stage task runs before the tick (0x71130): stage 11's
+         * sky scroll 0x702E0, which steps its wave (0x5A0144, a byte a pass
+         * and 0x5A0145 every fourth) and keeps the camera's sky scroll
+         * (0x54F948) in 0x5A0140. Stage 1's ropes and banners swing the
+         * same way; on doab the attract's own run of it comes first, and
+         * doaa, which has no attract, runs it from here. Graded against
+         * MAME's attract (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it
+         * word for word over 299 frames; 0, 2, 10 and 11 (0x5A0140 alone)
+         * differ only where they follow the camera. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 1, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is
@@ -3252,10 +3295,14 @@ const doab = {
          * each player (`roundReset`: its health, 0xFF, and the round's
          * counts). `camera` is the camera task, `frameWait` the wait for the
          * next frame it loops on, `ai` the attract's AI task: its start and
-         * the head of its loop. */
+         * the head of its loop. `headCheck` is what the body routine asks
+         * before it draws the head and face (0x45FA8): no while the player's
+         * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
+         * that no action script has run on. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
+            motion: 0x420c0, headCheck: 0x51dc0,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -3321,10 +3368,70 @@ const doab = {
             ],
         },
     },
+    /*
+     * The sound board is the Model 2 board, its UART at 0x9C0000 on the 2B
+     * (sends queued at 0x94C0, sent at once by 0x9590). The round start
+     * (0x18480) sends the stage's song straight from the table at 0x90C10,
+     * by stage number: A01001-A01010, or A00001, all sound off, for stages
+     * 6, 7, 9 and 15. The song names are in the data ROM at 0x9C860: stage
+     * 5's A01010 is BGM_BOSS, and stage 9 is the name entry, whose setup
+     * (0x1C6F8) sends A0100E, BGM_NAME, itself. The attract skips the table (0x54FC94
+     * is 4 there) and plays A0100A on every stage. MAME, a coined game:
+     * stage 5 starts A01010, 6 A00001, 11 A01002.
+     *
+     * The boot sends A00001. The driver takes its first command about four
+     * seconds after a reset (`warmup`; MAME's i960 sends it nine seconds in).
+     * The 0xFF the i960 writes as it sets the UART up comes long before that
+     * and is never heard; sent once the driver listens, it eats the next
+     * command, so it is left out.
+     */
+    sound: {
+        program: ['epr-19328.31', 0x400bdbfb],
+        samples: [
+            ['mpr-19329.32', 0x8fd2708a], ['mpr-19330.33', 0x0c69787d],
+            ['mpr-19331.34', 0xc18ea0b8], ['mpr-19332.35', 0x2877f96f],
+        ],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        warmup: 5,
+        stageMusic: 0x90c10,
+        none: 0xa00001,
+        songs: { 9: 0xa0100e },
+        replaces: true,
+        /* The fight only goes to nine stages, the fighters' own (the orders at
+         * 0x90BE0 and 0x90BF0: 11 3 8 10 0 2 1 4 5), each with its fighter's
+         * theme, which the table by character at 0x90C40 also names; 6 and 7
+         * are never fought on and have none. The explorer lets any theme play
+         * on any stage. */
+        music: {
+            region: 'mainCpu', table: 0x90c40, own: "the stage's own",
+            picks: [[0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'], [6, 'Genfu'],
+                [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang']],
+            hint: 'The song the stage plays. The game plays the stage\'s own, its fighter\'s theme; stages 6 and 7 are never fought on and have none. This plays any fighter\'s theme instead',
+        },
+    },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    /* The fighters on the animation tab, posed by the fight code itself
+     * (js/doafighters.js): the roster (character number, name), the model
+     * banks and the loads that pick a row of them, the two motion tables
+     * ([pointer, first id, count]), the action scripts and the group
+     * everyone shares. */
+    rig: {
+        kind: 'doa',
+        note: 'doa',
+        roster: [
+            [0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'],
+            [6, 'Genfu'], [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang'],
+        ],
+        banks: 0xc59d2,
+        loads: 0xc3380,
+        motions: [[0x6000000, 0, 0x552], [0x6c00004, 0x552, 249]],
+        scripts: 0xd8000,
+        common: 13,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
 /*
@@ -3354,12 +3461,16 @@ const doaa = {
         doa: { ...doab.colors.doa, stages: 0x72da0, fighters: { ...doab.colors.doa.fighters, table: 0x72d20 } },
     },
     doa: {
-        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
+        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
-        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, after: { 11: [0x688a0] }, tick: 0x696f8 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
+    rig: undefined,
+    features: { ...doab.features, motions: false, bodies: false },
+    /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
+    sound: { ...doab.sound, stageMusic: 0x89250, music: { ...doab.sound.music, table: 0x89280 } },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,

@@ -635,7 +635,20 @@ const FRAG_SHADER = /* glsl */`
                 layerZ = planeZ;
             }
         }
-        gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0), 0.0, 1.0);
+        // A plane material's offset, which writing the depth here takes away:
+        // what polygonOffset(n, n) adds, n times the face's steepest depth
+        // slope plus n steps of the buffer (see planeMaterial). The slope is
+        // the plane's, not the triangle's: near 1 a difference of two depths
+        // is a step or two of float, rounded its own way in each triangle,
+        // and three of those were more than the layer the lettering is lifted
+        // by. Every face of a group has the same plane at the same pixel, so
+        // it gets the same bias to the last bit and the layers stand.
+        float planeBias = 0.0;
+#ifdef PLANE_BIAS
+        float dz = max(abs(dFdx(layerDepth)), abs(dFdy(layerDepth)));
+        planeBias = (PLANE_BIAS) * (dz + 1.0 / 16777216.0);
+#endif
+        gl_FragDepth = clamp(layerDepth - vLayer * (layerSlope + 2.0 / 16777216.0) + planeBias, 0.0, 1.0);
 #endif
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
@@ -1295,19 +1308,31 @@ export class Viewer {
      * the panel and the colour pipeline write lands on it too.
      */
     /* The plane material for submission slot n, made the first time it is
-     * asked for. A negative n is submitted after slot 0 and goes in front. */
+     * asked for. A negative n is submitted after slot 0 and goes in front.
+     *
+     * The offset is polygonOffset(n, n), except where the faces carry layers:
+     * a shader that writes gl_FragDepth gets no polygon offset, so FACE_LAYERS
+     * adds the same amount itself (PLANE_BIAS). setDepthProfile switches
+     * between the two. */
     planeMaterial(n) {
         if (!this.planeMaterials.has(n)) {
-            this.planeMaterials.set(n, this.variantMaterial({
-                polygonOffset: true, polygonOffsetFactor: n, polygonOffsetUnits: n,
-            }));
+            const m = this.variantMaterial({ polygonOffsetFactor: n, polygonOffsetUnits: n });
+            m.defines.PLANE_BIAS = n.toFixed(1);
+            m.polygonOffset = !('FACE_LAYERS' in m.defines);
+            this.planeMaterials.set(n, m);
         }
         return this.planeMaterials.get(n);
     }
 
+    /* The model material with some properties of its own. The defines are
+     * the main material's as they stand: one made after setDepthProfile has
+     * run would otherwise miss FACE_LAYERS, and Fighting Vipers' ground and
+     * floor, drawn through plane materials made when a stage is built, fought
+     * their own lettering (issue 108). */
     variantMaterial(props) {
         const m = Object.assign(createModelMaterial(), props);
         m.uniforms = this.material.uniforms;
+        m.defines = { ...(this.material.defines ?? {}) };
         this.variantMaterials.push(m);
         return m;
     }
@@ -1370,6 +1395,7 @@ export class Viewer {
         /* Only a game whose draws carry layers pays for writing the depth from
          * the fragment shader, which turns off the early depth test. */
         for (const m of [this.material, ...this.variantMaterials, ...this.setMaterials.values()]) {
+            if ('PLANE_BIAS' in (m.defines ?? {})) m.polygonOffset = !layers;
             const has = 'FACE_LAYERS' in (m.defines ?? {});
             const plates = 'ZSORT_PLATES' in (m.defines ?? {});
             if (has === layers && plates === recede > 0) continue;
@@ -1540,6 +1566,9 @@ export class Viewer {
          * sheet beyond the hull is still drawn over it. The other windows
          * stay in, so a room's wall keeps hiding the dish outside it, which
          * the board only gets away with by never looking from there.
+         * A draw marked underlay stays out too: a floor of a later window
+         * that is backdrop all the same, which another scene's room is cut
+         * down into (the ground under Tails' lab, issue 116).
          *
          * The clear is "no surface here" (a view z under -1e8), and its alpha
          * is 1 because three.js premultiplies the clear colour by its alpha:
@@ -1550,7 +1579,7 @@ export class Viewer {
         r.setRenderTarget(this.keyTarget);
         r.setClearColor(new THREE.Color(-1e9, -1e9, 0), 1);
         r.clear(true, true, true);
-        only(solid.filter((o) => o.userData.zWindow !== 1), 1);
+        only(solid.filter((o) => o.userData.zWindow !== 1 && !o.userData.underlay), 1);
 
         /* 2: the picture by true depth, under the keyed one. */
         r.setClearColor(clear, clearAlpha);

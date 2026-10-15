@@ -316,6 +316,14 @@ const LAB_OUTSIDE = [
  * end. A depth test ties the decks with the sand and buries the track and the
  * pad (issue 44); the board files the ground in window 2 and the hangar in 4,
  * so the rail is drawn over the sand from anywhere.
+ *
+ * The ground also runs on under the hangar, at the height of the room's floor,
+ * and the conveyor the rocket rolls in on is sunk in a trench below it. The
+ * board never draws the ground with the room — they are the two cuts — but here
+ * both are drawn, and as the nearest surface the ground held every face of the
+ * trench beyond the z-sort's reach, so the sand lay over the conveyor (issue
+ * 116). It is an underlay: left out of the nearest surface, as window 1 is, so
+ * the room, a later window, is drawn over it whatever the depths.
  */
 const LAB_GROUND = 78;
 /* The Tornado, parked a quarter turn round beside the hangar. */
@@ -1747,7 +1755,10 @@ const OBJECT_ROUTINES = new Map([
 const FV_NO_PLATFORM_SLOTS = [7, 14];
 const FV_NO_POLE_SLOT = 7;
 const FV_TURNING = 1 << 0x10;
-const FV_TURN = (f) => 10 * f;
+/* 0x1EFA8's ten a frame, on the round's clock: the round start (0xC568), like
+ * change_scene, puts word_50A022 back to 0, so the town snaps home with the
+ * objects each FV_ROUND. */
+const FV_TURN = (f) => 10 * (f % FV_ROUND);
 const FV_TURNING_LAYERS = new Set(['upper', 'ground', 'floor']);
 
 export function buildFlatDisplayList(stage, { region = 0 } = {}) {
@@ -1832,8 +1843,14 @@ export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     pushFlatCage(push, stage, f);
 
     /* pole_disp: `bbc 0x12, r3` returns unless bit 18 is set, and stage 7
-     * draws its own before that. */
-    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) push(stage.cagePole, 'poles');
+     * draws its own before that. It draws the pole, pushes ang_y 0x4000
+     * (0x22E30) and draws it again, four times: a post at each corner. Pole k
+     * is drawn only while the camera is inside sides k and k + 1 (byte_500288,
+     * as for the cage), and pole_disp_f draws it later where the camera is
+     * outside both (not on stages 5 and 6). A free camera wants all four. */
+    if ((f & (1 << 0x12)) && stage.slot !== FV_NO_POLE_SLOT) {
+        for (let k = 0; k < 4; k++) push(stage.cagePole, 'poles', { ops: [angY(k * 0x4000)] });
+    }
 
     /*
      * The railing round the arena.
@@ -1884,11 +1901,28 @@ function fvCagePanels(flags) {
  * side, cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws
  * under the same six-unit push — the cage's top rail. */
 function pushFlatCage(push, stage, flags) {
+    if (stage.slot === FV_WALLED_SLOT) return pushWalls(push, stage);
     const panels = (stage.layers.cage ?? []).slice(0, fvCagePanels(flags));
     for (const ops of FV_CAGE_SIDES) {
         if (!stage.hall) for (const m of panels) push(m, 'cage', { ops });
         if (flags & (1 << 0x14)) push(stage.cageTop, 'cage', { ops });
     }
+}
+
+/* Bay Side's walls. cage_display sends stage 5 to 0x22690 instead of
+ * cage_clip_m: no ang_y and no six-unit push, only the scale every side gets,
+ * and then one model a side at the identity, as modelled in place — 0xA51 to
+ * 0xA54, the record's list at 0x84, with 0xBBB beside side 1. Each is drawn
+ * while the camera is inside its side (byte_500288), left out here as for
+ * the cage. */
+const FV_WALLED_SLOT = 5;
+const FV_WALL_EXTRA = [null, 0xbbb, null, null];
+
+function pushWalls(push, stage) {
+    (stage.layers.cage ?? []).slice(0, 4).forEach((m, k) => {
+        push(m, 'cage');
+        push(FV_WALL_EXTRA[k], 'cage');
+    });
 }
 
 /* Flags bit 3, the City Hall Elevator: 0x1EFBC adds 0.017 a frame to
@@ -2399,7 +2433,10 @@ export function buildStageDisplayList(stage, frames = null) {
         win = LAB_WINDOW;
         out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, window: 1, ops: [] });
         for (const m of LAB_OUTSIDE) {
-            out.push({ model: m, layer: 'outside', window: LAB_OUTSIDE_WINDOWS.get(m) ?? win, ops: [] });
+            out.push({
+                model: m, layer: 'outside', window: LAB_OUTSIDE_WINDOWS.get(m) ?? win, ops: [],
+                underlay: m === LAB_GROUND,
+            });
         }
         push(LAB_PLANE, 'outside', LAB_PLANE_AT);
         push(LAB_DISH, 'outside', (f) => [['t', LAB_DISH_AT], ['r', f * LAB_DISH_STEP]]);
