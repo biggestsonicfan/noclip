@@ -1567,7 +1567,7 @@ do not):
 - the four sky pictures, `0xC7660 + 8 * stage`, out of the 242 pictures.
 
 The explorer calls a stage "Stage n", in chapter n: the profile has no names
-for them, and the game shows none. Its info lists the stage, the routine's
+for them. Its info lists the stage, the routine's
 address, the pieces drawn and, on the attract stage, the fighters. Stages
 12-15 are not listed: their routine (`0x6F130`) draws nothing.
 
