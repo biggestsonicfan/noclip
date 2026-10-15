@@ -762,10 +762,12 @@ const fvipers = {
              * js/vf2fighters.js, readArmour, readHips. The shoulder pads
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
              * 0x6421DE0, drawn for the characters it compares against;
-             * 14 is past the roster); readPads, readSkirt. */
+             * 14 is past the roster); readPads, readSkirt. Picky's hair,
+             * pky_kami_disp's, for the characters rob_disp names (18 is past
+             * the roster too); its models are immediates, HAIR_PIECES. */
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
-                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
             },
             /* The midriff, record +0x24, and the one a broken chest draws
              * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */

@@ -1148,7 +1148,8 @@ part out along the fighter's own skeleton at player `+0x8C`.
 Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
 the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
 (`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
-`koshi_unit_change`), Picky's hair, and broken armour (below).
+`koshi_unit_change`), and broken armour (below). Picky's hair is drawn,
+below.
 
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
@@ -1225,7 +1226,8 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
 - `kosi_mino_disp` (`0x31E54`, slot 9): the skirt panels of characters 0, 1,
   13 and 14 (`0x6421DE0[char*16]`), gone once the hips break (bit 9).
 - `pky_kami_disp` (`0x1ADDC`, slot 2): Picky's hair is drawn only once his head armour
-  (slot 2, the helmet) has broken.
+  (slot 2, the helmet) has broken. The whole routine is below, under "Picky's
+  hair".
 - Record `+0x24` is read on slot 9 too, and it is not a model: its `+8`
   picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
   Once the chest breaks the game reads `0x642F9EC[char]` instead.
@@ -1328,7 +1330,8 @@ matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
 pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the chest's per-frame list, Picky's hair, and the flying pieces.
+own steps: the chest's per-frame list and the flying pieces. Picky's hair
+swings with the head ("Picky's hair", below).
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
@@ -1788,6 +1791,73 @@ the arm are both in the explorer's frame, so the facing's turn and the
 explorer's axes cancel in `p`, and nothing like the skirt's corrections is
 needed. It adds the swing to the left pad's X turn and takes it off the
 right's, for the second model as well, and returns the two swings as `pads`.
+
+**Picky's hair (read from the ROM; not checked against MAME).**
+`pky_kami_disp` (`0x1ADDC..0x1B23C`) is called from slot 2's entry in
+`rob_disp`'s table (`0x1A0EC` → `0x1A12C`), after the head's own `set_obj`,
+only while the character byte `+0x1B0` is 5 (Picky) or 18 and `+0x1F48`
+bit 2 is set: the helmet (slot 2, 894 → 893) has broken. Its state is player
+`+0xA70..+0xAA6`, which `pky_kami_init` (`0x1AD08`, called from
+`action_init` at `0x12B2C` for every fighter) fills with immediates, not
+from a per-character table:
+
+| Field | Value | Use |
+|---|---|---|
+| `+0xA70` | (0, 0, −0.2510) | translate on the head's matrix |
+| `+0xAA2`, `+0xAA0`, `+0xAA4` | 680, 908, 909 | the three models |
+| `+0xA92`, `+0xA90` | `0x4000`, `0x8000` | 680's Y, then X turn |
+| `+0xA8E` | `0xC000` | 908's Y turn |
+| `+0xA96`, `+0xA94` | `0x8000`, `0x4000` | 909's Y (plus the swing), Z turn |
+| `+0xA98`, `+0xA9A` | 0, 0 | the swing `s` and its speed `w` |
+| `+0xA9C`, `+0xA9E` | 48, `0x300` | the speed's pull and its cap |
+| `+0xA88` | 180.0 | the kick's gain |
+| `+0xA7C`, `+0xA80`/`+0xA84` | 0 | last head height, this and last rise |
+
+How the mesh is placed. On the head's matrix it pushes, translates by
+`+0xA70`, and draws each model twice, each draw in its own push/pop, turns
+sent in this order (`0x09` Y, `0x08` X, `0x0A` Z):
+
+1. 680: Y `0x4000`, X `0x8000`, then Z `−s` and, again, Z `−(s >> 1)`;
+2. 908: Y `0xC000`, then Z `s` and Z `s >> 1`;
+3. 909: Y `s + 0x8000` and Y `(s >> 1) + 0x8000`, then Z `0x4000`.
+
+So each lock is drawn at the whole swing and at half of it. Each draw is
+`0x5BE4` (`g2 = 0x800000`) with `+0x1A4` bit 26 and `+0x1AA` at most 4, or
+(`g2 = 0x802000`) with `+0x720` bit 2 and an odd `+0x1AA` at most 4;
+otherwise `0x5A48`.
+
+What it reads. Only the head's height, `+0x210` (slot 2's y; the slots'
+places run from `+0x1F4`, 12 bytes each), and the move flags. After the
+draw (`0x1B18C`) it steps the swing, so a frame draws what the frame before
+left:
+
+- `v = y − +0xA7C` (stored at `+0xA80`), `dv = v − +0xA84`, negated unless
+  `+0xA84` has its sign bit set (last frame's rise negative);
+- the kick, `trunc(1000.0 × 180.0 × dv)` (`0xC001818`, the coprocessor's
+  float to integer), goes on `w`; `w` loses `+0xA9C` (three times it with
+  `+0x1A4` bit 16 set and bit 15 clear) and is held to at most `+0xA9E`;
+- `s += w`; at `0x3000` or more `s` stops there, at 0 or less it rests at 0,
+  and either way `w` is cleared;
+- `+0xA7C = y`, `+0xA84 = v`.
+
+So the hair hangs at rest and is flung up whenever the head stops rising or
+stops falling (a landing, the top of a hop), then sinks back at a pull of 48 a
+frame. The fighters' records play no part.
+
+**What the explorer draws** (`HAIR_PIECES`, `hairStep` and `hairSwing` in
+`js/vf2fighters.js`; the profile's `armour.hair` lists characters 5 and 18).
+`readArmour` gives Picky the six draws as extras on slot 2, placed with the
+turns in the order above (`turnedInOrder` in `js/pose.js`).
+`armouredFighter` adds them once the Armour switch breaks the upper half.
+`poseFighter` keeps the swing per fighter, like the chest bounce: it draws
+the swing the last step left, then steps on this frame's head height when
+playback moves on a frame; a frame picked on its own holds the swing and
+takes the height afresh, with no rise. The explorer starts from the first
+frame's height with no rise (the board starts both at 0, which gives a kick
+on the second frame); that is the explorer's choice. The move flags are
+clear, so the pull is always 48. Returned as `hair`. In headless Chrome
+Picky's hair hangs at rest in motion 3 and stands up by frame 30, and the
+swing reaches `0x3000` in many of his motions.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
