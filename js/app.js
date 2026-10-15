@@ -582,7 +582,7 @@ function useRomTexram(texSets, fighters) {
      * dumped sheet says nothing about which palette is in RAM. */
     if (state.rom.game.palette && texSets.length) state.rom.paletteSet = texSets[texSets.length - 1];
     if (state.texramPinned) return;
-    const key = `${texSets.join(',')}${fighters ? `:${fighters.join(',')}` : ''}`;
+    const key = `${texSets.join(',')}${fighters ? `:${JSON.stringify(fighters)}` : ''}`;
     if (key === state.texramKey) return;
 
     const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets), fighters);
@@ -3288,12 +3288,9 @@ function useDoaFighterScene(body) {
         u.uLight.value.set(...lit.light);
         lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
     }
-    useRomTexram([A.stage], [body.index, rival.char]);
-    useRomColorLuts({
-        texSet: [A.stage, A.stage],
-        tint: [1, 1, 1],
-        fighters: [{ char: body.index }, { char: rival.char, costume: rival.costume }],
-    });
+    const fighters = [{ char: body.index }, { char: rival.char, costume: rival.costume }];
+    useRomTexram([A.stage], fighters);
+    useRomColorLuts({ texSet: [A.stage, A.stage], tint: [1, 1, 1], fighters });
     const status = $('#tex-status');
     if (status) status.textContent = `sheets unpacked from ROM (${body.name}'s, and stage ${A.stage}'s set)`;
 }
