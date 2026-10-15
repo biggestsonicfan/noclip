@@ -28,6 +28,8 @@ js/
   exhaust.js     Metal Sonic's jet: the eight-frame plume drawn off the chest
   eggrobo.js     the Egg robots' two frame-counter animations: the boss's
                  arms and the minion's head
+  doa.js         Dead or Alive: runs each stage's own routine, keeps its draws
+  i960.js        the i960 interpreter doa.js runs them on
   viewer.js      three.js scene, shader, orbit + noclip cameras
   app.js         UI wiring
   sound/
@@ -1147,6 +1149,192 @@ Not drawn: the skin at record `+0x24` (VF2 has one at `+0x38`, not drawn
 either), and the special parts `rob_disp`
 (`0x19F10`) swaps in: feet and hands (`set_ashi_ptn`, `set_te_ptn`), chest
 and hips (`mune_unit_change`, `koshi_unit_change`), Picky's hair.
+
+### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
+
+Dead or Alive keeps no stage records to read. Each stage is a routine, named
+by the table at `0x719E0 + 4 * stage` on Revision B, that writes the camera
+and each piece's matrix to the coprocessor's port and the piece's model to the
+geometrizer's. `js/i960.js` is just enough of an i960 to run them: the integer,
+float and branch instructions they use, and calls with their register frames.
+`js/doa.js` puts the program and data ROMs and a blank work RAM on its bus and
+listens on the two ports:
+
+- the copro port takes the matrix commands (load, multiply, translate, turn,
+  as the routines chain them), and the geometrizer's draw command reads the
+  current matrix and the model pointer, which the model table names;
+- the stage number goes in at `0x5555BE`, and `0x54FCDD = 1` has the
+  routines draw the banners and ropes as well;
+- the two culling helpers, `0x72600` and `0x72680`, are answered "in view",
+  and the view vector at `0x5B9870` is (1, 1, 1), so nothing is culled.
+
+Stages 0-11 draw; 12-15 point at a routine that draws nothing, and are
+skipped. A piece turned only about Y becomes a turn op; anything else becomes
+the new `m` op, a 3x3 by columns.
+
+The textures are slabs of 0xC0000 bytes that the routine at `0x7CBA0` copies
+into texture RAM by mode: rows 0-127 and 512-639 (modes 0, 3), rows 128-255
+and 640-767 (modes 1, 4), rows 256-511 (modes 2, 5), modes 3-5 to sheet 1.
+The stage's slab is `0xCADA0[stage]`, the fighters' `0xCADE0[char]`.
+`buildDoaTexram` does the same, the stage's slab onto both sheets. No slab
+carries a mip chain: MAME's texture RAM in a fight leaves rows 768-1023 of
+both sheets empty and still draws the far walls, so the board is never sent
+to a smaller level. The profile says `texture.mips: false` and the viewer
+stays on level 0 (`Viewer.setMipLevels`); sampling the lower levels drew the
+temple's walls black.
+
+Colour, each checked byte for byte against MAME's RAM: the face palette is
+484 colours from `0x62A42` (`0x70D80`), the luma 0x4000 bytes from data
+`0xFC0000` (`0x10D0`), and the colorxlat a grey ramp (`0xFB0`) with the
+stage's five rows of colour over rows 21-29 from `0x7A7E0[stage]`. The
+fighters' rows are 1-9 and 11-19, from `0x7A760[costume * 15 + char]`, grey
+in a stage with no fighter. The materials are 32 slots at `0x6B0`, and the
+light a fixed one, down and away from the camera.
+
+Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
+model and texture chips are Revision B's; its RAM is laid out the same, and
+everything the explorer reads from the program sits 0x7A40 lower (the sky's
+stage table 0x79C0). All twelve stages draw the same pieces and render pixel
+for pixel the same as Revision B's.
+
+The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
+`js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
+palette, map). As a stage starts, `0x6F558` lays four of them, named per
+stage at program `0xC7660`, side by side into a 2048-pixel ring; stages 4, 5,
+7 and 9 clear the layer, and 6 and 12-15 fill it with one plain tile. Each
+frame `0x6FE00` scrolls it by `yaw >> 5` (a turn is the ring) and `0x70090` by
+`200 * (pitch + 0xE39) / 0x238E`, linear in the pitch, so level centres row
+272 on the eye line at 229 rows a radian. The board's yaw 0 looks down its +Z
+and a positive yaw turns toward -X (the camera's eye and target at
+`0x555598`). Rendered from the eye and target of a MAME attract frame, the
+explorer shows the same arena and the same clouds over it. The colours are
+the raw palette, as MAME shows them.
+
+Stage 1's ropes and banners (models 16393-16424: four ropes of eight pieces)
+swing, and the stage routine moves them itself each time it draws them
+(`0x74000`, culled or not). The first piece of the first rope is a pendulum
+(`0x74460`): its angle speeds up by one a frame toward `-0x500`, and above
+`0x468` it is held there and stopped. Each piece keeps its last 32 angles
+(`+0xC`, a ring indexed by `0x5A02F0`), and the piece below it takes one of
+them, so the swing runs down the rope late; each rope then takes the one
+before it the same way. The stage setup (`0x70480`) clears it all. So the
+state is nothing but the routine's passes since the setup. For the attract
+fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
+`stageFrames`). After that, 0x5A02F0-0x5A14A0 is MAME's RAM at board frame
+0x75F byte for byte (639 passes give 0x640's). The eight rope pieces MAME
+draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
+off-screen there; their state is part of that byte-for-byte match.
+
+Six other stages move pieces the same way, each pass of their own routine:
+0 (16004), 2 (16597 16600 16628 16644), 3 (16867-16870), 4 (a conveyor of
+33 pieces in 17013-17106 that slide on a 1:2 slope and wrap), 8 (17392 and
+17398-17414; some swap models as they go, 17316-17318, and 17392 also reads
+the frame count) and 11 (17704 17707 17715 17718), with their state at
+0x5A0000-0x5A7667. The game sets them up in two steps: the stage task
+(0x64640) runs the common setup 0x70480 once, and the round start (0x705F0)
+calls the stage's own from the table at 0x70440 (stage 1's and 11's are a bare
+`ret`). The explorer runs both, then 924 passes to frame count 0x75F, the
+attract stage's count (`doa.stageSetup`; 2A's table at 0x68A00, setup 0x68A40).
+MAME's attract shows only stage 1 before it stops on the geometry DSP's
+multiplier op 15 (frame ~5500-6000), so these six are the code's word and
+are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
+moves, and are drawn once from cleared RAM.
+
+### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
+
+The fighters are drawn by the game's own code too, on two players set up the
+way the fight start does (Revision B addresses):
+
+- the player record at `0x54FBE0 + 88 * p`: +1 character, +2 costume, +4
+  position (y 1.0 is the floor), +0x14/+0x18/+0x1C angles (the body faces the
+  first), +0x2D which head the body routine picks, +0x48 drawn;
+- `0x407A0(char, p)` loads the character, `0x4F930(p)` clears its ribbon,
+  `0x41900(p, char)` sets it up; the player's frame `0x41A50(p)` runs its
+  action script (+0x28, started by +0x36 = 1), which starts motions with
+  `0x420C0(p, motion)` (facing `0x550124[p]`, -1 is mirrored);
+- the motion's fifteen joint tracks are pointers at `0x56ACD0 + 60 * p`, six
+  bytes a frame (three int16 angles), which go to `0x56AA40 + 0xB4 * p` as
+  int32; a mirrored player turns the other way about Y and Z;
+- the face model is `0x58828C[p]`, the model bank `0x5A6ED0[p]`;
+- the skeleton (`0x47810`, from the body routine `0x457C0`) lifts the hips by
+  the root's y at `0x56AD54 + 12 * p` times the character's height
+  `0x589B80[p]`, which `0x4DAE0` copies from `0xC1E80[char]`;
+- the motion step `0x44840` moves the motion's clock on by the speed at
+  `0x56ADA0[p]` times the record's rate (+0x10), and takes the joint angles
+  and the hips' place (`0x56AD50 + 12 * p`: dx, y, dz) from the frame it has
+  reached; the skeleton lifts the hips by that y times the height, and the
+  body routine turns dx and dz by the heading `0x56AC28[p]` into the
+  record's position and clears them, so the fighter steps as its motion does;
+- a move can blend in: the script sets a frame count at `0x56AC04[p]`,
+  `0x4A5B0(p)` works out a step per joint toward the move's first frame, and
+  `0x4A8D0(p)` takes one a frame in place of the motion step until the count
+  runs out;
+- `0x4FEB0(p)` draws the ribbon (Tina's struct at `0x568470`), a chain it
+  swings from frame to frame: a bob (`0x400B0`: acceleration, speed and place
+  at `+0x5C..+0x64`, 32 frames a swing from the load on) and a push
+  (`+0x74..+0x7C`), the joint the ribbon hangs from's move since the last
+  swing; it swings only on frames whose parity is `0x589DB1` (`0x3FA50`).
+  Each link's turn (`0x40540`) eases toward the angles the copro's `0x0F`
+  gives for the push, and the push takes the floor's slope from a 14 x 14
+  grid at `0x5A6F00` (two singles a cell, by the player's x and z, through
+  `0x630B0` into `0x56AA30`), which the stage setup `0x70764` copies from
+  `0xC7CA0` (`0xC82C0` on stages 2 and 5);
+- the fight loop's frame (`0x4D8D8`) opens with `0x4DF20`, which works out
+  `0x589DC0..C8` from the light at `0x5555B0` plus, with `0x54FC94 = 4`, the
+  stage's entry of the table at `0xC32A0`, and closes with `0x4DDC0`, which
+  copies the low bit of the frame count `0x54B158` to `0x589DB1`;
+- the shadows (models 136-150 and 1493-1507, drawn by `0x45B24` from the body
+  routine, before the skeleton moves: they are the frame before's) project
+  each joint along `0x589DC0` onto the floor at `0x58BA80` if it lies inside
+  the ring at `0x550100..0x550114`, else onto y 0. The round start `0x54660`
+  sets the floor (1.0) and the ring, half of the size the boot sets at
+  `0x54FD5C/60` (24.0, at `0x44B8`).
+
+- the round's setup also fills the fight's tables (`0x25870(c)` for c 0-12)
+  and resets each player (`0x1B430(p)`: health +0x20 = 0xFF, the round's
+  counts cleared); without the health, the first hit knocks the player down
+  (`0x22540` compares +0x20 with the damage) where MAME's only reacts;
+- each frame of the fight runs, in the board's order: `0x4DF20`, `0x41A50`
+  for each player, `0x4FEB0` for each, `0x4DDC0`, the hit and push check
+  `0x3E1E0`, the camera task, then the fight's tasks (`0x1FDD0` the hits,
+  `0x24FD0` the reactions, `0x21400`, `0x22EF0`, `0x231D0`, `0x1FE80`,
+  `0x23C80`) and the movers of the task at `0x2F4F0` (`0x2F5E0` the
+  knockback, `0x2F670` the push of players in contact, and the rest);
+- the camera task (`0x7D1B0`, a loop that waits for the next frame at
+  `0x8240`) eases its eye and target after the players (`0x5552C8`,
+  `0x865C0`) in mode `0x55558C` (0x23 in a fight) and builds the camera
+  (`0x85BE0`): copro `0x08`, then the turns and the eye's move. The body
+  routine outputs that matrix (`0x5888C0`) and builds the joints on it, so
+  the copro's matrices are the camera's; the explorer takes the draws back
+  to the stage's frame through its inverse;
+- the copro's arctangent (`0x0A`, and `0x0F`: the yaw and the pitch from one
+  point to another, yaw = atan2(-dx, dz), pitch = atan2(dy, the run)) reads
+  a little short, about 6e-5 of the angle (straight back is 0x7FFE), and
+  rounds down: MAME's answers agree with that to a unit.
+
+The profile's `doa.attract` names MAME's attract fight at frame 2000 on stage
+1: the stage, the light the attract script sets (`0x19710` turns two angles
+into it), the board's frame count on the fight's first frame (0x6B0) and on
+the one drawn (0x75F: the board shows a frame's display list on the next),
+the camera task's state on the first frame as MAME has it, and each player's
+record on that frame (Zack starting action 0; Tina turned, starting action
+0x800). The rest is the fight code's, the attract's AI included. The AI is
+a task of its own: its start (0x25BD0) sets it up, and each frame the loop
+from 0x25CF4 runs a byte-code per player whose ops 0x2B28C and 0x2B3E0 give
+the command (+0x2C), then 0x2F2E0 clears guard (+0x3A) and sets it again
+from the AI's state (0x56471A), the other player's +0x46 and its own +0x2E.
+It reads five bytes the attract's script sets before the fight, the
+profile's `ai`: script op 0x1A370 sets each player's start flag
+(0x5555F2/F3) to 1 and its pattern (0x5555F4/F5) from the table at 0x90E50
+(Zack 0, Tina 1), and op 0x1AEE0 sets 0x5555CB to 2. It draws no random
+number in this fight. Run after the camera task, it gives Tina 0xA6, 0xA7
+and 0xA8 on frames 0x6C4, 0x6C5 and 0x6D3, and Zack guard from 0x6C6 and
+0x40, 0x03, 0x53, 0xA8, 0xA9 and 0xAA on 0x6F2, 0x72A, 0x735, 0x736, 0x740
+and 0x74A, the frames MAME has them on. Against MAME's
+display list for that frame all 69 draws match, the ribbon's links
+included, to 0.001 radians in their turn and 0.001 in place.
+
+Not read yet: Revision A's fight code.
 
 ### Polygon decoding (`js/model.js`)
 

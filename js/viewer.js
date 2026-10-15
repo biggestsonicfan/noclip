@@ -302,6 +302,8 @@ const FRAG_SHADER = /* glsl */`
     uniform float uFogDensity;
     // Not the board: smooth a transparent face's holes into a translucent smear.
     uniform float uSmoothHoles;
+    // 0 for a game whose texture RAM holds no mips: see setMipLevels.
+    uniform float uMipLevels;
     uniform float uMicroOn;
     // The viewport being drawn, in the framebuffer's pixels: x, y, width, height.
     uniform vec4 uViewport;
@@ -696,7 +698,7 @@ const FRAG_SHADER = /* glsl */`
             // 30 - clz(min(w, h)) (draw_scanline_tex). A tile is 32 << n on a
             // side, so its log2 is a whole number, but a float log2 can land a
             // hair either side of it on some drivers. Rounding takes it back.
-            float lmax = max(floor(log2(min(vTile.z, vTile.w)) + 0.5) - 1.0, 0.0);
+            float lmax = max(floor(log2(min(vTile.z, vTile.w)) + 0.5) - 1.0, 0.0) * uMipLevels;
             float rawLod = log2(max(length(dFdx(vTexel)), length(dFdy(vTexel))));
             float lod = clamp(rawLod, 0.0, lmax);
             int L0 = int(floor(lod));
@@ -858,6 +860,7 @@ export function createModelMaterial() {
             uZsortRecede: { value: 12.0 },
             uBoardCull: { value: 1 },
             uSmoothHoles: { value: 0 },
+            uMipLevels: { value: 1 },
             uMicroOn: { value: 1 },
             /* Set as each render starts; see the scene's onBeforeRender. */
             uViewport: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -1271,6 +1274,14 @@ export class Viewer {
      *  translucent smear (not the board; see uSmoothHoles). */
     smoothHoles(on) {
         this.material.uniforms.uSmoothHoles.value = on ? 1 : 0;
+    }
+
+    /** Sample the smaller levels at a distance, or only ever the full size.
+     *  Dead or Alive loads its textures as raw slabs with no mip chain, and
+     *  the board is handed a texlod that keeps it on level 0; the mip area of
+     *  its texture RAM stays empty, so a level below the first reads black. */
+    setMipLevels(on) {
+        this.material.uniforms.uMipLevels.value = on ? 1 : 0;
     }
 
     /** Blend in the faces' microtextures, or leave them out (see microBlend). */

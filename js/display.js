@@ -20,6 +20,7 @@
  *       ['r', degrees]   Y rotation
  *       ['rx', degrees]  X rotation
  *       ['rz', degrees]  Z rotation
+ *       ['m', [9]]       a 3x3 matrix, by columns (X's image first)
  *       ['t', [x,y,z]]   translate
  *
  * Ops are in the viewer's space, not the board's, and the two differ in exactly
@@ -2430,15 +2431,17 @@ export function describeOps(ops) {
         if (kind === 'r') return `${Math.round(v)}°`;
         if (kind === 'rx') return `${Math.round(v)}°x`;
         if (kind === 'rz') return `${Math.round(v)}°z`;
+        if (kind === 'm') return 'matrix';
         return `@${v.map((n) => n.toFixed(1)).join(',')}`;
     }).join(' ');
 }
 
 /* `scenery` is a placement stage's one layer: its draws are all the same kind
- * of thing, a model where the table puts it. */
+ * of thing, a model where the table puts it. `fighters` are the bodies a stage
+ * poses with the game's own code (Dead or Alive's attract fight). */
 export const DISPLAY_LAYER_ORDER =
     ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery',
-        'outside', 'inside'];
+        'fighters', 'outside', 'inside'];
 
 /* Layers the camera's framing bounds leave out. The backdrop, because it sits
  * hundreds of units past the arena; the objects, because they reach further

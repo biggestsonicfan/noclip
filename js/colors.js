@@ -263,6 +263,47 @@ function buildRampColorxlat(rom, colorSet) {
 }
 
 /*
+ * Dead or Alive's colorxlat: a grey ramp the boot computes (0xFB0) and, over
+ * its odd rows, colours copied whole out of the program ROM (0x5D710). Row r
+ * of the ramp is k * (i + 1) >> 6 for luma i < 64, k = 0x40 + 6r + r / 6, and
+ * never under r; luma 64 on holds the last of it. The copies are 64 entries a
+ * row, three bytes an entry (red, green, blue), five rows two apart: the
+ * stage's at row 21 out of `stages[stage]`, the two fighters' at rows 1 and 11
+ * out of `fighters[costume * perCostume + char]`. With no fighter in the scene
+ * those rows stay grey.
+ *
+ * @param {{char:number, costume?:number}[]} fighters  player 1 first
+ */
+function buildDoaColorxlat(rom, stage, fighters) {
+    const C = rom.game.colors.doa;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const set = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const k = row ? 0x40 + 6 * row + Math.trunc(row / 6) : 0;
+        let v = 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            if (luma < 64) v = Math.max((k * (luma + 1)) >> 6, row);
+            for (let ch = 0; ch < 3; ch++) set(ch, row, luma, v);
+        }
+    }
+    const copyRows = (src, row0) => {
+        if (!src || src + C.rows * 64 * 3 > rom.maincpu.length) return;
+        for (let r = 0; r < C.rows; r++) {
+            for (let luma = 0; luma < 64; luma++) {
+                for (let ch = 0; ch < 3; ch++) set(ch, row0 + 2 * r, luma, cv.getUint8(src + (r * 64 + luma) * 3 + ch));
+            }
+        }
+    };
+    copyRows(stage >= 0 && stage < C.count ? cv.getUint32(C.stages + stage * 4, true) : 0, C.row0);
+    const F = C.fighters;
+    if (F) fighters.forEach((f, p) => {
+        copyRows(cv.getUint32(F.table + ((f.costume ?? 0) * F.perCostume + f.char) * 4, true), F.rows[p]);
+    });
+    return out;
+}
+
+/*
  * Virtua Cop's 0x43B0, run on the fresh ramp before the band goes over it:
  * rows 1..31, luma 1..63, every entry whose red is not zero and at most `top`
  * gains `add` in each channel. The test is on red alone, and the channels are
@@ -298,6 +339,29 @@ function writeBand(md, band, set) {
     }
 }
 
+/* ---- send_tex_col_part and send_tex_col_skin: whoever is on screen ----
+ * A character at or past the split indexes a second table with the split
+ * taken off — 26 in one game, 13 in the other, each the `subo` the routine
+ * does right after comparing the character number at +0x1B0. */
+function sendFighterColors(dv, put, rgb, C, fighters, palette) {
+    const { add, mul } = C;
+    fighters.slice(0, 2).forEach((charIndex, player) => {
+        if (!(charIndex >= 0)) return;
+        const part = C.part, skin = C.skin;
+        const hi = charIndex >= part.split;
+        const n = hi ? charIndex - part.split : charIndex;
+
+        palette(colorTable(dv, hi ? { ...part, at: part.atHi } : part) + part.block * n,
+            part.row0[player], part.rows);
+
+        sendTexCol(dv, put, rgb, add, mul, {
+            src: colorTable(dv, skin) + skin.block * n + (hi ? skin.hiOffset : 0),
+            row0: skin.row0[player], rows: skin.rows, luma0: SKIN_LUMA0,
+            count: SKIN_COLORS, groupStride: SKIN_GROUP, channelStride: SKIN_CHANNEL,
+        });
+    });
+}
+
 /**
  * colorxlat for one scene.
  *
@@ -308,7 +372,8 @@ function writeBand(md, band, set) {
  * @param {number[]} [opts.tint]    stage_RED/GREEN/BLUE as 0..1, i.e. the
  *                                  `tint` readStageTable already divides by 128
  * @param {number[]} [opts.fighters] the character numbers on screen, player 1
- *                                  first — whose part and skin rows to write.
+ *                                  first — whose part and skin rows to write
+ *                                  (Dead or Alive: {char, costume} records).
  *                                  An empty list leaves those rows at zero,
  *                                  which is what a scene with no fighter in it
  *                                  shows: no stage model names one.
@@ -317,6 +382,7 @@ function writeBand(md, band, set) {
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
+    if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
@@ -373,25 +439,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
      * 7..13 and leave no gap for them. */
     for (const f of C.fixed) palette(colorTable(dv, f), f.row0, f.rows);
 
-    /* ---- send_tex_col_part and send_tex_col_skin: whoever is on screen ----
-     * A character at or past the split indexes a second table with the split
-     * taken off — 26 in one game, 13 in the other, each the `subo` the routine
-     * does right after comparing the character number at +0x1B0. */
-    fighters.slice(0, 2).forEach((charIndex, player) => {
-        if (!(charIndex >= 0)) return;
-        const part = C.part, skin = C.skin;
-        const hi = charIndex >= part.split;
-        const n = hi ? charIndex - part.split : charIndex;
-
-        palette(colorTable(dv, hi ? { ...part, at: part.atHi } : part) + part.block * n,
-            part.row0[player], part.rows);
-
-        sendTexCol(dv, put, rgb, add, mul, {
-            src: colorTable(dv, skin) + skin.block * n + (hi ? skin.hiOffset : 0),
-            row0: skin.row0[player], rows: skin.rows, luma0: SKIN_LUMA0,
-            count: SKIN_COLORS, groupStride: SKIN_GROUP, channelStride: SKIN_CHANNEL,
-        });
-    });
+    sendFighterColors(dv, put, rgb, C, fighters, palette);
 
     return out;
 }

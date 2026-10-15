@@ -3117,8 +3117,236 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/*
+ * Dead or Alive, Revision B: the Model 2B board.
+ *
+ * The program does not keep its stages as tables. Each stage is a routine
+ * (`ld 0x719E0[stage]`, called from 0x71BC0 with the stage number in RAM byte
+ * 0x5555BE) that builds its matrices on the coprocessor and draws piece by
+ * piece, so js/doa.js runs it: an i960 interpreter (js/i960.js) and a
+ * coprocessor that does the routines' arithmetic. `visible` are the two cull
+ * tests the routines call, answered "in front"; `pokes` is RAM the routines
+ * read — 0x54FCDD is set, which draws the Danger Zone's banners and ropes
+ * (0x65F70) as the attract mode's fights do.
+ */
+const doab = {
+    id: 'doab',
+    name: 'Dead or Alive (Model 2B, Revision B)',
+    identify: ['epr-19379b.15', 'epr-19380b.16'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x00000, 'epr-19379b.15', 0x8a10a944, 'epr-19380b.16', 0x766c1ec8]],
+        },
+        /* MAME copies the last pair up to 0x1C00000 as well; nothing read
+         * here comes from that copy. */
+        mainData: {
+            size: 0x1c00000,
+            parts: [
+                [0x0000000, 'mpr-19318.11', 0xab431bfe, 'mpr-19319.12', 0xc5cb694d],
+                [0x0800000, 'mpr-19316.9', 0x2d2d1b1a, 'mpr-19317.10', 0x96b17bcf],
+                [0x1000000, 'mpr-19314.7', 0xa8d963fb, 'mpr-19315.8', 0x90ae5682],
+                [0x1800000, 'mpr-19312.5', 0x1dcedb10, 'mpr-19313.6', 0x8c63055e],
+            ],
+        },
+        polygons: {
+            size: 0x1800000,
+            parts: [
+                [0x0000000, 'mpr-19322.17', 0xd0e6ecf0, 'mpr-19325.21', 0x7cbe432d],
+                [0x0800000, 'mpr-19323.18', 0x453d3f4a, 'mpr-19326.22', 0xb976da02],
+                [0x1000000, 'mpr-19324.19', 0x0d6bf454, 'mpr-19327.23', 0x6a75634c],
+            ],
+        },
+        /* The material and texture-point streams the model table points at. */
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19321.27', 0x9c49e845, 'mpr-19320.25', 0x190c017f]],
+        },
+    },
+    modelTable: { offset: 0x0003a160, count: 19330, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* The boot copies 484 colours out of the program ROM to palette RAM
+     * 0x1802000 (0x70D80): a count and then the colours. `tables` points at
+     * the `ldos 0x62A40` operand that names them. */
+    palette: { tables: 0x70d84, sets: 1, split: 0 },
+    /* Raw sheets, filled from slabs (js/texture.js buildDoaTexram): a stage's
+     * set is its number. The slabs carry no mip chain -- MAME's texture RAM
+     * leaves rows 768-1023 empty on both sheets and still draws the far walls
+     * -- so the viewer stays on the full-size level (Viewer.setMipLevels). */
+    texture: {
+        raw: { layout: 'doa', stageSlabs: 0xcada0, charSlabs: 0xcade0 },
+        sets: 16,
+        residentSet: null,
+        defaultSet: 1,
+        mips: false,
+    },
+    /* Luma is 0x4000 bytes from data 0xFC0000 (0x10D0); colorxlat is a grey
+     * ramp with the stage's colours over rows 21-29 and the attract fighters'
+     * over rows 1-9 and 11-19 (js/colors.js buildDoaColorxlat). Both match
+     * MAME's RAM byte for byte. */
+    colors: {
+        luma: { data: 0xfc0000, bytes: 0x4000 },
+        doa: {
+            stages: 0x7a7e0, count: 16, row0: 21, rows: 5,
+            fighters: { table: 0x7a760, perCostume: 15, rows: [1, 11] },
+        },
+    },
+    /*
+     * The boot uploads 31 material slots from program 0x6B0 (geometry-engine
+     * function 6). The light is the fighter's — a point the routine at
+     * 0x16760 takes through the camera each frame — and for a stage alone it
+     * is this fixed one, what MAME's display list holds with the camera
+     * square on: down and away from the viewer.
+     */
+    lighting: {
+        light: [0, -Math.SQRT1_2, -Math.SQRT1_2],
+        materials: { at: 0x6b0, count: 32 },
+    },
+    doa: {
+        routines: 0x719e0,
+        count: 16,
+        stageByte: 0x5555be,
+        visible: [0x72600, 0x72680],
+        pokes: [[0x54fcdd, 1]],
+        /* The sky: four scroll pictures a stage, named in the program, out of
+         * the table of pictures in the data (js/scroll.js buildDoaSky). */
+        sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+        /* The stages whose routines move pieces of them each pass (state at
+         * 0x5A0000-0x5A7667, stage 8's one piece also by the frame count),
+         * and the game's setups for them: the stage task's common one
+         * (0x70480, 0x64640 runs it) and each stage's own, from the table
+         * the round start (0x705F0) calls by stage number. Those stages are
+         * run as many passes as the attract's stage, to the same frame
+         * count (attract.frame); MAME's attract shows only stage 1 before it
+         * stops (geo_adsp multiplier op 15), so these are the code's word,
+         * not graded against the board. Stage 6 is left at rest. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 11], frames: 924, clock: 0x75f },
+        /* The fight code (js/doa.js runDoaFighters), run a frame at a time
+         * as the board's fight loop runs it. `heights` is the table of one
+         * float a character the skeleton scales the hips' lift by. `boot` is
+         * floats the boot sets (0x44B8): the ring's size, which the round
+         * start halves into the bounds a shadow lands on the floor inside.
+         * The pokes are what the fight sets: 0x54FCDD/0x54FC93 pick the body
+         * path, 0x54FC94 4 takes the shadows' slant from the stage, 0x589DB0
+         * lets the ribbon swing. The round start also fills the fight's
+         * tables (`tables`, 0x25870 for each of 13), copies the stage's grid
+         * (`grid`, what 0x70764 does: the singles and bytes the ribbon reads
+         * under the feet, from a second table on stages 2 and 5) and resets
+         * each player (`roundReset`: its health, 0xFF, and the round's
+         * counts). `camera` is the camera task, `frameWait` the wait for the
+         * next frame it loops on, `ai` the attract's AI task: its start and
+         * the head of its loop. */
+        fighters: {
+            heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
+            player: 0x41a50, ribbon: 0x4feb0,
+            roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
+            tables: { at: 0x25870, count: 13 },
+            grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
+            roundReset: 0x1b430,
+            camera: 0x7d1b0, frameWait: 0x8240, ai: { start: 0x25bd0, frame: 0x25cf4 },
+            /* The hit and push checks, then the fight's tasks: the hits
+             * (0x1FDD0), the reactions to them (0x24FD0) and the rest. */
+            collision: [0x3e1e0],
+            fight: [0x1fdd0, 0x24fd0, 0x21400, 0x22ef0, 0x231d0, 0x1fe80, 0x23c80],
+            moversStart: 0x2f550, movers: [0x2f5e0, 0x2f670, 0x2fb40, 0x2fd50, 0x2ff70],
+            boot: [[0x54fd5c, 24], [0x54fd60, 24]],
+            pokes: [[0x54fcdd, 1], [0x54fc93, 2], [0x54fc94, 4], [0x589db0, 1]],
+        },
+        /* The attract fight MAME shows at frame 2000 on stage 1: Zack against
+         * Tina, from the round's start. `base` is the player's model bank
+         * (0x5A6ED0), `pos` and `angles` where the round starts it,
+         * `expression` the face model (0x58828C) and `open` its record on the
+         * fight's first frame. `light` is the
+         * stage's light, `first` and `frame` the board's frame count
+         * (0x54B158) on the fight's first frame and on the one drawn: the
+         * board shows a frame's display list on the next, so MAME's frame
+         * 2000 is loop 0x75F's. `camera` is the camera task's state on the
+         * first frame, from MAME's RAM. `ai` is what the attract's script
+         * sets for the AI before the fight: its op 0x1A370 each player's start
+         * flag (0x5555F2/F3) and pattern (0x5555F4/F5, from the table at
+         * 0x90E50: Zack 0, Tina 1), its op 0x1AEE0 0x5555CB. The stage's
+         * ropes and banners swing in RAM the stage routine steps each time it
+         * draws (0x74460, a pendulum, and a 32-frame ring of its angles down
+         * each rope), from what the stage setup (`stageInit`, 0x70480) clears:
+         * `stageFrames` is the routine's passes from the setup to the frame
+         * drawn, 924, which is when MAME's RAM is the routine's own byte for
+         * byte. */
+        attract: {
+            stage: 1,
+            stageInit: 0x70480,
+            stageFrames: 924,
+            light: [0.2387, 0.8988, -0.3677],
+            first: 0x6b0,
+            frame: 0x75f,
+            camera: [
+                [0x5bf840, 0x11000000], [0x5bf844, 0x11200000], [0x5bf870, 0x10a],
+                [0x5bf880, 0x3fef6f83], [0x5bf884, 0x40083127], [0x5bf888, 0x3db9b7a7],
+                [0x5bf88c, 0x3ff09dc2], [0x5bf890, 0x400dc87c], [0x5bf894, 0x3f8bde4e],
+                [0x5bf898, 0x38b], [0x5bf89c, 0x7f9f], [0x5bf8a4, 0x3f80c0c1],
+                [0x5bf8b0, 0x3fef6f83], [0x5bf8b8, 0x3f800000], [0x5bf8c0, 0x22],
+                [0x5bf8c8, 0x3fef6f83], [0x5bf8d0, 0x3f800000], [0x5bf8d8, 0x3db9b7a7],
+                [0x5bf8e0, 0x3db9b7a7], [0x5bf8e8, 0x2201], [0x5bf8f8, 0xcc9b4],
+                [0x555584, 0x3fde613e], [0x555588, 0xffff85aa], [0x55558c, 0x23],
+                [0x555590, 0x38b], [0x555594, 0x7f9f], [0x555598, 0x3ff09dc2],
+                [0x55559c, 0x400dc87c], [0x5555a0, 0x3f8bde4e], [0x5555a4, 0x3fef6f83],
+                [0x5555a8, 0x40083127], [0x5555ac, 0x3db9b7a7],
+            ],
+            ai: [[0x5555f2, 1], [0x5555f3, 1], [0x5555f4, 0], [0x5555f5, 1], [0x5555cb, 2]],
+            fighters: [
+                {
+                    char: 0, base: 80, pos: [5.5, 1, 0.5], angles: [0, 0, 0],
+                    open: { state: [0x28, 0, 0x29, 0, 0x2d, 0, 0x36, 1] },
+                },
+                {
+                    char: 1, base: 798, pos: [6.5, 1, 0.5], angles: [0x9f48, 0x9f48, 0x9f48], expression: 1,
+                    open: { angles: [0x8000, 0x9f48, 0x9f48], state: [0x29, 8, 0x36, 1] },
+                },
+            ],
+        },
+    },
+    stageTable: { doa: true, flat: true },
+    depth: { recede: 0, nearMin: 0.1, layers: true },
+    scenes: null,
+    features: { stages: true, characters: false, motions: false, bodies: false },
+};
+
+/*
+ * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
+ * the data, model and texture chips are doab's, so the set needs doa.zip
+ * beside it. The model table is in those data chips, so it has not moved;
+ * the stage code and the program's tables sit 0x7A40 lower than Revision B's
+ * (the sky's stage table 0x79C0), and its RAM is laid out the same.
+ */
+const doaa = {
+    ...doab,
+    id: 'doaa',
+    name: 'Dead or Alive (Model 2A, Revision A)',
+    identify: ['epr-19310a.12', 'epr-19311a.13'],
+    identifyCrc: [0x06486f7a, 0x1be62912],
+    regions: {
+        ...doab.regions,
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x00000, 'epr-19310a.12', 0x06486f7a, 'epr-19311a.13', 0x1be62912]],
+        },
+    },
+    palette: { ...doab.palette, tables: 0x69344 },
+    texture: { ...doab.texture, raw: { layout: 'doa', stageSlabs: 0xc33e0, charSlabs: 0xc3420 } },
+    colors: {
+        ...doab.colors,
+        doa: { ...doab.colors.doa, stages: 0x72da0, fighters: { ...doab.colors.doa.fighters, table: 0x72d20 } },
+    },
+    doa: {
+        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
+        sky: { ...doab.doa.sky, stages: 0xbfca0 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
+        /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
+        fighters: undefined, attract: undefined,
+    },
+};
+
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2, doaa, doab];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
