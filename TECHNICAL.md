@@ -1640,11 +1640,26 @@ Those 14 are every direct `call` to `0x63270` in the program; no instruction
 loads its address and no word in the program or data ROMs holds it, so no
 indirect call reaches it through a stored pointer. No direct call passes 3,
 nothing else reads `0xC5A70`, and no code names those entries by address.
-The program's indirect calls (343 `callx`, `bx` and `balx` in a linear
-disassembly, many of them data read as code) were not traced one by one,
-so a target worked out by arithmetic is not ruled out; short of that, each
-character's dark grey variant is never drawn. As a stage, 6 shows variant 0
-only, which is what the explorer draws.
+No indirect transfer reaches it either. A linear disassembly shows 343
+`callx`, `bx` and `balx` and 12 `calls`; followed from the program's own
+entry points (start IP `0x410`, `0x490` after the reinit at `0x3C0`, the
+fault, system procedure and interrupt tables at `0x210`, `0x1C0` and
+`0x7B10`, and the targets below), 80 of them are reachable and the rest are
+data read as code. 71 are `switch` jumps, `ld T[g4*4]` then `bx`, through
+tables of ROM words. Two are the task switcher (`0x25BC`, `0x27B4`), which
+jumps to a task's word +0x10: only `0x8210` writes it, from the constant
+each of its 42 callers loads (`0x2C70`, `0x5550`, ... `0x7D150`, never
+`0x63270`), and `0x2604` writes `0x825C`, the return address of the
+yield's `balx` at `0x8254`, which is one more and goes to the constant
+`0x24E0`. Four are leaf returns
+(`0x4E2F0`, `0x4E98C`, `0x4E99C`, `0x4EFD0`) through the register the
+entry copied `g14` into, a return address. Two are `callx` through the
+stage tables (`0x708AC`: `0x70440[0x5555BE]`; `0x71BD0`: `0x719E0[0x5555BE]`),
+ROM words read with a byte index. None computes its target by arithmetic,
+and the address `0x63270` is not in either ROM at any byte offset, so no
+indirect call or jump can land on it: the 14 direct calls are its only
+callers and each character's dark grey variant is never drawn. As a stage,
+6 shows variant 0 only, which is what the explorer draws.
 
 Its one piece outside the letters, 18109 (stage 9's too), is drawn as
 `18109 + [0x5A6EE0]`, like other stages' pieces. That word is the texture
