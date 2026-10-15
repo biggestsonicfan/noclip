@@ -2333,8 +2333,9 @@ them:
 
 - **One clock.** There is no per-object counter at `+6`. Every routine reads a
   single u16 at `mod_fa_obj0+6`, stepped once a frame after the routines run and
-  reset at the start of each round. The viewer gives it a round of 3600 frames,
-  so the trucks and the planes come back.
+  reset by `ROUND_INT`, which runs once a match (it sets round 1; the later
+  rounds start at `SET_INT`). The viewer starts it over every 3600 frames, so
+  the trucks and the planes come back.
 - **One turn.** `object_control` draws all the objects under `ang_y` of
   `-word_50A022`, the stage's yaw. On the two Westerns (flags bit 16) `0x1EFA8`
   takes 10 off that word a frame, so the ground (`sub_238E4`), the `0x24` list
@@ -2351,31 +2352,70 @@ board's `>>5` integer divisor), 3 coasts on the last slope, and 4 stops.
 | disp | stage | what it draws |
 |------|-------|---------------|
 | `0x6B260`, `0x6B4F4` | Factory | the machinery (`0x1B5` only while the camera is past `x = 8`), and four walls pushed out to the arena, each shown while the camera is outside it |
-| `0x6B7BC`, `0x6C198` | Airport | two planes on paths, one taxiing with its gear down, one taking off over the arena and folding its gear; their shadows; the still buildings |
-| `0x6C49C`, `0x6C400` | Western, Western 2 | the bear on its integer pendulum, culled when it faces away |
+| `0x6B7BC`, `0x6C198` | Airport | two planes on paths, one taxiing with its gear down, one taking off over the arena and folding its gear; their shadows and the arena decal, all skipped while the plane is off screen; the still buildings |
+| `0x6C49C`, `0x6C400` | Western, Western 2 | the bear on its integer pendulum, culled when it faces away, and its hop |
 | `0x6C67C` | City Hall Elevator | the lights outside, a three-group flipbook on `f & 0x7F`, and the shaft's walls, both sliding down 0.017 a frame so the car seems to rise |
 | `0x6CAF8` | Bay Side | sixteen still models |
 | `0x6CCE0` | Observation Deck | a still model and two spinners, `0x60` a frame |
-| `0x6CF38`, `0x6E908` | Tower | the lights on four sides (fade up, hold, fade down), and the helicopter |
+| `0x6CF38`, `0x6E908` | Tower | the lights on four sides (fade up, hold, fade down), and the helicopter, its glass sliding a reflection |
 | `0x6D0C4`, `0x6D2FC`, `0x6D6E4`, `0x6DAC0`, `0x6E3F8` | UFO Diner | the sign blinking and flickering, the cab and the Pepsi trailer on their paths with steered and turning wheels, the trucks passing on the road, the UFO turning |
+
+A few signs and the trucks' cabs are picked by the test menu's COUNTRY byte
+(backup `+0x3350`): 0 is Japan's, anything else the overseas model. The panel's
+Region sets it.
 
 The helicopter is the one routine with state of its own: `0x6E5BC` picks the
 heading on a circle of radius 15 that puts it in front of the camera, and a
 bang-bang controller steps the turn rate towards it, banking and leaning as it
-goes. The port is the same integers, run forward from the round's start with the
-camera as it stands.
+goes. The port is the same integers, run forward from the match's start with the
+camera as it stands. `sub_6EC0C` then slides the glass's texture points by where
+the helicopter sits in the camera's view, a fake reflection.
 
-Left out, because they need a fight or are not draws:
+The bear's hop is a fight's: `kuma_int` fires it when a fighter is knocked out
+into the wall segment in front of it (`finish_wall_flag` bit 23, segment 20).
+Here the camera coming within 4 of the bear while it is drawn stands in for
+the fighter, once a session; the hop is the board's single-precision bounce,
+217 frames.
 
-- the bear's hop when a fighter is knocked down near it;
-- the helicopter glass's reflection (`sub_6EC0C` rewrites its UVs a frame);
-- the Observation Deck's four light phases (`hall_stage_cont`) and the
-  Western's light yaw: lighting, not models;
-- the board's window placement: FV's draws go by depth, so the viewer's own
-  sort is used;
-- the model variants a few routines pick by the region byte (region 0 is drawn);
-- the airport planes' on-screen cull, and the other readers of `stage_ypos` on
-  the elevator.
+The draws land in the geometry processor's window slots (`0x50183C +
+8·(w-1)`), as the other game's do: most objects in window 2, the plane decal and
+the elevator lights in 1, the plane's shadow in 3, the bear's second model in 5.
+With no flat plane between them a depth buffer orders those the same, so the
+viewer keeps its depth sort and only the Airport's decal and shadow, which lie
+in the ground, take a plane bias for their window: the decal over the floor, the
+shadow over the `0x24` list.
+
+#### What the stage does round the objects (`js/fvstages.js`)
+
+`camera_control` builds the light every frame from `VECTER_Y`, and four stages
+move it: the Westerns turn it 10 a frame with the town; Bay Side takes the
+camera's yaw; the UFO Diner swings it to whichever truck's headlights face the
+arena, and scales material slot 26 with them; and the Observation Deck points it
+at its lit corner. That deck lights one corner at a time, a new one every 128
+frames with a 12-frame fade out and a 9-frame fade in (`hall_stage_cont`), and
+the corner picks the platform (`0x2369C`), the poles (`0x23014`), the cage
+panels (`0x22908`, or `0x22948` while it fades) and which colour channels of
+colorxlat go a shade down (`change_color_table`).
+
+The City Hall Elevator's ride is `stage_ypos`, 0.017 a frame, and every reader
+of it is drawn: the ground sixteen; the shaft `tou_disp_all` builds from two
+tables of heights and wall models (`0x6CE2654`, `0x6CE3214`), each side shown
+while the camera is inside its plane; and the four city panels `tex_move_poly`
+draws, whose texture `set_tpd_data` slides by the tangent of the camera's
+bearing off the panel's, a parallax. The board never resets `stage_ypos` but at
+`change_scene`; the viewer starts it over with the objects' clock.
+
+The stage music is `level_music_list`'s song, and the stage sounds are
+`sound_queue_output`'s: the loop each stage starts with and, on the Airport and
+the UFO Diner, cues on the objects' clock.
+
+Left out:
+
+- the per-entry clip tests of the shaft and the panels, which are culls;
+- `tou_disp_easy`, the shaft the board draws instead under a setting not
+  worked out (`dword_50002C` bits 8-9);
+- the Airport jet cue's on-screen test: it plays whether or not the plane is
+  in view.
 
 ### Character rigs (`js/characters.js`, `js/pose.js`)
 

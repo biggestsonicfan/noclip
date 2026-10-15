@@ -13,6 +13,7 @@
  */
 
 import { xtraResolve, MAIN_DATA_BASE, sfightAddr } from './romset.js';
+import { fvStageHooks } from './fvstages.js';
 import { readObjectRecords, courseObjectDraws, courseGround, courseReach, courseArea } from './daytona.js';
 import { buildCourseSky } from './scroll.js';
 import { readObjectPath } from './fvobjects.js';
@@ -391,7 +392,7 @@ export function readStageTable(rom) {
         if (T.source === 'maincpu' && s === TAILS_LAB_SLOT) vecter[1] = TAILS_LAB_VECTER_Y;
         const materials = readMaterials(rom, s);
 
-        stages.push({
+        const stage = {
             slot: s,
             num,
             /* Geometry already in world space: see stageTable.flat. */
@@ -435,7 +436,10 @@ export function readStageTable(rom) {
                 extra: [dv.getUint16(b + F.extra, true)].filter((m) => m !== 0),
                 sky: [...new Set(sky)].filter((m) => m !== 0),
             },
-        });
+        };
+        /* Fighting Vipers rewrites its light as a fight goes on: js/fvstages.js. */
+        if (T.source === 'xtra') Object.assign(stage, fvStageHooks(rom, stage));
+        stages.push(stage);
     }
 
     if (T.source === 'maincpu' && stages[TAILS_LAB_SLOT]) stages.push(eggLabStage(stages[TAILS_LAB_SLOT]));

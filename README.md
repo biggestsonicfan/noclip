@@ -128,15 +128,20 @@ with no matrix. So the draw list is the lists themselves.
 
 The object list a record points at is what animates, and it is walked: the
 Airport's planes taxi and take off, the Tower's helicopter keeps itself in
-view, the trucks come and go at the UFO Diner, the elevator rises, and both
-Westerns turn the town round the arena. See
+view, the trucks come and go at the UFO Diner, the elevator rises through its
+shaft past the city, and both Westerns turn the town round the arena. The
+light moves as the board moves it: with the town, with the camera on Bay Side,
+to the trucks' headlights at the diner, and round the Observation Deck's four
+corners, which also change its platform, poles, cage and colours. Take the
+camera up to the Western's bear and it hops, once. The panel's Region picks the
+signs and truck cabs the test menu's COUNTRY setting would. See
 [Fighting Vipers' stage objects](TECHNICAL.md#fighting-vipers-stage-objects-jsfvobjectsjs)
 for what each routine draws and what is left out.
 
 The Animation tab poses the fighters: Fighting Vipers' pose and draw routines
 are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
-motions. The stages carry their names, from the sound test's song list. Stage
-music is not played yet.
+motions. The stages carry their names, from the sound test's song list, and
+play their music and stage sounds on the emulated sound board.
 
 ## Daytona USA
 

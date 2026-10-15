@@ -7,12 +7,17 @@
  * Sonic The Fighters' — and object_cont (0x6ACEC) runs every int once a frame,
  * then steps one clock: the u16 at mod_fa_obj0+6 (0x6AD5C). There is no
  * per-object counter. The clock is zeroed in change_scene and again in
- * ROUND_INT (0xC778), which reinstalls object_init as well, so everything here
- * starts over at every round. Frame 0 below is the first frame of a round.
+ * ROUND_INT (0xC778), which reinstalls object_init as well. ROUND_INT runs
+ * once a match — it sets round 1, and the later rounds start at SET_INT — so
+ * everything here starts over at each match and runs on through its rounds.
+ * Frame 0 below is the first frame of a match.
  *
  * object_control (0x6AD6C) then calls every dsp inline, under the camera and a
- * stage yaw (word_50A022) that is 0 in a fight. There is no window list as in
- * the other game: what is drawn here is sorted with the arena.
+ * stage yaw (word_50A022) that is 0 in a fight. Its draws land in the geometry
+ * processor's window slots as the other game's do (0x50183C + 8·(w - 1)):
+ * most in window 2, a few elsewhere. Without a flat plane between them the
+ * depth buffer orders those the same, so only the Airport's two ground draws
+ * take a plane bias for theirs.
  *
  * Each routine is a port of the dsp at the address it is keyed by, with what
  * its int works out folded in, as a pure function of the frame. The ops are the
@@ -136,12 +141,14 @@ const pathYaw = (v) => Math.round(v[4]);
  * of frame_counter, the second on a random byte re-rolled every fourth frame
  * (a hash of the frame stands in for rand, so a scrub shows the same flicker),
  * the third is still. The third and the trucks below have a second set of
- * models picked by a backup-RAM byte (+0x3350) that reads like a region; this
- * draws the set for 0.
+ * models picked by the test menu's COUNTRY (backup RAM +0x3350, byte_59C350):
+ * 0 Japan, 1 USA, 2 Export, read only as Japan or not (0x6D120, 0x6D330,
+ * 0x6D740). The panel's Region picks it; `region` here is that byte.
  */
 const KANBAN_BLINK = [0xa82, 0xa83];
 const KANBAN_FLICKER = [0xbb2, 0xbb3];
-const KANBAN_STILL = 0xe53;
+const KANBAN_STILL = [0xe53, 0xeb3];
+const byRegion = (pair, region) => pair[region ? 1 : 0];
 
 const flicker = (f) => {
     let x = Math.imul((f >> 2) + 1, 0x9e3779b1);
@@ -149,17 +156,17 @@ const flicker = (f) => {
     return (Math.imul(x, 0x85ebca6b) >>> 31) & 1;
 };
 
-function kanbanDsp({ push, pushFrames }) {
+function kanbanDsp({ push, pushFrames, region }) {
     pushFrames(KANBAN_BLINK, (f) => (f >> 5) & 1, []);
     pushFrames(KANBAN_FLICKER, flicker, []);
-    push(KANBAN_STILL, []);
+    push(byRegion(KANBAN_STILL, region), []);
 }
 
 /* ---- the parked truck: trailer_dsp (0x6D2FC) and trailer_dsp_b0 (0x6D6E4) */
 
 const TRUCK_WHEEL = 0xae5;
-const TRUCK_CAB = 0xae4;
-const TRUCK_TRAILER = 0xae3;
+const TRUCK_CAB = [0xae4, 0xbb7];
+const TRUCK_TRAILER = [0xae3, 0xbb6];
 const WHEEL_Y = 0.461, WHEEL_Z = 1.1, AXLE = 2.2;
 /* trailer_int's hitch and rear points, 0xc0200000 and 0xc1066666. */
 const HITCH = 2.5, REAR = 8.4;
@@ -174,7 +181,7 @@ const turnZ = (a, d) => {
  * The angle the cab's front wheels steer by: 0x6D15C pulls a rear point along
  * behind a hitch 2.5 back of the cab, the way a trailer follows, and the wheels
  * take the difference from the cab's own yaw. It is a history, so it is run
- * forward from the round's start and kept.
+ * forward from the match's start and kept.
  */
 function articulation(keys) {
     const angles = [];
@@ -217,28 +224,35 @@ function wheels(push, base, steps, turn = () => []) {
 /* The path's pose at f, held at the last key once the path has stopped. */
 const keyed = (keys, f) => pathAt(keys, f) ?? keys[keys.length - 2]?.v ?? keys[0].v;
 
+/* Where the cab stands at clock f, in board coordinates, and its ang_y: what
+ * sub_21884 reads off the object (+0x18, +0x20, +0x26) for the headlights. */
+export function cabPose(keys, f) {
+    const v = keyed(keys, f);
+    return { x: v[0], z: v[2], h: pathYaw(v) & 0xffff };
+}
+
 const truckBody = (keys) => (f) => {
     const v = keyed(keys, f);
     return [pathPos(v), angY(pathYaw(v)), angY(-0x4000)];
 };
 
 /* trailer_dsp: the cab, its front pair steered by -k. */
-function cabDsp({ object, push }) {
+function cabDsp({ object, push, region }) {
     const keys = object.path;
     if (!keys) return;
     const steer = articulation(keys);
     const body = truckBody(keys);
     const k = (f) => (steer(f) - pathYaw(keyed(keys, f))) & 0xffff;
-    push(TRUCK_CAB, body);
+    push(byRegion(TRUCK_CAB, region), body);
     wheels(push, body, CAB_WHEELS, (f, i) => (i < 2 ? [angY(-k(f))] : []));
 }
 
 /* trailer_dsp_b0: the trailer, on a path of its own. */
-function trailerDsp({ object, push }) {
+function trailerDsp({ object, push, region }) {
     const keys = object.path;
     if (!keys) return;
     const body = truckBody(keys);
-    push(TRUCK_TRAILER, body);
+    push(byRegion(TRUCK_TRAILER, region), body);
     wheels(push, body, TRAILER_WHEELS);
 }
 
@@ -248,12 +262,21 @@ function trailerDsp({ object, push }) {
  * A second truck on a straight line along z = 21: in from x = 350 at 0.3 a
  * frame until clock 1600, then back out from x = -250 the other way, drawn
  * through a mirror in X (0x6DAFC) rather than turned. The yaw it stores is
- * never read by the draw. Its wheels roll on frame_counter << 12, a turn every
- * 16 frames, the cab's one way and the trailer's the other.
+ * never read by the draw, only by the UFO Diner's headlights (js/fvstages.js).
+ * Its wheels roll on frame_counter << 12, a turn every 16 frames, the cab's
+ * one way and the trailer's the other.
  */
 const PASS_Z = 21, PASS_SPEED = 0.3, PASS_TURN = 1600;
 const PASS_IN = 350, PASS_OUT = -250;
 const PASS_MODELS = [[0xbb5, 0xbb4], [0xbb7, 0xbb6]];
+
+/* The passing truck at clock f, and the yaw trailer_easy_int stores (0x6D9F8,
+ * 0x6DA90), which only the headlights read. */
+export function passingPose(f) {
+    return f < PASS_TURN
+        ? { x: PASS_IN - PASS_SPEED * f, z: PASS_Z, h: 0x4000 }
+        : { x: PASS_OUT + PASS_SPEED * (f - PASS_TURN), z: PASS_Z, h: 0xc000 };
+}
 
 function passingDsp({ push }) {
     const back = (f) => f >= PASS_TURN;
@@ -277,7 +300,7 @@ function passingDsp({ push }) {
 
 /*
  * The UFO over the diner, at (0, 4.5, -16.1), turning 64 binary units a frame
- * on a counter of its own that ufo_int zeroes at each round. 0x6E490 leaves it
+ * on a counter of its own that ufo_int zeroes at each match. 0x6E490 leaves it
  * out when the camera is on the far side of it — the sign of a dot product of
  * the camera's offset with the UFO's own position, 5 pulled towards the arena.
  */
@@ -304,8 +327,16 @@ function ufoDsp({ push }) {
  *
  * Each also lays a shadow on the ground under it, turned by its yaw, and an
  * arena-sized model scaled by the ring-out bound (dword_50A00C, 5.0) over 6.
- * The routine skips all of it while the plane is off screen (0x6B7BC-0x6BAE0),
- * which a viewer that goes anywhere has no use for.
+ * Both are flat on the ground: the decal is object_control's, in the window
+ * after the floor's, and the shadow in the third, after the 0x24 list, so
+ * they take the plane biases between and in front (js/display.js).
+ *
+ * The routine skips all of it while the plane is off screen (0x6B7BC-0x6BAE0):
+ * four points 50 out along its X and Z go to view space, and if every one is
+ * behind z = 0.1 or past the same edge of the screen — 480 focal against a
+ * 496 by 384 window — nothing is drawn. That takes the shadow and the decal
+ * with it, which is the part that shows. Here it is the viewer's screen, and
+ * the points turn by the yaw alone.
  */
 const PLANE_PARKED = 0xe51, PLANE_FLYING = 0x2a4, PLANE_FAR = 0xe52;
 const PLANE_MAIN_GEAR = 0x1b7, PLANE_NOSE_GEAR = 0x1b6;
@@ -313,11 +344,32 @@ const PLANE_SHADOW = 0x70e, PLANE_GROUND = 0x569;
 const MAIN_GEAR_AT = [7.2, 6.62, -1.8], NOSE_GEAR_AT = [0, 3.335, 31.14];
 const GEAR_FROM = 450, GEAR_UP = 578, GEAR_STEP = 128, PLANE_FAR_FROM = 898;
 const RING_OUT = 5.0;
+const PLANE_REACH = 50, PLANE_NEAR = 0.1, BOARD_LENS = { x: 248 / 480, y: 192 / 480 };
+const PLANE_DECAL_BIAS = 1, PLANE_SHADOW_BIAS = -1;
+
+/* The 0x6B7BC test: some point on screen. */
+function planeOnScreen(p, cam) {
+    if (!cam?.view) return true;
+    const r = (p[4] * 2 * Math.PI) / 65536, c = Math.cos(r), s = Math.sin(r);
+    const lens = cam.lens ?? BOARD_LENS;
+    let all = 0x1f;
+    for (const [px, pz] of [[0, PLANE_REACH], [0, -PLANE_REACH], [PLANE_REACH, 0], [-PLANE_REACH, 0]]) {
+        const v = cam.view(p[0] + px * c - pz * s, p[1], p[2] + px * s + pz * c);
+        const code = v.z <= PLANE_NEAR ? 0x1f
+            : (v.x <= -lens.x * v.z) | ((v.x >= lens.x * v.z) << 1)
+                | ((v.y <= -lens.y * v.z) << 2) | ((v.y >= lens.y * v.z) << 3);
+        all &= code;
+    }
+    return all === 0;
+}
 
 function planeDsp({ object, push }) {
     const keys = object.path;
     if (!keys) return;
-    const alive = (f) => pathAt(keys, f) !== null;
+    const alive = (f, cam) => {
+        const p = pathAt(keys, f);
+        return p !== null && planeOnScreen(p, cam);
+    };
     const v = (f) => keyed(keys, f);
     const M = (f) => {
         const p = v(f);
@@ -332,17 +384,17 @@ function planeDsp({ object, push }) {
         push(PLANE_NOSE_GEAR, (f) => [...M(f), nose], alive);
     } else {
         const g = (f) => (f > GEAR_FROM ? (f - GEAR_FROM) * GEAR_STEP : 0);
-        const geared = (f) => alive(f) && f < GEAR_UP;
-        push(PLANE_FLYING, M, (f) => alive(f) && f < PLANE_FAR_FROM);
-        push(PLANE_FAR, M, (f) => alive(f) && f >= PLANE_FAR_FROM);
+        const geared = (f, cam) => alive(f, cam) && f < GEAR_UP;
+        push(PLANE_FLYING, M, (f, cam) => alive(f, cam) && f < PLANE_FAR_FROM);
+        push(PLANE_FAR, M, (f, cam) => alive(f, cam) && f >= PLANE_FAR_FROM);
         for (const m of mains) push(PLANE_MAIN_GEAR, (f) => [...M(f), ...m, angZ(-g(f))], geared);
         push(PLANE_NOSE_GEAR, (f) => [...M(f), nose, angX(g(f))], geared);
     }
     push(PLANE_SHADOW, (f) => {
         const p = v(f);
         return [at(p[0], 0, p[2]), angY(Math.round(p[4]))];
-    }, alive);
-    push(PLANE_GROUND, [scale(RING_OUT / 6, 1, RING_OUT / 6)], alive);
+    }, alive, { planeBias: PLANE_SHADOW_BIAS });
+    push(PLANE_GROUND, [scale(RING_OUT / 6, 1, RING_OUT / 6)], alive, { planeBias: PLANE_DECAL_BIAS });
 }
 
 /* sub_6C198: four of the Airport's models, at the identity. */
@@ -391,10 +443,10 @@ function factoryWallsDsp({ push }) {
  * or a light by it.
  */
 const ARENA_PLANES = [[0, 6], [-6, 0], [0, -6], [6, 0]];
-const SHAFT_PLANES = [[0, 8.5], [-8.5, 0], [0, -8.5], [8.5, 0]];
+export const SHAFT_PLANES = [[0, 8.5], [-8.5, 0], [0, -8.5], [8.5, 0]];
 const BOUND = RING_OUT / 6;
 
-const inside = (planes, k, cam) => {
+export const inside = (planes, k, cam) => {
     const [px, pz] = planes[k];
     return (cam.x - BOUND * px) * px + (cam.z - BOUND * pz) * pz < 0;
 };
@@ -412,8 +464,15 @@ const facing = (x, z) => (f, cam) => !cam || (x - cam.x) * x + (z - cam.z) * z >
  * position reaches 0x10000000, bounces back elastically, and the angle is the
  * negated top half — 0 to about -22.5° and back, every 513 frames once the
  * first bounce has come at 256. Integer arithmetic, so it is run as the board
- * runs it. The hop it also has is the fight's: it fires only when a fighter is
- * knocked out through wall segment 20 (finish_coli_check), and is left out.
+ * runs it.
+ *
+ * The hop is the fight's: kuma_int fires it when finish_coli_hit sets bit 23 of
+ * finish_wall_flag with segment 20 (dword_5740AC), the diagonal wall in front
+ * of the bear, 2.23 from it — a fighter knocked out into it. Here the camera
+ * coming within KUMA_NEAR of the bear while it is drawn stands in for the
+ * fighter, once a session. The bear alone (0x407) leaves the stand at 0.2 a frame under the
+ * game's gravity (dword_50A000), and bounces at -0.2 losing 0.3 of its speed
+ * each time until it is under 0.01: 217 frames, peaking at 3.53.
  */
 const KUMA_STAND = 0x257, KUMA = 0x407, KUMA_W2 = 0x406;
 const KUMA_AT = [-5.02, -0.2, -10.37];
@@ -437,11 +496,45 @@ function kumaSwing() {
     };
 }
 
+const KUMA_GRAVITY = Math.fround(0.0052222223), KUMA_FLOOR = Math.fround(-0.2);
+const KUMA_NEAR = 4;
+
+/* The hop's heights, frame by frame, in the board's single precision. */
+function kumaHopHeights() {
+    const out = [];
+    let v = Math.fround(0.2), y = KUMA_FLOOR, on = true;
+    while (on) {
+        v = Math.fround(v - KUMA_GRAVITY);
+        const next = Math.fround(y + v);
+        if (next > KUMA_FLOOR) y = next;
+        else {
+            y = KUMA_FLOOR;
+            v = Math.fround(v * Math.fround(-0.7));
+            on = v > Math.fround(0.01);
+        }
+        out.push(y);
+    }
+    return out;
+}
+const KUMA_HOP = kumaHopHeights();
+
+/* Once a session, across stage loads: the first time the camera is near. */
+const kumaHop = { done: false, start: 0 };
+
+function kumaHeight(f, cam, shown) {
+    if (!kumaHop.done && cam && shown(f, cam) && Math.hypot(cam.x - KUMA_AT[0], cam.z - KUMA_AT[2]) < KUMA_NEAR) {
+        kumaHop.done = true;
+        kumaHop.start = f;
+    }
+    const n = f - kumaHop.start;
+    return kumaHop.done && n >= 0 && n < KUMA_HOP.length ? KUMA_HOP[n] : KUMA_FLOOR;
+}
+
 function kumaDsp({ push }) {
     const swing = kumaSwing();
     const shown = facing(KUMA_AT[0], KUMA_AT[2]);
     push(KUMA_STAND, [], shown);
-    push(KUMA, (f) => [at(...KUMA_AT), angX(swing(f)), angZ(0)], shown);
+    push(KUMA, (f, cam) => [at(KUMA_AT[0], kumaHeight(f, cam, shown), KUMA_AT[2]), angX(swing(f)), angZ(0)], shown);
 }
 
 /* 0x6C400, Western 2: one model more, always drawn, then kuma_dsp. */
@@ -461,7 +554,7 @@ function kumaW2Dsp(ctx) {
  * a scale about a far pivot, (c - 2W) / (c - 12) along their normal, and each
  * is drawn only while the camera is inside it.
  */
-const RISE = 0.017;
+export const RISE = 0.017;
 const ELEVATOR_LIGHTS = [[0x96f, 0x972, 0x974, 0x976], [0x971, 0x973, 0x975, 0x977], [0x978, 0x997, 0x998, 0x999]];
 function elevatorGroup(c) {
     if (c < 2 || (c >= 64 && c < 66)) return 1;
@@ -490,7 +583,8 @@ function elevatorDsp({ push, pushFrames }) {
  * A still model and two spinners, ten units either side of the arena on Z,
  * the second turned half round; both turn 0x60 a frame on a counter the dsp
  * steps itself (a turn in 682.67 frames), each culled like the bear. The deck's
- * four-phase light cycle (hall_stage_cont) is lighting, not a draw.
+ * four-corner light cycle (hall_stage_cont) is the stage's, in
+ * js/fvstages.js.
  */
 const HALL = 0x5d7, HALL_SPINNER = [0x1a6, 0x1a4];
 const HALL_Z = 10, HALL_CULL_Z = 9, HALL_STEP = 0x60;
@@ -544,11 +638,11 @@ function towerDsp({ push, pushFrames }) {
  * distance says so. It banks into the turn and leans with how far round it
  * faces, bobs on two sines, and its searchlight (0x6D2) aims at the midpoint
  * of the fighters, which with no fight is taken as the arena's centre. The
- * glass (0x1A1) has its UVs rewritten each frame for a fake reflection
- * (sub_6EC0C); that is left out.
+ * glass (0x1A1) goes through set_obj_tpd with its own texture points slid
+ * each frame for a fake reflection (sub_6EC0C, heliGlass).
  *
  * Everything is integer state carried from frame to frame and fed by the
- * camera, so it is run forward from the round's start with the camera as it
+ * camera, so it is run forward from the match's start with the camera as it
  * stands, and run again from the start if the clock goes back.
  */
 const HELI_BODY = 0x6d1, HELI_GLASS = 0x1a1, HELI_ROTOR = 0x97d, HELI_LIGHT = 0x6d2;
@@ -601,6 +695,25 @@ function heliStep(st, cam) {
     st.bob2 = s16(st.bob2 + 16);
 }
 
+/*
+ * sub_6EC0C: the helicopter's place at y 3 (no bob) in the camera's space, its
+ * x and y times 660 plus a quarter of its yaw and pitch, wrapped to the tile's
+ * 2048 eighths of a texel, are added to every point: v takes the first, u the
+ * second. Behind the camera nothing is sent, and last frame's points stay.
+ */
+const GLASS_SLIDE = 660, GLASS_TURN = 0.25, GLASS_WRAP = 2048;
+
+function heliGlass(q, cam) {
+    if (!cam?.view) return null;
+    const r = rad(q.h);
+    const v = cam.view(-Math.sin(r) * HELI_R, HELI_Y, Math.cos(r) * HELI_R);
+    if (v.z < 0) return null;
+    const wrap = (a) => Math.trunc(((a % GLASS_WRAP) + GLASS_WRAP) % GLASS_WRAP);
+    const a = wrap(GLASS_SLIDE * v.x + GLASS_TURN * s16(q.yaw));
+    const b = wrap(-GLASS_SLIDE * v.y + GLASS_TURN * s16(q.pitch));
+    return [b / 8, a / 8];
+}
+
 function heliDsp({ pushLive }) {
     let st = heliStart();
     const at_ = (f, cam) => {
@@ -619,7 +732,12 @@ function heliDsp({ pushLive }) {
         return [at(p.x, p.y, p.z), angY(q.yaw), angX(q.pitch), angZ(q.roll)];
     };
     pushLive(HELI_BODY, (f, cam) => frame(at_(f, cam)));
-    pushLive(HELI_GLASS, (f, cam) => frame(at_(f, cam)));
+    let slid = [0, 0];
+    pushLive(HELI_GLASS, (f, cam) => {
+        const q = at_(f, cam);
+        slid = heliGlass(q, cam) ?? slid;
+        return { ops: frame(q), uv: slid };
+    }, true);
     pushLive(HELI_ROTOR, (f, cam) => {
         const q = at_(f, cam);
         return [...frame(q), at(...HELI_ROTOR_AT), angY(q.rotor)];

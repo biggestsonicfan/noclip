@@ -19,7 +19,7 @@ import { cellCount, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCe
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
-    stageLightYaw, stageBright, stageMaterials, stageWorldFrame, eggLabFootage,
+    stageLightYaw, stageBright, stageMaterials, stageWorldFrame, eggLabFootage, FV_ROUND,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
 import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
@@ -748,7 +748,7 @@ function stageDisplayList(stage, view = stageView(stage)) {
             .filter((d) => (!d.extra || extraOn(stage, d.extra)) && !(d.unless && extraOn(stage, d.unless)));
     }
     return state.rom.game.stageTable.flat
-        ? buildFlatDisplayList(stage)
+        ? buildFlatDisplayList(stage, { region: state.rom.country ?? 0 })
         : buildStageDisplayList(stage, state.frames);
 }
 
@@ -970,7 +970,7 @@ function addModelToScene(decoded, {
      * the scene's — see materialForSet. */
     const mesh = new THREE.Mesh(geom ? geom.mesh : buildGeometry(decoded),
         material ?? (backdrop ? v.backdropMaterial
-            : planeBias ? v.planeMaterials[planeBias]
+            : planeBias ? v.planeMaterial(planeBias)
                 : v.material));
     if (backdrop) mesh.renderOrder = BACKDROP_ORDER;
     else if (shellFirst && layer === 'sky') mesh.renderOrder = SHELL_ORDER;
@@ -1653,6 +1653,8 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
      * already built in place, rotation and all. Put it back to phase 0, which
      * is what buildColorxlat would have written. */
     stepStageColors(0);
+    stepStageShade(0);
+    if (stage.lightAt) stepStageLight(0);
 
     renderStagePanel(stage, counts, totals, list);
     updateHud();
@@ -1702,7 +1704,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
             new THREE.BufferAttribute(Float32Array.from(d.lumaBases), 1));
     }
     /* And the same for a texture-point override, which rewrites the UVs. */
-    if (entry.scroll) {
+    if (entry.scroll || entry.slides) {
         mesh.geometry.setAttribute('aTexel',
             new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
     }
@@ -1713,7 +1715,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
     if (moves) {
         item = {
             entry, mesh, lines, model: entry.model,
-            uvs: entry.scroll ? d.uvs : null,
+            uvs: entry.scroll || entry.slides ? d.uvs : null,
         };
         state.anim.entries.push(item);
     }
@@ -1944,7 +1946,10 @@ function stepBillboards() {
  * The camera in the board's frame: where it stands (the decoder's Z negated
  * back) and the heading it faces as a board angle — the one a model turned by
  * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's.
+ * `view(x, y, z)` puts a board point into the camera's space the way the
+ * board's view matrix does: x right, y up, z ahead.
  */
+const LIVE_VIEW = new THREE.Matrix4();
 const LIVE_POS = new THREE.Vector3();
 const LIVE_FWD = new THREE.Vector3();
 const LIVE_INV = new THREE.Matrix4();
@@ -1956,7 +1961,17 @@ function cameraOnCourse() {
     LIVE_INV.copy(root.matrixWorld).invert();
     LIVE_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(LIVE_INV);
     camera.getWorldDirection(LIVE_FWD).transformDirection(LIVE_INV);
-    return { x: LIVE_POS.x, y: LIVE_POS.y, z: -LIVE_POS.z, heading: boardAngle(LIVE_FWD.x, -LIVE_FWD.z) };
+    const view = LIVE_VIEW.multiplyMatrices(camera.matrixWorldInverse, root.matrixWorld).clone();
+    const ty = Math.tan((camera.fov * Math.PI) / 360);
+    return {
+        x: LIVE_POS.x, y: LIVE_POS.y, z: -LIVE_POS.z, heading: boardAngle(LIVE_FWD.x, -LIVE_FWD.z),
+        /* The screen's edges as x/z and y/z in view space. */
+        lens: { x: ty * camera.aspect, y: ty },
+        view: (x, y, z) => {
+            const v = new THREE.Vector3(x, y, -z).applyMatrix4(view);
+            return { x: v.x, y: v.y, z: -v.z };
+        },
+    };
 }
 
 /*
@@ -2081,6 +2096,7 @@ function stepStageAnimation(now) {
             it.block = r.block;
             it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
             placePart(it, composeOps(ANIM_SCRATCH, r.ops));
+            if (r.uv) slideTexels(it, r.uv);
         } else if (typeof entry.ops === 'function') {
             placePart(it, composeOps(ANIM_SCRATCH, entry.ops(frame)));
         }
@@ -2091,8 +2107,23 @@ function stepStageAnimation(now) {
     stepSkyImage(frame);
     setWorldFrame(frame);
     stepStageColors(frame);
+    stepStageShade(frame);
     stepStageLight(frame);
     stepStageMaterials(frame);
+}
+
+/* A live draw's offset of every texture point, (u, v) in texels, from the
+ * decoded ones: a send_tpd block that is the model's own points plus one
+ * offset, as the Tower helicopter's glass is. */
+function slideTexels(it, [du, dv]) {
+    if (it.slid?.[0] === du && it.slid?.[1] === dv) return;
+    it.slid = [du, dv];
+    const attr = it.mesh.geometry.getAttribute('aTexel');
+    for (let i = 0; i < attr.array.length; i += 2) {
+        attr.array[i] = it.uvs[i] + du;
+        attr.array[i + 1] = it.uvs[i + 1] + dv;
+    }
+    attr.needsUpdate = true;
 }
 
 /*
@@ -2246,7 +2277,7 @@ function disposeEggLabFootage() {
  */
 function stepStageMaterials(frame) {
     const stage = state.stages[state.stageIndex];
-    const slots = stage ? stageMaterials(stage, frame, state.frames) : null;
+    const slots = stage?.materialsAt ? stage.materialsAt(frame) : stage ? stageMaterials(stage, frame, state.frames) : null;
     if (!slots) return;
     const u = state.viewer.material.uniforms.uMaterial.value;
     for (const { slot, diffuse, ambient } of slots) u[slot].set(diffuse, ambient);
@@ -2255,13 +2286,21 @@ function stepStageMaterials(frame) {
 /*
  * A light that follows where the camera stands rather than the frame: Virtua
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
- * looked up again once the camera has moved.
+ * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
+ * its light with the camera's heading instead (js/fvstages.js).
  */
 function stepEyeLight() {
     const stage = state.stages[state.stageIndex];
+    if (stage?.lightFromHeading) {
+        const h = cameraOnCourse().heading;
+        if (state.eyeLightAt === h) return;
+        state.eyeLightAt = h;
+        state.viewer.material.uniforms.uLight.value.set(...stage.lightFromHeading(h));
+        return;
+    }
     if (!stage?.lightFrom) return;
     const p = state.viewer.camera.position;
-    if (state.eyeLightAt?.equals(p)) return;
+    if (state.eyeLightAt?.equals?.(p)) return;
     state.eyeLightAt = p.clone();
     state.viewer.material.uniforms.uLight.value.set(...stage.lightFrom(p.toArray()));
 }
@@ -2313,6 +2352,27 @@ function stepStageColors(frame) {
         dirty = true;
     });
     if (dirty) state.viewer.material.uniforms.uCxlat.value.needsUpdate = true;
+}
+
+/*
+ * A stage that shades colorxlat as it runs — the Observation Deck dims a
+ * channel or two for each lit corner (js/fvstages.js). The table as built is
+ * kept beside it, so each change starts from that, and a stage without the
+ * hook that shares the table gets it back.
+ */
+const CXLAT_SHADED = new WeakMap();
+function stepStageShade(frame) {
+    const stage = state.stages[state.stageIndex];
+    const c = state.cxlat;
+    if (state.lutsPinned || !c) return;
+    const key = stage?.cxlatAt ? stage.cxlatAt.key(frame) : null;
+    let t = CXLAT_SHADED.get(c);
+    if ((t?.key ?? null) === key) return;
+    if (!t) CXLAT_SHADED.set(c, t = { base: c.slice(), key: null });
+    c.set(t.base);
+    if (key !== null) stage.cxlatAt.apply(c, key);
+    t.key = key;
+    state.viewer.material.uniforms.uCxlat.value.needsUpdate = true;
 }
 
 /* Axis-aligned bounds of a decoded model after a display-list matrix, for
@@ -4400,6 +4460,11 @@ function wireOptions() {
         clearSkyPanoramas();
         reloadView({ keepCamera: true });
     });
+    /* The region picks models in the draw list, which is rebuilt. */
+    $('#country-mode').addEventListener('change', (e) => {
+        state.rom.country = +e.target.value;
+        reloadView({ keepCamera: true });
+    });
     $('#opt-wire').addEventListener('change', (e) => {
         state.wireframe = e.target.checked;
         applyWireVisibility();
@@ -4590,7 +4655,8 @@ function playStageSounds(slot) {
     state.music.sfx?.stop();
     if (!state.rom.game.sound?.ambience || !$('#opt-stage-sfx').checked || slot == null) return;
     if (state.music.sfx?.board !== state.music.board) state.music.sfx = new StageSounds(state.rom, state.music.board);
-    state.music.sfx.start(slot);
+    /* Fighting Vipers' cues go off on the stage objects' clock. */
+    state.music.sfx.start(slot, () => Math.max(0, state.anim.frame) % FV_ROUND);
 }
 
 async function setMusic(on) {
@@ -4671,6 +4737,18 @@ function applyGameFeatures() {
         cab.appendChild(o);
     }
     if (cabinets) cab.value = String(state.rom.cabinet ?? colors.cabinet);
+
+    const countries = state.rom.game.countries;
+    $('#country-field').hidden = !countries;
+    const country = $('#country-mode');
+    country.innerHTML = '';
+    for (const [i, c] of (countries ?? []).entries()) {
+        const o = el('option');
+        o.value = String(i);
+        o.textContent = c;
+        country.appendChild(o);
+    }
+    if (countries) country.value = String(state.rom.country ?? 0);
     return on;
 }
 

@@ -413,6 +413,10 @@ const fvipers = {
     id: 'fvipers',
     name: 'Fighting Vipers',
     identify: ['epr-18606d.15', 'epr-18607d.16'],
+    /* The test menu's COUNTRY (backup +0x3350), which picks a few signs and
+     * the trucks' cabs (js/fvobjects.js kanbanDsp): the panel's Region.
+     * sram_clear sets 0. */
+    countries: ['Japan', 'USA', 'Export'],
     regions: {
         /* Half the size of the other game's: four 128KB EPRs in two pairs
          * rather than one pair of 512KB ones. The second pair carries the
@@ -723,6 +727,27 @@ const fvipers = {
      * constants: character 9, B.M., stands at 1.1 and 10, Sonic, at 0.56.
      */
     motionTable: { list: 0x06c00004, count: 1055 },
+    /*
+     * The sound board is Sonic The Fighters', the ROMs laid out the same way
+     * and the same three boot commands (0x8574, 0x8B9C, 0x8BAC). FIGHT_INT
+     * sends the stage's song in round 1 (0xD5B4) out of level_music_list at
+     * XTRA 0x6425E14, by stage_num & 15: AE1005-AE100D for slots 0-8, then 0.
+     *
+     * `ambience` is sound_queue_output's (0x420B4), js/sound/ambience.js: a
+     * 16-byte record a stage, the loop the match starts with at +0, and a
+     * player, picked through the jump table at 0x6425680, that plays the
+     * stage objects' cues on their clock.
+     */
+    sound: {
+        program: ['epr-18628.31', 0xaa7dd79f],
+        samples: [
+            ['mpr-18629.32', 0x5d0006cc], ['mpr-18630.33', 0x9d405615],
+            ['mpr-18631.34', 0x9dae5b45], ['mpr-18632.35', 0x39da6805],
+        ],
+        stageMusic: 0x1025e14,
+        stageMusicRegion: 'mainData',
+        ambience: { kind: 'fv', table: 0x1025e5c, stride: 16, count: 12, players: 0x1025680 },
+    },
     rig: {
         kind: 'vf2',
         standardRig: 0x2c194,
