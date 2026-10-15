@@ -517,8 +517,8 @@ to the face target `+0xB0C`, which the fight writes.
 
 Every build MAME has loads: `doa.zip` (Revision C, Model 2B), `doab.zip`
 (Revision B), and the Model 2A builds `doaa.zip` (Revision A), `doaab.zip` and
-`doaae.zip` (export). The 2B builds have all three tabs, fighters included; the
-2A builds the Stages and Models tabs. A merged set, or several zips dropped at
+`doaae.zip` (export). The 2B builds have all four tabs, fighters included; the
+2A builds the Stages, Models and Cells tabs. A merged set, or several zips dropped at
 once, opens as Revision C, and the Build list at the top of the sidebar picks
 another. Tecmo's game keeps no
 stage records: each stage is a routine of its own that places its pieces and
@@ -552,6 +552,13 @@ word over 300 frames, except where they follow the game's camera (0, 2 and
 10) or scroll the sky (11). Stage 4's code has a
 copy-paste slip that leaves one row of the belt hanging far below the rest for
 part of each cycle; the explorer fixes it, so the belt stays whole.
+
+The **Cells** tab has the game's 242 pictures: the Tecmo logo and warnings,
+the fighters' profiles, portraits and name plates, the stage skies, the
+fight's messages and fonts, the rankings, the endings, the staff roll and the
+title logos. Tecmo's format is not Sega's: each picture brings its own tiles
+and colours, so each cell opens on a CG of its own with the same number (see
+[TECHNICAL.md](TECHNICAL.md#dead-or-alives-pictures-jscellsjs)).
 
 ## Running it
 

@@ -1550,6 +1550,143 @@ compare's operands swapped, and row 3's x and z), patched into its own copy of
 the program; the ROM's other users see it as it is. With the fix the copy sits
 right under the belt's lowest row.
 
+### Dead or Alive's stage pieces (`readDoaStages` in `js/doa.js`)
+
+A stage is put together from five tables, each indexed by the stage number
+(Revision B addresses; the program ones move with the build, the data ones
+do not):
+
+- the routine, `0x719E0 + 4 * stage`, which draws the pieces;
+- the model table at data `0x3A160`: 19330 entries of 16 bytes, the texture
+  points, the material, the mesh and the face count. A piece is the entry the
+  routine sent (above), so the explorer names it by that entry's number;
+- the texture slab, `0xCADA0[stage]`, a data pointer whose rows from `0x40000`
+  on fill texture rows 256-511;
+- the five colour rows, `0x7A7E0[stage]`, and the 32 material slots at `0x6B0`
+  that every stage shares;
+- the four sky pictures, `0xC7660 + 8 * stage`, out of the 242 pictures.
+
+The explorer calls a stage "Stage n", in chapter n: the profile has no names
+for them. Its info lists the stage, the routine's
+address, the pieces drawn and, on the attract stage, the fighters. Stages
+12-15 are not listed: their routine (`0x6F130`) draws nothing.
+
+| stage | pieces | models | model range | slab | sky pictures |
+|---|---|---|---|---|---|
+| 0 | 54 | 40 | 15665-16004 | 0x25C0000 | 52 53 54 55 |
+| 1 | 87 | 68 | 16347-16437 | 0x2680000 | 125 126 127 128 |
+| 2 | 70 | 54 | 16587-16669 | 0x2740000 | 60 61 60 61 |
+| 3 | 82 | 34 | 16814-16881 | 0x2800000 | 121 122 123 124 |
+| 4 | 92 | 45 | 17013-17114 | 0x28C0000 | none |
+| 5 | 25 | 25 | 19071-19175 | 0x2EC0000 | none |
+| 6 | 50 | 45 | 17889-18109 | 0x2B00000 | one plain tile |
+| 7 | 4 | 4 | 16372-16386 | 0x2680000 | none |
+| 8 | 46 | 45 | 17277-17414 | 0x2980000 | 62 63 64 65 |
+| 9 | 1 | 1 | 18109 | 0x2B00000 | none |
+| 10 | 57 | 42 | 18389-18722 | 0x2BC0000 | 67 69 66 68 |
+| 11 | 35 | 35 | 17633-17731 | 0x2A40000 | 134 135 136 133 |
+
+Pieces are the draws of the explorer's pass (stage 4's belt draws 82 to 92;
+the table counts the most), models the distinct entries among them. Each
+stage keeps to its own run of the table, except for the two small ones:
+
+- stage 7 is four of stage 1's models (16372, 16381, 16383, 16386) on stage
+  1's slab, with stage 8's colour rows;
+- stage 9 is one model, 18109, the first piece stage 6 draws, on stage 6's
+  slab and with stage 6's colour rows.
+
+Both are skyless; neither was reached in MAME's attract (above). Stage 2's
+sky is two pictures twice, and stage 10's is the four (66-69) that stage 9's
+entry names in another order; stage 9 itself never shows them. Stage 6 draws
+every fifth entry from 17889 to 18109; the four after each are consecutive
+meshes with the same face count, and nothing the explorer runs picks them:
+not the ring size (`0x5A75F4`, 0-4), not the culling helpers' answer (0.5 to
+5000), and not 400 passes of the stage task's tick.
+
+They are picked by the caller, not by game state. Entries 17889 to 18108
+are 44 characters of five entries each (44 x 5 = 220), and 18109 is the
+one piece outside them. Stage 6's routine (`0x6C500`) draws a 7 by 7 board
+of characters, a byte each from the string at `0xC75E0` ("A" to "Z", `,`,
+`.`, "0" to "9", `!`, `?`, six spaces, then codes 2, 1 and 0), through
+`0x63270(char, variant)`, which draws entry `0xC5A70[char] + variant`. That
+table gives each character its first entry, five apart: "0" 17889 to "9"
+17934, "A" 17939 to "Z" 18064, `,` 18069, code 0 18074, `!` 18079, `.`
+18084, `?` 18089, space 18094 (and every code it has no glyph for), code 2
+and `_` 18099, code 1 18104. The five entries of a character are one shape
+in five colours: each has its own mesh pointer (17939 to 17943: `0x92BA13`,
+`0x92BB1E`, ... `0x92BE3F`) and its own face records (`0x270330`,
+`0x270340`, ... `0x270370`), but the meshes decode to the same vertices and
+face count, and none of their faces is textured; the face records differ in
+colour. Each model has two face records, which differ only in their last
+word, the colour base (bits 6-15); its faces are untextured (bit 14 of the
+first word clear), so the board colours them from palette RAM entry
+`0x1000 + base`, shaded by the face's light. The second record is base 7
+in all five, palette `0xFFFF` (31, 31, 31: white); the first is base 441
+(`0x6E40`) in 17939, palette `0xFDC0` (red 0, green 14, blue 31), 482
+(`0x7880`) in 17940, `0xBBE0` (0, 31, 14), 93 in 17941, `0x81DF` (31, 14,
+0), 84 in 17942, `0x98C6` (6, 6, 6) and 483 in 17943, `0xB81F` (31, 0, 14):
+blue, green, orange, dark grey and pink, each beside white. MAME's palette
+RAM holds the same six values (read in `doab`'s attract, frames 600 to
+5400; the game has one palette table, uploaded at boot).
+Stage 6 passes variant 0 (loaded from `0xC75D0`, a ROM word holding 0) at
+`0x6C614`, `0x6C6A0` and `0x6C70C`. The only other caller is the name entry
+routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`): its grid of the
+same letters (string `0x91BA0`) passes 1 at `0x1DEAC` and 2 for the letter
+under the cursor (`0x557D48`) at `0x1DE98`; it passes 2 for the digits it
+makes from `0x557D68` (`0x1DFE4`, `0x1E0A4`, `0x1E170`), the `.` at
+`0x1E218`, the three initials `0x557D58`-`0x557D5C` (`0x1E30C`, `0x1E414`,
+`0x1E524`) and a letter at `0x1E690`, and 4 for the letters at `0x1E8A0`.
+Those 14 are every direct `call` to `0x63270` in the program; no instruction
+loads its address and no word in the program or data ROMs holds it, so no
+indirect call reaches it through a stored pointer. No direct call passes 3,
+nothing else reads `0xC5A70`, and no code names those entries by address.
+No indirect transfer reaches it either. A linear disassembly shows 343
+`callx`, `bx` and `balx` and 12 `calls`; followed from the program's own
+entry points (start IP `0x410`, `0x490` after the reinit at `0x3C0`, the
+fault, system procedure and interrupt tables at `0x210`, `0x1C0` and
+`0x7B10`, and the targets below), 80 of them are reachable and the rest are
+data read as code. 71 are `switch` jumps, `ld T[g4*4]` then `bx`, through
+tables of ROM words. Two are the task switcher (`0x25BC`, `0x27B4`), which
+jumps to a task's word +0x10: only `0x8210` writes it, from the constant
+each of its 42 callers loads (`0x2C70`, `0x5550`, ... `0x7D150`, never
+`0x63270`), and `0x2604` writes `0x825C`, the return address of the
+yield's `balx` at `0x8254`, which is one more and goes to the constant
+`0x24E0`. Four are leaf returns
+(`0x4E2F0`, `0x4E98C`, `0x4E99C`, `0x4EFD0`) through the register the
+entry copied `g14` into, a return address. Two are `callx` through the
+stage tables (`0x708AC`: `0x70440[0x5555BE]`; `0x71BD0`: `0x719E0[0x5555BE]`),
+ROM words read with a byte index. None computes its target by arithmetic,
+and the address `0x63270` is not in either ROM at any byte offset, so no
+indirect call or jump can land on it: the 14 direct calls are its only
+callers and each character's dark grey variant is never drawn. As a stage,
+6 shows variant 0 only, which is what the explorer draws.
+
+Its one piece outside the letters, 18109 (stage 9's too), is drawn as
+`18109 + [0x5A6EE0]`, like other stages' pieces. That word is the texture
+slot offset the stage loader sets (`0x715EC`-`0x71608`): 0 while the stage
+sits in the first of two slots (`0x5A6EEE` = 0), `0xC5960[stage]` (250 for
+stage 6) in the second, whose entries are the same meshes with their
+texture points moved on (18359 is 18109's). It does not touch the letters;
+the explorer draws the first slot.
+
+Every build draws the same stages. `readDoaStages` run on `doab`, `doa`,
+`doaa`, `doaab` and `doaae` gives the same models, matrices and texture points
+for every scenery piece of all twelve stages (one hash a stage, the same in
+all five), and the five tables above hold the same values in each: the same
+slab pointers, the same sky pictures, the same colour rows byte for byte and
+the same material slots (at 0x6B0 on the 2B builds and `doaa`, 0x870 on
+`doaab` and `doaae`). The model table is the shared data chips', so a model
+number means the same model in every build. The one difference is stage 1's
+fighters: `doab` and `doa` play the attract fight there and draw its two
+fighters (70 more pieces), while the 2A builds have no attract mapped and
+show the stage empty. The colour pointers of stages 12-15 differ by build,
+but those stages draw nothing. The routines sit at:
+
+| stage | `doab` | `doa` | `doaa` | `doaab` | `doaae` |
+|---|---|---|---|---|---|
+| 0 | 0x646C0 | 0x64770 | 0x5CC80 | 0x5CC10 | 0x5CC20 |
+| 11 | 0x6E8E0 | 0x6E990 | 0x66EA0 | 0x66E30 | 0x66E40 |
+
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
 The fighters are drawn by the game's own code too, on two players set up the
@@ -1645,6 +1782,45 @@ display list for that frame all 69 draws match, the ribbon's links
 included, to 0.001 radians in their turn and 0.001 in place.
 
 Not read yet: Revision A's fight code.
+
+On the Animation tab a part is a place in that draw order, and the body
+routine works out every matrix whole (the copro's stack stays flat), so the
+skeleton is not in the ROM to read. `jointsOf` in `js/doafighters.js` finds
+it from the motion: a joint is fixed on its parent's bone, so a part's parent
+is the earlier part in whose frame its place holds still through every frame.
+A joint the motion never bends holds still in several; of those the parent is
+the one whose model comes nearest the joint, the bone it is the end of. That
+gives hips, chest, head, two arms and two legs of three, and the chains that
+hang (Tina's ribbons, Kasumi's sash and ponytail, Jann Lee's belt), the same
+in every motion tried. A part
+drawn on its parent's very matrix in every frame is laid on it: the face
+(eyes and mouth) on the head, the bust on the chest. The board's sort puts
+those over the skin in the order they are sent, so the explorer ranks each
+such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
+ranked one part at a time, the head's skin hid the eyes.
+
+### Dead or Alive's pictures (`js/cells.js`)
+
+The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its
+own tiles, colours and map. The table at data 0x20C0000 (data ROM 0xC0000)
+holds 242 entries of three pointers, 12 bytes each:
+
+- tiles: chunks of a u32 count and that many 32-byte tiles, ending with a
+  count of 0; each chunk starts a fresh block of 128 tiles;
+- palette: 16 colours (32 bytes) a chunk, for every block the chunk fills;
+- map: u16 width and height in tiles, then a u16 entry a tile, the low 13
+  bits the picture's own tile number.
+
+The loader (`0x9000` on Revision B) takes free blocks from its bitmap at
+`0x54F980`, writes the tiles to `0x1080000 + block * 0x1000` and the colours
+to `0x1800000 + block * 32`; the draw (`0x9250`) adds the block to each
+entry's character (`block << 7`) and makes it the palette group too. Every
+map's highest tile number is its own tile count less one, so a picture needs
+nothing loaded with it: the Cells tab gives cell n its own CG n, loaded from
+block 0. The pictures are the Tecmo logo and warnings, the profiles and name
+plates, portraits, the stage skies (named from `doa.sky`), the fight's
+messages, fonts, the rankings, endings, staff roll and title logos. The table
+is the same in every build.
 
 ### Polygon decoding (`js/model.js`)
 

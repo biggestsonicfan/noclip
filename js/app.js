@@ -3385,7 +3385,7 @@ function rankBodyPart(slot) {
 
 /* Point a part's slot at a model, or at nothing. */
 function setBodySlot(slot, model) {
-    if (slot.model === model) return;
+    if (slot.model === model) return false;
     slot.model = model;
     const d = model == null ? null : getModel(model);
     slot.decoded = d?.positions.length ? d : null;
@@ -3394,7 +3394,7 @@ function setBodySlot(slot, model) {
     if (slot.lines) slot.lines.userData.hidden = hidden;
     if (hidden) {
         if (slot.lines) slot.lines.visible = false;
-        return;
+        return true;
     }
     const geom = frameGeometry(model);
     slot.mesh.geometry = geom.mesh;
@@ -3404,11 +3404,14 @@ function setBodySlot(slot, model) {
         slot.lines.visible = state.wireframe;
     }
     rankBodyPart(slot);
+    return true;
 }
 
 /* Draw a body's parts for a frame: each part's models in its slots, placed by
- * the pose's matrices. */
-function placeBodyParts(parts, draws, matrices) {
+ * the pose's matrices. `pose.joined` and `pose.parents` say which parts are
+ * laid on their parent (see rankJoinedParts). */
+function placeBodyParts(parts, draws, matrices, pose = null) {
+    const changed = new Set();
     for (const p of parts) {
         const models = draws[p.part];
         for (let k = 0; k < Math.max(models.length, p.slots.length); k++) {
@@ -3418,13 +3421,39 @@ function placeBodyParts(parts, draws, matrices) {
                 const { mesh, lines } = addRigPart(d, frameGeometry(models[k]));
                 p.slots.push({ mesh, lines, model: models[k], decoded: d });
                 rankBodyPart(p.slots[p.slots.length - 1]);
+                changed.add(p.part);
                 continue;
             }
-            setBodySlot(p.slots[k], k < models.length ? models[k] : null);
+            if (setBodySlot(p.slots[k], k < models.length ? models[k] : null)) changed.add(p.part);
         }
         for (const x of p.slots) {
             placePartAt(x, matrices[p.part]);
         }
+    }
+    if (pose?.joined) rankJoinedParts(parts, pose, changed);
+}
+
+/*
+ * Rank the parts laid on one another together. Dead or Alive draws a face as
+ * a part of its own on the head's matrix, eyes and mouth in the plane of the
+ * head's skin, and the board's sort puts it over the skin by the order the
+ * two are sent in; ranked apart, each in its own part, the depth buffer chose
+ * between them. A group is a part and every part joined to it, in draw order,
+ * ranked again when any of their models changes.
+ */
+function rankJoinedParts(parts, { parents, joined }, changed) {
+    const root = (i) => (joined[i] && parents[i] >= 0 ? root(parents[i]) : i);
+    const groups = new Map();
+    for (const p of parts) {
+        const r = root(p.part);
+        if (!groups.has(r)) groups.set(r, []);
+        groups.get(r).push(p);
+    }
+    for (const group of groups.values()) {
+        if (group.length < 2 || !group.some((p) => changed.has(p.part))) continue;
+        const slots = group.flatMap((p) => p.slots.filter((x) => x.decoded && x.mesh.visible));
+        if (slots.length < 2) continue;
+        applyFaceLayers(slots.map((x) => ({ decoded: x.decoded, matrix: IDENTITY_MATRIX, mesh: x.mesh })), slots[0].mesh);
     }
 }
 
@@ -3463,8 +3492,9 @@ function poseBodyRig() {
     if (!body) return;
     /* A rig whose pose says what each part draws (Dead or Alive's) is
      * taken at its word. */
-    const { matrices, origins, draws, extras } = poseFighterAndRival(body, m);
-    placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    const pose = poseFighterAndRival(body, m);
+    const { matrices, origins, draws, extras } = pose;
+    placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices, pose);
     placeExtras(m.extras, body, extras ?? []);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
@@ -3489,7 +3519,7 @@ function poseBodyRig() {
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
-        a.array.set(bodySkeletonLines(body, origins));
+        a.array.set(bodySkeletonLines(body, origins, pose.parents));
         a.needsUpdate = true;
         m.skeleton.visible = state.showSkeleton;
     }
