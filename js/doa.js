@@ -349,6 +349,8 @@ export function boardToOps(m) {
  *        frames: the passes of the routine, the last one's draws returned;
  *        clock: the board's frame count (0x54B158) on the last pass, counted
  *        up a pass at a time to it, for the routines that read it;
+ *        after: the stage's own routines the stage task runs after each
+ *        pass (stage 11's sky scroll), then
  *        tick: the stage task's own count-up, run after each pass
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
@@ -373,7 +375,7 @@ export function runStageRoutine(rom, entry, opts = {}) {
  * `rewind()` puts RAM back as the first run left it. `most` is the most
  * pieces any pass drew; `ram` is the board RAM it runs in.
  */
-function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock, tick } = {}) {
+function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clock, after = [], tick } = {}) {
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
@@ -399,6 +401,7 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
         geo.draws = [];
         if (n !== undefined) rv.setUint32(FRAME_COUNT - RAM_BASE, (n = (n + 1) >>> 0), true);
         run.done = cpu.call(entry, [], { maxSteps });
+        for (const at of after) cpu.call(at, [], { maxSteps });
         if (tick) cpu.call(tick, [], { maxSteps });
         run.draws = geo.draws;
         run.most = Math.max(run.most, run.draws.length);
@@ -653,10 +656,11 @@ export function readDoaStages(rom) {
  * drawn once, at rest. */
 function stageClock(rom, n) {
     const D = rom.game.doa, A = D.attract, S = D.stageSetup;
-    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames, tick: S?.tick };
+    const after = S?.after?.[n] ?? [];
+    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames, after, tick: S?.tick };
     if (!S?.moving.includes(n)) return {};
     const own = rom.mainCpuView.getUint32(S.table + 4 * n, true);
-    return { init: [S.common, own], frames: S.frames, clock: S.clock, tick: S.tick };
+    return { init: [S.common, own], frames: S.frames, clock: S.clock, after, tick: S.tick };
 }
 
 function stageMoves(rom, n) {

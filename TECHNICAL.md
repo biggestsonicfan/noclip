@@ -1238,12 +1238,23 @@ its real geometry SHARC, running beside the HLE geometry, takes a jump into
 data (handler 0x20C26) and stops the attract with a bogus "op 15". The board
 does not run a stage once a frame: it runs one twice when it falls behind and
 skips one now and then, so the passes are counted from 0x5A75F0. Stages 1, 3,
-4, 5, 6, 7 and 8 leave 0x5A0000-0x5A7667 exactly as MAME has it after 299
+4, 5, 6, 7, 8 and 11 leave 0x5A0000-0x5A7667 exactly as MAME has it after 299
 frames. Stages 0 and 10 copy the camera's yaw and position into their state
 (0x5A0014, 0x5A00F4) and pick pieces by it; stage 2 runs its ring of eight
-(0x67388) only while the camera is in range; stage 11 also scrolls its sky
-(0x702E0) into the scroll hardware. Those differ only there, since the
-explorer's camera is not the game's. Stage 9 was not reached. Stages 5, 6, 7
+(0x67388) only while the camera is in range. Those differ only there, since
+the explorer's camera is not the game's. Stage 9 was not reached.
+
+Stage 11's sky waves. After the stage's pass, the stage task (0x71124) calls
+0x702E0 (2A 0x688A0) when the stage is 11. That routine steps a byte at
+0x5A0144 each pass and, every fourth, the wave's phase at 0x5A0145. It keeps
+the camera's sky scroll 0x54F948 (made by the sky routine, 0x701C8, from the
+camera) in 0x5A0140. Then it fills the scroll chip's line table at 0x1008800:
+the lines above the horizon (0x54F950) at the last scroll, then four lines
+at half the wave (table 0xC76E0, by phase), then the rest at the full wave.
+The explorer runs it as the stage's `after` routine, before the tick.
+0x5A0140 follows the camera, so the grade gives it the board's 0x54F948 from
+the frame it grades against (`CAMERA=0` leaves that out; then only 0x5A0140
+differs). The explorer's sky does not draw the line table yet. Stages 5, 6, 7
 and 9 have nothing that moves, and are drawn once from cleared RAM.
 
 The moving stages, stage 1 among them, go on moving in the viewer: the routine

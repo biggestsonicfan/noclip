@@ -3235,11 +3235,15 @@ const doab = {
          * run as many passes as the attract's stage, to the same frame
          * count (attract.frame). `tick` is the stage task's count-up after
          * each pass (0x5A75F0 +0x80 and the byte 0x5A6EDD +1): stage 4's
-         * belt and stage 10's turn run on it. Graded against MAME's attract
-         * (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it word for word
-         * over 299 frames; 0, 2 and 10 follow the camera and 11's sky
-         * scrolls. */
-        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, tick: 0x71138 },
+         * belt and stage 10's turn run on it. `after` are a stage's own
+         * routines the stage task runs before the tick (0x71130): stage 11's
+         * sky scroll 0x702E0, which steps its wave (0x5A0144, a byte a pass
+         * and 0x5A0145 every fourth) and keeps the camera's sky scroll
+         * (0x54F948) in 0x5A0140. Graded against MAME's attract
+         * (tools/doa-stages): 1, 3, 4, 5, 6, 7, 8 and 11 match it word for
+         * word over 299 frames (11 given the camera's scroll); 0, 2 and 10
+         * follow the camera. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is
@@ -3358,7 +3362,7 @@ const doaa = {
     doa: {
         ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
-        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, tick: 0x696f8 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, after: { 11: [0x688a0] }, tick: 0x696f8 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
