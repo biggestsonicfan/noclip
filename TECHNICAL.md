@@ -1222,13 +1222,12 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
 
 **Drawn on top of the slot model**, all keyed on `+0x1F48`:
 
-- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken, and
-  only for Jane, Grace, Honey and Jane in jeans (`0x6421F80[char]`). It then
-  replaces the chest with one of 31 models (table `+4`), picked by a spring
-  (`+0xC68`/`+0xC6C`, clamped to +-15) the body's movement drives: index
-  `15 + round(+0xC6C + 0.5)`. At rest that is entry 15 or 16 (Jane 772/773).
-  Table `+0` is a per-frame list it uses while the move flags `+0x1A4` are
-  exactly `0x200`.
+- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken
+  (`+0x1F48` bit 1), and only for characters with a table at
+  `0x6421F80[char]`: Jane, Grace, Honey, Jane in jeans and character 14.
+  It swaps the chest's model for one of 31 picked by a spring, or for a
+  per-frame list on some moves. The whole routine is below, under "The
+  chest bounce".
 - `koshi_unit_change` (`0x31ADC`, slot 9): Honey and Bahn (`0x6422400[char]`).
   It picks the hip model per motion (fixed lists for motions (`+0x1A8`) `0x31` and `0x180`,
   a 50-frame swing, a per-motion table at `+0x1C`), taking the second of each
@@ -1353,27 +1352,132 @@ entry 14 is never read. The Armour switch hides both pads with the upper half
 own steps: the swings, the chest spring and the hip lists by motion, Picky's
 hair, and the flying pieces.
 
-**The chest bounce: what is missing before it can be drawn.** Everything this
-document says about it is the `mune_unit_change` entry above. That is enough
-to know the part (slot 1), the fighters (0, 1, 2, 13) and two of the models
-(Jane's entries 15 and 16, 772 and 773), but not enough to draw a bounce:
+**The chest bounce (read from the ROM; not drawn).** `rob_disp` calls
+`mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
+own model (`+0x44`) in `g0`, and draws whatever comes back in `g0` on the
+slot's own matrix: the chest's, already sent (`0x19FD0`, slot × `0xC`). The
+routine sends no matrix, offset or scale. The bounce is a model swap, nothing
+else.
 
-- *Intact or broken.* As written, `mune_unit_change` runs only once the chest
-  is broken. Nothing here says an intact chest bounces or names a model for
-  one, so as far as this document goes the bounce is a broken chest's only.
-- *The 31 models.* Only Jane's entries 15 and 16 are named, and entry 15 for
-  the other three (2844, 2978, 1597). Which way the index runs (which end is
-  up) is not said.
-- *The spring.* `+0xC68`/`+0xC6C` are named and clamped to +-15, but not how
-  they step each frame: which of the two is the velocity, what drives them
-  ("the body's movement": which bone, vector or flag), the stiffness, the
-  damping, the starting value, or whether `action_init` resets them.
-- *The per-frame list.* Table `+0` is used while `+0x1A4` is exactly `0x200`;
-  its length, its entries (model numbers or indices), and how the frame into
-  it is counted are not said, nor what `0x200` means as a move.
+*When it runs.* It returns the slot model unchanged unless the character has
+a table at `0x6421F80[char]` and `+0x1F48` bit 1 (chest broken) is set. Only
+characters 0, 1, 2, 13 and 14 have a table, so only their broken chests
+bounce. An intact chest never does: there is no other path. Jane's chest
+breaks in three stages; bit 1 is set at the first one, so the bounce starts
+then. Character 14 is in neither the break table above nor the explorer, but
+`0x640EDAC[14]` does have a one-stage slot-1 entry. `debug_flag` bit 5
+skips the spring step (and the copy at `0x1716C`) but still picks a model.
 
-Until those are read from `0x31888` (and whatever writes `+0xC68`/`+0xC6C`),
-the explorer keeps the resting model, entry 15, on a broken chest.
+*The table* (`0x6421F80[char]` → two words): `+0` points at the per-frame
+list (a count word, then that many 16-bit model numbers), `+4` at 31 16-bit
+model numbers (entries 0-30, ending in a 0 word).
+
+| Char | Table | 31 models (entry 0 → 30) | Per-frame list |
+|---|---|---|---|
+| 0 Jane | `0x6422018` | 701, 758-778, 864-872 | 21 frames |
+| 1 Grace | `0x6422000` | 2829-2859 | 51 frames |
+| 2 Honey | `0x6421FE8` | 2963-2993 | 68 frames |
+| 13 Jane (jeans) | `0x6422024` | 1582-1612 | 21 frames |
+| 14 | `0x642200C` | 436, 873, 2800-2828 | 51 frames |
+
+The per-frame lists, as stored:
+
+- Jane: 778 778 864 778 777 775 773 771 769 768 767 766 765 766 767 768 769
+  771 773 775 777
+- Grace: 2853 2850 2851 2852 2853 2853 2852 2851 2850 2849 2848 2846 2844
+  2842 2840 2839 2838 2837 2838 2839 2840 2842 2844 2846 2848 2849 2850 2851
+  2852 2853 2853 2852 2851 2850 2849 2848 2846 2844 2842 2840 2839 2838 2837
+  2838 2839 2840 2842 2844 2846 2848 2849
+- Honey: 2971 2971 2971 2970 2970 2970 2971 2971 2971 2972 2972 2973 2973
+  2974 2974 2975 2975 2976 2976 2977 2977 2978 2979 2979 2980 2980 2981 2981
+  2982 2982 2983 2983 2984 2984 2985 2985 2985 2986 2986 2986 2985 2985 2985
+  2984 2984 2983 2983 2982 2982 2981 2981 2980 2980 2979 2979 2978 2977 2977
+  2976 2976 2975 2975 2974 2974 2973 2973 2972 2972
+- Jane (jeans): 1603 1603 1604 1603 1602 1600 1598 1596 1594 1593 1592 1591
+  1590 1591 1592 1593 1594 1596 1598 1600 1602
+- 14: 2822 2819 2820 2821 2822 2822 2821 2820 2819 2818 2817 2815 2813 2811
+  2809 2808 2807 2806 2807 2808 2809 2811 2813 2815 2817 2818 2819 2820 2821
+  2822 2822 2821 2820 2819 2818 2817 2815 2813 2811 2809 2808 2807 2806 2807
+  2808 2809 2811 2813 2815 2817 2818
+
+They are model numbers from the same character's 31 (entries 8-22 for Jane
+and Jane in jeans, 8-24 for Grace and 14, 7-23 for Honey), not indices.
+
+*The spring.* `+0xC6C` is the position, `+0xC68` the velocity, both floats.
+`change_unit_init` (`0x2CA10`, from `efc_ram_init`, for both fighters) sets
+three constants: `+0xC74` = 160.0, `+0xC70` = 0.14, `+0xC78` = -0.1. What
+drives it is the distance from the head (`+0x20C`) to `+0xC7C`, a copy of
+the waist (`+0x1F4`) that `calc_unit_mat` takes as it starts (`0x1716C`),
+before it stores the new waist (`0x172D4`) and head (`0x17450`). The distance
+is coprocessor function `0x2C` (`0x16002C2C`, six floats in, one out). In
+FV's own coprocessor program (uploaded from `0x6400000` by
+`b_crx_copro_down`, `0x1810`) entry `0x2C` of the dispatch table goes to
+`0x20670`, the same instructions as cpres1's official `Fn_get_3d_r`:
+`sqrt(dx² + dy² + dz²)` (its square root, `0x20281`, is the same code too).
+Each frame, from `loc_3191C`:
+
+1. `d` = that distance; `k` = `|+0xC64 - d|` × `+0xC74` (160), capped at
+   4.2. `+0xC64` = `d` (kept for next frame); `+0xC88` = `k` (nothing reads
+   it).
+2. The kick: if the velocity is exactly 0 it becomes `k`; else if
+   `k` ≥ |velocity| it becomes `k` with the velocity's sign; else it is left
+   alone. So the kick only ever raises the speed, and only a spring at a
+   dead stop is pushed in the + direction.
+3. position += velocity; then velocity × 0.935.
+4. If position ≥ 15: position = 15, velocity = -velocity × 0.78. If
+   position ≤ -15: position = -15, the same.
+5. velocity += 0.14 (`+0xC70`) if position is negative (sign bit), else
+   -0.1 (`+0xC78`). The pull back is a constant, not proportional to the
+   position, and stronger from below than from above.
+
+*Which model.* Index = 15 + `int(position + 0.5)`, the conversion being
+coprocessor function `0x18` (`0x0C001818`). In FV's program it goes to
+`0x205A3`, the same bytes as cpres1's `r0 = fix f1`, and the program sets
+`MODE1 = 0x18000` once (`0x20080`) and never again: bit 15, TRUNC, is on,
+so `fix` truncates toward zero. With position in [-15, 15] the index runs
+1-30; entry 0 (Jane 701, Grace 2829, Honey 2963, jeans 1582, 14's 436) is
+never picked. Index 15 covers positions above -1.5 and below 0.5, two units
+wide; every other index one unit. A higher index means a more positive
+position. Which way that moves the chest on screen is in the models, not
+the code. The model is stored in `+0xC94` and returned.
+
+At rest (no kick) the constant pull keeps the position swinging about 0:
+from 0/0, worked through the five steps above in floats, it settles within
+±0.26, so the resting model is entry 15 (Jane 772, Grace 2844, Honey 2978,
+jeans 1597, 14's 2813). Entry 16 (Jane 773) needs position ≥ 0.5.
+
+*Reset.* `change_unit_init` sets only the three constants. Nothing in the
+program ROM stores to `+0xC64`, `+0xC68`, `+0xC6C`, `+0xC90` or `+0xC94`
+outside this routine. The one reset found is in it (`0x31A60`): when
+`also_mode` is 9, `0x500031` is `0x11` and `+0x1A4` bit 16 is set, velocity
+and position are set to 0 and the slot model is returned. Whether a block
+clear of the fighter's work area zeroes them at a round start was not found.
+
+*The per-frame list.* At the top (`0x318B4`), with `+0x1A4` bit 9 set and
+bits 14 and 16 clear:
+
+- If `+0xC90` is already set, the spring is not stepped. If `+0x1A4` is
+  exactly `0x200` the model is list[`+0x1AA` mod count]; otherwise the slot
+  model. `+0x1AA` is the motion frame (the move script steps against it),
+  so the list plays at one entry per motion frame and wraps.
+- Otherwise `+0xC90` is set, and the list taken (as above, `0x200` check
+  included), when list[`+0x1AA` mod count] equals the model last
+  picked (`+0xC94`) and |velocity| ≤ 0.8. Failing that, `+0xC90` is cleared
+  and the spring runs.
+
+Any other `+0x1A4` clears `+0xC90` and runs the spring. So the list takes
+over only where it meets the spring's current model with the spring nearly
+still: Jane and Jane in jeans's lists never hold their resting models (772,
+1597), so they enter only from entry 16 or another listed model. While on
+the list the spring is frozen and `+0xC64` is not updated, so the first
+frame back measures the distance against the one from before the list
+(capped by the 4.2). `+0x1A4` is built from the move record and its
+set-up and script (see "When the chest twists"); which moves leave it at
+exactly `0x200` was not read.
+
+To draw it, the explorer would need per frame: the head and waist positions
+(from the matrices it already builds), the five steps, the index, and for
+the list the motion frame and `+0x1A4`.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
