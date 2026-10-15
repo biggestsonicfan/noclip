@@ -3110,44 +3110,76 @@ const doab = {
         /* The sky: four scroll pictures a stage, named in the program, out of
          * the table of pictures in the data (js/scroll.js buildDoaSky). */
         sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
-        /* The fight code run on posed players (js/doa.js runDoaFighters):
-         * load the character, clear its ribbon, set it up, start a motion,
-         * then step it (the hips and the steps) and draw the body and the
-         * ribbon, a frame at a time, between the fight loop's frame start
-         * and end. A move can blend in from the pose before it.
-         * `heights` is the table of one float a character the skeleton
-         * scales the hips' lift by. `boot` is floats the boot sets (0x44B8):
-         * the ring's size, which the round start halves into the bounds a
-         * shadow lands on the floor inside. The pokes are what the fight
-         * sets: 0x54FCDD/0x54FC93 pick the body path, 0x54FC94 4 takes the
-         * shadows' slant from the stage, 0x589DB0 lets the ribbon swing. */
+        /* The fight code (js/doa.js runDoaFighters), run a frame at a time
+         * as the board's fight loop runs it. `heights` is the table of one
+         * float a character the skeleton scales the hips' lift by. `boot` is
+         * floats the boot sets (0x44B8): the ring's size, which the round
+         * start halves into the bounds a shadow lands on the floor inside.
+         * The pokes are what the fight sets: 0x54FCDD/0x54FC93 pick the body
+         * path, 0x54FC94 4 takes the shadows' slant from the stage, 0x589DB0
+         * lets the ribbon swing. The round start also fills the fight's
+         * tables (`tables`, 0x25870 for each of 13), copies the stage's grid
+         * (`grid`, what 0x70764 does: the singles and bytes the ribbon reads
+         * under the feet, from a second table on stages 2 and 5) and resets
+         * each player (`roundReset`: its health, 0xFF, and the round's
+         * counts). `camera` is the camera task, `frameWait` the wait for the
+         * next frame it loops on. */
         fighters: {
-            heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900, motion: 0x420c0,
-            step: 0x44840, blendStart: 0x4a5b0, blend: 0x4a8d0, body: 0x457c0, ribbon: 0x4feb0,
+            heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
+            player: 0x41a50, ribbon: 0x4feb0,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
+            tables: { at: 0x25870, count: 13 },
+            grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
+            roundReset: 0x1b430,
+            camera: 0x7d1b0, frameWait: 0x8240,
+            /* The hit and push checks, then the fight's tasks: the hits
+             * (0x1FDD0), the reactions to them (0x24FD0) and the rest. */
+            collision: [0x3e1e0],
+            fight: [0x1fdd0, 0x24fd0, 0x21400, 0x22ef0, 0x231d0, 0x1fe80, 0x23c80],
+            moversStart: 0x2f550, movers: [0x2f5e0, 0x2f670, 0x2fb40, 0x2fd50, 0x2ff70],
             boot: [[0x54fd5c, 24], [0x54fd60, 24]],
             pokes: [[0x54fcdd, 1], [0x54fc93, 2], [0x54fc94, 4], [0x589db0, 1]],
         },
         /* The attract fight MAME shows at frame 2000 on stage 1: Zack against
-         * Tina. `base` is the player's model bank (0x5A6ED0), `angles` and
-         * `head` the record's +0x14..+0x1C and +0x2D, `expression` the face
-         * model (0x58828C). `moves` are what the player plays up to the
-         * frame the board draws, as MAME logged them: [motion, frames, rate
-         * (the speed at 0x56ADA0 times the record's rate), blend frames,
-         * start frame]; Tina's go back to the round's start,
-         * as her ribbon's swing counts from there. `light` is the stage's
-         * light, `frame` the board's frame count (0x54B158), whose low bit
-         * picks the frames the chains swing on. */
+         * Tina, from the round's start. `base` is the player's model bank
+         * (0x5A6ED0), `pos` and `angles` where the round starts it,
+         * `expression` the face model (0x58828C), `open` its record on the
+         * fight's first frame, and `commands` and `guard` what the attract's
+         * AI decided, as MAME logged it (js/doa.js decide). `light` is the
+         * stage's light, `first` and `frame` the board's frame count
+         * (0x54B158) on the fight's first frame and on the one drawn: the
+         * board shows a frame's display list on the next, so MAME's frame
+         * 2000 is loop 0x75F's. `camera` is the camera task's state on the
+         * first frame, from MAME's RAM. */
         attract: {
             stage: 1,
             light: [0.2387, 0.8988, -0.3677],
-            frame: 0x761,
+            first: 0x6b0,
+            frame: 0x75f,
+            camera: [
+                [0x5bf840, 0x11000000], [0x5bf844, 0x11200000], [0x5bf870, 0x10a],
+                [0x5bf880, 0x3fef6f83], [0x5bf884, 0x40083127], [0x5bf888, 0x3db9b7a7],
+                [0x5bf88c, 0x3ff09dc2], [0x5bf890, 0x400dc87c], [0x5bf894, 0x3f8bde4e],
+                [0x5bf898, 0x38b], [0x5bf89c, 0x7f9f], [0x5bf8a4, 0x3f80c0c1],
+                [0x5bf8b0, 0x3fef6f83], [0x5bf8b8, 0x3f800000], [0x5bf8c0, 0x22],
+                [0x5bf8c8, 0x3fef6f83], [0x5bf8d0, 0x3f800000], [0x5bf8d8, 0x3db9b7a7],
+                [0x5bf8e0, 0x3db9b7a7], [0x5bf8e8, 0x2201], [0x5bf8f8, 0xcc9b4],
+                [0x555584, 0x3fde613e], [0x555588, 0xffff85aa], [0x55558c, 0x23],
+                [0x555590, 0x38b], [0x555594, 0x7f9f], [0x555598, 0x3ff09dc2],
+                [0x55559c, 0x400dc87c], [0x5555a0, 0x3f8bde4e], [0x5555a4, 0x3fef6f83],
+                [0x5555a8, 0x40083127], [0x5555ac, 0x3db9b7a7],
+            ],
             fighters: [
-                { char: 0, base: 80, pos: [6.382, 1, 0.471], angles: [0xff94, 0x98, 0x98], head: 3, moves: [[484, 9, 2.7, 5, 13]] },
                 {
-                    char: 1, base: 798, pos: [7.662, 1, 0.484], angles: [0x8175, 0x8175, 0x8175], head: 9,
-                    expression: 1, mirror: true,
-                    moves: [[1142, 21], [1266, 14], [1217, 18, 2.6], [1218, 19, 2.4], [519, 57], [1142, 14, 1, 7], [1221, 9, 2.23], [1221, 13, 2.07], [1222, 11, 1.45]],
+                    char: 0, base: 80, pos: [5.5, 1, 0.5], angles: [0, 0, 0],
+                    open: { state: [0x28, 0, 0x29, 0, 0x2d, 0, 0x36, 1] },
+                    commands: [[0x6f2, 0x40], [0x72a, 0x03], [0x735, 0x53], [0x736, 0xa8], [0x740, 0xa9], [0x74a, 0xaa]],
+                    guard: 0x6c6,
+                },
+                {
+                    char: 1, base: 798, pos: [6.5, 1, 0.5], angles: [0x9f48, 0x9f48, 0x9f48], expression: 1,
+                    open: { angles: [0x8000, 0x9f48, 0x9f48], state: [0x29, 8, 0x36, 1] },
+                    commands: [[0x6c4, 0xa6], [0x6c5, 0xa7], [0x6d3, 0xa8]],
                 },
             ],
         },

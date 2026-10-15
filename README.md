@@ -522,12 +522,11 @@ which a MAME frame and the explorer from the same camera agree on. The indoor
 stages have none.
 
 On Revision B, stage 1 has the two fighters of the attract fight MAME shows
-there, Zack against Tina, played by the game's own fight code through the
-moves MAME logged up to the frame it draws: textured, coloured, with their
-shadows, and standing where MAME has them. They hold that one pose; Revision
-A's fighters are not read yet, and Tina's ribbon hangs where MAME's does but
-swings at other angles, as she is not pushed and thrown round the ring the way
-the attract fight pushes her.
+there, Zack against Tina, played from the round's start by the game's own
+fight code, hits, camera and all, with only the attract's AI's commands taken
+from MAME: textured, coloured, with their shadows, and posed as MAME has them
+at that frame, Tina's ribbon included. They hold that one pose; Revision A's
+fighters are not read yet.
 
 ## Running it
 

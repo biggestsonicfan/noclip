@@ -1165,8 +1165,9 @@ way the fight start does (Revision B addresses):
   position (y 1.0 is the floor), +0x14/+0x18/+0x1C angles (the body faces the
   first), +0x2D which head the body routine picks, +0x48 drawn;
 - `0x407A0(char, p)` loads the character, `0x4F930(p)` clears its ribbon,
-  `0x41900(p, char)` sets it up, and `0x420C0(p, motion)` starts a motion
-  with facing `0x550124[p]` (-1 is mirrored) and `0x56AC64[p] = 1`;
+  `0x41900(p, char)` sets it up; the player's frame `0x41A50(p)` runs its
+  action script (+0x28, started by +0x36 = 1), which starts motions with
+  `0x420C0(p, motion)` (facing `0x550124[p]`, -1 is mirrored);
 - the motion's fifteen joint tracks are pointers at `0x56ACD0 + 60 * p`, six
   bytes a frame (three int16 angles), which go to `0x56AA40 + 0xB4 * p` as
   int32; a mirrored player turns the other way about Y and Z;
@@ -1180,7 +1181,7 @@ way the fight start does (Revision B addresses):
   reached; the skeleton lifts the hips by that y times the height, and the
   body routine turns dx and dz by the heading `0x56AC28[p]` into the
   record's position and clears them, so the fighter steps as its motion does;
-- a move can blend in: the fight sets a frame count at `0x56AC04[p]`,
+- a move can blend in: the script sets a frame count at `0x56AC04[p]`,
   `0x4A5B0(p)` works out a step per joint toward the move's first frame, and
   `0x4A8D0(p)` takes one a frame in place of the motion step until the count
   runs out;
@@ -1188,7 +1189,12 @@ way the fight start does (Revision B addresses):
   swings from frame to frame: a bob (`0x400B0`: acceleration, speed and place
   at `+0x5C..+0x64`, 32 frames a swing from the load on) and a push
   (`+0x74..+0x7C`), the joint the ribbon hangs from's move since the last
-  swing; it swings only on frames whose parity is `0x589DB1`;
+  swing; it swings only on frames whose parity is `0x589DB1` (`0x3FA50`).
+  Each link's turn (`0x40540`) eases toward the angles the copro's `0x0F`
+  gives for the push, and the push takes the floor's slope from a 14 x 14
+  grid at `0x5A6F00` (two singles a cell, by the player's x and z, through
+  `0x630B0` into `0x56AA30`), which the stage setup `0x70764` copies from
+  `0xC7CA0` (`0xC82C0` on stages 2 and 5);
 - the fight loop's frame (`0x4D8D8`) opens with `0x4DF20`, which works out
   `0x589DC0..C8` from the light at `0x5555B0` plus, with `0x54FC94 = 4`, the
   stage's entry of the table at `0xC32A0`, and closes with `0x4DDC0`, which
@@ -1200,20 +1206,39 @@ way the fight start does (Revision B addresses):
   sets the floor (1.0) and the ring, half of the size the boot sets at
   `0x54FD5C/60` (24.0, at `0x44B8`).
 
+- the round's setup also fills the fight's tables (`0x25870(c)` for c 0-12)
+  and resets each player (`0x1B430(p)`: health +0x20 = 0xFF, the round's
+  counts cleared); without the health, the first hit knocks the player down
+  (`0x22540` compares +0x20 with the damage) where MAME's only reacts;
+- each frame of the fight runs, in the board's order: `0x4DF20`, `0x41A50`
+  for each player, `0x4FEB0` for each, `0x4DDC0`, the hit and push check
+  `0x3E1E0`, the camera task, then the fight's tasks (`0x1FDD0` the hits,
+  `0x24FD0` the reactions, `0x21400`, `0x22EF0`, `0x231D0`, `0x1FE80`,
+  `0x23C80`) and the movers of the task at `0x2F4F0` (`0x2F5E0` the
+  knockback, `0x2F670` the push of players in contact, and the rest);
+- the camera task (`0x7D1B0`, a loop that waits for the next frame at
+  `0x8240`) eases its eye and target after the players (`0x5552C8`,
+  `0x865C0`) in mode `0x55558C` (0x23 in a fight) and builds the camera
+  (`0x85BE0`): copro `0x08`, then the turns and the eye's move. The body
+  routine outputs that matrix (`0x5888C0`) and builds the joints on it, so
+  the copro's matrices are the camera's; the explorer takes the draws back
+  to the stage's frame through its inverse;
+- the copro's arctangent (`0x0A`, and `0x0F`: the yaw and the pitch from one
+  point to another, yaw = atan2(-dx, dz), pitch = atan2(dy, the run)) reads
+  a little short, about 6e-5 of the angle (straight back is 0x7FFE), and
+  rounds down: MAME's answers agree with that to a unit.
+
 The profile's `doa.attract` names MAME's attract fight at frame 2000 on stage
 1: the stage, the light the attract script sets (`0x19710` turns two angles
-into it), the frame count, and each player's record fields and moves as MAME
-logged them frame by frame (`[motion, frames, rate, blend, start frame]`).
-Zack enters 484 at frame 13 with a five-frame blend at speed 2.7; Tina's moves
-go back to the round's start (frame 1821), as her ribbon's bob counts from the
-load. The explorer plays them all through the fight loop's frame and keeps
-the last frame's draws. Against MAME's display list for that frame all 69
-draws match: bodies, faces and hands to the last bit in their turn and 0.012
-in place (Zack's record x, which the display list lags by a frame), the
-shadows within 0.04 and 0.07 radians, the ribbon's root in place. The
-ribbon's three links swing 0.15-1.2 radians off: its push is the joint's
-move in the world, and MAME's Tina is pushed and knocked back round the ring
-by the fight (`0x51F00` and the hit code), which the profile does not play.
+into it), the board's frame count on the fight's first frame (0x6B0) and on
+the one drawn (0x75F: the board shows a frame's display list on the next),
+the camera task's state on the first frame as MAME has it, and each player's
+record on that frame (Zack starting action 0; Tina turned, starting action
+0x800). The rest is the fight code's, except the attract's AI, which the
+explorer does not run: its commands (+0x2C) and guard (+0x3A), as MAME
+logged them, are the profile's `commands` and `guard`. Against MAME's
+display list for that frame all 69 draws match, the ribbon's links
+included, to 0.001 radians in their turn and 0.001 in place.
 
 Not read yet: Revision A's fight code.
 
