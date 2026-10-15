@@ -689,10 +689,14 @@ const fvipers = {
      * porch boards 0.002 over the dirt, a lip 0.27 over the floor — and the depth
      * buffer puts those on top unaided.
      *
-     * What it does have is lettering 0.002 in front of its sign, and that is the
-     * near plane's to hold: see setDepthProfile in js/viewer.js.
+     * What it does have is lettering 0.002 in front of its sign, shadows and
+     * stains laid on the ground in its own plane, and plates of one layer
+     * overlapping each other. The near plane alone held the lettering close
+     * up and lost it across the arena, and on a phone's depth buffer sooner;
+     * `layers` puts each such face over the one under it the way the board's
+     * sort does (js/layers.js), whatever the distance.
      */
-    depth: { recede: 0, nearMin: 0.1 },
+    depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
     /*
      * The fighters, on Virtua Fighter 2's rig: calc_rob_angle (0x2AA84) is
@@ -3069,6 +3073,12 @@ const vf2 = {
             at: 0x101000, indirect: false,
             block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
         },
+        /* The untextured faces go through colorxlat, as MAME's
+         * draw_scanline_solid has them: a fighter's hands are untextured, and
+         * their palette colour (colorbase 29) is 28 in all three channels,
+         * the first skin row send_tex_col_skin fills, so drawn flat they came
+         * out white. */
+        solid: true,
     },
     /* js/vf2.js reads the records and draws them the way the board does. */
     /* One material table for every stage: 0x117F8 uploads the 32 slots at

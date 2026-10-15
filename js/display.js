@@ -163,8 +163,13 @@ export function frameModel(anim, frame) {
  * them. Giant Wing writes only the roll, and the same argument carries: the
  * board tips the horizon under a camera riding the plane, and inverting that
  * banks the plane under a horizon that stays where it is.
+ *
+ * Fighting Vipers' two Westerns are the same sentence again: the board turns
+ * the town round a still arena (FV_TURN), and the turn handed out here stills
+ * the town and sends the arena round in it.
  */
 export function stageWorldFrame(stage, frame, frames = null) {
+    if (stage.flat) return stage.flags & FV_TURNING ? [angY(FV_TURN(frame))] : null;
     if (!sfightSlots(stage)) return null;
     if (stage.slot === FLYING_CARPET_SLOT) return worldPrologue(carpetAt(frame));
     if (stage.slot === CANYON_CRUISE_SLOT) {
@@ -1741,6 +1746,7 @@ const OBJECT_ROUTINES = new Map([
 /* Fighting Vipers' own slots, which sub_235BC and pole_disp test by number. */
 const FV_NO_PLATFORM_SLOTS = [7, 14];
 const FV_NO_POLE_SLOT = 7;
+const FV_TURNING = 1 << 0x10;
 const FV_TURN = (f) => 10 * f;
 const FV_TURNING_LAYERS = new Set(['upper', 'ground', 'floor']);
 
@@ -1803,14 +1809,20 @@ export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     if (f & (1 << 0xe)) for (const m of stage.layers.extra ?? []) push(m, 'extra');
 
     /*
-     * The cage, which is eight wall panels and a rail over them.
+     * The cage, four sides of up to eight panels and a rail over them.
      *
-     * cage_clip_m walks the eight models at 0x84 and pushes the same translate
+     * cage_display calls cage_clip_m once for each side, and pushes ang_y
+     * 0x4000 after each (0x22318), so side k is drawn a quarter turn k on.
+     * cage_clip_m walks the models at 0x84 and pushes the same translate
      * before each — `lda 0x40C00000` into the third slot of a 0x3000606, six
-     * units — then pushes its negation after, so each wall is drawn six out
-     * from the arena centre and the next starts from the centre again. No
-     * rotation: the eight models are already oriented, one per side. Drawing
-     * them at the identity is what stacked them in the middle.
+     * units — then pushes its negation after, so each panel is drawn six out
+     * from the arena centre and the next starts from the centre again. The
+     * panels are cut along the one side: eight of them, or four, two or one
+     * on flags bits 19, 21 and 22 (the table of panel edges it clips by).
+     *
+     * A side is drawn only while the camera is inside its plane (byte_500288,
+     * 0x22AC8), which hides the wall between the camera and the fight. A
+     * camera that can go anywhere wants all four, so the cull is left out.
      *
      * The 24 entries at 0x84 are three groups of eight and the group is chosen
      * by a damage state, not a ring — the table cage_clip_m indexes with the
@@ -1846,7 +1858,7 @@ export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     /* The Observation Deck's platform, poles and cage by its lit corner, and
      * the City Hall Elevator's shaft and city: see js/fvstages.js. */
     rideElevator(out, f);
-    out.push(...fvStageDraws(stage, FV_CAGE_PUSH));
+    out.push(...fvStageDraws(stage, FV_CAGE_SIDES));
 
     /* On a stage with flags bit 16 — both Westerns — 0x1EFA8 takes 10 off
      * the stage yaw (word_50A022) every frame, and the ground (sub_238E4), the
@@ -1857,14 +1869,26 @@ export function buildFlatDisplayList(stage, { region = 0 } = {}) {
     return out;
 }
 
-const FV_CAGE_PUSH = [['t', [0, 0, 6.0]]];
+const FV_CAGE_SIDES = [0, 1, 2, 3].map((k) => [angY(k * 0x4000), ['t', [0, 0, 6.0]]]);
 
-/* The Observation Deck draws its own eight (js/fvstages.js). Then
- * cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws under
- * the same six-unit push — the cage's top rail. */
+/* How many panels a side is cut in: cage_clip_m's tests at 0x224A0, the
+ * later bit winning. */
+function fvCagePanels(flags) {
+    if (flags & (1 << 0x16)) return 1;
+    if (flags & (1 << 0x15)) return 2;
+    if (flags & (1 << 0x13)) return 4;
+    return 8;
+}
+
+/* The Observation Deck draws its own panels (js/fvstages.js). Then, on every
+ * side, cage_clip_m: `bbc 0x14, r3` skips the model at 0x20, which it draws
+ * under the same six-unit push — the cage's top rail. */
 function pushFlatCage(push, stage, flags) {
-    if (!stage.hall) for (const m of stage.layers.cage ?? []) push(m, 'cage', { ops: FV_CAGE_PUSH });
-    if (flags & (1 << 0x14)) push(stage.cageTop, 'cage', { ops: FV_CAGE_PUSH });
+    const panels = (stage.layers.cage ?? []).slice(0, fvCagePanels(flags));
+    for (const ops of FV_CAGE_SIDES) {
+        if (!stage.hall) for (const m of panels) push(m, 'cage', { ops });
+        if (flags & (1 << 0x14)) push(stage.cageTop, 'cage', { ops });
+    }
 }
 
 /* Flags bit 3, the City Hall Elevator: 0x1EFBC adds 0.017 a frame to
@@ -1882,7 +1906,7 @@ function rideElevator(out, flags) {
 }
 
 function addFlatObjects(out, stage, flags, region) {
-    const turn = flags & (1 << 0x10) ? FV_TURN : null;
+    const turn = flags & FV_TURNING ? FV_TURN : null;
     if (turn) {
         for (const e of out) {
             if (FV_TURNING_LAYERS.has(e.layer)) {

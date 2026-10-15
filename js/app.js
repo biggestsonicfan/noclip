@@ -102,6 +102,9 @@ const state = {
      * when fight state allows (see poseBout), and the explorer looks on every
      * frame, so with it on a head can turn where the game's doesn't. */
     opponent: false,
+    /* Where it stands: ahead, where a round starts it, or behind, where the
+     * fight has it once a fighter is turned round (see opponentMatrix). */
+    opponentBehind: false,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -1426,9 +1429,13 @@ function addSkyPanorama(slot) {
      * board centres at Yang 0 lies down the board's +Z, the explorer's -Z. */
     mesh.scale.z = -1;
     mesh.rotation.y = (2 * Math.PI * sky.centre) / sky.width;
+    mesh.userData.turn = mesh.quaternion.clone();
     if (sky.footColor) mesh.add(skyFloor(sky.footColor, height));
     v.root.add(mesh);
-    state.sky = { mesh, height, horizon: sky.horizon, distance: sky.distance, lines: sky.lines, images: sky.images };
+    state.sky = {
+        mesh, height, horizon: sky.horizon, distance: sky.distance, lines: sky.lines, images: sky.images,
+        still: Boolean(stage?.flat && stageMoves(stage)),
+    };
     stepSkyLines(Math.max(0, state.anim.frame));
     stepSkyImage(Math.max(0, state.anim.frame));
     stepSky();
@@ -1556,6 +1563,16 @@ function stepSky() {
         y -= SKY_RADIUS * SKY_EYE.y / sky.distance;
     }
     sky.mesh.position.set(c.position.x, y, c.position.z);
+    if (sky.still) holdSkyStill(sky.mesh, root);
+}
+
+/* The Westerns' sky stays with the town, which stands still here while the
+ * arena, and the root with it, turns: the strip is carried back out of the
+ * root's turn so it stays put round the camera. */
+function holdSkyStill(mesh, root) {
+    SKY_INV.copy(root.matrix).invert();
+    mesh.position.applyMatrix4(SKY_INV);
+    mesh.quaternion.setFromRotationMatrix(SKY_INV).multiply(mesh.userData.turn);
 }
 
 /* ---- Stage view ---------------------------------------------------------- */
@@ -1871,6 +1888,7 @@ function setRideStage(on) {
     RIDE_OLD.copy(v.root.matrix);
     const frame = state.anim.frame > 0 ? state.anim.frame : 0;
     RIDE_DELTA.copy(setWorldFrame(frame)).multiply(RIDE_OLD.invert());
+    stepStageLight(frame);
     v.camera.position.applyMatrix4(RIDE_DELTA);
     v.camera.quaternion.premultiply(RIDE_TURN.setFromRotationMatrix(RIDE_DELTA));
     v.orbit.target.applyMatrix4(RIDE_DELTA);
@@ -2342,11 +2360,16 @@ function stepEyeLight() {
  * in the world. Rebuilt from the record each time rather than rotated in place,
  * because that is the arithmetic camera_init does.
  */
+const LIGHT_ROOT = new THREE.Matrix3();
 function stepStageLight(frame) {
     const stage = state.stages[state.stageIndex];
     if (!stage) return;
     if (stage.lightAt) {
-        state.viewer.material.uniforms.uLight.value.set(...stage.lightAt(frame));
+        /* Built in the board's frame, as the normals are; the root carries
+         * both into the explorer's, as on the Westerns, whose light turns with
+         * the town. */
+        LIGHT_ROOT.setFromMatrix4(state.viewer.root.matrix);
+        state.viewer.material.uniforms.uLight.value.set(...stage.lightAt(frame)).applyMatrix3(LIGHT_ROOT);
         return;
     }
     const yaw = stageLightYaw(stage, frame, state.frames);
@@ -3391,11 +3414,12 @@ function placeBodyParts(parts, draws, matrices) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
+    const at = opponentMatrix({ behind: state.opponentBehind });
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame },
         { body: m.rival.body, motion: m.decoded, frame: m.frame },
-    ]);
-    const place = new THREE.Matrix4().fromArray(opponentMatrix());
+    ], at);
+    const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
@@ -3521,7 +3545,7 @@ function renderStagePanel(stage, counts, totals, list) {
         $('#view-label').textContent = stage.zones ? 'Zone' : 'Blocks drawn';
     }
     if (rides) {
-        $('#ride-label').textContent = RIDE_LABEL[stage.slot] ?? 'ride the arena';
+        $('#ride-label').textContent = (!stage.flat && RIDE_LABEL[stage.slot]) || 'ride the arena';
         $('#opt-ride').checked = state.rideStage;
     }
 
@@ -4448,8 +4472,13 @@ function wireOptions() {
     });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
+        $('#char-behind-field').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
+    });
+    $('#char-behind').addEventListener('change', (e) => {
+        state.opponentBehind = e.target.checked;
+        if (state.opponent) rebuildBody({ keepCamera: false });
     });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
@@ -4786,7 +4815,10 @@ function applyGameFeatures() {
     $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
-    $('#char-rival-field').hidden = state.rom.game.rig?.kind !== 'vf2';
+    /* The opponent is VF2's alone. */
+    const rival = state.rom.game.rig?.kind === 'vf2';
+    $('#char-rival-field').hidden = !rival;
+    $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     /* The solved rig's note names the game's own addresses. */

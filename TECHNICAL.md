@@ -696,8 +696,20 @@ is the lists themselves at the identity, and `buildFlatDisplayList` is the whole
 of it. The layers are a grouping for the sidebar rather than a claim about
 transforms.
 
-What is missing is motion. The object list at `0xB4` is what animates a stage,
-and walking it is not written, so a stage here stands still.
+The cage is the one list that is transformed. `cage_display` (`0x221A8`)
+pushes a scale of `(s, 1, s)`, `s` the ring-out bound over 6, and then takes
+four sides, a quarter turn about Y after each; `cage_clip_m` (`0x22398`) draws
+the side's panels from `+0x84` under a push of `+6` on Z. That is eight
+panels, or four, two or one when flag bit `0x13`, `0x15` or `0x16` is set (the
+later bit wins), and with bit `0x14` the model at `+0x20` too. The Observation
+Deck's `boss_cage` (`0x22668`) draws two panels a side instead, by corner. The
+board draws a side only while the camera is inside its plane (`byte_500288`);
+that is a cull, and the viewer draws all four. Before this was read the viewer
+drew one side and left the other three to the rail `sub_24224` lays round all
+four, which is translucent.
+
+The object list at `0xB4` is what animates a stage; see
+[Fighting Vipers' stage objects](#fighting-vipers-stage-objects-jsfvobjectsjs).
 
 ### Virtua Fighter 2's stage records (`js/vf2.js`)
 
@@ -1793,6 +1805,18 @@ western arena that took the shimmer from 2,982 pixels to 2. The arena is twelve
 units wide, so the plane standing a tenth of a unit off is not something a flying
 camera runs into.
 
+The near plane only moves the distance out, though. A sign across the town
+still shimmered, the UFO Diner's Pepsi board lost half its letters to the board
+under them, and a phone's depth buffer, coarser than 24 bits, lost them sooner.
+The stages also lay shadows and stains on the ground in its own plane, and
+plates of one layer over each other. So Fighting Vipers takes `depth.layers`
+as well: each face lying on another in its plane is put over it in the order
+the board's sort gives (see "Faces laid on faces" and `js/layers.js`), at any
+distance. Its cost did not show in the frame time on any stage. The one change
+seen that is not a fix is behind the Western's bank, outside the town, where
+the sort puts the board over the lettering; the game's camera never stands
+there.
+
 ### Stages (`js/stages.js`, `js/display.js`)
 
 `change_scene()` indexes a 256-byte record per stage from `stage_data` at
@@ -2612,8 +2636,11 @@ them:
   takes 10 off that word a frame, so the ground (`sub_238E4`), the `0x24` list
   (`ground_upper_disp`) and the objects turn by `10·f` while the platform
   (`sub_235BC` skips the turn on that bit) and the cage stand still: the town
-  goes round the arena. The routines' culls see the camera turned into that
-  frame.
+  goes round the arena. That is the town seen from a camera that rides with
+  the arena; the viewer's camera stands in the town, so it holds the town
+  still and turns the platform, the cage and the poles the other way
+  (`stageWorldFrame` in `js/display.js`), the light with them. The routines'
+  culls see the camera turned into that frame.
 
 The paths are `object_move_int`'s: 0x1C-byte keys `{u16 type, u16 frame, f32
 pos[3], f32 ang[3]}`, read from the entry's `arg`. Type 0 holds, 1 is linear, 2
