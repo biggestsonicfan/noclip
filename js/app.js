@@ -984,7 +984,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    zWindow = 0, planeBias = 0, material = null,
+    zWindow = 0, underlay = false, planeBias = 0, material = null,
 } = {}) {
     const v = state.viewer;
     /* A draw that names a material of its own is one whose texture set is not
@@ -1000,6 +1000,7 @@ function addModelToScene(decoded, {
     /* The geometry processor window the board files the draw in, which the
      * z-sort draws in order — see Viewer.drawScene. */
     mesh.userData.zWindow = zWindow;
+    mesh.userData.underlay = underlay;
     if (matrix) { mesh.matrixAutoUpdate = false; mesh.matrix.copy(matrix); }
     v.root.add(mesh);
 
@@ -1733,7 +1734,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
     const geom = entry.anim ? frameGeometry(entry.model) : null;
     const { mesh, lines } = addModelToScene(d, {
         layer: entry.layer, matrix, geom, backdrop: entry.backdrop, shellFirst,
-        zWindow: entry.window,
+        zWindow: entry.window, underlay: entry.underlay,
         planeBias: entry.planeBias,
         material,
     });

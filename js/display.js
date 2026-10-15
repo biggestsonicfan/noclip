@@ -316,6 +316,14 @@ const LAB_OUTSIDE = [
  * end. A depth test ties the decks with the sand and buries the track and the
  * pad (issue 44); the board files the ground in window 2 and the hangar in 4,
  * so the rail is drawn over the sand from anywhere.
+ *
+ * The ground also runs on under the hangar, at the height of the room's floor,
+ * and the conveyor the rocket rolls in on is sunk in a trench below it. The
+ * board never draws the ground with the room — they are the two cuts — but here
+ * both are drawn, and as the nearest surface the ground held every face of the
+ * trench beyond the z-sort's reach, so the sand lay over the conveyor (issue
+ * 116). It is an underlay: left out of the nearest surface, as window 1 is, so
+ * the room, a later window, is drawn over it whatever the depths.
  */
 const LAB_GROUND = 78;
 /* The Tornado, parked a quarter turn round beside the hangar. */
@@ -2399,7 +2407,10 @@ export function buildStageDisplayList(stage, frames = null) {
         win = LAB_WINDOW;
         out.push({ model: LAB_SEA, layer: 'water', band: SEA_BAND, window: 1, ops: [] });
         for (const m of LAB_OUTSIDE) {
-            out.push({ model: m, layer: 'outside', window: LAB_OUTSIDE_WINDOWS.get(m) ?? win, ops: [] });
+            out.push({
+                model: m, layer: 'outside', window: LAB_OUTSIDE_WINDOWS.get(m) ?? win, ops: [],
+                underlay: m === LAB_GROUND,
+            });
         }
         push(LAB_PLANE, 'outside', LAB_PLANE_AT);
         push(LAB_DISH, 'outside', (f) => [['t', LAB_DISH_AT], ['r', f * LAB_DISH_STEP]]);

@@ -1540,6 +1540,9 @@ export class Viewer {
          * sheet beyond the hull is still drawn over it. The other windows
          * stay in, so a room's wall keeps hiding the dish outside it, which
          * the board only gets away with by never looking from there.
+         * A draw marked underlay stays out too: a floor of a later window
+         * that is backdrop all the same, which another scene's room is cut
+         * down into (the ground under Tails' lab, issue 116).
          *
          * The clear is "no surface here" (a view z under -1e8), and its alpha
          * is 1 because three.js premultiplies the clear colour by its alpha:
@@ -1550,7 +1553,7 @@ export class Viewer {
         r.setRenderTarget(this.keyTarget);
         r.setClearColor(new THREE.Color(-1e9, -1e9, 0), 1);
         r.clear(true, true, true);
-        only(solid.filter((o) => o.userData.zWindow !== 1), 1);
+        only(solid.filter((o) => o.userData.zWindow !== 1 && !o.userData.underlay), 1);
 
         /* 2: the picture by true depth, under the keyed one. */
         r.setClearColor(clear, clearAlpha);
