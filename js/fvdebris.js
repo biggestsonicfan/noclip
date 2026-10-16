@@ -5,6 +5,8 @@
  * 0x2D390 puts it in one of eight shared slots at the broken slot's point, and
  * 0x2CE68 moves it every frame (gravity, a bounce on its floor, the ring's
  * walls, a spin that settles on the record's target angles). 0x2E17C draws it.
+ * A piece 0x2D390 turns into the flipbook effect instead goes to one of two
+ * effect slots (0x2D254), which 0x2D2F4 runs and 0x2E17C draws after them.
  *
  * The explorer runs them in the pose's board frame (forward +x, y up), the
  * fighter's facing taken as 0 and the attacker straight ahead of it, so the
@@ -43,6 +45,12 @@ const GRAVITY = fromBits(0x3bab1f2d), DRAG = fromBits(0x3f7ae148), SKID = fromBi
 const BOUNCE = fromBits(0x3e4ccccd), STILL = fromBits(0x3a83126f), WALL = fromBits(0xbe99999a);
 const HALF = f(5), OUT = f(0.5), WALL_TOP = fromBits(0x40466666), OUT_DROP = f(-0.5);
 
+/* The flipbook effect (0x2D254, 0x2D2F4; mod_fa_effect +0x508, 0x24 bytes a
+ * slot): two slots, each shown for 54 frames, its speed the piece's throw
+ * times these, X, Y and Z. */
+export const EFFECT_SLOTS = 2;
+const EFFECT_FRAMES = 54, EFFECT_SPEED = [fromBits(0x3e4ccccd), fromBits(0x3c23d70a), fromBits(0x3e4ccccd)];
+
 /* Flag bits: 1 and 3 pick between a piece and the flipbook effect, 7 resting,
  * 11 in flight, 12 and 14 spin about X and Z, 19 out of the ring. */
 const FLAG = { one: 1 << 1, three: 1 << 3, rest: 1 << 7, live: 1 << 11, spinX: 1 << 12, spinZ: 1 << 14, out: 1 << 19 };
@@ -62,8 +70,13 @@ export function readDebrisTables(rom, D, dataAt) {
     return Object.values(t).every(Boolean) ? t : null;
 }
 
-export function createDebrisSim(centre) {
-    return { slots: Array.from({ length: DEBRIS_SLOTS }, () => null), frame: 0, centre };
+/** `flipbook` is 0x6421760[record]'s models, the effect's frames (null:
+ * none). */
+export function createDebrisSim(centre, flipbook = null) {
+    return {
+        slots: Array.from({ length: DEBRIS_SLOTS }, () => null),
+        effects: Array.from({ length: EFFECT_SLOTS }, () => null), flipbook, frame: 0, centre,
+    };
 }
 
 /* 0x2D614 for one piece: its velocity in the board frame. */
@@ -76,7 +89,7 @@ function throwOf(T, hit, piece) {
     return [f(-out * Math.cos(a)), rise, f(-out * Math.sin(a))];
 }
 
-/* 0x2D390's choice: a bit-3 piece is the flipbook effect instead (not drawn)
+/* 0x2D390's choice: a bit-3 piece is the flipbook effect instead
  * unless bit 1 is set and fewer than two slots hold a bit-3 piece (0x2D8D4). */
 function isEffect(sim, flags) {
     if (!(flags & FLAG.three)) return false;
@@ -88,14 +101,15 @@ function isEffect(sim, flags) {
 /**
  * Throw one broken slot's stage of pieces (0x2D390's loop): each into the
  * first free slot, at the broken slot's point of `pose`. The loop ends at the
- * first piece that is the effect instead, or when the slots run out. A record
+ * first piece that is the effect instead (launched, if an effect slot is
+ * free), or when the slots run out. A record
  * with model 0 takes a slot all the same, which nothing moves, draws or frees
  * (0x2CE68 and 0x2E17C skip it). `half` tags them so the half's switch can
  * take them back.
  */
 export function launchDebris(sim, T, hit, pieces, pose, half) {
     for (const p of pieces) {
-        if (isEffect(sim, p.flags)) return;
+        if (isEffect(sim, p.flags)) { launchEffect(sim, p.slot, throwOf(T, hit, p), pose[p.slot].t, half); return; }
         const k = sim.slots.indexOf(null);
         if (k < 0) return;
         const at = pose[p.slot].t.map(f);
@@ -109,6 +123,30 @@ export function launchDebris(sim, T, hit, pieces, pose, half) {
             spin, weight: p.weight, radius: p.radius, floor: p.floor, frames: 0, bounces: 0,
         };
     }
+}
+
+/* 0x2D254: the first free effect slot (+0x1E, the model shown, 0) takes the
+ * broken slot's point and a fraction of the piece's throw, and shows the
+ * record's first frame. The seed it keeps at +0x1A is never read again. */
+function launchEffect(sim, slot, v, at, half) {
+    const k = sim.effects.indexOf(null);
+    /* A first frame of 0 would leave the slot free, as here. */
+    if (k < 0 || !sim.flipbook?.[0]) return;
+    sim.effects[k] = {
+        half, slot, model: sim.flipbook[0], frames: 0,
+        p: at.map(f), v: v.map((x, i) => f(x * EFFECT_SPEED[i])), from: at.map(f),
+    };
+}
+
+/* 0x2D2F4: on to the next frame; the 54th, or a frame of model 0, frees the
+ * slot. Then it falls, with no floor, drag or wall. */
+function stepEffect(sim, k) {
+    const e = sim.effects[k];
+    if (!e) return;
+    if (++e.frames >= EFFECT_FRAMES || !sim.flipbook[e.frames]) { sim.effects[k] = null; return; }
+    e.model = sim.flipbook[e.frames];
+    e.v[1] = f(e.v[1] - GRAVITY);
+    for (let i = 0; i < 3; i++) e.p[i] = f(e.p[i] + e.v[i]);
 }
 
 /* 0x2CF24's fall and bounce. The resting piece's on-screen test (0x316F0,
@@ -186,6 +224,7 @@ export function stepDebris(sim) {
         walls(s, sim.centre);
         turn(s);
     }
+    for (let k = 0; k < EFFECT_SLOTS; k++) stepEffect(sim, k);
 }
 
 /** A piece's board-frame transform as 0x2E17C draws it: translate, then Y
@@ -194,4 +233,12 @@ export function stepDebris(sim) {
 export function debrisPlace(s) {
     const [x, y, z] = s.angles;
     return { r: turnedInOrder([1, 0, 0, 0, 1, 0, 0, 0, 1], [[1, y - 0x4000], [0, x], [2, z]]), t: s.p };
+}
+
+/** An effect's board-frame transform as 0x2E17C draws it: translate, then a
+ * turn about Y by the slot (0x8000 the first, 0x4000 the second), whatever
+ * the fighter faces, and a scale of 1. The second model it draws, +0x18, is
+ * always 0. */
+export function effectPlace(e, k) {
+    return { r: turnedInOrder([1, 0, 0, 0, 1, 0, 0, 0, 1], [[1, ((EFFECT_SLOTS - k) << 14) - 0x4000]]), t: e.p };
 }

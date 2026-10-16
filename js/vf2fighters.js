@@ -319,7 +319,20 @@ function readArmour(rom, A, i) {
     return {
         table, slots, pieces, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
         hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
+        flipbook: readFlipbook(rom, A.debris, i),
     };
+}
+
+/* The flipbook effect a piece with flag bit 3 becomes (0x2D254): the
+ * record's 0x6421760 entry, 54 halfword models, one a frame. */
+const FLIPBOOK_FRAMES = 54;
+
+function readFlipbook(rom, D, i) {
+    const at = (addr) => (D?.flipbook ? dataAt(rom, addr) : null);
+    const r = at(D?.flipbook + i * 4);
+    const list = r && at(r.view.getUint32(r.off, true));
+    if (!list || list.off + FLIPBOOK_FRAMES * 2 > list.data.length) return null;
+    return Array.from({ length: FLIPBOOK_FRAMES }, (_, k) => list.view.getUint16(list.off + k * 2, true));
 }
 
 /*

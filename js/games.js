@@ -800,8 +800,12 @@ const fvipers = {
                 pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
-                 * 0x2D390's sixteen spins; js/fvdebris.js. */
-                debris: { out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924 },
+                 * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
+                 * 0x2D254's effect, 54 models a record (+0x1B0). */
+                debris: {
+                    out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924,
+                    flipbook: 0x06421760,
+                },
             },
             /* The midriff, record +0x24, and the one a broken chest draws
              * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */

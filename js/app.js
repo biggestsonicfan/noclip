@@ -51,7 +51,7 @@ import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE,
 } from './vf2fighters.js';
-import { createDebrisSim, launchDebris, stepDebris, debrisPlace, SAMPLE_HIT } from './fvdebris.js';
+import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3655,8 +3655,9 @@ function placeBodyOsage(holder, pose, board, tick, place = null) {
  * Fighting Vipers' flying armour pieces (js/fvdebris.js). A half the armour
  * switch breaks throws its pieces off the pose on screen, with the one sample
  * hit, and they fly on by board frames of their own, whether the motion plays
- * or not. A half put back whole takes its pieces back, and another fighter
- * starts with none. Only the fighter's own: the opponent's armour is whole.
+ * or not, with the flipbook effect a piece can become. A half put back whole
+ * takes its pieces and effects back, and another fighter starts with none.
+ * Only the fighter's own: the opponent's armour is whole.
  */
 const DEBRIS_CATCH_UP = 8;
 const HALVES = ['upper', 'lower'];
@@ -3665,15 +3666,18 @@ const HALVES = ['upper', 'lower'];
  * The scene has just been cleared, so the meshes are built again. */
 function syncDebris(m, body) {
     m.debrisParts = [];
+    m.effectParts = [];
+    m.effectCycle = null;
     const tables = state.rom.game.rig?.kind === 'vf2' && body.armour ? fighterDebrisTables(state.rom) : null;
     if (!tables) { m.debris = null; return; }
     const d = m.debris?.root === body.root ? m.debris
-        : { root: body.root, sim: createDebrisSim([OPPONENT_DISTANCE / 2, 0, 0]), halves: {}, pending: [], start: null };
+        : { root: body.root, sim: createDebrisSim([OPPONENT_DISTANCE / 2, 0, 0], body.armour.flipbook), halves: {}, pending: [], start: null };
     for (const half of HALVES) {
         const thrown = body.debris?.[half] ?? [];
         if (thrown.length && !d.halves[half]) d.pending.push({ half, thrown });
         if (!thrown.length) {
             d.sim.slots = d.sim.slots.map((s) => (s?.half === half ? null : s));
+            d.sim.effects = d.sim.effects.map((e) => (e?.half === half ? null : e));
             d.pending = d.pending.filter((p) => p.half !== half);
         }
         d.halves[half] = thrown.length > 0;
@@ -3722,6 +3726,31 @@ function placeDebris(m) {
         }
         if (s && m.debrisParts[i].mesh) placePartAt(m.debrisParts[i], viewerMatrix(debrisPlace(s)));
     });
+    placeEffects(m);
+}
+
+/* One mesh per effect slot, swapping through the flipbook's frames, built
+ * once the first effect is thrown. A frame whose model will not decode is
+ * left out, as one of model 0 would be. */
+function placeEffects(m) {
+    const sim = m.debris.sim;
+    sim.effects.forEach((e, i) => {
+        const frames = e && effectFrames(m);
+        let part = m.effectParts[i];
+        if (!frames?.[e.frames]) { if (part) showPart(part, false); return; }
+        part ??= m.effectParts[i] = addCyclePart(frames, e.frames);
+        showPart(part, true);
+        stepCycle(part, e.frames);
+        placePartAt(part, viewerMatrix(effectPlace(e, i)));
+    });
+}
+
+function effectFrames(m) {
+    m.effectCycle ??= m.debris.sim.flipbook.map((n) => {
+        const d = n > 0 && getModel(n);
+        return d ? geomBundle(d) : null;
+    });
+    return m.effectCycle;
 }
 
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on

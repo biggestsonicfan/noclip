@@ -1260,7 +1260,30 @@ from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
   and 714; her third chest stage's first record (719) is the effect and
   ends that stage, slot 4's 580 is the effect too, and slot 5's model 0 holds
   a slot. Grace's lower half throws four pieces (1740, 1741, 1985 twice) and
-  then nothing from her upper, whose records all have bit 3.
+  two effects (slots 9 and 10), and her upper, whose records all have bit 3,
+  only effects. Which records become effects depends on what is already
+  flying: with Jane's lower half broken first, its two 486s make 715 and 714
+  effects as well.
+- **The flipbook effect (`0x2D254`, `0x2D2F4`).** Two `0x24`-byte slots at
+  `mod_fa_effect + 0x508`; `0x2D254` takes the first whose `+0x1E` (the model
+  shown) is 0, and with neither free nothing is launched. It writes the
+  broken slot's place at `+0`, the piece's throw times (0.2, 0.01, 0.2)
+  (`0x3E4CCCCD`, `0x3C23D70A`) at `+0xC`, the record number `+0x1B0` at
+  `+0x1C`, a frame count of 0 at `+0x20` and the first model of
+  `0x6421760[record]` at `+0x1E`. That list is 54 halfword models a record,
+  one a frame (Jane 1849..1902, Grace 2110..2163, Honey 3910..3963); they are
+  a burst of shreds in the fighter's colours, 180 points each, that spread
+  from 0.3 to about 10 across in model space as the frames go on. It also
+  keeps the three speeds' bits summed, plus slot × `0x400`, at `+0x1A`, which
+  nothing reads. Each frame, after the pieces (`0x2CDC4`, `0x2CDC8`),
+  `0x2D2F4` adds one to the count; at 54 it clears `+0x1E`, else it shows
+  entry `count`, takes gravity (`0x50A000`) off the Y speed and moves by the
+  speed: no floor, drag or wall, so it falls through the floor about 7.4
+  below where it started by the last frame, while the shreds rise in the
+  model. `0x2E17C` draws it after the pieces: push, translate, Y turn
+  `0x8000` for the first slot and `0x4000` for the second, whatever the
+  fighter faces, scale 1, model `+0x1E`, then model `+0x18`, which nothing
+  sets, so 0; pop.
 - **The fall (`0x2CF24`).** vy −= 0.005222 (`0x3BAB1F2D`), vx and vz × 0.98,
   then the place moves by the speed. At or under the floor (`+0x40`, 0.5
   lower once out of the ring) the bounce is counted, the y step taken back,
@@ -1282,14 +1305,19 @@ from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
   bounds in r11/r14 and Y's step leaves r14 the divisor, which Z's test then
   reads; that is kept.
 
+The explorer runs the effect as above (`launchEffect`, `stepEffect` and
+`effectPlace` in `js/fvdebris.js`; `readFlipbook` in `js/vf2fighters.js`),
+one mesh per effect slot swapping through the 54 frames' geometry
+(`placeEffects` in `js/app.js`).
+
 Not followed: the push out of both fighters' bodies (TGP `0x77`
 `Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`), the flipbook effect itself, the floor shadow and
-the sound (flag bits 28 to 31, `0x2D218`). The pieces are the fighter's
+is off screen (`0x316F0`), the floor shadow and the sound (flag bits 28 to
+31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
-throws its pieces from the pose on screen at that moment, making it whole
-again takes them back, and another fighter starts with none.
+throws its pieces and effects from the pose on screen at that moment, making
+it whole again takes them back, and another fighter starts with none.
 
 **Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
 and 360, each half broken while the motion plays, and Jane with it held):
@@ -1298,6 +1326,17 @@ the launch, to 0.0001. Every drawn piece leaves it, rising 1.3 to 6.2 above
 the floor, and lands 1.8 to 6.2 away, on its floor (0.05, or 0.008 for
 Grace's slot 9), behind the fighter, away from the attacker. One of Grace's
 leaves the ring and drops to the lower floor. Turns with targets reach them.
+
+The effect, checked the same way (Jane and Grace, motions 21 and 360, each
+half broken while the motion plays, in both orders): each effect's drawn
+translation equals its broken slot's drawn translation at the launch, to
+1e-5 (Jane's chest and forearm, 1 and 4, or her shins, 11 and 14; Grace's
+hips and thigh, 9 and 10, or chest and head, 1 and 2), and moves with the
+pose: Jane's forearm effect starts at (0.42, 1.04, 0.06) in motion 21 and
+(0.31, 0.81, 0.18) in 360. The drawn mesh shows the frame the slot names
+on every frame sampled, frames 0 to 53, and is hidden once the slot frees.
+The first slot is drawn a quarter turn from the second. With the armour
+whole none is launched.
 The launch turn is not measurable against the armour: the piece models do
 not sit on the intact slot model in any quarter turn (mean nearest vertex
 0.04 to 0.08 for all four), so it rests on `0x2E17C`'s order alone. Not
