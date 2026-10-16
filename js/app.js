@@ -111,6 +111,8 @@ const state = {
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter). */
     armour: { upper: false, lower: false },
+    /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
+    p2Look: false,
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -1117,7 +1119,10 @@ function modelsInDisplayList(list) {
  * fighters read. */
 function fighterRigModels(add, out) {
     if (state.rom.game.rig?.kind !== 'vf2') return out;
-    for (const f of readFighters(state.rom)) {
+    const roster = readFighters(state.rom);
+    /* Player 2's records after the whole roster, so a part both wear stays
+     * player 1's. */
+    for (const f of [...roster, ...roster.map((b) => b.p2).filter(Boolean)]) {
         for (const p of f.parts) add(p.model, f.index);
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
@@ -1265,7 +1270,7 @@ function applyStageShading(stage) {
  * approximation at least shows the model's own palette colour rather than
  * another stage's texture read under this one's ramp.
  */
-function useModelScene(idx) {
+function useModelScene(idx, fighter = modelFighter(idx)) {
     const u = state.viewer.material.uniforms;
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
@@ -1331,7 +1336,7 @@ function useModelScene(idx) {
          * but the fighter rows of the colour table do not: they are the
          * character's, and a part read without them shows black where its own
          * palette should be. */
-        useRomColorLuts(scene, modelFighter(idx));
+        useRomColorLuts(scene, fighter);
         u.uUseRamp.value = state.cxlat && scene ? 1 : 0;
         return;
     }
@@ -3262,17 +3267,23 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
+/* The roster's body, or its player 2 record where the switch asks for it. */
+function ownBody(index) {
+    /* Dead or Alive's roster skips the empty character numbers. */
+    const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
+    return state.p2Look && body.p2 ? body.p2 : body;
+}
+
 /* The body as the panel shows it: a fighter with armour wears the broken
  * parts the armour switch asks for. */
 function shownBody(index) {
-    /* Dead or Alive's roster skips the empty character numbers. */
-    const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
+    const body = ownBody(index);
     return body.armour ? armouredFighter(body, state.armour) : body;
 }
 
 function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     const body = shownBody(index);
-    state.charIndex = body.index;
+    state.charIndex = body.char ?? body.index;
     state.character = body;
     const m = state.motion;
     /* A body has no input tables, so no moves and no strings. */
@@ -3335,7 +3346,9 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
-    else if (first != null) useModelScene(first);
+    /* A fighter's colour rows are its record's: player 2's look is its own
+     * number, whoever else wears the part. */
+    else if (first != null) useModelScene(first, body.texSet !== undefined ? body.index : modelFighter(first));
 
     const m = state.motion;
     /* A part can draw more than one model, and which ones changes with the
@@ -3928,13 +3941,16 @@ function renderBodyPanel() {
     }
     renderArmourPanel();
     renderMotionPanel();
+    const twin = state.bodies.find((b) => b.index === state.charIndex)?.p2;
+    $('#char-p2-field').hidden = !twin;
+    $('#char-p2').checked = state.p2Look;
 }
 
 /* The armour switches, shown only for a fighter whose break table has entries,
  * one for each half that has a slot to break: which slots break, and what they
  * show once broken. */
 function renderArmourPanel() {
-    const own = state.bodies?.find((b) => b.index === state.charIndex);
+    const own = state.bodies && ownBody(state.charIndex);
     const A = own?.armour;
     $('#armour-field').hidden = !A;
     if (!A) return;
@@ -4563,6 +4579,13 @@ function wireOptions() {
         state.opponentBehind = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: false });
     });
+    $('#char-p2').addEventListener('change', (e) => {
+        state.p2Look = e.target.checked;
+        state.character = shownBody(state.charIndex);
+        rebuildBody({ keepCamera: true });
+        renderAnimPanel();
+        updateHud();
+    });
     for (const h of ['upper', 'lower']) {
         $(`#armour-${h}`).addEventListener('change', (e) => {
             state.armour = { ...state.armour, [h]: !e.target.checked };
@@ -4911,6 +4934,7 @@ function applyGameFeatures() {
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
     $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     /* The solved rig's note names the game's own addresses. */

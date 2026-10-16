@@ -137,33 +137,50 @@ function depthOf(slot) {
  */
 export function readFighters(rom) {
     const F = rom.game.rig.fighters;
-    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
     const out = [];
     for (let i = 0; i < F.count; i++) {
-        const root = u32(F.records + i * 4);
-        const list = u32(root + PARTS);
-        const offsets = readOffsets(rom, u32(root + SKELETON));
-        out.push({
-            index: i,
-            name: F.names[i] ?? `character ${i}`,
-            joints: SLOT_COUNT,
-            scale: 1,
-            roles: [],
-            skin: -1,
-            hitMotions: [],
-            start: -1,
-            root,
-            texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
-            armour: F.armour ? readArmour(rom, F.armour, i) : null,
-            extras: F.armour ? [...readPads(rom, F.armour, i), ...readSkirt(rom, F.armour, i)] : [],
-            offsets,
-            parts: offsets.map((offset, s) => ({
-                index: s, model: u32(list + s * 4), offset, joint: s,
-                parent: SLOT_PARENT[s], depth: depthOf(s), flags: 0,
-            })),
-        });
+        const body = readFighter(rom, F, i, i);
+        if (F.p2) {
+            const p2 = readFighter(rom, F, i + F.p2, i);
+            body.p2 = { ...p2, name: F.names[i + F.p2] ?? `${body.name} (P2)` };
+        }
+        out.push(body);
     }
     return out;
+}
+
+/*
+ * Record `record`, as fighter `char` wears it. Fighting Vipers keeps a second
+ * record per fighter, `rig.fighters.p2` on: player +0x1B0 indexes the records,
+ * the colour tables and the armour's, and 0xA0A8 adds 13 to player 2's when
+ * both pick the same fighter, so that is the second player's look. +0x1B1, the
+ * fighter less those 13 (0xA0D8), is what the crouch reads.
+ */
+function readFighter(rom, F, record, char) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const root = u32(F.records + record * 4);
+    const list = u32(root + PARTS);
+    const offsets = readOffsets(rom, u32(root + SKELETON));
+    return {
+        index: record,
+        char,
+        name: F.names[record] ?? `character ${record}`,
+        joints: SLOT_COUNT,
+        scale: 1,
+        roles: [],
+        skin: -1,
+        hitMotions: [],
+        start: -1,
+        root,
+        texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
+        armour: F.armour ? readArmour(rom, F.armour, record) : null,
+        extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : [],
+        offsets,
+        parts: offsets.map((offset, s) => ({
+            index: s, model: u32(list + s * 4), offset, joint: s,
+            parent: SLOT_PARENT[s], depth: depthOf(s), flags: 0,
+        })),
+    };
 }
 
 /*
@@ -562,7 +579,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     live.motion = motion; live.frame = frame;
     if (faceTarget && motion) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });
     const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { levelFeet: true, fight }), body.offsets);
-    const crouch = (rom.game.rig.crouch ?? CROUCH)[body.index];
+    const crouch = (rom.game.rig.crouch ?? CROUCH)[body.char ?? body.index];
     if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);

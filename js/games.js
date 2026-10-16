@@ -406,8 +406,11 @@ const schamp = {
  */
 const FV_NAMES = [
     'Jane', 'Grace', 'Honey', 'Tokio', 'Bahn', 'Picky', 'Raxel', 'Sanman', 'Mahler', 'B.M.',
-    'Sonic', 'Dummy (11)', 'Dummy (12)', 'Jane (jeans)',
+    'Sonic', 'Dummy (11)', 'Dummy (12)',
 ];
+/* Player 2's records are the fighters' own names with (P2), but for Sonic's:
+ * record 23 draws Tails. */
+FV_NAMES[23] = 'Tails (Sonic, P2)';
 
 const fvipers = {
     id: 'fvipers',
@@ -505,8 +508,10 @@ const fvipers = {
          * copied into the player at 0x12554, and the set at +0x20, handed to
          * the request at 0x4B0FC (0x12AF8), whose handler 0x4B1C0 loads it
          * and the next into the player's slot. Sets 1, 3 ... 17 and 93 for
-         * characters 0-10 and 13; 11 and 12 have 0 and no textured part. */
-        fighters: { records: 0x640d2b0, count: 14, parts: 0x00, partCount: 16, set: 0x20 },
+         * characters 0-10; 11 and 12 have 0 and no textured part. Records
+         * 13-25 are the same fighters as player 2 wears them (js/vf2fighters.js
+         * readFighter), Honey's on set 81 and Picky's on 87. */
+        fighters: { records: 0x640d2b0, count: 26, parts: 0x00, partCount: 16, set: 0x20 },
     },
     /*
      * The colour tables, which turned out to be the same machinery again.
@@ -724,8 +729,11 @@ const fvipers = {
      * set 17. 10 is Sonic, on a set of its own (93) and drawn at 0.56 of his
      * motions' height; the card after B.M.'s is SONIC & TAILS, and the
      * models are plainly him. 11 and 12 have no card: one set of untextured
-     * stand-in parts on Honey's and Jane's skeletons. 13 is Jane on her own
-     * skeleton and texture set in other clothes, jeans for the fatigues.
+     * stand-in parts on Honey's and Jane's skeletons. Records 13-25 are the
+     * thirteen again in player 2's colours (`p2`): 0xA0A8 adds 13 to player
+     * 2's number when both pick the same fighter. Some are other models too,
+     * Jane's in jeans for the fatigues; Mahler's is his first record again,
+     * so only his colours change.
      *
      * The crouch is adj_taikaku (0x2BF4C), VF2's 0x29414 with other
      * constants: character 9, B.M., stands at 1.1 and 10, Sonic, at 0.56.
@@ -756,7 +764,7 @@ const fvipers = {
         kind: 'vf2',
         standardRig: 0x2c194,
         fighters: {
-            records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20,
+            records: 0x0640d2b0, count: 13, p2: 13, names: FV_NAMES, texSet: 0x20,
             /* The break table (0x640EDAC) and mune_unit_change's chests
              * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
