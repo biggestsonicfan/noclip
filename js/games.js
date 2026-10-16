@@ -793,6 +793,14 @@ const fvipers = {
              * one hands over to as it ends. */
             actions: { at: 0x14, count: 55 }, commands: { table: 0x0001ebe0 },
             handover: { table: 0x06411e94, head: 12 },
+            /* The intro, win, time-up and attract showcase poses; readPoses. */
+            poses: {
+                intro: 0x0641f81e, wins: 0x0641f78a, timeUp: 0x0641f7f2, count: 11,
+                showcase: [
+                    [0x06ce759e, 0x06ce767a], [0x06ce7466, 0x06ce7546], [0x06ce7826, 0x06ce7902],
+                    [0x06ce76ca, 0x06ce77a6], [0x06ce7a36, 0x06ce7b12], [0x06ce795a, 0x06ce7996],
+                ],
+            },
             /* The break table (0x640EDAC), mune_unit_change's chests
              * (0x6421F80) and koshi_unit_change's hips (0x6422400);
              * js/vf2fighters.js, readArmour, readHips. The shoulder pads

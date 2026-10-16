@@ -177,6 +177,7 @@ function readFighter(rom, F, record, char) {
         start: actions[0] ?? -1,
         actions,
         commands: F.commands ? readCommands(rom, F.commands, char) : [],
+        poses: F.poses ? readPoses(rom, F.poses, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
@@ -673,7 +674,9 @@ function readActions(rom, A, at) {
  * the set-up half of the motion's mot_list record (`rig.fighters.handover`,
  * 0x6411E94[id], twelve bytes of head) through the handlers at 0x1B9A4: op 1's
  * u16 and op 0x13's two go to +0x802 and +0x86C, which 0x1C114 plays as the
- * motion runs out in place of the stance. The lengths are each handler's
+ * motion runs out in place of the stance. Op 0xA's {key, frame, motion} is a
+ * switch (+0x838): a command of type 20 sets +0x60C to the key, and 0x1CC4C
+ * plays the motion once the frame comes. The lengths are each handler's
  * `addo n, r11, r11`; 0x10 is a count and that many u16s; 0 and 8 end it.
  */
 const SETUP_LENGTH = {
@@ -681,7 +684,21 @@ const SETUP_LENGTH = {
     0x0a: 6, 0x0b: 11, 0x0c: 4, 0x0d: 3, 0x0e: 15, 0x0f: 3, 0x11: 7, 0x12: 7,
     0x13: 7, 0x14: 3, 0x15: 6, 0x16: 5, 0x17: 3, 0x18: 13,
 };
-const SETUP_LIST = 0x10, SETUP_NEXT = 0x01, SETUP_NEXT_PAIR = 0x13;
+const SETUP_LIST = 0x10, SETUP_NEXT = 0x01, SETUP_NEXT_PAIR = 0x13, SETUP_SWITCH = 0x0a;
+
+/*
+ * After set-up op 8 comes the play half, which 0x1C24C runs as the motion's
+ * frame passes each op's u16 (handlers 0x1D028; the lengths are their
+ * `addo n, g4, g4`). Ops 0xA, 0xB (at random: Honey's and Sanman's stances
+ * fidget) and 0x17 switch to the motion at the offset in PLAY_SWITCH, through
+ * +0x852 and 0x1CCA4.
+ */
+const PLAY_LENGTH = [
+    0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3,
+    4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4,
+];
+const PLAY_SWITCH = { 0x0a: 5, 0x0b: 5, 0x17: 4 };
+const SETUP_PLAY = 0x08;
 
 function handovers(rom, H, id) {
     const rec = dataAt(rom, H.table + id * 4);
@@ -689,13 +706,21 @@ function handovers(rom, H, id) {
     if (!r) return [];
     const out = [];
     const u8 = (k) => r.view.getUint8(r.off + k), u16 = (k) => r.view.getUint16(r.off + k, true);
-    for (let k = 0; r.off + k + 8 <= r.data.length;) {
+    const fits = (k) => r.off + k + 8 <= r.data.length;
+    let k = 0;
+    while (fits(k)) {
         const op = u8(k);
         if (op === SETUP_LIST) { k += 2 + u8(k + 1) * 2; continue; }
         if (!SETUP_LENGTH[op]) break;
         if (op === SETUP_NEXT || op === SETUP_NEXT_PAIR) out.push(u16(k + 1));
         if (op === SETUP_NEXT_PAIR) out.push(u16(k + 3));
+        if (op === SETUP_SWITCH) out.push(u16(k + 4));
         k += SETUP_LENGTH[op];
+    }
+    if (u8(k) === SETUP_PLAY) {
+        for (k++; fits(k) && PLAY_LENGTH[u8(k)]; k += PLAY_LENGTH[u8(k)]) {
+            if (PLAY_SWITCH[u8(k)]) out.push(u16(k + PLAY_SWITCH[u8(k)]));
+        }
     }
     return out.map((n) => n & MOTION_ID).filter((n) => n && n !== MOTION_ID);
 }
@@ -723,9 +748,46 @@ function readCommands(rom, C, char) {
     return commandMotions(rom, rom.mainCpuView.getUint32(at, true)).map((id) => id & MOTION_ID);
 }
 
+/*
+ * The poses round flow and the attract mode give a fighter, by +0x1B1. At
+ * round start 0xC77C commands `intro`'s u16; the win pick 0x3CCB8 takes one
+ * of `wins`' four u16 tables, by the button held or the time and life left;
+ * 0x3CD98 plays `timeUp`'s u32, 21 for all. The attract showcase (0x52628)
+ * runs two scripts a player: 0x529BC's twenty-byte records swap the fighter
+ * (+0x10) at the frame in +0xE, 0x52BF8's eight-byte ones command the u32 at
+ * +0 at the frame in +4. A frame no later than the one before ends a script.
+ */
+function readPoses(rom, P, char) {
+    if (char >= P.count) return [];
+    const u16 = (a) => { const r = dataAt(rom, a); return r ? r.view.getUint16(r.off, true) : 0; };
+    const u32 = (a) => { const r = dataAt(rom, a); return r ? r.view.getUint32(r.off, true) : 0; };
+    const out = [u16(P.intro + char * 2)];
+    for (let k = 0; k < 4; k++) out.push(u16(u32(P.wins + k * 4) + char * 2));
+    out.push(u32(P.timeUp + char * 4));
+    for (const [fighters, poses] of P.showcase) {
+        const who = scriptRows(rom, fighters, 20, 0xe).map(([at, r]) => [at, r.view.getUint8(r.off + 0x10)]);
+        for (const [at, r] of scriptRows(rom, poses, 8, 4)) {
+            if (who.findLast(([from]) => from <= at)?.[1] === char) out.push(r.view.getUint32(r.off, true));
+        }
+    }
+    return out.map((id) => id & MOTION_ID).filter(Boolean);
+}
+
+function scriptRows(rom, at, size, frame) {
+    const rows = [];
+    for (let prev = -1; ; at += size) {
+        const r = dataAt(rom, at);
+        const f = r ? r.view.getUint16(r.off + frame, true) : -1;
+        if (f <= prev) return rows;
+        rows.push([f, r]);
+        prev = f;
+    }
+}
+
 /**
  * The stance, then the fighter's moves, then the rest of its action table,
- * then every other motion. Virtua Fighter 2's records name none of their own,
+ * what those hand over to, its round and attract poses, then every other
+ * motion. Virtua Fighter 2's records name none of their own,
  * so there it is the table as it stands: any motion plays on any fighter.
  */
 export function fighterMotionList(rom, body, motions) {
@@ -741,6 +803,10 @@ export function fighterMotionList(rom, body, motions) {
     ];
     const H = rom.game.rig.fighters.handover;
     if (H) groups.push({ label: 'What those hand over to', list: own(handedOver(rom, H, [...body.actions, ...body.commands])) });
+    if (body.poses?.length) {
+        const poses = H ? [...body.poses, ...handedOver(rom, H, body.poses)] : body.poses;
+        groups.push({ label: 'Its intro, win and show poses', list: own(poses) });
+    }
     return { fits, lead: groups.flatMap((g) => g.list), groups, label: '', every, other: 'Every other motion' };
 }
 

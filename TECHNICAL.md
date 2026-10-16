@@ -1201,15 +1201,34 @@ its moves, then the rest of what it plays, then every other motion.
   `+0x86C` (`0x1C114`), in place of the stance. Followed from the action
   table and the moves, they add a few per fighter: Jane's 900, Grace's 953
   and 954, Picky's 906 and 910. Set-up op 4 is 19 bytes here (STF: 18).
+  Op `0xA` is a switch, `{key, frame, motion}` (`+0x838`): a command of type
+  20 sets `+0x60C` to the key and `0x1CC4C` plays the motion once the frame
+  comes (Bahn's 97). After set-up op 8, the play half (`0x1C24C`, handlers
+  `0x1D028`, lengths from each handler's `addo n, g4, g4`) has three more
+  switches, through `+0x852` and `0x1CCA4`: ops `0xA`, `0xB` (at random) and
+  `0x17`. Honey's and Sanman's stances fidget that way (272, 449).
+- **Round and attract poses**, by `+0x1B1`:
+  - Intro: `0xC77C` commands `0x641F81E[char]` (u16) as the round starts
+    (Jane 809, Bahn 807, Sonic 857).
+  - Win: `0x3CCB8` takes one of four u16 tables, `0x641F78A[0..3]`, by the
+    Guard, Punch or Kick held (`0x500700`), else by the time and life left.
+  - Time up: `0x3CD98` plays `0x641F7F2[char]` (u32), 21 for everyone.
+  - The attract showcase (`0x52628`) runs two scripts a player, one of three
+    pairs a cycle. `0x529BC`'s twenty-byte records swap the fighter (`+0x10`)
+    at the frame in `+0xE`; `0x52BF8`'s eight-byte ones put the command at
+    `+0` in `+0x198` at the frame in `+4`, and `0x131D8` plays it once the
+    current motion is done (Grace's 776, Raxel's 463, Jane's 116). Script B
+    swaps to Honey a frame before its 438, so she plays Picky's pose too.
 
 **Checked against MAME** (7000 frames of attract fights, player `+0x1A8` each
 frame): every fighter seen fighting played its slot 0 most (Jane 904, Grace
 224, Honey 271, Tokio 759, Bahn 21, Picky 916, Raxel 928, Sanman 169), and
 most frames' motions are in the fighter's own groups (Jane 2371 of 3540,
-Bahn 2128 of 2551). The rest are not listed as the fighter's own: hit
+Bahn 2128 of 2551). A 40000-frame attract pass, which runs all three
+showcase scripts, and a coined match put every showcase and intro pose in
+its fighter's pose group. What stays under every other motion: hit
 reactions and throw victims, which the attacker picks (player `+0x19C`,
-`0x26978`), play-script switches (`0x1CC4C`), and the poses around a round
-(Grace's 776, Raxel's 463).
+`0x26978`; 589, 798, 304-320), and the shared 648/649 and 804 (`0x13570`).
 
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
