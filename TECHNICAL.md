@@ -1535,12 +1535,11 @@ matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
 pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Picky's hair
-swings with the head ("Picky's hair", below). Not drawn, and not drawable
-from what the explorer has: the chest's per-frame list needs the move flags
-(below). The flying pieces are thrown by one sample hit (above).
+swings with the head ("Picky's hair", below). The chest's per-frame list
+is drawn on the move flags the motion itself sets (below). The flying pieces are thrown by one sample hit (above).
 Hands and feet have nothing to swap (above).
 
-**The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
+**The chest bounce (read from the ROM; drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
 own model (`+0x44`) in `g0`, and draws whatever comes back in `g0` on the
 slot's own matrix: the chest's, already sent (`0x19FD0`, slot × `0xC`). The
@@ -1659,11 +1658,48 @@ still: Jane and Jane in jeans's lists never hold their resting models (772,
 1597), so they enter only from entry 16 or another listed model. While on
 the list the spring is frozen and `+0xC64` is not updated, so the first
 frame back measures the distance against the one from before the list
-(capped by the 4.2). `+0x1A4` is built from the move record and its
-set-up and script (see "When the chest twists"); which moves leave it at
-exactly `0x200` was not read.
+(capped by the 4.2). The list never updates `+0xC94`, so the model compared
+on the way in is the spring's last pick, not the list's last entry.
 
-*What the explorer draws.* The spring, and not the list. With the Armour
+*Which motions leave `+0x1A4` at `0x200`.* `set_mot_dat` (`0x1B880`) starts
+the word from the motion's setup script, `0x6411E94[motion]`: its first word,
+with bit 21 cleared and, when bits 8 and 15 are both set, bit 15 moved to 16
+(`0x1B964`). The setup ops follow at +12 (lengths at `0x1CE86`; op 16 is
+2 + 2 × its count byte; op 0 or op 8 ends them, and the script starts there,
+past op 8's byte). Setup op 2 sets bit 1 and gives three frames (`+0x808`,
+`+0x80A`, `+0x80C`), which the per-frame step (`0x1C180`, after `+0x1AA` is
+counted at `0x12BF8`) walks through: from the first, bit 1 goes (and bit 16
+when bits 8 and 15 were set); from the second, bits 26, 16 and 8 go, bit 15
+too with bit 8, and bit 2 comes on; from the third, bits 12 and 0 go (bit 0
+earlier, from setup op 3's frame `+0x850`, while bits 12 and 4 are set). Past
+the third it re-runs all three every frame. Then the script after the setup
+(`0x1C24C`, op table `0x1D028`, each op a frame word and run once the motion
+frame reaches it) changes the word: op 5 sets, 6 clears and 7 flips the bit
+named by its operand, op 1 flips bit 21, op 13 sets or clears bit 25, op 22
+sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`). All of it
+runs before `rob_disp`, so the chest sees this frame's word.
+
+Stepped that way, 86 of the 1054 motions with a setup run at exactly `0x200`
+from their first frame to their last, and no other motion reaches it on any
+frame: they are stances, win poses and other standing loops (21, 116,
+123-125, 169, 187-192, 224, 231-233, 271, 272, 299-303, ... 1046). Motions
+8, 152, 426 and 914 run at `0x208`, the list's gate with something else, so
+once on the list those draw the slot model. Checked against MAME's attract
+mode (30,000 frames, both players): on 29,480 of the 29,481 frames where the
+board's `+0x1A4` was `0x200` the motion gives `0x200` too, and the list's
+gate (bit 9 without 14 and 16) agrees on 58,412 of 58,414 frames. The
+misses are fight state: on 55 frames in 116, 224, 271, 448, 904 and 928 the
+fight had also set bit 7 (`0x280`), which the motion alone does not say.
+
+The rule itself was checked the same way, with `+0x1F48` bit 1 forced on for
+Jane, Grace and Honey so their chests bounce in attract mode (20,000
+frames): fed the board's own word, frame, `+0xC94` and velocity, it gives the
+board's `+0xC90` on 16,889 of 16,920 frames, 5,709 of them on the list (Honey
+in 271, 272, 302 and 21, Grace in 224, 776 and 1016, Jane in 904 and 116, and
+Grace in 152 at `0x208`). The 31 misses fall where a motion changes, where
+the word read after the frame is not the one the chest saw.
+
+*What the explorer draws.* The spring and the list. With the Armour
 switch on upper or all broken, Jane, Grace, Honey and Jane in jeans draw
 their chest as the 31 models' entry 15 + `int(position + 0.5)`, stepped once
 per frame of playback (`bounceStep`/`bounceChest` in `js/vf2fighters.js`)
@@ -1685,10 +1721,18 @@ These are the explorer's choices, not read from the ROM:
 - A frame picked on its own (scrubbing) holds the spring and only takes the
   new distance.
 
-The per-frame list is not followed. It needs `+0x1A4` to be exactly `0x200`,
-and the explorer has no move flags. In a moving motion the spring often
-reaches the ±15 walls. Where the board would switch to the list in a stance,
-the explorer keeps the spring.
+The per-frame list is followed on the move flags `moveFlags` steps from the
+motion's setup and script, as above (`chestFromList`): on a frame with bit 9
+and neither 14 nor 16, the chest goes on the list when list[frame mod count]
+is the spring's last pick and |velocity| ≤ 0.8, stays on it while the gate
+holds, and draws the list's model at exactly `0x200`, the slot model the
+break left (Jane 731, Grace 1982, Honey 2540, jeans 1581) otherwise. On the
+list the spring is held and its last distance kept; the waist copy still
+moves on. In headless Chrome, played from the loaded fighter in motion 21,
+Grace joins her list at frame 10, Honey at 21 and Jane at 27, each from a
+spring that had settled near its rest, and stays on it through the loop.
+The fight's own changes to `+0x1A4` (a hit, bit 7, `fix_hara`'s bit 4) are
+left out.
 
 **The hips (read from the ROM; drawn).** `rob_disp` calls
 `koshi_unit_change` (`0x31ADC`) for slot 9 only (`0x1A024`), the same way as
@@ -1752,7 +1796,7 @@ is the side that won before (`0x500066`), and starts it again otherwise):
 `readHips` reads `+0`, `+0xC`, `+0x10` (as many entries as motion `0x180`
 has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
 and 7 every frame, the hips broken when the Armour switch breaks the lower
-half. The explorer has no move flags, other fighter or game state, so it
+half. The hips do not use the move flags, and the explorer has no other fighter or game state, so it
 takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), the streak as under
 10 unless the 100-win switch (`?hentai=baka`, Honey only) asks for 100, no
 ring (`+0xC8C` 0) and no raised floor. The waist

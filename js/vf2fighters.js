@@ -255,6 +255,18 @@ function readChestModels(rom, A, i) {
     return Array.from({ length: BOUNCE_MODELS }, (_, k) => r.view.getInt16(r.off + k * 2, true));
 }
 
+/* The chest's per-frame list, 0x6421F80[char] +0: a count word, then that
+ * many 16-bit models (mune_unit_change, 0x318B4). Null with none. */
+function readChestList(rom, A, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const rec = A.chest ? u32(A.chest + i * 4) : 0;
+    const at = rec ? u32(rec) : 0;
+    const n = at ? u32(at) : 0;
+    const r = n ? resolveData(rom, at + 4) : null;
+    if (!r || r.off + n * 2 > r.data.length) return null;
+    return Array.from({ length: n }, (_, k) => r.view.getUint16(r.off + k * 2, true));
+}
+
 /*
  * The hips a long win streak leaves: koshi_unit_change (0x31ADC) draws slot 9
  * for a fighter with a record at 0x6422400[char], and where that record's
@@ -323,6 +335,7 @@ function readArmour(rom, A, i) {
     const hips = readHips(rom, A, i);
     return {
         table, slots, pieces, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
+        bounceList: bounce ? readChestList(rom, A, i) : null,
         hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
         flipbook: readFlipbook(rom, A.debris, i),
     };
@@ -626,6 +639,10 @@ export function armouredFighter(body, which) {
     /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
      * slot model, as mune_unit_change returns it unchanged. */
     const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
+    /* The per-frame list, and the model the break left in the slot (+0x44),
+     * which mune_unit_change hands back on a frame it leaves both alone. */
+    const bounceList = bounce ? A.bounceList : null;
+    const chestSlot = bounce ? A.slots[CHEST][A.slots[CHEST].length - 1] : null;
     const midriff = broken(CHEST) && body.midriff ? { ...body.midriff, ...body.midriff.broken } : body.midriff;
     /* The fight's +0x7F4 bit 2, which Grace's sway chains are switched on
      * (js/osage.js) whether or not a slot of the half breaks. */
@@ -634,7 +651,7 @@ export function armouredFighter(body, which) {
      * ascending, each slot's stages in turn (fvdebris.js). */
     const thrown = (from, to) => A.pieces.slice(from, to).flat().filter((p) => broken(p.slot));
     const debris = { upper: thrown(0, LOWER_FIRST), lower: thrown(LOWER_FIRST, SLOT_COUNT) };
-    return { ...body, parts, extras, bounce, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
+    return { ...body, parts, extras, bounce, bounceList, chestSlot, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
@@ -1009,9 +1026,9 @@ function blendFor(live, rom, motion, frame, sample) {
  * a spring, +0xC6C the position and +0xC68 the velocity, floats. It is driven
  * by the distance from the head (+0x20C, this frame's) to +0xC7C, the waist
  * (+0x1F4) as calc_unit_mat found it before storing this frame's; +0xC64 is
- * the distance it measured last frame. The per-frame list (0x6421F80 +0) is
- * not followed: it needs the move flags at +0x1A4 to be exactly 0x200, and
- * the explorer has no move flags, so this is the spring alone.
+ * the distance it measured last frame. The per-frame list (0x6421F80 +0)
+ * takes over on the frames chestFromList says, with the move flags the
+ * motion's own setup and script give (moveFlags).
  *
  * The spring starts at 0/0 whenever the fighter is loaded or its armour
  * switched, the explorer's round start. That reset is the explorer's choice:
@@ -1049,6 +1066,126 @@ export function bounceIndex(p) {
 }
 
 const WAIST_SLOT = 0, HEAD_SLOT = 2;
+
+/*
+ * The move flags (+0x1A4) on each frame of a motion, as far as the motion
+ * itself sets them (TECHNICAL.md, "The per-frame list"). set_mot_dat
+ * (0x1B880) takes the setup script's first word (0x6411E94[motion]), clears
+ * bit 21 and moves bit 15 to 16 when bit 8 is set too; setup op 2 sets bit 1
+ * and gives three frames (+0x808, +0x80A, +0x80C) that 0x1C180 steps
+ * through; then the script after the setup (0x1C24C, ops by frame) sets,
+ * clears and flips bits, and bit 20 is cleared once it has run (0x1C950).
+ * What the fight does to the word besides (a hit, the air, fix_hara's bit 4)
+ * is fight state, left out.
+ */
+const SETUP_LENGTH = 0x1ce86, SETUP_OPS = 25, SETUP_END = 0, SETUP_LAST = 8;
+const SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TABLE = 16, SETUP_HEAD = 12;
+const SCRIPT_LENGTH = [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4];
+const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT_25 = 13, OP_BIT_6 = 22;
+
+/* The setup ops after the head: op 2's three frames, op 3's +0x850, and
+ * where the script starts. */
+function readMoveSetup(rom, dv, at) {
+    const len = (op) => rom.mainCpuView.getUint8(SETUP_LENGTH + op);
+    const out = { times: null, window: 0 };
+    for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
+        if (op === SETUP_END) return { ...out, script: at };
+        if (op === SETUP_LAST) return { ...out, script: at + 1 };
+        if (op >= SETUP_OPS) return null;
+        if (op === SETUP_TIMES) out.times = [1, 3, 5].map((k) => dv.getInt16(at + k, true));
+        if (op === SETUP_WINDOW) out.window = dv.getUint16(at + 12, true);
+        at += op === SETUP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : len(op);
+    }
+}
+
+function readScriptOps(dv, at) {
+    const ops = [];
+    for (let op = dv.getUint8(at); op !== 0 && op < SCRIPT_LENGTH.length; op = dv.getUint8(at)) {
+        ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3) });
+        at += SCRIPT_LENGTH[op];
+    }
+    return ops;
+}
+
+/* One frame of 0x1C180's walk through op 2's frames. It enters at the step
+ * +0xA00 names and falls through the later ones; past the third it starts
+ * again from the first every frame. */
+function moveTimesStep(m, st, f, w) {
+    const [t0, t1, t2] = m.times, raised = (m.word >> 8 & 1) && (m.word >> 15 & 1);
+    let at = st.stage === 2 ? 2 : st.stage === 3 ? 3 : 1;
+    if (at === 1) {
+        if (raised && f >= t0) w &= ~0x10000;
+        if (f < t0) return w;
+        w &= ~2; st.stage++; at = 2;
+    }
+    if (at === 2) {
+        if (f < t1) return w;
+        if (w & 0x100) w &= ~0x8000;
+        w = (w & ~0x4010100) | 4; st.stage++;
+    }
+    if ((w & 0x1010) === 0x1010 && m.window && f >= m.window) w &= ~1;
+    if (f < t2) return w;
+    st.stage++;
+    return w & ~0x1001;
+}
+
+function scriptOp(w, { op, arg }) {
+    if (op === OP_SET) return w | (1 << arg);
+    if (op === OP_CLEAR) return w & ~(1 << arg);
+    if (op === OP_FLIP) return w ^ (1 << arg);
+    if (op === OP_FLIP_21) return w ^ (1 << 21);
+    if (op === OP_BIT_25) return arg ? w & ~(1 << 25) : w | (1 << 25);
+    if (op === OP_BIT_6) return w | (1 << 6);
+    return w;
+}
+
+/** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */
+export function moveFlags(rom, motion) {
+    const at = rom.game.rig?.fighters?.armour?.setups;
+    if (!at || motion?.id == null) return null;
+    const cache = (rom.fvMoveFlags ??= new Map());
+    if (cache.has(motion.id)) return cache.get(motion.id);
+    const ptr = dataAt(rom, at + motion.id * 4);
+    const r = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
+    const setup = r && r.off + SETUP_HEAD < r.data.length ? readMoveSetup(rom, r.view, r.off + SETUP_HEAD) : null;
+    let out = null;
+    if (setup) {
+        const word = r.view.getUint32(r.off, true), m = { ...setup, word };
+        const ops = readScriptOps(r.view, setup.script), st = { stage: setup.times ? 1 : 0 };
+        let w = word & ~(1 << 21), k = 0;
+        if ((word >> 8 & 1) && (word >> 15 & 1)) w = (w & ~0x8000) | 0x10000;
+        if (setup.times) w |= 2;
+        out = new Uint32Array(motion.frames + 1);
+        for (let f = 1; f <= motion.frames; f++) {
+            if (st.stage) w = moveTimesStep(m, st, f, w);
+            for (; k < ops.length && ops[k].frame <= f; k++) w = scriptOp(w, ops[k]);
+            out[f] = (w & ~(1 << 20)) >>> 0;
+            w = out[f];
+        }
+    }
+    cache.set(motion.id, out);
+    return out;
+}
+
+/*
+ * mune_unit_change's per-frame list (0x318B4): with move flag bit 9 set and
+ * bits 14 and 16 clear, the list may take the chest from the spring. It does
+ * when it is already on it (+0xC90), or when list[frame mod count] is the
+ * model the spring last picked (+0xC94) and the spring is all but still
+ * (|velocity| <= 0.8). On the list the spring is not stepped, and the chest is
+ * the list's model while the flags are exactly 0x200, else the slot's own.
+ * Returns that model, or null for the spring.
+ */
+const LIST_BIT = 1 << 9, LIST_OFF = (1 << 14) | (1 << 16), LIST_ONLY = 0x200, LIST_STILL = f32(0.8);
+
+function chestFromList(body, s, flags, frame) {
+    const list = body.bounceList;
+    if (!list?.length || !(flags & LIST_BIT) || (flags & LIST_OFF)) return (s.onList = false, null);
+    const entry = list[frame % list.length];
+    if (!s.onList && !(entry === s.picked && Math.abs(s.v) <= LIST_STILL)) return null;
+    s.onList = true;
+    return flags === LIST_ONLY ? entry : body.chestSlot;
+}
 
 /*
  * The hips (TECHNICAL.md, "The hips"): koshi_unit_change (0x31ADC) swaps slot
@@ -1111,18 +1248,23 @@ const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 /* The chest's model this frame, stepping the spring once when playback has
  * moved on a frame. A frame picked on its own holds the spring and takes its
  * distances afresh, so a jump does not kick it. */
-function bounceChest(body, live, pose, frame, stepped) {
+function bounceChest(body, live, pose, frame, stepped, flags) {
     const head = pose[HEAD_SLOT].t, waist = pose[WAIST_SLOT].t.slice();
     let s = live.spring;
-    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist };
+    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist, onList: false, picked: null };
+    const before = s.waist;
+    /* calc_unit_mat copies the waist (+0xC7C) on every frame, list or not. */
+    s.waist = waist;
+    s.flags = flags;
+    const listed = chestFromList(body, s, flags, frame);
+    if (listed != null) return (s.model = listed);
     /* A motion starting (or looping) stands the explorer's fighter back where
      * its motion starts, a jump the board's fighter does not make, so on that
      * frame the waist is this frame's. */
-    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : s.waist));
+    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : before));
     else s.last = distance(head, waist);
-    s.waist = waist;
     s.index = bounceIndex(s.p);
-    return (s.model = body.bounce[s.index]);
+    return (s.model = s.picked = body.bounce[s.index]);
 }
 
 /* The hair's swing to draw this frame: the one the last step left, then a
@@ -1139,9 +1281,10 @@ function hairSwing(live, pose, stepped, fresh) {
 
 /* The chest's and hips' models this frame, for the fighters whose chest
  * bounces or whose hips koshi_unit_change names. */
-function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
+function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) {
     const held = !fresh && live.spring?.model != null;
-    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
+    const flags = () => moveFlags(rom, motion)?.[frame] ?? 0;
+    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped, flags())) : undefined;
     const hips = body.armour?.hips ? hipsModel(body, motion, frame, pose[WAIST_SLOT].t[1]) : undefined;
     return { chest, hips, spring: live.spring };
 }
@@ -1194,7 +1337,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

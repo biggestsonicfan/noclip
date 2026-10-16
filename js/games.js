@@ -822,6 +822,10 @@ const fvipers = {
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
                 pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
+                /* set_mot_dat's setup scripts, 0x6411E94[motion]: the move
+                 * flags (+0x1A4) the chest's per-frame list is gated on;
+                 * js/vf2fighters.js, moveFlags. */
+                setups: 0x06411e94,
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is

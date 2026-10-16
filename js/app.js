@@ -4273,7 +4273,7 @@ function renderArmourPanel() {
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
         + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
         + (state.character.bounce ? '<br><span id="bounce-now"></span>'
-            + '<br>spring only: the per-frame list needs move flags the explorer lacks' : '')
+            + `<br>per-frame list: ${state.character.bounceList?.length ?? 0} models, on move flags 0x200` : '')
         + (A.hips ? '<br><span id="hips-now"></span>' : '')
         + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
@@ -4570,7 +4570,8 @@ function updateBounceReadout(m) {
     const out = $('#bounce-now');
     const sp = m.spring;
     if (!out || sp?.model == null) return;
-    out.textContent = `frame ${m.frame}: chest ${sp.model} (entry ${sp.index}),`
+    const from = sp.onList ? `from the list, move flags 0x${sp.flags.toString(16)}` : `entry ${sp.index}`;
+    out.textContent = `frame ${m.frame}: chest ${sp.model} (${from}),`
         + ` spring ${sp.p.toFixed(2)}, speed ${sp.v.toFixed(2)}`;
 }
 
