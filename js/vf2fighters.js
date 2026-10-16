@@ -292,12 +292,13 @@ function placeExtra(slot, e) {
     return { r, t: e.then ? at(r, t, e.then) : t };
 }
 
-export const ARMOUR_STATES = [
-    { id: 'intact', label: 'Intact', upper: false, lower: false },
-    { id: 'upper', label: 'Upper broken', upper: true, lower: false },
-    { id: 'lower', label: 'Lower broken', upper: false, lower: true },
-    { id: 'all', label: 'All broken', upper: true, lower: true },
-];
+/** Which halves of a fighter have a slot that breaks: damage_unit breaks one
+ * half at a time, so each is a switch of its own. */
+export function armourHalves(body) {
+    const A = body.armour;
+    const has = (from, to) => !!A && A.slots.slice(from, to).some((x) => x.length > 0);
+    return { upper: has(0, LOWER_FIRST), lower: has(LOWER_FIRST, SLOT_COUNT) };
+}
 
 /**
  * The fighter as a hit that breaks a half leaves it: in the board one hit runs
@@ -305,13 +306,12 @@ export const ARMOUR_STATES = [
  * its last stage's model, and a chest with a spring its resting model.
  *
  * @param {object} body from readFighters
- * @param {string} state one of ARMOUR_STATES' ids
+ * @param {{upper: boolean, lower: boolean}} which the halves that are broken
  * @returns {object} the body, or a copy with its parts' models swapped
  */
-export function armouredFighter(body, state) {
+export function armouredFighter(body, which) {
     const A = body.armour;
-    const which = ARMOUR_STATES.find((x) => x.id === state);
-    if (!A || !which || (!which.upper && !which.lower)) return body;
+    if (!A || (!which.upper && !which.lower)) return body;
     const broken = (s) => (s < LOWER_FIRST ? which.upper : which.lower) && A.slots[s].length > 0;
     const extras = body.extras.filter((e) => !broken(e.hiddenBy));
     const parts = body.parts.map((p) => {

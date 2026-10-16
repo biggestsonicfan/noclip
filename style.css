@@ -408,6 +408,7 @@ html.mobile #tools a span { display: none; }
 .chip:hover { border-color: #ff7ac8; }
 .chip.active { border-color: var(--accent); color: var(--accent); }
 #string-field .row { display: flex; gap: 6px; margin: 4px 0; }
+#armour-field .row { display: flex; gap: 14px; align-items: center; }
 #string-field .row select { flex: 1; min-width: 0; }
 #string-field .row .btn { flex: 0 0 auto; }
 
