@@ -1177,6 +1177,40 @@ sixteen records at `0x640D2B0`. So both are skipped and every fighter draws
 its part list's hands and feet, as the explorer does. Even with a table the
 feet would not change: `rob_disp` drops what `0x1AB74` returns (`0x19FEC`).
 
+#### The motion list: the fighter's own motions first
+
+As in Sonic The Fighters, the motion list opens on the fighter's stance, then
+its moves, then the rest of what it plays, then every other motion.
+
+- **Action table**: record `+0x14`, which `action_init` copies to player
+  `+0x1A0` and the action code reads as `ldos n(g6)`: 55 motion ids, the
+  same layout for every fighter. Slot 0 is the stance: `set_mot_dat`
+  (`0x1B5B0`) is handed it as the round starts (`0x12AB8`) and as a move
+  winds back to neutral (`0x1379C`, `0x1C150`). The ids keep their low 13
+  bits there (`and 0x1FFF`); bit 15 turns the fighter round. Bahn, Mahler and
+  B.M. share one table (stance 21).
+- **Moves**: `0x1D360` runs `ld 0x1EBE0[+0x1B1*4]`, one input program per
+  fighter, through the opcode table at `0x1EC34`. The program and its opcodes
+  are Sonic The Fighters' (`js/moves.js`): the lengths agree op for op over
+  FV's 59 handlers, so the same walk lists every motion a commit names (Jane
+  79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
+  are listed by number only.
+- **Hand-overs**: set-up op 1 of a motion's `mot_list` record
+  (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
+  `0x13`'s two write the motion that plays as this one runs out, `+0x802` and
+  `+0x86C` (`0x1C114`), in place of the stance. Followed from the action
+  table and the moves, they add a few per fighter: Jane's 900, Grace's 953
+  and 954, Picky's 906 and 910. Set-up op 4 is 19 bytes here (STF: 18).
+
+**Checked against MAME** (7000 frames of attract fights, player `+0x1A8` each
+frame): every fighter seen fighting played its slot 0 most (Jane 904, Grace
+224, Honey 271, Tokio 759, Bahn 21, Picky 916, Raxel 928, Sanman 169), and
+most frames' motions are in the fighter's own groups (Jane 2371 of 3540,
+Bahn 2128 of 2551). The rest are not listed as the fighter's own: hit
+reactions and throw victims, which the attacker picks (player `+0x19C`,
+`0x26978`), play-script switches (`0x1CC4C`), and the poses around a round
+(Grace's 776, Raxel's 463).
+
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
 `rob_disp` draws slot `s` with the model in player `+0x40 + 4s`, not the

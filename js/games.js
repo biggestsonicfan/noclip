@@ -786,6 +786,13 @@ const fvipers = {
         standardRig: 0x2c194,
         fighters: {
             records: 0x0640d2b0, count: 13, p2: 13, names: FV_NAMES, texSet: 0x20,
+            /* The action table, record +0x14, and the input programs by
+             * character (0x1EBE0, the matcher's opcodes at 0x1EC34);
+             * js/vf2fighters.js, fighterMotionList. `handover` is the
+             * mot_list table set_mot_dat reads (0x1B880), for the motions
+             * one hands over to as it ends. */
+            actions: { at: 0x14, count: 55 }, commands: { table: 0x0001ebe0 },
+            handover: { table: 0x06411e94, head: 12 },
             /* The break table (0x640EDAC), mune_unit_change's chests
              * (0x6421F80) and koshi_unit_change's hips (0x6422400);
              * js/vf2fighters.js, readArmour, readHips. The shoulder pads

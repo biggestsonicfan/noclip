@@ -84,6 +84,7 @@ import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_CO
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables } from './fvdebris.js';
+import { commandMotions } from './moves.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -163,6 +164,7 @@ function readFighter(rom, F, record, char) {
     const root = u32(F.records + record * 4);
     const list = u32(root + PARTS);
     const offsets = readOffsets(rom, u32(root + SKELETON));
+    const actions = F.actions ? readActions(rom, F.actions, u32(root + F.actions.at)) : [];
     return {
         index: record,
         char,
@@ -172,7 +174,9 @@ function readFighter(rom, F, record, char) {
         roles: [],
         skin: -1,
         hitMotions: [],
-        start: -1,
+        start: actions[0] ?? -1,
+        actions,
+        commands: F.commands ? readCommands(rom, F.commands, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
@@ -644,9 +648,100 @@ export function readFighterMotions(rom) {
     return list;
 }
 
-/** Any motion plays on any fighter; nothing in the record names its own. */
+/*
+ * A fighter's own motions, where the game names them (`rig.fighters.actions`
+ * and `commands`, Fighting Vipers'). Record +0x14 is the action table,
+ * action_init's `ld 0x14(g5)` to player +0x1A0, which the action code reads as
+ * `ldos n(g6)`: 55 motion ids, the stance first (set_mot_dat, 0x1B5B0, plays
+ * slot 0 as a round starts, 0x12AB8, and as a move winds back to neutral). The
+ * commands are the input program the matcher runs for the fighter,
+ * `ld 0x1EBE0[+0x1B1*4]` at 0x1D360, through js/moves.js. set_mot_dat keeps an
+ * id's low 13 bits; bit 15 turns the fighter round.
+ */
+const MOTION_ID = 0x1fff;
+
+function readActions(rom, A, at) {
+    const r = at && dataAt(rom, at);
+    if (!r) return [];
+    const out = [];
+    for (let i = 0; i < A.count && r.off + i * 2 + 2 <= r.data.length; i++) out.push(r.view.getUint16(r.off + i * 2, true) & MOTION_ID);
+    return out;
+}
+
+/*
+ * The motions a motion hands over to when it ends. set_mot_dat (0x1B880) runs
+ * the set-up half of the motion's mot_list record (`rig.fighters.handover`,
+ * 0x6411E94[id], twelve bytes of head) through the handlers at 0x1B9A4: op 1's
+ * u16 and op 0x13's two go to +0x802 and +0x86C, which 0x1C114 plays as the
+ * motion runs out in place of the stance. The lengths are each handler's
+ * `addo n, r11, r11`; 0x10 is a count and that many u16s; 0 and 8 end it.
+ */
+const SETUP_LENGTH = {
+    0x01: 3, 0x02: 7, 0x03: 14, 0x04: 19, 0x05: 14, 0x06: 6, 0x07: 3, 0x09: 15,
+    0x0a: 6, 0x0b: 11, 0x0c: 4, 0x0d: 3, 0x0e: 15, 0x0f: 3, 0x11: 7, 0x12: 7,
+    0x13: 7, 0x14: 3, 0x15: 6, 0x16: 5, 0x17: 3, 0x18: 13,
+};
+const SETUP_LIST = 0x10, SETUP_NEXT = 0x01, SETUP_NEXT_PAIR = 0x13;
+
+function handovers(rom, H, id) {
+    const rec = dataAt(rom, H.table + id * 4);
+    const r = rec && dataAt(rom, rec.view.getUint32(rec.off, true) + H.head);
+    if (!r) return [];
+    const out = [];
+    const u8 = (k) => r.view.getUint8(r.off + k), u16 = (k) => r.view.getUint16(r.off + k, true);
+    for (let k = 0; r.off + k + 8 <= r.data.length;) {
+        const op = u8(k);
+        if (op === SETUP_LIST) { k += 2 + u8(k + 1) * 2; continue; }
+        if (!SETUP_LENGTH[op]) break;
+        if (op === SETUP_NEXT || op === SETUP_NEXT_PAIR) out.push(u16(k + 1));
+        if (op === SETUP_NEXT_PAIR) out.push(u16(k + 3));
+        k += SETUP_LENGTH[op];
+    }
+    return out.map((n) => n & MOTION_ID).filter((n) => n && n !== MOTION_ID);
+}
+
+/* Every motion `ids` hand over to, and those hand over to, not in `ids`. */
+function handedOver(rom, H, ids) {
+    const have = new Set(ids);
+    const todo = [...ids];
+    const out = [];
+    while (todo.length) {
+        for (const n of handovers(rom, H, todo.shift())) {
+            if (have.has(n)) continue;
+            have.add(n);
+            out.push(n);
+            todo.push(n);
+        }
+    }
+    return out;
+}
+
+/* The program table is the program ROM's, where the matcher runs. */
+function readCommands(rom, C, char) {
+    const at = C.table + char * 4;
+    if (at + 4 > rom.maincpu.length) return [];
+    return commandMotions(rom, rom.mainCpuView.getUint32(at, true)).map((id) => id & MOTION_ID);
+}
+
+/**
+ * The stance, then the fighter's moves, then the rest of its action table,
+ * then every other motion. Virtua Fighter 2's records name none of their own,
+ * so there it is the table as it stands: any motion plays on any fighter.
+ */
 export function fighterMotionList(rom, body, motions) {
-    return { fits: motions.filter(Boolean), lead: [], label: '', every: 'Every motion in the table' };
+    const fits = motions.filter(Boolean);
+    const every = 'Every motion in the table';
+    if (!body.actions.length) return { fits, lead: [], label: '', every };
+    const taken = new Set();
+    const own = (ids) => ids.map((id) => motions[id]).filter((m) => m && !taken.has(m) && taken.add(m));
+    const groups = [
+        { label: 'Idle', list: own(body.actions.slice(0, 1)) },
+        { label: 'Its moves, by the input table', list: own(body.commands) },
+        { label: 'The rest of its action table', list: own(body.actions) },
+    ];
+    const H = rom.game.rig.fighters.handover;
+    if (H) groups.push({ label: 'What those hand over to', list: own(handedOver(rom, H, [...body.actions, ...body.commands])) });
+    return { fits, lead: groups.flatMap((g) => g.list), groups, label: '', every, other: 'Every other motion' };
 }
 
 const REST = {
