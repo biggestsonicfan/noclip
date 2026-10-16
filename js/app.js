@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, ARMOUR_STATES,
+    armouredFighter, armourHalves,
 } from './vf2fighters.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
@@ -108,9 +108,9 @@ const state = {
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
-    /* Fighting Vipers: which halves of the fighter's armour are broken, one of
-     * ARMOUR_STATES' ids (see armouredFighter). */
-    armour: 'intact',
+    /* Fighting Vipers: which halves of the fighter's armour are broken (see
+     * armouredFighter). */
+    armour: { upper: false, lower: false },
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -3930,23 +3930,19 @@ function renderBodyPanel() {
     renderMotionPanel();
 }
 
-/* The armour switch, shown only for a fighter whose break table has entries:
- * which slots each half breaks, and what they show once broken. */
+/* The armour switches, shown only for a fighter whose break table has entries,
+ * one for each half that has a slot to break: which slots break, and what they
+ * show once broken. */
 function renderArmourPanel() {
     const own = state.bodies?.find((b) => b.index === state.charIndex);
     const A = own?.armour;
     $('#armour-field').hidden = !A;
     if (!A) return;
-    const sel = $('#armour-select');
-    if (!sel.options.length) {
-        for (const x of ARMOUR_STATES) {
-            const o = el('option');
-            o.value = x.id;
-            o.textContent = x.label;
-            sel.appendChild(o);
-        }
+    const halves = armourHalves(own);
+    for (const h of ['upper', 'lower']) {
+        $(`#armour-${h}-field`).hidden = !halves[h];
+        $(`#armour-${h}`).checked = !state.armour[h];
     }
-    sel.value = state.armour;
     const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
@@ -4567,12 +4563,14 @@ function wireOptions() {
         state.opponentBehind = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: false });
     });
-    $('#armour-select').addEventListener('change', (e) => {
-        state.armour = e.target.value;
-        state.character = shownBody(state.charIndex);
-        rebuildBody({ keepCamera: true });
-        renderAnimPanel();
-    });
+    for (const h of ['upper', 'lower']) {
+        $(`#armour-${h}`).addEventListener('change', (e) => {
+            state.armour = { ...state.armour, [h]: !e.target.checked };
+            state.character = shownBody(state.charIndex);
+            rebuildBody({ keepCamera: true });
+            renderAnimPanel();
+        });
+    }
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
         if (state.motion.skeleton) state.motion.skeleton.visible = e.target.checked;
