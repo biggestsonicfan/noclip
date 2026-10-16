@@ -187,9 +187,14 @@ export function faceVariantModels(rom) {
 }
 
 /* Roster order from the CHAR_PARTS listing. Entries 17-25 repeat SONIC as
- * padding; the "_I" entries from 26 are the roster's mirror half, the same
+ * padding; the "_I" entries from 26 are the roster's second half, the same
  * seventeen again -- the half `send_tex_col_part` reaches by taking 26 off the
- * character before it indexes its second table. */
+ * character before it indexes its second table. It is the second player's
+ * look: when both are on the same fighter, the select screen's cursor
+ * (0x5A66C), the arcade opponent (0xAE64) and the attract's pairs (0x9A30) add
+ * 26 to the second one's character. */
+export const P2_HALF = 26;
+
 export const CHARACTERS = [
     { index: 0, name: 'Sonic' },
     { index: 1, name: 'Tails' },
@@ -208,23 +213,23 @@ export const CHARACTERS = [
     { index: 14, name: 'Rocket Metal' },
     { index: 15, name: 'Honey' },
     { index: 16, name: 'Super Sonic' },
-    { index: 26, name: 'Sonic (mirror)' },
-    { index: 27, name: 'Tails (mirror)' },
-    { index: 28, name: 'Amy (mirror)' },
-    { index: 29, name: 'Metal Sonic (mirror)' },
-    { index: 30, name: 'Fang (mirror)' },
-    { index: 31, name: 'Bark (mirror)' },
-    { index: 32, name: 'Knuckles (mirror)' },
-    { index: 33, name: 'Espio (mirror)' },
-    { index: 34, name: 'Eggman (mirror)' },
-    { index: 35, name: 'Eggman B (mirror)' },
-    { index: 36, name: 'Bean (mirror)' },
-    { index: 37, name: 'Eggman boss (mirror)' },
-    { index: 38, name: 'Egg UFO (mirror)' },
-    { index: 39, name: 'Egg Minion (mirror)' },
-    { index: 40, name: 'Rocket Metal (mirror)' },
-    { index: 41, name: 'Honey (mirror)' },
-    { index: 42, name: 'Super Sonic (mirror)' },
+    { index: 26, name: 'Sonic (P2)' },
+    { index: 27, name: 'Tails (P2)' },
+    { index: 28, name: 'Amy (P2)' },
+    { index: 29, name: 'Metal Sonic (P2)' },
+    { index: 30, name: 'Fang (P2)' },
+    { index: 31, name: 'Bark (P2)' },
+    { index: 32, name: 'Knuckles (P2)' },
+    { index: 33, name: 'Espio (P2)' },
+    { index: 34, name: 'Eggman (P2)' },
+    { index: 35, name: 'Eggman B (P2)' },
+    { index: 36, name: 'Bean (P2)' },
+    { index: 37, name: 'Eggman boss (P2)' },
+    { index: 38, name: 'Egg UFO (P2)' },
+    { index: 39, name: 'Egg Minion (P2)' },
+    { index: 40, name: 'Rocket Metal (P2)' },
+    { index: 41, name: 'Honey (P2)' },
+    { index: 42, name: 'Super Sonic (P2)' },
 ];
 
 /*

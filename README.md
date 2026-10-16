@@ -40,10 +40,11 @@ Three views, and a fourth for the 2D art:
   so Giant Wing's floor is a dark sea under bright cloud and Aurora Icefield's
   ground is snow, whichever stage was up. See
   [A lone model's sheets](TECHNICAL.md#a-lone-models-sheets).
-- **Animation** — the cast, moving, and not only the fighters. The list is all
-  34 roster entries: the seventeen `CHAR_PARTS` names and the mirror half that
-  repeats them from index 26, so the Final Eggman Boss, the Egg UFO, the Egg
-  Minion, Rocket Metal and Super Sonic are in it too. Each one's sixteen part
+- **Animation** — the cast, moving, and not only the fighters. The list is the
+  seventeen `CHAR_PARTS` names, so the Final Eggman Boss, the Egg UFO, the Egg
+  Minion, Rocket Metal and Super Sonic are in it too, and a **P2 colours**
+  switch shows the half that repeats them from index 26: the look player 2
+  wears when both pick the same fighter. Each one's sixteen part
   meshes are assembled onto **its own** skeleton — the rig `SKELETON_TYPE_DATA`
   gives it, read off its own stance, rather than the one its record points at,
   which for several of them is somebody else's — and posed by the game's own
@@ -497,8 +498,10 @@ each stage takes its colour cast from its record, the mirror stage's blue-green
 the strongest. The bubbles rising from a fighter are left out with the fighters.
 
 The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
-Jeffry, Pai, Wolf, Shun, Dural, Lion, and Akira in the white gi, named from
-the game's own tables — each on its own texture sets, and every one of the
+Jeffry, Pai, Wolf, Shun, Dural and Lion, named from the game's own tables —
+each on its own texture sets, with a **P2 colours** switch for the look player
+2 wears when both pick the same fighter (Akira's white gi among them) — and
+every one of the
 1359 motions in the game's table plays on any of them
 ([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
