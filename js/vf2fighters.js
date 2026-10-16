@@ -228,12 +228,32 @@ function readRestingChest(rom, A, i) {
     return r ? r.view.getInt16(r.off, true) : null;
 }
 
+/*
+ * The hips a long win streak leaves: koshi_unit_change (0x31ADC) draws slot 9
+ * for a fighter with a record at 0x6422400[char], and where that record's
+ * +0x18 is set, the streak (0x5000A2) is at least 100 and the hips are broken
+ * (+0x1F48 bit 9), it draws the model at +0x18's first halfword instead of
+ * any it would swing through (0x31B94, 0x31D58). The streak is the versus
+ * one: 0xE06C counts it up while the same side keeps winning and sets it back
+ * to 1 when the other side wins. Null where the record has no +0x18.
+ */
+const STREAK_HIPS = 0x18;
+export const STREAK_WINS = 100;
+
+function readStreakHips(rom, A, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const rec = A.hips ? u32(A.hips + i * 4) : 0;
+    const list = rec ? u32(rec + STREAK_HIPS) : 0;
+    const r = list ? dataAt(rom, list) : null;
+    return r ? r.view.getInt16(r.off, true) : null;
+}
+
 function readArmour(rom, A, i) {
     const r = dataAt(rom, A.table + i * 4);
     const table = r ? r.view.getUint32(r.off, true) : 0;
     const slots = readArmourSlots(rom, table);
     if (!slots.some((x) => x.length)) return null;
-    return { table, slots, chest: readRestingChest(rom, A, i) };
+    return { table, slots, chest: readRestingChest(rom, A, i), streakHips: readStreakHips(rom, A, i) };
 }
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
@@ -323,7 +343,9 @@ export function armourHalves(body) {
  * its last stage's model, and a chest with a spring its resting model.
  *
  * @param {object} body from readFighters
- * @param {{upper: boolean, lower: boolean}} which the halves that are broken
+ * @param {{upper: boolean, lower: boolean, streak?: boolean}} which the
+ *        halves that are broken, and whether the fighter is on a win streak
+ *        of STREAK_WINS or more (readStreakHips)
  * @returns {object} the body, or a copy with its parts' models swapped
  */
 export function armouredFighter(body, which) {
@@ -334,7 +356,8 @@ export function armouredFighter(body, which) {
     const parts = body.parts.map((p) => {
         if (!broken(p.index)) return p;
         const last = A.slots[p.index][A.slots[p.index].length - 1];
-        const model = p.index === CHEST && A.chest != null ? A.chest : last;
+        const model = p.index === CHEST && A.chest != null ? A.chest
+            : p.index === HIPS && which.streak && A.streakHips > 0 ? A.streakHips : last;
         return { ...p, model: model > 0 ? model : 0 };
     });
     return { ...body, parts, extras };

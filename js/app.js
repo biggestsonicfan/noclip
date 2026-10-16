@@ -111,8 +111,8 @@ const state = {
     /* The opponent in player 2's look, whatever the fighter wears. */
     opponentP2: false,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
-     * armouredFighter). */
-    armour: { upper: false, lower: false },
+     * armouredFighter), and whether the win streak's hips are asked for. */
+    armour: { upper: false, lower: false, streak: false },
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -3272,6 +3272,10 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
+/* The hips a long win streak leaves Honey in (readStreakHips) are behind a
+ * switch the page shows only when its address asks for it. */
+const STREAK_UNLOCKED = new URLSearchParams(location.search).get('hentai') === 'baka';
+
 /* The roster's body, or its player 2 record where the switch asks for it. */
 function ownBody(index, p2 = state.p2Look) {
     /* Dead or Alive's roster skips the empty character numbers. */
@@ -4038,6 +4042,8 @@ function renderArmourPanel() {
         $(`#armour-${h}-field`).hidden = !halves[h];
         $(`#armour-${h}`).checked = !state.armour[h];
     }
+    $('#armour-streak-field').hidden = !STREAK_UNLOCKED || !(A.streakHips > 0);
+    $('#armour-streak').checked = state.armour.streak;
     const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
@@ -4676,9 +4682,10 @@ function wireOptions() {
         renderAnimPanel();
         updateHud();
     });
-    for (const h of ['upper', 'lower']) {
+    for (const h of ['upper', 'lower', 'streak']) {
         $(`#armour-${h}`).addEventListener('change', (e) => {
-            state.armour = { ...state.armour, [h]: !e.target.checked };
+            /* The halves' boxes say what is intact; the streak's that it is on. */
+            state.armour = { ...state.armour, [h]: h === 'streak' ? e.target.checked : !e.target.checked };
             state.character = shownBody(state.charIndex);
             rebuildBody({ keepCamera: true });
             renderAnimPanel();
