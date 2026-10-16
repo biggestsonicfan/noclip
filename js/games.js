@@ -3015,11 +3015,16 @@ const vcop = {
  * and 0x46298 (the debug menu's, with the development names SUI, ACHO and TOU
  * for Shun, Dural and Lion) go on to MUE and KOJACKY for 11 and 12. The record
  * table holds the one pointer 0x20032A8, Lion's, at 10, 11 and 12, so those
- * two slots draw Lion. No table names 13, which is Akira in the white gi on
- * Akira's sets. */
+ * two slots draw Lion. Records 13-25 are the thirteen again as player 2
+ * wears them: 0xBDE4 adds 13 to player 2's character when both pick the same
+ * fighter (0xCED4 to the arcade opponent's when it is the player's), the
+ * records are read by that number (0x13F10) and the part colours of 13 and up
+ * out of the second table. They are on their fighters' own texture sets;
+ * Akira's is the white gi, and Dural's is the same record as 9, so only the
+ * colours change. */
 const VF2_NAMES = [
     'Akira', 'Jacky', 'Sarah', 'Kage', 'Lau', 'Jeffry', 'Pai', 'Wolf', 'Shun', 'Dural',
-    'Lion', "Mue (Lion's record)", "Kojacky (Lion's record)", 'Akira (white gi)',
+    'Lion', "Mue (Lion's record)", "Kojacky (Lion's record)",
 ];
 
 const vf2 = {
@@ -3072,7 +3077,7 @@ const vf2 = {
         /* The fighters' sets: character set-up reads the record
          * `ld 0x200620C[char*4]` and hands its +0x30 to the request at
          * 0x4B838 (0x10720, 0x39F4C). See js/vf2fighters.js. */
-        fighters: { records: 0x200620c, count: 14, parts: 0x00, partCount: 16, set: 0x30 },
+        fighters: { records: 0x200620c, count: 26, parts: 0x00, partCount: 16, set: 0x30 },
     },
     /* Fighting Vipers' tables and settings: the program reads its settings
      * out of the same backup RAM bytes (0x3356..0x335C) into the same
@@ -3138,7 +3143,7 @@ const vf2 = {
     rig: {
         kind: 'vf2',
         standardRig: 0x296a0,
-        fighters: { records: 0x200620c, count: 14, names: VF2_NAMES },
+        fighters: { records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };

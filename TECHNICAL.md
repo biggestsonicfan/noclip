@@ -898,7 +898,7 @@ Character set-up (`0x13F08`) reads the record `ld 0x200620C[char*4]`: the
 sixteen part models at `+0x00`, the skeleton at `+0x04` (fifteen offsets,
 entry j slot j+1's place in its parent's frame), the texture set at `+0x30`
 (the request at `0x4B838`, which loads it and the next) and thirty-two hand
-models at `+0x3C` (`0x19E34` picks from them). There are fourteen records.
+models at `+0x3C` (`0x19E34` picks from them). There are twenty-six records.
 
 The names are the game's own. The pointer tables at `0x2980C` and `0x509E8`
 name records 0 to 10, AKIRA to LION in record order, and drawing each record on
@@ -906,8 +906,17 @@ its own texture sets agrees. The tables at `0x5CB28` (eight-byte names) and
 `0x46298` (the debug menu's, with the development names SUI, ACHO and TOU for
 Shun, Dural and Lion) go on to MUE and KOJACKY for 11 and 12. The record table
 holds the same pointer, `0x20032A8`, at 10, 11 and 12: the game stores Lion's
-record three times over, so the two named slots draw Lion. No table names 13,
-which is Akira in the white gi on Akira's sets.
+record three times over, so the two named slots draw Lion.
+
+Records 13-25 are the thirteen again as player 2 wears them, as in Fighting
+Vipers. When both players pick the same fighter, `0xBDE4` adds 13 to player 2's
+character at `+0x1B0` (`0xCED4` does the same to the arcade opponent's when it
+draws the player's fighter); the record is read by that number (`0x13F10`), and
+`send_tex_col_part` reads 13 and up out of its second table (`0x2107780`, `0x788`).
+`+0x1B1` is the number less 13 (`0xB6C4`), and the crouch reads that one
+(`0x29414`). Each is on its fighter's own texture sets. Akira's (13) is the
+white gi; Dural's (22) is Dural's own record again, so only the colours change;
+23-25 are Lion's three times over, as 10-12 are.
 
 The motions are Sonic the Fighters' keyframe blocks (`js/motion.js`). A motion
 id indexes the pointer table at `0x2120004` directly (`0x1A21C`, `0x27B5C`);

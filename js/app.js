@@ -23,7 +23,7 @@ import {
     stageLightYaw, stageBright, stageMaterials, stageWorldFrame, eggLabFootage, FV_ROUND,
     DISPLAY_LAYER_ORDER as LAYER_ORDER, BACKDROP_LAYERS,
 } from './display.js';
-import { CHARACTERS, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
+import { CHARACTERS, P2_HALF, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
     useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
 import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
@@ -2600,6 +2600,7 @@ function loadModel(idx, { keepCamera = false } = {}) {
 function loadCharacter(charIndex, { keepCamera = false, keepMotion = false } = {}) {
     if (state.bodies) return loadBody(charIndex, { keepCamera, keepMotion });
     state.charIndex = charIndex;
+    state.p2Look = charIndex >= P2_HALF;
     const c = readCharacter(state.rom, charIndex);
     state.character = c;
 
@@ -3784,13 +3785,21 @@ function renderCharacterSelect() {
         sel.value = String(state.charIndex);
         return;
     }
-    for (const c of CHARACTERS) {
+    /* The second half is the P2 colours switch's. */
+    for (const c of CHARACTERS.filter((c) => c.index < P2_HALF)) {
         const opt = el('option');
         opt.value = String(c.index);
         opt.textContent = c.name;
         sel.appendChild(opt);
     }
-    sel.value = String(state.charIndex);
+    sel.value = String(state.charIndex % P2_HALF);
+}
+
+/* The roster entry for fighter `base` in the look the P2 switch asks for:
+ * Sonic the Fighters keeps player 2's as characters 26 on. */
+function lookedCharacter(base, p2) {
+    const twin = base + P2_HALF;
+    return p2 && CHARACTERS.some((c) => c.index === twin) ? twin : base;
 }
 
 function renderAnimPanel() {
@@ -3798,6 +3807,8 @@ function renderAnimPanel() {
     const c = state.character;
     if (!c) return;
 
+    $('#char-p2-field').hidden = false;
+    $('#char-p2').checked = c.charIndex >= P2_HALF;
     $('#char-meta').innerHTML = `
         <span>CHAR_PARTS</span><b>#${c.charIndex}</b>
         <span>part table</span><b>0x${c.partsPtr.toString(16)}</b>
@@ -4549,8 +4560,10 @@ function wireOptions() {
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
 
-    $('#char-select').addEventListener('change', (e) =>
-        loadCharacter(+e.target.value, { keepMotion: true }));
+    $('#char-select').addEventListener('change', (e) => {
+        const base = +e.target.value;
+        loadCharacter(state.bodies ? base : lookedCharacter(base, state.p2Look), { keepMotion: true });
+    });
     $('#char-squish').addEventListener('change', (e) => {
         state.useSquished = e.target.checked;
         rebuildRig({ keepCamera: true });
@@ -4581,6 +4594,10 @@ function wireOptions() {
     });
     $('#char-p2').addEventListener('change', (e) => {
         state.p2Look = e.target.checked;
+        if (!state.bodies) {
+            loadCharacter(lookedCharacter(state.charIndex % P2_HALF, state.p2Look), { keepCamera: true, keepMotion: true });
+            return;
+        }
         state.character = shownBody(state.charIndex);
         rebuildBody({ keepCamera: true });
         renderAnimPanel();
