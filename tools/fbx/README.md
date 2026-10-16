@@ -12,6 +12,11 @@ the FBX.
   tab's list. Without `--motion`, the parts stay on their rest offsets,
   which leaves the fighter crumpled. Fighting Vipers' motion 192, frame 1 is
   an upright fighting stance. Motion 73 stands too, but with the head bowed.
+- `--armour` chooses the armour, as the Animation tab's switches do:
+  `whole` (the default), `broken` (both halves), `upper` or `lower`. A
+  broken slot shows the model its last stage leaves, and the skirt or pads
+  that go with that half are left off. Grace without armour:
+  `--armour broken --out grace-armorless.fbx`.
 - `--stage` chooses the stage whose material table and colour set light
   the fighter. The default is 0. Every Fighting Vipers stage has the same
   table.
@@ -54,10 +59,12 @@ origin.
   z-fighting.
 - **Normals:** the model's normals point into the body. The file turns
   them round, so they point out and the faces are wound to match.
-- **Hip armour:** Fighting Vipers draws more in the hip frame after slot 9
-  (`rob_disp` at 0x19F10): a piece from the character record, and for
-  characters 0, 1, 13 and 14 (Grace among them) four skirt plates, from
-  the list at 0x6421DE0. These are skinned to PELVIS.
+- **Hip piece, skirt and pads:** Fighting Vipers draws more in the hip
+  frame after slot 9 (`rob_disp` at 0x19F10): the model in the character
+  record's `+0x24` block, or once the chest breaks the block at
+  0x642F9EC. That piece is skinned to PELVIS. The skirt plates and the
+  shoulder pads are the fighter's `extras` (`js/vf2fighters.js`), placed
+  by the pose and skinned to the slot each hangs from.
 - **Two-sided faces:** faces the board draws from both sides (flag 0x80)
   are written once. Turn backface culling off where they matter.
 

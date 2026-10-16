@@ -12,6 +12,10 @@
  * its slot's bone, so it can be posed again in whatever opens it. The atlas is
  * embedded in the FBX and written beside it as a PNG.
  *
+ * `--armour broken` (or `upper`, `lower`) dresses the fighter as the Animation
+ * tab's armour switches do: the broken halves' slots show their last stage's
+ * model, and the skirt or pads that go with them are left off.
+ *
  * Only the solved rig (Virtua Fighter 2's, which Fighting Vipers uses) is read
  * here; see README.md beside this file.
  */
@@ -20,8 +24,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadRomSet } from '../../js/romset.js';
 import { decodeModel } from '../../js/model.js';
-import { readFighters, poseFighter } from '../../js/vf2fighters.js';
-import { SLOT_NAMES, SLOT_PARENT, turnedBy, viewerMatrix } from '../../js/pose.js';
+import { readFighters, poseFighter, armouredFighter } from '../../js/vf2fighters.js';
+import { SLOT_NAMES, SLOT_PARENT, viewerMatrix } from '../../js/pose.js';
 import { decodeMotion, resolveData } from '../../js/motion.js';
 import { readOsage, osageParts } from '../../js/osage.js';
 import { buildTexram, programTextureSets } from '../../js/texture.js';
@@ -33,10 +37,16 @@ import { skinnedMeshFbx, mul4 } from './fbx.mjs';
 import { encodePng } from './png.mjs';
 
 const USAGE = `usage: export.mjs <set.zip>... --fighter <name|index> [--motion <id>] [--frame <n>]
-                 [--stage <index>] --out <file.fbx>`;
+                 [--stage <index>] [--armour whole|broken|upper|lower] --out <file.fbx>`;
+
+/* Which halves of the armour are broken, by --armour. */
+const ARMOUR = {
+    whole: { upper: false, lower: false }, broken: { upper: true, lower: true },
+    upper: { upper: true, lower: false }, lower: { upper: false, lower: true },
+};
 
 function parseArgs(argv) {
-    const o = { zips: [], motion: null, frame: 1, stage: 0 };
+    const o = { zips: [], motion: null, frame: 1, stage: 0, armour: ARMOUR.whole };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--fighter') o.fighter = argv[++i];
@@ -44,11 +54,16 @@ function parseArgs(argv) {
         else if (a === '--frame') o.frame = Number(argv[++i]);
         else if (a === '--stage') o.stage = Number(argv[++i]);
         else if (a === '--out') o.out = argv[++i];
+        else if (a === '--armour') o.armour = ARMOUR[argv[++i]] ?? usageError(`no armour ${argv[i]}`);
         else if (a.startsWith('--')) throw new Error(`unknown option ${a}\n${USAGE}`);
         else o.zips.push(a);
     }
     if (!o.zips.length || o.fighter == null || !o.out) throw new Error(USAGE);
     return o;
+}
+
+function usageError(why) {
+    throw new Error(`${why}\n${USAGE}`);
 }
 
 async function loadRom(zips) {
@@ -71,39 +86,21 @@ function pickFighter(rom, which) {
 
 /*
  * What Fighting Vipers draws on the hips besides the sixteen parts, out of its
- * rob_disp (0x19f10). After slot 9 it draws the model in field +8 of the
- * record's +0x24 block, in the hip's own frame, and then (0x31e54) the skirt
- * of the fighters that wear one (0, 1, 13 and 14): four plates out of the
- * 16-bit list at 0x6421de0 + 16 * fighter. Each is the hip's frame moved by
- * its own offset (set at 0x12768) and turned Z, Y, X; the angles are where its
- * spring rests, read off the board's RAM (0x50a354..0x50a37a) mid-fight.
+ * rob_disp (0x19f10): after slot 9, the model in field +8 of the record's
+ * +0x24 block, in the hip's own frame; once the chest is broken, the block at
+ * 0x642f9ec[char] instead (TECHNICAL.md, "Armour breaking"). The skirt and
+ * shoulder pads are body.extras, placed by the pose.
  */
-const SKIRT_TABLE = 0x6421de0;
-const SKIRT_WEARERS = [0, 1, 13, 14];
-const SKIRT_PLATES = [   /* list entry, offset, angle x, y, z */
-    { entry: 2, t: [0.013, 0.087, 0], a: [0x4000, -0x4000, 0] },
-    { entry: 3, t: [0.013, -0.088, 0], a: [0x4000, -0x4000, 0] },
-    { entry: 1, t: [0, -0.017, 0.107], a: [0x4000, -0x4000, 0] },
-    { entry: 0, t: [0, -0.017, -0.107], a: [0x4000, -0x4000, 0] },
-];
-const HIPS = 9;
-const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+const BROKEN_HIP_BLOCKS = 0x642f9ec;
+const HIPS = 9, CHEST = 1;
 
-function hipExtras(rom, body) {
+function hipPiece(rom, body, plain) {
     if (rom.game.id !== 'fvipers') return [];
     const u32 = (a) => { const r = resolveData(rom, a); return r ? r.view.getUint32(r.off, true) : 0; };
-    const u16 = (a) => { const r = resolveData(rom, a); return r ? r.view.getUint16(r.off, true) : 0; };
-    const out = [];
-    const block = u32(body.root + 0x24);
-    const piece = block ? u32(block + 8) : 0;
-    if (piece) out.push({ index: HIPS, model: piece });
-    if (SKIRT_WEARERS.includes(body.index)) {
-        for (const { entry, t, a } of SKIRT_PLATES) {
-            const model = u16(SKIRT_TABLE + body.index * 16 + entry * 2);
-            if (model) out.push({ index: HIPS, model, place: viewerMatrix({ r: turnedBy(IDENTITY, ...a), t }) });
-        }
-    }
-    return out;
+    const chestBroken = body.parts[CHEST].model !== plain.parts[CHEST].model;
+    const block = chestBroken ? u32(BROKEN_HIP_BLOCKS + body.index * 4) : u32(body.root + 0x24);
+    const model = block ? u32(block + 8) : 0;
+    return model ? [{ index: HIPS, model }] : [];
 }
 
 /* The board's texture RAM and colour tables while this fighter is on screen:
@@ -179,7 +176,7 @@ function buildMesh(rig, matrices, faces, baked) {
     const layers = new Map();
     const key = (v) => v.map((x) => Math.round(x * 1e5)).join(',');
     for (const f of faces) {
-        const m = f.place ? mul4(matrices[f.part], f.place) : matrices[f.part];
+        const m = matrices[f.at ?? f.part];
         /* The model's normals point into the body; a file's point out of it,
          * or an engine that culls back faces draws the fighter inside out. */
         const corners = [0, 1, 2].map((c) => {
@@ -279,7 +276,8 @@ function restFrames(bones, positions) {
 async function main() {
     const opts = parseArgs(process.argv.slice(2));
     const rom = await loadRom(opts.zips);
-    const body = pickFighter(rom, opts.fighter);
+    const plain = pickFighter(rom, opts.fighter);
+    const body = plain.armour ? armouredFighter(plain, opts.armour) : plain;
     const stage = readStageTable(rom)[opts.stage];
     if (!stage) throw new Error(`no stage ${opts.stage}`);
 
@@ -292,8 +290,12 @@ async function main() {
     const osage = readOsage(rom, body.index);
     const sway = osageParts(pose.pose, osage);
     const rig = rigOf(body, osage, sway);
-    const drawn = [...body.parts, ...hipExtras(rom, body),
-        ...sway.map((p, k) => ({ index: body.parts.length + k, model: p.model }))];
+    /* `at` is the matrix a piece is drawn on, when it is not its bone's:
+     * the skirt and pads have their own, after the slots' and the chains'. */
+    const extrasAt = body.parts.length + sway.length;
+    const drawn = [...body.parts, ...hipPiece(rom, body, plain),
+        ...sway.map((p, k) => ({ index: body.parts.length + k, model: p.model })),
+        ...body.extras.map((e, k) => ({ index: e.slot, model: e.model, at: extrasAt + k }))];
     const decoded = new Map();
     for (const p of drawn) {
         const d = p.model ? decodeModel(rom, p.model) : null;
@@ -301,9 +303,9 @@ async function main() {
     }
     const tables = sceneTables(rom, body, decoded, stage);
     const faces = drawn.flatMap((p) => (decoded.has(p.model)
-        ? facesOf(decoded.get(p.model), p.index, stage.materials).map((f) => ({ ...f, place: p.place })) : []));
+        ? facesOf(decoded.get(p.model), p.index, stage.materials).map((f) => ({ ...f, at: p.at })) : []));
     const baked = bakeFaces(faces, tables);
-    const matrices = placeInFile([...pose.matrices, ...sway.map(viewerMatrix)], decoded, body);
+    const matrices = placeInFile([...pose.matrices, ...sway.map(viewerMatrix), ...pose.extras], decoded, body);
     const mesh = buildMesh(rig, matrices, faces, baked);
     mesh.bones = restFrames(sideNames(mesh.bones), mesh.positions);
 
