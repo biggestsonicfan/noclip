@@ -1135,7 +1135,13 @@ part out along the fighter's own skeleton at player `+0x8C`.
   cards' weights, `pky_kami_disp` (Picky's hair) is drawn for character 5,
   Mahler and B.M. share texture set 17, and each record drawn on its own sets
   is the fighter the card names. 10 is Sonic. 11 and 12 are untextured
-  stand-ins, and 13 is Jane in jeans.
+  stand-ins. Records 13-25 are the thirteen again as player 2 wears them:
+  player `+0x1B0` indexes the records, the colour tables (13 and up read the
+  second, `0x2107780`) and the armour tables, and `0xA0A8` adds 13 to player
+  2's when both pick the same fighter. `+0x1B1` is the number less 13
+  (`0xA0D8`), and the crouch reads that one. Jane's (13) is in jeans; Honey's
+  (15) and Picky's (18) are on texture sets 81 and 87; Mahler's (21) is his
+  own record again, so only the colours change.
 - **Crouch**: `adj_taikaku` (`0x2BF4C`) is VF2's `0x29414` with other
   constants: B.M. (9) is drawn at 1.1 of the motion's height, Sonic (10) at
   0.56, everyone else at 1.
@@ -1201,7 +1207,7 @@ stage's pieces (`+6` each one's model) and writes the stage's first piece's
 | 7 Sanman | 1: 1075 -> 1074, 2: 1061 -> 1060, 3: 1068 -> 1067, 4: 1084 -> 1083, 6: 1066 -> 1065, 7: 1082 -> 1081, 11: 1056 -> 1057 -> 1055, 14: 1053 -> 1054 -> 1052 |
 | 8 Mahler | 2: 1497 -> 3887, 3/6: same, 4: 1516 -> 3893, 7: 1515 -> 3892, 11: 1496 -> 3886, 14: 1399 -> 3885 |
 | 9 B.M. | 2: 3589 -> 3588, 3/6: same, 4: 3619 -> 3618, 7: 3617 -> 3616, 11: 3587 -> 3586, 14: 3585 -> 3584 |
-| 13 Jane (jeans) | as Jane: chest 1613 -> 1580 -> 1579 -> 1581, 4: 1620 -> 1619, 5: 1617 -> 1616, 11: 1563 -> 1562, 14: 1561 -> 1560 |
+| 13 Jane (P2, jeans) | as Jane: chest 1613 -> 1580 -> 1579 -> 1581, 4: 1620 -> 1619, 5: 1617 -> 1616, 11: 1563 -> 1562, 14: 1561 -> 1560 |
 
 Sonic and the two stand-ins (10-12) have no armour (all entries 0).
 
@@ -1290,7 +1296,7 @@ only, and not once bit 9 of `+0x1F48` (hips broken) is set; then
 |---|---|---|---|---|---|
 | 0 Jane | 3045 | 3044 | 0 | 0 | 0.025 |
 | 1 Grace | 2446 | 2445 | 2444 | 2443 | 0 |
-| 13 Jane (jeans) | 3037 | 3036 | 0 | 0 | 0.025 |
+| 13 Jane (P2, jeans) | 3037 | 3036 | 0 | 0 | 0.025 |
 | 14 | 2439 | 2438 | 2437 | 2436 | 0 |
 
 The routine does not check for 0, so for Jane it calls `set_obj` with model 0
