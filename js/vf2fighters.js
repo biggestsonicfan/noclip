@@ -1078,6 +1078,34 @@ function hipsModel(body, motion, frame, waistY) {
     return (waistY < HIPS_LOW ? H.low : H.base)[k];
 }
 
+/*
+ * The hit flash (TECHNICAL.md, "The flash"). Every routine that draws a
+ * fighter's models (rob_disp's slots at 0x1A094, the hips, the midriff, the
+ * pads, skirt, hair and sway chains) sends the model with its material
+ * pointer swapped while the motion is in its first four frames (+0x1AA, which
+ * set_motion starts at 1, at most 4): for `1 << 23` when move flag +0x1A4
+ * bit 26 is set, else for 0x802000 on the odd ones when +0x720 bit 2 is.
+ * set_mot_dat (0x1B880) copies both from the first two words of the motion's
+ * setup script, 0x6411E94[motion], so they are the motion's own. Both
+ * pointers are texture RAM blocks the boot fills (games.js, textureRamFill).
+ */
+const FLASH_FRAMES = 4, FLASH_BIT = 26, BLINK_BIT = 2;
+const FLASH = 0x800000, BLINK = 0x802000;
+
+/** The material pointer a fighter is drawn with on this frame of a motion,
+ * or null for its own. */
+export function flashMaterial(rom, motion, frame) {
+    const F = rom.game.rig?.fighters?.flash;
+    if (!F || motion?.id == null || frame < 0 || frame > FLASH_FRAMES) return null;
+    const ptr = dataAt(rom, F.setups + motion.id * 4);
+    const setup = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
+    if (!setup || setup.off + 8 > setup.data.length) return null;
+    const flags = setup.view.getUint32(setup.off, true), word720 = setup.view.getUint32(setup.off + 4, true);
+    if ((flags >>> FLASH_BIT) & 1) return FLASH;
+    if ((word720 >>> BLINK_BIT) & 1 && frame & 1) return BLINK;
+    return null;
+}
+
 const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
 
 /* The chest's model this frame, stepping the spring once when playback has

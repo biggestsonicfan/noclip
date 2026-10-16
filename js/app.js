@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial,
 } from './vf2fighters.js';
 import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
@@ -944,7 +944,7 @@ function modelCount() {
 /* A game whose face palette changes with the loaded set bakes different colours
  * into the same mesh under each, so the set is part of the key. */
 function getModel(idx) {
-    if (typeof idx === 'string') return getSwappedModel(idx);
+    if (typeof idx === 'string') return idx.includes('#') ? getFlashedModel(idx) : getSwappedModel(idx);
     return cachedDecode(state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx, idx);
 }
 
@@ -959,6 +959,22 @@ function getSwappedModel(key) {
     state.modelCache.set(key, m);
     return m;
 }
+
+/* A model drawn with another material pointer, `model#material` with the
+ * pointer in hex: a Fighting Vipers fighter's hit flash (flashMaterial). */
+function getFlashedModel(key) {
+    if (state.modelCache.has(key)) return state.modelCache.get(key);
+    const [model, matPtr] = key.split('#');
+    const entry = readModelEntry(state.rom, +model);
+    const at = meshOffsetOf(state.rom, entry);
+    const m = entry.meshPtr === 0 || at < 0 ? null
+        : decodeModel(state.rom, +model, null, { bytes: state.rom.polygons.subarray(at), uvPtr: entry.uvPtr, matPtr: parseInt(matPtr, 16) });
+    state.modelCache.set(key, m);
+    return m;
+}
+
+/* A model's key with the flash's material, when there is one. */
+const flashed = (model, mat) => (mat == null || !model ? model : `${model}#${mat.toString(16)}`);
 
 /* A draw whose texture points set_obj_tpd replaces gets a decode of its own,
  * under a key the model's own decode cannot take: the override is not always a
@@ -3574,19 +3590,19 @@ function extraParts(body) {
     return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
 }
 
-function placeExtras(parts, body, matrices, material = null) {
-    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices, null, material);
+function placeExtras(parts, body, matrices, material = null, flash = null) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [flashed(e.model, flash)]), matrices, null, material);
 }
 
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
  * the one its spring picked, and the hips' (slot 9) the one their motion
- * picked. A rig whose pose says what each part draws (Dead or Alive's) is
- * taken at its word. */
+ * picked, all in the flash's material on a frame that has it. A rig whose
+ * pose says what each part draws (Dead or Alive's) is taken at its word. */
 function bouncedDraws(body, posed, m) {
     const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
     if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
-    return draws;
+    return m.flash == null ? draws : draws.map((list) => list.map((model) => flashed(model, m.flash)));
 }
 
 /* Pose the fighter, and its opponent when there is one: the pair face each
@@ -3603,9 +3619,9 @@ function poseFighterAndRival(body, m) {
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
-        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material);
-    placeSkin(m.rival, placed);
-    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place);
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, m.flash);
+    placeSkin(m.rival, placed, m.flash);
+    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place, m.flash);
     return mine;
 }
 
@@ -3627,7 +3643,7 @@ function buildBodyOsage(holder, body, material = null) {
     holder.osageSim = null;
     holder.osageParts = osageSegments(holder.osage).map((seg) => {
         const d = getModel(seg.model);
-        return d ? { ...addRigPart(d, undefined, material), bounds: d.bounds } : null;
+        return d ? { ...addRigPart(d, frameGeometry(seg.model), material), bounds: d.bounds, model: seg.model, own: seg.model, decoded: d } : null;
     });
 }
 
@@ -3641,11 +3657,12 @@ function osageBoard(m, body) {
 
 /* Run a figure's chains on to the frame and place their segments; `place`
  * puts the opponent's own frame in the fighter's. */
-function placeBodyOsage(holder, pose, board, tick, place = null) {
+function placeBodyOsage(holder, pose, board, tick, place = null, flash = null) {
     if (!holder?.osage || !pose) return;
     const placed = placeOsage(holder, pose, board, tick);
     holder.osageParts.forEach((part, i) => {
         if (!part || !placed[i]) return;
+        setBodySlot(part, flashed(part.own, flash));
         const mat = viewerMatrix(placed[i]);
         placePartAt(part, place ? new THREE.Matrix4().fromArray(mat).premultiply(place).elements : mat);
     });
@@ -3755,9 +3772,10 @@ function effectFrames(m) {
 
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
  * the chest side move with the pose. `holder` keeps the skin and its mesh. */
-function placeSkin(holder, matrices) {
+function placeSkin(holder, matrices, flash = null) {
     if (!holder.skin) return;
-    const d = decodeModel(state.rom, null, null, skinMesh(holder.skin, matrices));
+    const mesh = skinMesh(holder.skin, matrices);
+    const d = decodeModel(state.rom, null, null, flash == null ? mesh : { ...mesh, matPtr: flash });
     if (!d) return;
     d.index = null;
     if (!holder.skinMesh) {
@@ -3777,15 +3795,16 @@ function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
+    m.flash = flashMaterial(state.rom, m.decoded, m.frame);
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
-    placeExtras(m.extras, body, extras ?? []);
+    placeExtras(m.extras, body, extras ?? [], null, m.flash);
 
-    placeSkin(m, matrices);
-    placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick);
+    placeSkin(m, matrices, m.flash);
+    placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
     launchPendingDebris(m, pose.pose);
     placeDebris(m);
 

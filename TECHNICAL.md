@@ -1859,7 +1859,7 @@ points, its material (plus `hi16` of its fourth word × 4 for player 2, the
 other player's colours), the object address `player × 0x100 + 4` (the
 polygon RAM written above, past the first attribute and normal) and a count
 of -1 (to the closing word). In some move states it swaps the material word
-for `1 << 23` or `0x802000`. Then it sets mode 1 again, and calls
+for `1 << 23` or `0x802000` (the hit flash, below). Then it sets mode 1 again, and calls
 `kosi_mino_disp` (`0x31E54`, the skirt panels) and the default `0x1CB2C`.
 
 So the midriff is drawn in the hips' frame on the hips' matrix: the hips'
@@ -1891,8 +1891,8 @@ changes shape against the hips by up to 0.07 in motion 21 and 0.38 (Sanman)
 in 360, so it follows the pose, not the rest. The broken models
 are the ones listed above, with P2's own for Honey (2625, 2493), Bahn (2402,
 1707) and Sanman (1684, 1683). Sonic, Tails and the dummies draw none.
-Not checked against a MAME picture. The move states' material swaps are left
-out.
+Not checked against a MAME picture. The move states' material swaps are drawn
+as the hit flash (below).
 
 *Lit by its planes.* `0x58F0` sends geometrizer command 7 (`0x707`), the
 mode, and mode 3 is MAME's `geo_parse_nn_s`: the stored normal is skipped
@@ -2099,6 +2099,46 @@ on the second frame); that is the explorer's choice. The move flags are
 clear, so the pull is always 48. Returned as `hair`. In headless Chrome
 Picky's hair hangs at rest in motion 3 and stands up by frame 30, and the
 swing reaches `0x3000` in many of his motions.
+
+#### The hit flash (read from the ROM; not checked against MAME)
+
+Every fighter draw swaps the material word on its first frames in some
+motions: `rob_disp` (`0x1A04C`, `0x1A09C`), `set_obj_fifo` (`0x5DC0`) and the
+midriff (`0x1A364..0x1A390`). The rule, the same in each:
+
+- `+0x1A4` bit 26 set and `+0x1AA` (the motion's frame, 1 on its first) at
+  most 4: the material is `1 << 23`;
+- else `+0x720` bit 2 set, `+0x1AA` at most 4 and odd: the material is
+  `0x802000`.
+
+`set_mot_dat` (`0x1B880`) fills both words from the motion's setup script,
+`0x6411E94[motion]`: its word +0 goes to `+0x804` then `+0x1A4`, word +4 to
+`+0x860` then `+0x720`. Bit 26 is set in motions 605-611, 820-831, 864 and
+1006 (a white-out on frames 1-4); bit 2 of the second word in 706 and 949
+(a blink on frames 1 and 3). The debris pieces and the armour flipbook
+(`0x2E17C`) never flash.
+
+A material pointer with bit 23 reads the board's texture-header RAM, word
+`ptr & 0xFFFF`. Fighting Vipers does not copy that from data: at boot
+`0x12154` (`sub_121BC`) fills five blocks of `0x1000` words from `0x800000`,
+each with one four-halfword header repeated, taken from the program ROM at
+`0x12240`, eight bytes a block. So every face drawn through a block gets
+that header. Block 0 (`0x800000`) is `4000 0000 1C1E 0400`: a textured tile
+of texel 15 at sheet 1 (960, 512), colour base 16, a flat light beige. Block
+2 (`0x802000`) has colour base 567 (`th3 = 0x8DC0`), a bright green. The
+tile is in texture set 36, the boot set the explorer loads for every
+fighter.
+
+**What the explorer draws** (`flashMaterial` in `js/vf2fighters.js`, the
+profile's `rig.fighters.flash` and `modelTable.textureRamFill`). `textureAt`
+in `js/model.js` builds the five blocks from the ROM once and reads a bit-23
+material from them. `poseBodyRig` asks `flashMaterial` for the motion's
+material at the shown frame; when there is one, every part, extra, osage
+piece and the midriff, the opponent's too, is drawn from the model decoded
+with that material (`model#800000`). In headless Chrome Jane's 605 and 820
+draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
+and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
+flashes.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

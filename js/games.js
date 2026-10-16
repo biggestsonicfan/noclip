@@ -484,7 +484,16 @@ const fvipers = {
         select: 0x800000,
         banks: [{ region: 'mainData', base: 0x1000000 }, { region: 'xtraBank', base: 0 }],
     },
-    modelTable: { offset: 0x000e0004, count: 5413, stride: 16 },
+    /* Texture RAM is not copied from data here: at boot 0x12154 fills five
+     * 0x1000-word blocks (0x800000, 0x801000 .. 0x804000), each with one
+     * four-halfword material header over and over, read from the program ROM
+     * at 0x12240, eight bytes a block. A pointer into a block gives every face
+     * that header; the fighters' hit flash draws with two of them
+     * (js/vf2fighters.js, flashMaterial). */
+    modelTable: {
+        offset: 0x000e0004, count: 5413, stride: 16,
+        textureRamFill: { headers: 0x12240, blocks: 5, words: 0x1000 },
+    },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
     /* The whole texture pipeline carried across: every routine texture.js ports
@@ -825,6 +834,11 @@ const fvipers = {
             /* The midriff, record +0x24, and the one a broken chest draws
              * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */
             midriff: { at: 0x24, broken: 0x0642f9ec },
+            /* The motions' setup scripts, set_mot_dat's 0x6411E94[motion]:
+             * their first two words become the move flags (+0x1A4) and
+             * +0x720, which every draw of the fighter tests for the flash
+             * (js/vf2fighters.js, flashMaterial). */
+            flash: { setups: 0x06411e94 },
         },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },
