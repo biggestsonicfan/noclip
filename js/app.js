@@ -3964,7 +3964,8 @@ function renderArmourPanel() {
     const own = state.bodies && ownBody(state.charIndex);
     const A = own?.armour;
     $('#armour-field').hidden = !A;
-    if (!A) return;
+    /* No switch, no list: the last fighter's would stay behind it. */
+    if (!A) { $('#armour-readout').innerHTML = ''; return; }
     const halves = armourHalves(own);
     for (const h of ['upper', 'lower']) {
         $(`#armour-${h}-field`).hidden = !halves[h];
