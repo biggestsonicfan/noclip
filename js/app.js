@@ -108,9 +108,11 @@ const state = {
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
+    /* The opponent in player 2's look, whatever the fighter wears. */
+    opponentP2: false,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
-     * armouredFighter). */
-    armour: { upper: false, lower: false },
+     * armouredFighter), and whether the win streak's hips are asked for. */
+    armour: { upper: false, lower: false, streak: false },
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -642,6 +644,8 @@ function setLumaTables(luma, cxlat) {
  */
 function useRomColorLuts(stage, fighter = null) {
     const u = state.viewer.material.uniforms;
+    /* The scene a second fighter's own table is built under (rivalMaterial). */
+    state.lutStage = stage;
     if (state.lutsPinned) { u.uUseRamp.value = 1; return; }
     /* A game whose colour pipeline is not ported has no tables to build, and
      * without them the ramp would read zeros: shade flat on the palette. */
@@ -2694,8 +2698,8 @@ function geomBundle(d) {
 
 /* A rig part: a mesh and its wires, placed by hand each frame. `geom` is a
  * bundle already uploaded — an entry of a cycle — for the part to start on. */
-function addRigPart(decoded, geom = null) {
-    return addModelToScene(decoded, { matrix: new THREE.Matrix4(), geom });
+function addRigPart(decoded, geom = null, material = null) {
+    return addModelToScene(decoded, { matrix: new THREE.Matrix4(), geom, material });
 }
 
 /* A part that swaps through a built cycle, starting on entry `phase`. */
@@ -3271,17 +3275,21 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
+/* The hips a long win streak leaves Honey in (readStreakHips) are behind a
+ * switch the page shows only when its address asks for it. */
+const STREAK_UNLOCKED = new URLSearchParams(location.search).get('hentai') === 'baka';
+
 /* The roster's body, or its player 2 record where the switch asks for it. */
-function ownBody(index) {
+function ownBody(index, p2 = state.p2Look) {
     /* Dead or Alive's roster skips the empty character numbers. */
     const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
-    return state.p2Look && body.p2 ? body.p2 : body;
+    return p2 && body.p2 ? body.p2 : body;
 }
 
 /* The body as the panel shows it: a fighter with armour wears the broken
  * parts the armour switch asks for. */
-function shownBody(index) {
-    const body = ownBody(index);
+function shownBody(index, p2 = state.p2Look) {
+    const body = ownBody(index, p2);
     return body.armour ? armouredFighter(body, state.armour) : body;
 }
 
@@ -3352,7 +3360,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
-    else if (first != null) useModelScene(first, body.texSet !== undefined ? body.index : modelFighter(first));
+    else if (first != null) useModelScene(first, colourFighter(body));
 
     const m = state.motion;
     /* A part can draw more than one model, and which ones changes with the
@@ -3362,9 +3370,8 @@ function rebuildBody({ keepCamera = true } = {}) {
     m.extras = extraParts(body);
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
-    m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
-        : null;
+    dropRivalMaterial(m.rival);
+    m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2' ? rivalOf(body) : null;
     m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
     applyWireVisibility();
@@ -3378,6 +3385,68 @@ function rebuildBody({ keepCamera = true } = {}) {
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
         frameRig(drawn, 10);
     }
+}
+
+/* Whose colour rows a body is shaded with: a fighter's record's, so player
+ * 2's look is its own number, whoever else wears the part. */
+function colourFighter(body) {
+    const first = bodySceneModel(body);
+    return body.texSet !== undefined ? body.index : first == null ? null : modelFighter(first);
+}
+
+/* The opponent: the same fighter in the look its own P2 switch asks for,
+ * wearing the same armour. */
+function rivalOf(main) {
+    const body = state.bodies ? shownBody(state.charIndex, state.opponentP2) : { ...main };
+    return {
+        body: body === main ? { ...main } : body,
+        parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
+        extras: extraParts(body),
+        material: rivalMaterial(main, body),
+    };
+}
+
+/* The opponent's own sheets and colour table, where they are not the
+ * fighter's; none where it wears what the fighter does. */
+function rivalMaterial(main, rival) {
+    const atlas = rivalSheets(main, rival);
+    const cxlat = rivalColours(main, rival);
+    return atlas || cxlat ? state.viewer.tablesMaterial({ atlas, cxlat }) : null;
+}
+
+function dropRivalMaterial(rival) {
+    const mat = rival?.material;
+    if (!mat) return;
+    const u = state.viewer.material.uniforms;
+    for (const k of ['uAtlas', 'uCxlat']) if (mat.uniforms[k] !== u[k]) mat.uniforms[k].value.dispose();
+    mat.dispose();
+}
+
+/* The board writes the second player's colours into rows of their own, and
+ * the second player's faces read those; here the opponent's parts read the
+ * same rows as the first's out of a table built for the opponent alone,
+ * which comes to the same colours. */
+function rivalColours(main, rival) {
+    const who = colourFighter(rival);
+    const stage = state.lutStage;
+    if (who === colourFighter(main) || who == null || !stage || state.lutsPinned || !state.rom.game.colors) return null;
+    const cxlat = buildColorxlat(state.rom, { colorSet: stage.texSet[1], tint: stage.tint, fighters: [who] });
+    return makeDataTexture(cxlat, CXLAT_W, CXLAT_H);
+}
+
+/* A record's sets load into its player's slot, so the board holds both
+ * fighters' at once; here the opponent's are sheets of their own. Player 2's
+ * Honey and Picky are on sets of their own (81 and 87, not 5 and 11). */
+function rivalSheets(main, rival) {
+    if (state.texramPinned || !modelsPickTextures()) return null;
+    const sets = (b) => {
+        const first = bodySceneModel(b);
+        return first == null ? [] : modelTextureGuess(first).sets;
+    };
+    const theirs = sets(rival);
+    if (!theirs.length || theirs.join() === sets(main).join()) return null;
+    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(theirs));
+    return atlasTexture(sheet0, sheet1);
 }
 
 const IDENTITY_MATRIX = new THREE.Matrix4().elements;
@@ -3427,7 +3496,7 @@ function setBodySlot(slot, model) {
 /* Draw a body's parts for a frame: each part's models in its slots, placed by
  * the pose's matrices. `pose.joined` and `pose.parents` say which parts are
  * laid on their parent (see rankJoinedParts). */
-function placeBodyParts(parts, draws, matrices, pose = null) {
+function placeBodyParts(parts, draws, matrices, pose = null, material = null) {
     const changed = new Set();
     for (const p of parts) {
         const models = draws[p.part];
@@ -3435,7 +3504,7 @@ function placeBodyParts(parts, draws, matrices, pose = null) {
             if (k >= p.slots.length) {
                 const d = getModel(models[k]);
                 if (!d?.positions.length) continue;
-                const { mesh, lines } = addRigPart(d, frameGeometry(models[k]));
+                const { mesh, lines } = addRigPart(d, frameGeometry(models[k]), material);
                 p.slots.push({ mesh, lines, model: models[k], decoded: d });
                 rankBodyPart(p.slots[p.slots.length - 1]);
                 changed.add(p.part);
@@ -3490,8 +3559,8 @@ function extraParts(body) {
     return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
 }
 
-function placeExtras(parts, body, matrices) {
-    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
+function placeExtras(parts, body, matrices, material = null) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices, null, material);
 }
 
 /* Pose the fighter, and its opponent when there is one: the pair face each
@@ -3507,9 +3576,9 @@ function poseFighterAndRival(body, m) {
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
-    placeBodyParts(m.rival.parts, draws, placed);
+    placeBodyParts(m.rival.parts, draws, placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
-        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material);
     return mine;
 }
 
@@ -3968,6 +4037,8 @@ function renderBodyPanel() {
     const twin = state.bodies.find((b) => b.index === state.charIndex)?.p2;
     $('#char-p2-field').hidden = !twin;
     $('#char-p2').checked = state.p2Look;
+    $('#char-rival-p2-field').hidden = !twin || !state.opponent || state.rom.game.rig?.kind !== 'vf2';
+    $('#char-rival-p2').checked = state.opponentP2;
 }
 
 /* The armour switches, shown only for a fighter whose break table has entries,
@@ -3977,12 +4048,15 @@ function renderArmourPanel() {
     const own = state.bodies && ownBody(state.charIndex);
     const A = own?.armour;
     $('#armour-field').hidden = !A;
-    if (!A) return;
+    /* No switch, no list: the last fighter's would stay behind it. */
+    if (!A) { $('#armour-readout').innerHTML = ''; return; }
     const halves = armourHalves(own);
     for (const h of ['upper', 'lower']) {
         $(`#armour-${h}-field`).hidden = !halves[h];
         $(`#armour-${h}`).checked = !state.armour[h];
     }
+    $('#armour-streak-field').hidden = !STREAK_UNLOCKED || !(A.streakHips > 0);
+    $('#armour-streak').checked = state.armour.streak;
     const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
@@ -4600,10 +4674,15 @@ function wireOptions() {
         $('#char-behind-field').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
+        renderAnimPanel();
     });
     $('#char-behind').addEventListener('change', (e) => {
         state.opponentBehind = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: false });
+    });
+    $('#char-rival-p2').addEventListener('change', (e) => {
+        state.opponentP2 = e.target.checked;
+        if (state.opponent) rebuildBody({ keepCamera: true });
     });
     $('#char-p2').addEventListener('change', (e) => {
         state.p2Look = e.target.checked;
@@ -4616,9 +4695,10 @@ function wireOptions() {
         renderAnimPanel();
         updateHud();
     });
-    for (const h of ['upper', 'lower']) {
+    for (const h of ['upper', 'lower', 'streak']) {
         $(`#armour-${h}`).addEventListener('change', (e) => {
-            state.armour = { ...state.armour, [h]: !e.target.checked };
+            /* The halves' boxes say what is intact; the streak's that it is on. */
+            state.armour = { ...state.armour, [h]: h === 'streak' ? e.target.checked : !e.target.checked };
             state.character = shownBody(state.charIndex);
             rebuildBody({ keepCamera: true });
             renderAnimPanel();
@@ -4964,6 +5044,7 @@ function applyGameFeatures() {
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
     $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
