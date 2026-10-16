@@ -17,6 +17,17 @@ export function isMobile() {
 }
 
 /**
+ * The query string with the layout key set to this site: ?mobile or ?desktop
+ * first, where the inline detector looks, and every other key the page was
+ * opened with kept as it was written.
+ */
+export function layoutSearch(on, search = location.search) {
+    const rest = search.replace(/^\?/, '').split('&')
+        .filter((kv) => kv && !/^(mobile|desktop)(=|$)/.test(kv));
+    return `?${[on ? 'mobile' : 'desktop', ...rest].join('&')}`;
+}
+
+/**
  * Switch sites without a reload, and put the choice in the URL so a reload
  * keeps it — the inline detector reads ?mobile and ?desktop ahead of the user
  * agent.
@@ -24,7 +35,7 @@ export function isMobile() {
 export function setMobile(on) {
     document.documentElement.classList.toggle('mobile', on);
     const url = new URL(location.href);
-    url.search = on ? '?mobile' : '?desktop';
+    url.search = layoutSearch(on);
     history.replaceState(null, '', url);
 }
 

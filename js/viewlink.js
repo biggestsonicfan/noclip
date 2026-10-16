@@ -23,6 +23,7 @@
 
 import { GAMES } from './games.js';
 import { boardCamera, boardCameraParams, readBoardCameraParams } from './skyeye.js';
+import { isMobile, layoutSearch } from './mobile.js';
 
 /** Where a link points: the published site, whatever the reporter was on. */
 export const SITE = 'https://noclip.sonicthefighte.rs/';
@@ -89,7 +90,7 @@ const triple = (p, n = 3) => `${num(p.x, n)},${num(p.y, n)},${num(p.z, n)}`;
  */
 export function viewLink(state) {
     const url = new URL(SITE);
-    url.search = document.documentElement.classList.contains('mobile') ? '?mobile' : '?desktop';
+    url.search = layoutSearch(isMobile());
     const rom = state?.rom;
     const v = state?.viewer;
     if (!rom || !v) return url.href;
