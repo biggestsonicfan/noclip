@@ -1891,9 +1891,33 @@ changes shape against the hips by up to 0.07 in motion 21 and 0.38 (Sanman)
 in 360, so it follows the pose, not the rest. The broken models
 are the ones listed above, with P2's own for Honey (2625, 2493), Bahn (2402,
 1707) and Sanman (1684, 1683). Sonic, Tails and the dummies draw none.
-Not checked against MAME. Player 2's material offset is not drawn, the move
-states' material swaps are left out, and the stored normals are used for
-lighting where the board works them out from the points.
+Not checked against a MAME picture. The move states' material swaps are left
+out.
+
+*Lit by its planes.* `0x58F0` sends geometrizer command 7 (`0x707`), the
+mode, and mode 3 is MAME's `geo_parse_nn_s`: the stored normal is skipped
+and each face takes `(p1 - p0) × (p2 - p0)` of the strip's two last points
+and its new one, for its lighting and for which side faces the camera. So
+`readMidriff` marks the mesh `planeNormals`, and `decodeModel` takes the
+plane path a mode-2 game uses for every model. Walking the midriff's bytes
+the way `geo_parse_nn_s` does gives the explorer's face normals on all 16
+band faces (dot 1.00, Jane and Bahn in motion 21). It matters: the plane and
+the stored normal are 27° (Jane) to 79° (Bahn) apart on average, and on Bahn
+and Honey six faces of the band face the other way even in motion 21 (their
+attribute's bit 17 is clear, so they are drawn from one side only). In
+motion 362 Sanman's shirt band had a wedge missing at the belt on the stored
+normals; on the planes it is whole.
+
+*Player 2's block is not needed here.* A fighter model's material records
+run on past the first `hi16` (of its fourth table word), and those are player
+2's. Over all 28,658 faces of the playable records (0-10, 13-23) the second
+block is the first with the texture on the other sheet (`th2` bit 12) and
+palette entries 1-5 moved to 8-12 and 29/30 to 31/32, nothing else: the rows
+`send_tex_col_part` and the skin upload fill for the second player. Ordinary
+parts hand the coprocessor the player byte instead (`0x5A48`). The explorer
+draws every fighter, opponent included, from player 1's block over sheets and
+rows filled for that fighter alone (`rivalSheets`, `rivalColours`), so the
+midriff stays on player 1's block like the rest of the body.
 
 **The skirt (read from the ROM, measured against MAME).** `kosi_mino_disp`
 (`0x31E54..0x32A08`) is the call at the end of `0x1A2D8`, the hips' draw. It

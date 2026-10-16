@@ -540,7 +540,8 @@ function swungExtra(e, swings, pose, offsets, hair) {
  * point, already in it. The draw starts 4 words in, past the first attribute
  * and normal, so the bytes are model.js's records as they stand. A broken
  * chest (+0x1F48 bit 1) takes `broken[char]`'s model: same points, other
- * material.
+ * material. It is drawn in geometrizer mode 3 (0x58F0), which skips the stored
+ * normals and lights each face by its plane, so the band shades as it bends.
  */
 const MIDRIFF = { model: 8, ring: 0x70, count: 0xd0, links: 0xd4, link: 0x28, first: 8, ringPoints: 16 };
 
@@ -568,7 +569,7 @@ function readMidriff(rom, M, root, i) {
     }
     const b = dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at));
     return {
-        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST,
+        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST, planeNormals: true,
         ...midriffLook(rom, dv, o), broken: midriffLook(rom, (b ?? r).view, (b ?? r).off),
     };
 }

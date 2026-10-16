@@ -90,7 +90,8 @@ function polygonRamOffset(rom, meshPtr) {
  *   texture pointers a table entry would carry. The House of the Dead builds
  *   the polygons that join an enemy's chest to its hips this way, a template
  *   with some points moved every frame, and hands them to the geometry engine
- *   exactly as it does a model.
+ *   exactly as it does a model. `planeNormals` set lights it by its faces'
+ *   planes, whatever the game's own mode.
  * @returns {null|object}   null when the table entry has no mesh
  */
 export function decodeModel(rom, modelIdx, points = null, mesh = null) {
@@ -433,7 +434,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
      * of its palette.
      */
     let hdr = matBase;
-    const planeNormals = rom.game.lighting?.planeNormals === true;
+    const planeNormals = mesh?.planeNormals ?? rom.game.lighting?.planeNormals === true;
     let faceCount = 0;
     let texturedFaces = 0;
 
@@ -563,7 +564,8 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                 zSrc[0] = A; zSrc[1] = B; zSrc[2] = D; zSrc[3] = C;
             }
         }
-        /* A game that runs the geometry engine in mode 2 has it ignore the
+        /* A game that runs the geometry engine in mode 2 (or a mesh drawn in
+         * mode 3, `planeNormals` on the mesh) has it ignore the
          * normal in ROM and take the plane of the polygon's first three points
          * instead — P0(n-1), P1(n-1) and P0(n), which are A, B and C here on
          * every link type (MAME geo_parse_nn_ns, vector_cross3). Negated,
