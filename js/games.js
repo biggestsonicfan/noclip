@@ -740,6 +740,27 @@ const fvipers = {
      */
     motionTable: { list: 0x06c00004, count: 1055 },
     /*
+     * The sway chains (js/osage.js), Sonic The Fighters' records and code on
+     * this game's data. The definitions by record, `0x63E34[+0x1B0*4]` at
+     * 0x627E8, 26 of them before the empty table at 0x63E9C. Grace's switched
+     * on her upper armour every frame (0x62860). Gravity as 0x7284 stores it.
+     * The wind (0x63B80): each record's two entries at 0x63A58, and the
+     * stages it blows on, by 0x500064, with the direction and which entry
+     * (the second where flag 10 is clear). The head is slot 2.
+     */
+    osage: {
+        table: 0x00063e34, count: 26, gravity: 0.005222222302109003, head: 2,
+        byArmour: { char: 1, broken: 0x00063fcc, whole: 0x00064154 },
+        wind: {
+            table: 0x00063a58,
+            stages: {
+                0: { angle: 0xf000, entry: 0 }, 1: { angle: 0x8000, entry: 1 },
+                4: { angle: 0xf000, entry: 0 }, 5: { angle: 0xc000, entry: 1 },
+                8: { angle: 0x7000, entry: 0 },
+            },
+        },
+    },
+    /*
      * The sound board is Sonic The Fighters', the ROMs laid out the same way
      * and the same three boot commands (0x8574, 0x8B9C, 0x8BAC). FIGHT_INT
      * sends the stage's song in round 1 (0xD5B4) out of level_music_list at

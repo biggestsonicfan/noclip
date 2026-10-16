@@ -26,7 +26,7 @@ import {
 import { CHARACTERS, P2_HALF, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
     useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
-import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
+import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, readOsageWind, windStages, NO_FLOOR } from './osage.js';
 import {
     readTails, tailParts, propellerPart,
     PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
@@ -113,6 +113,8 @@ const state = {
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
+    /* The stage whose wind blows on the sway chains (js/osage.js), or none. */
+    osageWind: null,
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -1132,6 +1134,9 @@ function fighterRigModels(add, out) {
         if (f.armour?.chest) add(f.armour.chest, f.index);
         for (const m of hipModels(f.armour?.hips)) add(m, f.index);
         for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
+        /* The sway chains with the upper half broken, which is every chain
+         * the record can wear (Grace's earrings only come with it). */
+        for (const seg of osageSegments(bodyOsage({ ...f, upperBroken: true }))) add(seg.model, f.index);
     }
     return out;
 }
@@ -2969,16 +2974,16 @@ const OSAGE_CATCH_UP = 8;
  * swing. Anything else — a new motion, a scrub backwards, a jump — starts them
  * again and settles them on the pose, which is what a pose held still shows.
  */
-function placeOsage(m, pose, board) {
-    const step = m.tick - m.osageTick;
+function placeOsage(m, pose, board, tick = m.tick) {
+    const step = tick - m.osageTick;
     if (m.osageSim?.osage === m.osage && step >= 1 && step <= OSAGE_CATCH_UP) {
         let placed = [];
         for (let i = 0; i < step; i++) placed = stepOsage(m.osageSim, pose, board);
-        m.osageTick = m.tick;
+        m.osageTick = tick;
         return placed;
     }
     m.osageSim = createOsageSim(m.osage);
-    m.osageTick = m.tick;
+    m.osageTick = tick;
     return settleOsage(m.osageSim, pose, board);
 }
 
@@ -3376,6 +3381,9 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* A Fighting Vipers fighter's midriff is built the same way. */
     m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
+    /* And its sway chains, the opponent's in its own material. */
+    buildBodyOsage(m, body);
+    if (m.rival) buildBodyOsage(m.rival, m.rival.body, m.rival.material);
     applyWireVisibility();
 
     m.skeleton = addSkeletonLines(Math.max(1, body.parts.length - 1));
@@ -3595,7 +3603,50 @@ function poseFighterAndRival(body, m) {
     placeExtras(m.rival.extras, m.rival.body,
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material);
     placeSkin(m.rival, placed);
+    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place);
     return mine;
+}
+
+/* A fighter's sway chains, in a game whose profile names its own table
+ * (Fighting Vipers'): its record's, and Grace's as her upper half has them. */
+function bodyOsage(body) {
+    if (!state.rom.game.osage) return null;
+    return readOsage(state.rom, body.index, { char: body.char ?? body.index, upperBroken: Boolean(body.upperBroken) });
+}
+
+/* The segments that draw a model, in the order stepOsage places them. */
+const osageSegments = (osage) => (osage?.chains ?? []).flatMap((c) => c.segments).filter((seg) => seg.model);
+
+/* Give a figure (the motion state, or the opponent) its chains and a mesh for
+ * each segment, in the material it is drawn with. A model that does not
+ * decode keeps its place in the list, empty, so the rest line up. */
+function buildBodyOsage(holder, body, material = null) {
+    holder.osage = bodyOsage(body);
+    holder.osageSim = null;
+    holder.osageParts = osageSegments(holder.osage).map((seg) => {
+        const d = getModel(seg.model);
+        return d ? { ...addRigPart(d, undefined, material), bounds: d.bounds } : null;
+    });
+}
+
+/* What the chains run against: the ring's floor under a motion (a pose with
+ * none stands nowhere), and the wind the panel's stage blows on the record. */
+function osageBoard(m, body) {
+    if (!m.decoded) return { floorY: NO_FLOOR };
+    const stage = state.osageWind;
+    return { wind: stage == null ? null : readOsageWind(state.rom, body.index, stage) };
+}
+
+/* Run a figure's chains on to the frame and place their segments; `place`
+ * puts the opponent's own frame in the fighter's. */
+function placeBodyOsage(holder, pose, board, tick, place = null) {
+    if (!holder?.osage || !pose) return;
+    const placed = placeOsage(holder, pose, board, tick);
+    holder.osageParts.forEach((part, i) => {
+        if (!part || !placed[i]) return;
+        const mat = viewerMatrix(placed[i]);
+        placePartAt(part, place ? new THREE.Matrix4().fromArray(mat).premultiply(place).elements : mat);
+    });
 }
 
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
@@ -3630,6 +3681,7 @@ function poseBodyRig() {
     placeExtras(m.extras, body, extras ?? []);
 
     placeSkin(m, matrices);
+    placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -3993,13 +4045,15 @@ function renderExhaustPanel() {
         + `<br><span id="exhaust-now"></span>`;
 }
 
-/* What the sway chains are made of, shown only for the five fighters that have
- * them: each chain's attach bone, its segments and the damping it runs with. */
+/* What the sway chains are made of, shown only for the fighters that have
+ * them: each chain's attach bone, its segments and the damping it runs with,
+ * and in a game with wind, the stage it blows on. */
 function renderOsagePanel() {
     const m = state.motion;
     const field = $('#osage-field');
     field.hidden = !m.osage;
     if (!m.osage) return;
+    renderOsageWind();
 
     const lines = [`table 0x${m.osage.table.toString(16)}`];
     let damping = null, limits = null, chain = 0;
@@ -4013,6 +4067,19 @@ function renderOsagePanel() {
             + (damping === null ? '' : `, damping ${damping.toFixed(2)}${limits ? '' : ', no body limits'}`));
     }
     $('#osage-readout').innerHTML = lines.join('<br>');
+}
+
+/* The stages a game's wind blows on (js/osage.js), named as the Stages tab
+ * names them; none for a game whose chains hang in still air. */
+function renderOsageWind() {
+    const stages = windStages(state.rom);
+    const sel = $('#osage-wind');
+    $('#osage-wind-field').hidden = !stages.length;
+    if (!stages.length) return;
+    const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
+    sel.innerHTML = [['', 'no wind'], ...stages.map((n) => [n, `${name(n)}'s`])]
+        .map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
+    sel.value = state.osageWind ?? '';
 }
 
 function renderBodyPanel() {
@@ -4051,6 +4118,7 @@ function renderBodyPanel() {
         list.appendChild(row);
     }
     renderArmourPanel();
+    renderOsagePanel();
     renderMotionPanel();
     const twin = state.bodies.find((b) => b.index === state.charIndex)?.p2;
     $('#char-p2-field').hidden = !twin;
@@ -4742,6 +4810,10 @@ function wireOptions() {
             renderAnimPanel();
         });
     }
+    $('#osage-wind').addEventListener('change', (e) => {
+        state.osageWind = e.target.value === '' ? null : Number(e.target.value);
+        poseRig();
+    });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
         if (state.motion.skeleton) state.motion.skeleton.visible = e.target.checked;

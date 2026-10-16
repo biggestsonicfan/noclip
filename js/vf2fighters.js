@@ -585,7 +585,10 @@ export function armouredFighter(body, which) {
      * slot model, as mune_unit_change returns it unchanged. */
     const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
     const midriff = broken(CHEST) && body.midriff ? { ...body.midriff, ...body.midriff.broken } : body.midriff;
-    return { ...body, parts, extras, bounce, midriff, hipsBroken: broken(HIPS), streak: Boolean(which.streak) };
+    /* The fight's +0x7F4 bit 2, which Grace's sway chains are switched on
+     * (js/osage.js) whether or not a slot of the half breaks. */
+    const upperBroken = Boolean(which.upper);
+    return { ...body, parts, extras, bounce, midriff, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
@@ -932,7 +935,9 @@ function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
  *   a fighter with one, is each panel's swing this frame, and `pads` each
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
- *   for a fighter koshi_unit_change names, is the hips' model this frame.
+ *   for a fighter koshi_unit_change names, is the hips' model this frame;
+ *   `pose`, the bones in the board's frame, which the sway chains hang off
+ *   (js/osage.js).
  */
 export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
@@ -959,7 +964,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    return { matrices, origins, extras, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*
