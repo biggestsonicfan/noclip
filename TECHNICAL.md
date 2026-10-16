@@ -1160,11 +1160,10 @@ part out along the fighter's own skeleton at player `+0x8C`.
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
 
-Not drawn: the flying armour pieces (below), the one part left. Record
-`+0x24` is the midriff and is drawn (below, "The midriff"; VF2's `+0x38` is
-still not). The special parts `rob_disp` (`0x19F10`) swaps in for the chest
-and hips (`mune_unit_change`, `koshi_unit_change`), broken armour and Picky's
-hair are drawn, below.
+Record `+0x24` is the midriff and is drawn (below, "The midriff"; VF2's
+`+0x38` is still not). The special parts `rob_disp` (`0x19F10`) swaps in for
+the chest and hips (`mune_unit_change`, `koshi_unit_change`), broken armour,
+the pieces it throws (with one sample hit) and Picky's hair are drawn, below.
 
 **Hands and feet are never swapped.** `rob_disp` calls the foot routine
 (`set_ashi_ptn`, `0x1AB74`: slots 12 and 15, 32 models from player `+0x5F0`
@@ -1217,7 +1216,7 @@ stage's pieces (`+6` each one's model) and writes the stage's first piece's
 `+4` into `+0x40[slot]`: that is the slot's new model. It skips the write in
 `also_mode` `0xC`/`0xD` and some sub-modes of 3 and 9 (`0x2D4D0`).
 
-**The flying pieces are not drawn: they need the hit.** `0x2D374` (from
+**The flying pieces (drawn, with one sample hit).** `0x2D374` (from
 `damage_unit`) gives each piece a launch speed (`0x2D614`) from the
 attacker's attack, its damage `+0x83D`, kind `+0x843` and direction `+0x82A`
 (set by the move script, `0x1BB20`), and `0x2D390` puts it in one of eight
@@ -1225,16 +1224,84 @@ attacker's attack, its damage `+0x83D`, kind `+0x843` and direction `+0x82A`
 (`+0x1F4 + 12·slot`). Each frame `0x2CE68` drops them on the stage's gravity,
 floor and ring walls (`0x50A000`, `0x50A00C`, `0x50A010`) and spins them, and
 `0x2E17C` draws model `+0x22` at the piece's place turned Y, X, Z, with a
-floor shadow (`+0x44`, `0x77E48`/`0x78384`). The explorer's Armour switch
-breaks armour with no attack, so it has no launch to follow. `0x2D614` makes
-that plain: with d = min(damage, 70) / 60, each piece flies
-out at d × `0x64216D0[kind]` and up at (d × `0x64216E8[kind]` + 0.06) (1.5
-times that for `+0xA74` = 1), both plus an entry of `0x6421720` (the rise
-twice), heading the defender's facing `+0x26` plus the attack's `+0x82A` bent
-by `0x6421700`; both tables are indexed by those two, `+0xA7E` and the piece's
-own `+6` and `+0x14`, & 15.
-Every term but the piece's own comes from the hit, so nothing short of a
-made-up attack would launch them.
+floor shadow (`+0x44`, `0x77E48`/`0x78384`). With d = min(damage, 70) / 60,
+`0x2D614` throws each piece out at d × `0x64216D0[kind]` and up at
+(d × `0x64216E8[kind]` + 0.06) (1.5 times that for `+0xA74` = 1), both plus
+an entry of `0x6421720` (the rise twice), heading the attacker's facing plus
+its `+0x82A` less an entry of `0x6421700`; both entries are picked by those
+two, the slot, the piece's `+6` and the bits of its `+0x14`, & 15.
+
+The explorer's Armour switch breaks with no attack, so it throws the pieces
+with one fixed hit, a real one from the ROM: **damage 60, kind 0, direction
+0**, the attack (op 4, 19 bytes, `0x1BB20`) in move 128's setup script
+(`0x641E26B`), at `0x641E27E`: `04 15 04 3c 02 00 00 07 40 00 00 00 ...`,
+whose `+3` is the damage, `+5` the direction (a signed halfword) and `+10`
+the kind. It sits inside the routine's limits: 60 is under the cap of 70, so
+d = 1, and kind 0 picks the first entries (out 0.06, up 0.04 + 0.06). The
+attacker stands straight ahead facing the fighter, so its facing is the
+fighter's plus `0x8000` and direction 0 throws the pieces straight back
+from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
+`SAMPLE_HIT`).
+
+`js/fvdebris.js` follows the three routines in single floats:
+
+- **The launch (`0x2D390`)**, per broken slot and stage in `damage_unit`'s
+  order (upper half, slots ascending, stages ascending). Each record goes
+  into the first free slot with flags `+0x1C` | bit 11, its place, its
+  speed, model `+6`, radius `+0x18`, weight `+0x14`, floor `+0x20`, X turn
+  `+8`, Y turn the facing plus `+0xA`, Z turn `+0xC` (low half), the turns
+  it settles on (`+0xE`/`+0x10`/`+0x12`, 0 none) and a spin
+  `0x640F924[(bits of x + y + z + weight) & 15]`. A bit-3 record is the
+  flipbook effect (`0x2D254`) instead when bit 1 is clear, or when two slots
+  already hold bit-3 pieces (`0x2D8D4`), and **that ends the stage's loop**
+  (`0x2D3F0`), as eight full slots do. A record with model 0 still takes a
+  slot that nothing moves, draws or frees (`0x2CE68` and `0x2E17C` skip
+  model 0), and it counts toward those two. So Jane's upper half throws 715
+  and 714; her third chest stage's first record (719) is the effect and
+  ends that stage, slot 4's 580 is the effect too, and slot 5's model 0 holds
+  a slot. Grace's lower half throws four pieces (1740, 1741, 1985 twice) and
+  then nothing from her upper, whose records all have bit 3.
+- **The fall (`0x2CF24`).** vy −= 0.005222 (`0x3BAB1F2D`), vx and vz × 0.98,
+  then the place moves by the speed. At or under the floor (`+0x40`, 0.5
+  lower once out of the ring) the bounce is counted, the y step taken back,
+  and vy = −vy × (0.2 + 0.2 / weight). Once |vy| ≤ 0.001 the piece rests
+  (bit 7, speed 0); otherwise vx and vz × 0.9. The rest test is on the
+  bounce's speed, and that speed settles near g·k/(1 + k) with k the bounce
+  factor, so a piece whose bounce lands it just over the threshold chatters
+  within a couple of millimetres of its floor without ever setting bit 7, in
+  the ROM as here.
+- **The walls**, below y 3.1 (`0x50027C`), about the ring's centre: past
+  5.5 a piece is out (bit 19) and falls to the lower floor; past 5 less its
+  radius it is put back and its speed on that axis × −0.3. The centre is
+  half the opponent's distance ahead of the fighter. Every wall is up, as
+  at the start of a round (`0x574004`).
+- **The turns (`0x2D118`).** While flying and for its first four bounces a
+  piece adds its spin to Y, and to X with flag bit 12 and Z with bit 14.
+  After that each turn with a target steps onto it, `0x800` a frame
+  (`0x1000` at rest), Y's step over (bounces + 1). The ROM keeps its two
+  bounds in r11/r14 and Y's step leaves r14 the divisor, which Z's test then
+  reads; that is kept.
+
+Not followed: the push out of both fighters' bodies (TGP `0x77`
+`Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
+is off screen (`0x316F0`), the flipbook effect itself, the floor shadow and
+the sound (flag bits 28 to 31, `0x2D218`). The pieces are the fighter's
+own; the opponent's armour stays whole. They run in board frames of their
+own, so they fly with the motion held as well as playing. Breaking a half
+throws its pieces from the pose on screen at that moment, making it whole
+again takes them back, and another fighter starts with none.
+
+**Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
+and 360, each half broken while the motion plays, and Jane with it held):
+the drawn piece's translation equals the broken slot's drawn translation at
+the launch, to 0.0001. Every drawn piece leaves it, rising 1.3 to 6.2 above
+the floor, and lands 1.8 to 6.2 away, on its floor (0.05, or 0.008 for
+Grace's slot 9), behind the fighter, away from the attacker. One of Grace's
+leaves the ring and drops to the lower floor. Turns with targets reach them.
+The launch turn is not measurable against the armour: the piece models do
+not sit on the intact slot model in any quarter turn (mean nearest vertex
+0.04 to 0.08 for all four), so it rests on `0x2E17C`'s order alone. Not
+checked against MAME.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|
@@ -1378,7 +1445,7 @@ entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Picky's hair
 swings with the head ("Picky's hair", below). Not drawn, and not drawable
 from what the explorer has: the chest's per-frame list needs the move flags
-(below), and the flying pieces need the attack that broke the armour (above).
+(below). The flying pieces are thrown by one sample hit (above).
 Hands and feet have nothing to swap (above).
 
 **The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls

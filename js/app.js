@@ -49,8 +49,9 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE,
 } from './vf2fighters.js';
+import { createDebrisSim, launchDebris, stepDebris, debrisPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3384,6 +3385,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* And its sway chains, the opponent's in its own material. */
     buildBodyOsage(m, body);
     if (m.rival) buildBodyOsage(m.rival, m.rival.body, m.rival.material);
+    syncDebris(m, body);
     applyWireVisibility();
 
     m.skeleton = addSkeletonLines(Math.max(1, body.parts.length - 1));
@@ -3649,6 +3651,79 @@ function placeBodyOsage(holder, pose, board, tick, place = null) {
     });
 }
 
+/*
+ * Fighting Vipers' flying armour pieces (js/fvdebris.js). A half the armour
+ * switch breaks throws its pieces off the pose on screen, with the one sample
+ * hit, and they fly on by board frames of their own, whether the motion plays
+ * or not. A half put back whole takes its pieces back, and another fighter
+ * starts with none. Only the fighter's own: the opponent's armour is whole.
+ */
+const DEBRIS_CATCH_UP = 8;
+const HALVES = ['upper', 'lower'];
+
+/* Note which halves have just broken, and drop the pieces of any made whole.
+ * The scene has just been cleared, so the meshes are built again. */
+function syncDebris(m, body) {
+    m.debrisParts = [];
+    const tables = state.rom.game.rig?.kind === 'vf2' && body.armour ? fighterDebrisTables(state.rom) : null;
+    if (!tables) { m.debris = null; return; }
+    const d = m.debris?.root === body.root ? m.debris
+        : { root: body.root, sim: createDebrisSim([OPPONENT_DISTANCE / 2, 0, 0]), halves: {}, pending: [], start: null };
+    for (const half of HALVES) {
+        const thrown = body.debris?.[half] ?? [];
+        if (thrown.length && !d.halves[half]) d.pending.push({ half, thrown });
+        if (!thrown.length) {
+            d.sim.slots = d.sim.slots.map((s) => (s?.half === half ? null : s));
+            d.pending = d.pending.filter((p) => p.half !== half);
+        }
+        d.halves[half] = thrown.length > 0;
+    }
+    d.tables = tables;
+    m.debris = d;
+}
+
+/* Throw what a half has just broken off, each slot's stage as one call of
+ * 0x2D390, which stops when the eight slots are full. */
+function launchPendingDebris(m, pose) {
+    const d = m.debris;
+    if (!d?.pending.length || !pose) return;
+    for (const { half, thrown } of d.pending) {
+        const calls = Map.groupBy(thrown, (p) => p.slot * 16 + p.stage);
+        for (const pieces of calls.values()) launchDebris(d.sim, d.tables, SAMPLE_HIT, pieces, pose, half);
+    }
+    d.pending = [];
+    d.start ??= performance.now() - (d.sim.frame * 1000) / GAME_HZ;
+}
+
+/* Run the pieces on to the frame the clock is at; after a long gap (a held
+ * view, another tab) they carry on from where they were. */
+function stepBodyDebris(now) {
+    const m = state.motion, d = m.debris;
+    if (!d || d.start == null) return;
+    let n = Math.floor(((now - d.start) / 1000) * GAME_HZ) - d.sim.frame;
+    if (n <= 0) return;
+    if (n > DEBRIS_CATCH_UP) {
+        d.start += ((n - DEBRIS_CATCH_UP) * 1000) / GAME_HZ;
+        n = DEBRIS_CATCH_UP;
+    }
+    for (let i = 0; i < n; i++) stepDebris(d.sim);
+    placeDebris(m);
+}
+
+/* One mesh per shared slot, built when a piece first lands in it. */
+function placeDebris(m) {
+    if (!m.debris) return;
+    m.debris.sim.slots.forEach((s, i) => {
+        const part = m.debrisParts[i];
+        if (part?.model !== s?.model) {
+            if (part?.mesh) showPart(part, false);
+            const d = s?.model && getModel(s.model);
+            m.debrisParts[i] = d ? { ...addRigPart(d), model: s.model } : { model: s?.model };
+        }
+        if (s && m.debrisParts[i].mesh) placePartAt(m.debrisParts[i], viewerMatrix(debrisPlace(s)));
+    });
+}
+
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
  * the chest side move with the pose. `holder` keeps the skin and its mesh. */
 function placeSkin(holder, matrices) {
@@ -3682,6 +3757,8 @@ function poseBodyRig() {
 
     placeSkin(m, matrices);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick);
+    launchPendingDebris(m, pose.pose);
+    placeDebris(m);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -5422,7 +5499,7 @@ function start() {
          * the transform that goes with it. */
         if (state.tab === 'stage' && state.animate) stepStageAnimation(performance.now());
         else if (state.tab === 'anim') {
-            if (state.animate) stepMotion(performance.now());
+            if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();
         }
         /* Not behind `animate`: a billboard turns with the camera, and the

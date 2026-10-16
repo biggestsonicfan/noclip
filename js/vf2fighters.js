@@ -83,6 +83,7 @@
 import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
+import { readDebrisTables } from './fvdebris.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -197,28 +198,43 @@ function readFighter(rom, F, record, char) {
  */
 const ARMOUR_ENTRY = 8, ARMOUR_PIECE = 0x28, ARMOUR_STAGES = 4;
 
-/* Per slot, the model each stage leaves on it, in order; empty for a slot
- * that never breaks. */
+/* One piece record as 0x2D390 copies it into a flying slot (fvdebris.js):
+ * +6 the model thrown (0 throws nothing), +8/+0xA/+0xC its X, Y and Z turns,
+ * +0xE/+0x10/+0x12 the turns it settles on (0 none), +0x14 its weight (a
+ * float, whose bits also pick its spin and heading), +0x18 its radius against
+ * the walls, +0x1C its flags, +0x20 its floor. */
+function readArmourPiece(dv, o, slot, stage) {
+    const h = (k) => dv.getInt16(o + k, true);
+    return {
+        slot, stage, model: h(6), angles: [h(8), h(0xa), h(0xc)], targets: [h(0xe), h(0x10), h(0x12)],
+        weight: dv.getFloat32(o + 0x14, true), weightBits: dv.getUint32(o + 0x14, true),
+        radius: dv.getFloat32(o + 0x18, true), flags: dv.getUint32(o + 0x1c, true), floor: dv.getFloat32(o + 0x20, true),
+    };
+}
+
+/* Per slot, the model each stage leaves on it, in order (empty for a slot
+ * that never breaks), and every piece its stages throw off. */
 function readArmourSlots(rom, table) {
-    const slots = [];
+    const slots = [], pieces = [];
     for (let s = 0; s < SLOT_COUNT; s++) {
         const r = table && dataAt(rom, table + s * ARMOUR_ENTRY);
-        const stages = [];
+        const stages = [], thrown = [];
         if (r) {
-            const pieces = r.view.getUint32(r.off + 4, true);
+            const list = r.view.getUint32(r.off + 4, true);
             let k = 0;
             for (let st = 0; st < ARMOUR_STAGES; st++) {
                 const n = r.view.getUint8(r.off + st);
-                if (!n) break;
-                const p = dataAt(rom, pieces + k * ARMOUR_PIECE);
-                if (!p) break;
+                const p = n ? dataAt(rom, list + k * ARMOUR_PIECE) : null;
+                if (!p || p.off + n * ARMOUR_PIECE > p.data.length) break;
                 stages.push(p.view.getInt16(p.off + 4, true));
+                for (let j = 0; j < n; j++) thrown.push(readArmourPiece(p.view, p.off + j * ARMOUR_PIECE, s, st));
                 k += n;
             }
         }
         slots.push(stages);
+        pieces.push(thrown);
     }
-    return slots;
+    return { slots, pieces };
 }
 
 /* A chest spring: 0x6421F80[char] +4 points at 31 signed halfwords, the
@@ -296,12 +312,12 @@ export function hipModels(H) {
 function readArmour(rom, A, i) {
     const r = dataAt(rom, A.table + i * 4);
     const table = r ? r.view.getUint32(r.off, true) : 0;
-    const slots = readArmourSlots(rom, table);
+    const { slots, pieces } = readArmourSlots(rom, table);
     if (!slots.some((x) => x.length)) return null;
     const bounce = readChestModels(rom, A, i);
     const hips = readHips(rom, A, i);
     return {
-        table, slots, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
+        table, slots, pieces, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
         hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
     };
 }
@@ -547,6 +563,13 @@ function placeExtra(slot, e) {
     return { r, t: e.then ? at(r, t, e.then) : t };
 }
 
+/** The tables the flying pieces are thrown by, from the profile's
+ * `armour.debris`; null in a game without them. */
+export function fighterDebrisTables(rom) {
+    const D = rom.game.rig?.fighters?.armour?.debris;
+    return D ? readDebrisTables(rom, D, dataAt) : null;
+}
+
 /** Which halves of a fighter have a slot that breaks: damage_unit breaks one
  * half at a time, so each is a switch of its own. */
 export function armourHalves(body) {
@@ -588,7 +611,11 @@ export function armouredFighter(body, which) {
     /* The fight's +0x7F4 bit 2, which Grace's sway chains are switched on
      * (js/osage.js) whether or not a slot of the half breaks. */
     const upperBroken = Boolean(which.upper);
-    return { ...body, parts, extras, bounce, midriff, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
+    /* What each broken half throws off, in damage_unit's order: its slots
+     * ascending, each slot's stages in turn (fvdebris.js). */
+    const thrown = (from, to) => A.pieces.slice(from, to).flat().filter((p) => broken(p.slot));
+    const debris = { upper: thrown(0, LOWER_FIRST), lower: thrown(LOWER_FIRST, SLOT_COUNT) };
+    return { ...body, parts, extras, bounce, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
