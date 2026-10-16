@@ -4506,6 +4506,53 @@ doubles. Taking the bones from frame N instead of N+1 puts the points up to
 root modes 1 or 3, the cylinder never pushed, and Bark's table, whose records
 have the same shape as Espio's, lost its swap before it could be graded.
 
+#### Fighting Vipers
+
+FV runs the same chains. Its main-CPU handlers are STF's moved by `+0x4ED4`,
+and its own coprocessor program carries `Fn_osage` (`0x4A`) at PM `0x20733`:
+compared word for word with cpres1's at `0x2076E`, the two differ only in
+relocated jumps and one data address, and `Fn_sin`, `Fn_sinx` and `Fn_cosx`,
+which it calls, match too. So `js/osage.js` steps FV's chains with the STF port
+and only the data around it changes, in the `osage` block of the game's entry
+in `js/games.js`.
+
+The table at `0x63E34` has 26 entries, one per **record**, not per character.
+P2 costumes and the bosses are records of their own, so Honey (`0x64810`) and
+Honey P2 (`0x64AD4`) each have their eight twintail segments, and Mahler and
+B.M. their tails. Jane's earrings and chain, Sonic P2's two tails and the rest
+come out of the same table. Grace is the exception: the routine at `0x62860`
+skips her table entry and picks one of two streams on her armour. If bit 2 of
+`+0x7F4` is set (upper armour broken), it uses `0x63FCC`: the ponytail and the
+earrings. Otherwise it uses `0x64154`, which is the first part of the same
+stream, the ponytail only, with the earrings cut off. The explorer takes that
+bit from the armour panel.
+
+Gravity is `0.0052222` (`0x50A000`, stored at `0x7284`), about a fifth of STF's.
+A KO slow-motion swaps in a smaller one, which the explorer leaves out.
+
+FV's wind is switched on. `0x63B80` blows on five stages, picked by the stage
+byte `0x500064`:
+
+| stage | angle | entry |
+|-------|-------|-------|
+| 0 | `0xF000` | 0 |
+| 1 | `0x8000` | 1 |
+| 4 | `0xF000` | 0 |
+| 5 | `0xC000` | 1 |
+| 8 | `0x7000` | 0 |
+
+The entry is one of two `{int16 speed, float amplitude}` pairs at
+`0x63A58 + record*4` (entry 1 is 8 bytes on). Each frame the phase steps by the
+speed, `s = amplitude * (sin(phase) + 2) * gravity`, and the vector is
+`(cos(angle) * s, min(s, gravity), sin(angle) * s)` in world axes. The MATRIX
+record adds it to gravity before turning both into the chain's frame:
+`[wx, wy - gravity * scale, wz]`. There is no wind, and the phase and vector are
+cleared, when there is no floor, or when the head (slot 2) is less than 0.5
+above the floor. A low motion keeps the chains calm for that reason. Any other
+stage blows only in modes 16 and 17, from the side `0x500065` names, and never
+on Grace. The explorer leaves that case out. The Animation tab's sway panel has
+a wind picker for the five stages.
+
 ### Tails' tails
 
 Tails' two tails are not on the sixteen-slot skeleton, and they are not a sway
