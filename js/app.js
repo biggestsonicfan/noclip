@@ -2480,9 +2480,11 @@ function transformedBounds(d, matrix) {
  * fought the cloth (issue 38).
  *
  * `space` is what the draws' matrices are relative to: the scene root for a
- * stage, the part itself for a body part posed by its own matrix.
+ * stage, the part itself for a body part posed by its own matrix. `scale` is
+ * how much larger than `space` the draws' matrices make them (see
+ * rankJoinedParts); the sort is still keyed in `space`.
  */
-function applyFaceLayers(draws, space = state.viewer.root) {
+function applyFaceLayers(draws, space = state.viewer.root, { scale = 1 } = {}) {
     if (!state.rom.game.depth?.layers || !draws.length) return;
     const layers = coplanarLayers(draws);
     const gap = 0.5;
@@ -2491,7 +2493,7 @@ function applyFaceLayers(draws, space = state.viewer.root) {
     const meets = (a, b) => [0, 1, 2].every((k) => a.min[k] <= b.max[k] + gap && b.min[k] <= a.max[k] + gap);
     /* The layer attributes each ranking writes, by draw. */
     const ranker = (ranking) => {
-        const r = { ranking, space, mesh: draws[0].mesh, attrs: new Map() };
+        const r = { ranking, space, scale, mesh: draws[0].mesh, attrs: new Map() };
         if (ranking) state.layerRankers.push(r);
         return r;
     };
@@ -2558,6 +2560,7 @@ function rankFaceLayers(camera) {
     for (const r of list) {
         /* The view depth of p in the draws' space is dir . (S p - eye). */
         s.copy(r.space.matrixWorld);
+        if (r.scale !== 1) s.multiply(new THREE.Matrix4().makeScale(1 / r.scale, 1 / r.scale, 1 / r.scale));
         const e = s.elements;
         const view = [
             e[0] * dir.x + e[1] * dir.y + e[2] * dir.z,
@@ -3454,7 +3457,16 @@ function placeBodyParts(parts, draws, matrices, pose = null) {
  * two are sent in; ranked apart, each in its own part, the depth buffer chose
  * between them. A group is a part and every part joined to it, in draw order,
  * ranked again when any of their models changes.
+ *
+ * They are ranked a hundred times their size. The fighters are drawn in
+ * metres, and the pairing in js/layers.js is measured for stages: faces
+ * under 1e-4 square units are left out, and two faces must overlap by 1e-3.
+ * A fighter's eye or mouth triangle is about 1e-4 square metres, so at its
+ * own size not one face was paired with the skin under it, and the depth
+ * buffer still chose between them, differently by browser and camera.
  */
+const JOINED_SCALE = 100;
+const JOINED_MATRIX = new THREE.Matrix4().makeScale(JOINED_SCALE, JOINED_SCALE, JOINED_SCALE).elements;
 function rankJoinedParts(parts, { parents, joined }, changed) {
     const root = (i) => (joined[i] && parents[i] >= 0 ? root(parents[i]) : i);
     const groups = new Map();
@@ -3467,7 +3479,8 @@ function rankJoinedParts(parts, { parents, joined }, changed) {
         if (group.length < 2 || !group.some((p) => changed.has(p.part))) continue;
         const slots = group.flatMap((p) => p.slots.filter((x) => x.decoded && x.mesh.visible));
         if (slots.length < 2) continue;
-        applyFaceLayers(slots.map((x) => ({ decoded: x.decoded, matrix: IDENTITY_MATRIX, mesh: x.mesh })), slots[0].mesh);
+        applyFaceLayers(slots.map((x) => ({ decoded: x.decoded, matrix: JOINED_MATRIX, mesh: x.mesh })), slots[0].mesh,
+            { scale: JOINED_SCALE });
     }
 }
 
