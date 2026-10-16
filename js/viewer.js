@@ -1367,6 +1367,21 @@ export class Viewer {
         return m;
     }
 
+    /* The main material with sheets or a colour table of its own, and the
+     * rest shared: a second fighter whose sets or rows are not the first's.
+     * The caller owns what it hands in. */
+    tablesMaterial({ atlas = null, cxlat = null }) {
+        const m = createModelMaterial();
+        m.uniforms = { ...this.material.uniforms };
+        if (atlas) {
+            m.uniforms.uAtlas = { value: atlas };
+            m.uniforms.uMicro = { value: atlas.userData.micro ?? placeholderTexture() };
+        }
+        if (cxlat) m.uniforms.uCxlat = { value: cxlat };
+        m.defines = { ...(this.material.defines ?? {}) };
+        return m;
+    }
+
     /** Drop the per-set materials and the texture RAM they hold. */
     clearSetMaterials() {
         for (const m of this.setMaterials.values()) {
