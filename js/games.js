@@ -762,7 +762,18 @@ const fvipers = {
     rig: {
         kind: 'vf2',
         standardRig: 0x2c194,
-        fighters: { records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20 },
+        fighters: {
+            records: 0x0640d2b0, count: 14, names: FV_NAMES, texSet: 0x20,
+            /* The break table (0x640EDAC) and mune_unit_change's chests
+             * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
+             * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
+             * 0x6421DE0, drawn for the characters it compares against;
+             * 14 is past the roster); readPads, readSkirt. */
+            armour: {
+                table: 0x0640edac, chest: 0x06421f80, rest: 15,
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+            },
+        },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },
         note: 'fv',
@@ -2286,6 +2297,7 @@ const DAYTONA_SOUND = {
     music: {
         region: 'mainData', table: 0x8050f0, slotMask: 3,
         buttons: ['VR1 (red)', 'VR3 (yellow)', 'VR2 (blue)', 'VR4 (green)'],
+        hint: 'The song the race starts with. The game plays the course\'s own unless a VR button is held as the race starts, which picks one itself — this is that choice',
     },
 };
 
@@ -3080,6 +3092,12 @@ const vf2 = {
             at: 0x101000, indirect: false,
             block: 0x300, hiOffset: 0x2400, rows: 2, row0: [28, 30],
         },
+        /* The untextured faces go through colorxlat, as MAME's
+         * draw_scanline_solid has them: a fighter's hands are untextured, and
+         * their palette colour (colorbase 29) is 28 in all three channels,
+         * the first skin row send_tex_col_skin fills, so drawn flat they came
+         * out white. */
+        solid: true,
     },
     /* js/vf2.js reads the records and draws them the way the board does. */
     /* One material table for every stage: 0x117F8 uploads the 32 slots at
@@ -3124,6 +3142,18 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/* Dead or Alive's stage 4 conveyor fix (doab's `doa.fixes`), for a program
+ * `shift` bytes below Revision B's. */
+function doaConveyorFix(shift) {
+    return [
+        [0x6a0b4, 0x5a7628, 0x5a761c], // ld row 2's height, g4
+        [0x6a0bc, 0x5a761c, 0x5a7628], // ld row 3's height, g7
+        [0x6a0c0, 0x6805e294, 0x68052297], // cmpr g7, g4
+        [0x6a0cc, 0x5a7620, 0x5a762c], // ld row 3's z
+        [0x6a0dc, 0x5a7618, 0x5a7624], // ld row 3's x
+    ].map(([a, was, now]) => [a - shift, was, now]);
+}
+
 /*
  * Dead or Alive, Revision B: the Model 2B board.
  *
@@ -3134,7 +3164,11 @@ const vf2 = {
  * coprocessor that does the routines' arithmetic. `visible` are the two cull
  * tests the routines call, answered "in front"; `pokes` is RAM the routines
  * read — 0x54FCDD is set, which draws the Danger Zone's banners and ropes
- * (0x65F70) as the attract mode's fights do.
+ * (0x65F70) as the attract mode's fights do. 0x5A75F4 is 2: the round start
+ * (0x7086C calls 0x70950) sets it from the float at 0x54FCE8, which boot leaves
+ * at 10.0 (0x44D8), and nine stages index short model tables with it (stage
+ * 1's floor at 0x65F08 and 0x66AF8), so it picks which version of two
+ * pieces they send. MAME holds 2 there through the attract.
  */
 const doab = {
     id: 'doab',
@@ -3213,21 +3247,56 @@ const doab = {
         routines: 0x719e0,
         count: 16,
         stageByte: 0x5555be,
+        /* RAM js/doa.js sets by hand: the view vector the culls dot with,
+         * the board's frame count, the stage's light, and the fight code's
+         * per-player records and tables (js/doa.js startPlayer). */
+        ram: {
+            viewVector: 0x5b9870, frameCount: 0x54b158, light: 0x5555b0,
+            player: 0x54fbe0, facing: 0x550124, bodyScales: [0x56ac50, 0x588ee0],
+            modelBase: 0x5a6ed0, expression: 0x58828c,
+            speed: 0x56ada0, heading: 0x56ac28, height: 0x589b80,
+        },
         visible: [0x72600, 0x72680],
-        pokes: [[0x54fcdd, 1]],
+        pokes: [[0x54fcdd, 1], [0x5a75f4, 2]],
+        /* Stage 4's conveyor (rows of x y z, 12 bytes each from 0x5A7600)
+         * draws a copy of the row that has just wrapped, a lap lower, so it
+         * reads as one belt. The fourth of those copies (0x6A0B0) tests row 3
+         * against row 2 but then draws row 2's place: a copy-paste slip that
+         * leaves a row hanging 80 below the rest for a quarter of the cycle.
+         * The fix loads the two heights the other way round (g7 = row 3's,
+         * the one drawn) and row 3's x and z. */
+        fixes: doaConveyorFix(0),
         /* The sky: four scroll pictures a stage, named in the program, out of
-         * the table of pictures in the data (js/scroll.js buildDoaSky). */
-        sky: { pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15] },
+         * the table of pictures in the data (js/scroll.js buildDoaSky).
+         * `lines`: the stages whose sky the tile chip scrolls line by line
+         * (11: the sky routine sets bit 15 of layer 2's scroll, 0x6FE70), from
+         * the line table the stage's `after` routine fills (layer 2's, tile RAM
+         * 0x1008800, a short a screen line), with the layer's vertical scroll
+         * (0x54F950, the program's copy of the register) and the scroll the
+         * routine keeps for every line (0x5A0140). js/doa.js doaLineShift. */
+        sky: {
+            pictures: 0x20c0000, stages: 0xc7660, skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15],
+            lines: { stages: [11], table: 0x1008800, count: 384, vscroll: 0x54f950, scroll: 0x5a0140 },
+        },
         /* The stages whose routines move pieces of them each pass (state at
          * 0x5A0000-0x5A7667, stage 8's one piece also by the frame count),
          * and the game's setups for them: the stage task's common one
          * (0x70480, 0x64640 runs it) and each stage's own, from the table
          * the round start (0x705F0) calls by stage number. Those stages are
          * run as many passes as the attract's stage, to the same frame
-         * count (attract.frame); MAME's attract shows only stage 1 before it
-         * stops (geo_adsp multiplier op 15), so these are the code's word,
-         * not graded against the board. Stage 6 is left at rest. */
-        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 2, 3, 4, 8, 11], frames: 924, clock: 0x75f },
+         * count (attract.frame). `tick` is the stage task's count-up after
+         * each pass (0x5A75F0 +0x80 and the byte 0x5A6EDD +1): stage 4's
+         * belt and stage 10's turn run on it. `after` are a stage's own
+         * routines the stage task runs before the tick (0x71130): stage 11's
+         * sky scroll 0x702E0, which steps its wave (0x5A0144, a byte a pass
+         * and 0x5A0145 every fourth) and keeps the camera's sky scroll
+         * (0x54F948) in 0x5A0140. Stage 1's ropes and banners swing the
+         * same way; on doab the attract's own run of it comes first, and
+         * doaa, which has no attract, runs it from here. Graded against
+         * MAME's attract (tools/doa-stages): 1, 3, 4, 5, 6, 7 and 8 match it
+         * word for word over 299 frames; 0, 2, 10 and 11 (0x5A0140 alone)
+         * differ only where they follow the camera. */
+        stageSetup: { common: 0x70480, table: 0x70440, moving: [0, 1, 2, 3, 4, 8, 10, 11], frames: 924, clock: 0x75f, after: { 11: [0x702e0] }, tick: 0x71138 },
         /* The fight code (js/doa.js runDoaFighters), run a frame at a time
          * as the board's fight loop runs it. `heights` is the table of one
          * float a character the skeleton scales the hips' lift by. `boot` is
@@ -3242,10 +3311,14 @@ const doab = {
          * each player (`roundReset`: its health, 0xFF, and the round's
          * counts). `camera` is the camera task, `frameWait` the wait for the
          * next frame it loops on, `ai` the attract's AI task: its start and
-         * the head of its loop. */
+         * the head of its loop. `headCheck` is what the body routine asks
+         * before it draws the head and face (0x45FA8): no while the player's
+         * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
+         * that no action script has run on. */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
+            motion: 0x420c0, headCheck: 0x51dc0,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -3298,6 +3371,9 @@ const doab = {
                 [0x55559c, 0x400dc87c], [0x5555a0, 0x3f8bde4e], [0x5555a4, 0x3fef6f83],
                 [0x5555a8, 0x40083127], [0x5555ac, 0x3db9b7a7],
             ],
+            /* The words of `camera` that hold a program address (the path
+             * the camera follows), for a build whose program has moved. */
+            programWords: [0x5bf8f8],
             ai: [[0x5555f2, 1], [0x5555f3, 1], [0x5555f4, 0], [0x5555f5, 1], [0x5555cb, 2]],
             fighters: [
                 {
@@ -3311,16 +3387,102 @@ const doab = {
             ],
         },
     },
+    /*
+     * The sound board is the Model 2 board, its UART at 0x9C0000 on the 2B
+     * (sends queued at 0x94C0, sent at once by 0x9590). The round start
+     * (0x18480) sends the stage's song straight from the table at 0x90C10,
+     * by stage number: A01001-A01010, or A00001, all sound off, for stages
+     * 6, 7, 9 and 15. The song names are in the data ROM at 0x9C860: stage
+     * 5's A01010 is BGM_BOSS, and stage 9 is the name entry, whose setup
+     * (0x1C6F8) sends A0100E, BGM_NAME, itself. The attract skips the table (0x54FC94
+     * is 4 there) and plays A0100A on every stage. MAME, a coined game:
+     * stage 5 starts A01010, 6 A00001, 11 A01002.
+     *
+     * The boot sends A00001. The driver takes its first command about four
+     * seconds after a reset (`warmup`; MAME's i960 sends it nine seconds in).
+     * The 0xFF the i960 writes as it sets the UART up comes long before that
+     * and is never heard; sent once the driver listens, it eats the next
+     * command, so it is left out.
+     */
+    sound: {
+        program: ['epr-19328.31', 0x400bdbfb],
+        samples: [
+            ['mpr-19329.32', 0x8fd2708a], ['mpr-19330.33', 0x0c69787d],
+            ['mpr-19331.34', 0xc18ea0b8], ['mpr-19332.35', 0x2877f96f],
+        ],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        warmup: 5,
+        stageMusic: 0x90c10,
+        none: 0xa00001,
+        songs: { 9: 0xa0100e },
+        replaces: true,
+        /* The fight only goes to nine stages, the fighters' own (the orders at
+         * 0x90BE0 and 0x90BF0: 11 3 8 10 0 2 1 4 5), each with its fighter's
+         * theme, which the table by character at 0x90C40 also names; 6 and 7
+         * are never fought on and have none. The explorer lets any theme play
+         * on any stage. */
+        music: {
+            region: 'mainCpu', table: 0x90c40, own: "the stage's own",
+            picks: [[0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'], [6, 'Genfu'],
+                [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang']],
+            hint: 'The song the stage plays. The game plays the stage\'s own, its fighter\'s theme; stages 6 and 7 are never fought on and have none. This plays any fighter\'s theme instead',
+        },
+    },
     stageTable: { doa: true, flat: true },
     depth: { recede: 0, nearMin: 0.1, layers: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    /* The fighters on the animation tab, posed by the fight code itself
+     * (js/doafighters.js): the roster (character number, name), the model
+     * banks and the loads that pick a row of them, the two motion tables
+     * ([pointer, first id, count]), the action scripts and the group
+     * everyone shares. */
+    rig: {
+        kind: 'doa',
+        note: 'doa',
+        roster: [
+            [0, 'Zack'], [1, 'Tina'], [2, 'Jann Lee'], [4, 'Ryu'], [5, 'Kasumi'],
+            [6, 'Genfu'], [8, 'Bayman'], [11, 'Raidou'], [12, 'Leifang'],
+        ],
+        banks: 0xc59d2,
+        loads: 0xc3380,
+        motions: [[0x6000000, 0, 0x552], [0x6c00004, 0x552, 249]],
+        scripts: 0xd8000,
+        common: 13,
+    },
+    /* The 2D pictures (js/cells.js): the 242 pictures of data 0xC0000, three
+     * pointers each, tiles, colours and map, the table the sky's pictures
+     * come from too. Each brings its own tiles, so a cell's CG is its own.
+     * The loader (0x9000) keeps a bitmap of the 128 blocks of character RAM
+     * (0x54F980) and puts each picture in the first free run, so pictures on
+     * screen together never share tiles. The data is the same in every
+     * build. */
+    cells: { pictures: { table: 0x020c0000, count: 242 }, charBytes: 0x80000 },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /*
+ * The 2A board seats the same data, model, texture and sound chips in other
+ * sockets, so MAME's 2A sets name them by those: Revision B's name, the 2A's.
+ * A 2A set and a 2B set dropped together find each other's by checksum.
+ */
+const DOA_2A_SOCKETS = {
+    'mpr-19318.11': 'mpr-19318.10', 'mpr-19319.12': 'mpr-19319.11', 'mpr-19316.9': 'mpr-19316.8',
+    'mpr-19317.10': 'mpr-19317.9', 'mpr-19314.7': 'mpr-19314.6', 'mpr-19315.8': 'mpr-19315.7',
+    'mpr-19312.5': 'mpr-19312.4', 'mpr-19313.6': 'mpr-19313.5', 'mpr-19322.17': 'mpr-19322.16',
+    'mpr-19325.21': 'mpr-19325.20', 'mpr-19323.18': 'mpr-19323.17', 'mpr-19326.22': 'mpr-19326.21',
+    'mpr-19324.19': 'mpr-19324.18', 'mpr-19327.23': 'mpr-19327.22', 'mpr-19321.27': 'mpr-19321.25',
+    'mpr-19320.25': 'mpr-19320.24', 'epr-19328.31': 'epr-19328.30', 'mpr-19329.32': 'mpr-19329.31',
+    'mpr-19330.33': 'mpr-19330.32', 'mpr-19331.34': 'mpr-19331.36', 'mpr-19332.35': 'mpr-19332.37',
+};
+const doa2A = (chip) => chip.map((x) => DOA_2A_SOCKETS[x] ?? x);
+const doa2ARegions = (regions) => Object.fromEntries(Object.entries(regions)
+    .map(([k, r]) => [k, { ...r, parts: r.parts.map(doa2A) }]));
+
+/*
  * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
- * the data, model and texture chips are doab's, so the set needs doa.zip
- * beside it. The model table is in those data chips, so it has not moved;
+ * the data, model and texture chips are doab's, in the 2A's sockets. The
+ * model table is in those data chips, so it has not moved;
  * the stage code and the program's tables sit 0x7A40 lower than Revision B's
  * (the sky's stage table 0x79C0), and its RAM is laid out the same.
  */
@@ -3331,7 +3493,7 @@ const doaa = {
     identify: ['epr-19310a.12', 'epr-19311a.13'],
     identifyCrc: [0x06486f7a, 0x1be62912],
     regions: {
-        ...doab.regions,
+        ...doa2ARegions(doab.regions),
         maincpu: {
             size: 0x100000,
             parts: [[0x00000, 'epr-19310a.12', 0x06486f7a, 'epr-19311a.13', 0x1be62912]],
@@ -3344,16 +3506,160 @@ const doaa = {
         doa: { ...doab.colors.doa, stages: 0x72da0, fighters: { ...doab.colors.doa.fighters, table: 0x72d20 } },
     },
     doa: {
-        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40],
+        ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
-        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00 },
+        stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, after: { 11: [0x688a0] }, tick: 0x696f8 },
         /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
         fighters: undefined, attract: undefined,
     },
+    rig: undefined,
+    features: { ...doab.features, motions: false, bodies: false },
+    /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
+    sound: {
+        ...doab.sound, program: doa2A(doab.sound.program), samples: doab.sound.samples.map(doa2A),
+        stageMusic: 0x89250, music: { ...doab.sound.music, table: 0x89280 },
+    },
 };
 
+/*
+ * The other Dead or Alive builds MAME knows, each a build above with its
+ * program moved: code put in or taken out in places, so what follows sits
+ * further on (or back), as with Sonic Championship. The runs were found the
+ * same way, matching the two programs 16 bytes at a time; each run starts at
+ * the first block that matched with that shift, and everything the explorer
+ * names falls well inside one (checked address by address). Revision C also
+ * moved its RAM: the runs `ram` gives, found by pairing the RAM addresses the
+ * two programs' matched instructions name. The 2A builds keep doaa's RAM.
+ */
+const DOA_C_PROGRAM = [
+    [0x00000, 0x0], [0x02780, 0x10], [0x08430, 0x20], [0x09370, 0x30],
+    [0x1a9f0, 0x70], [0x1b530, 0x80], [0x1bb50, 0xd0], [0x288f0, 0xb0],
+    [0x91280, 0xd0], [0x91b80, 0x3af0], [0xd8000, 0x0],
+];
+const DOA_C_RAM = [[0x500000, 0x0], [0x5420d0, 0x20], [0x557c60, 0x30], [0x600000, 0x0]];
+const DOAAB_PROGRAM = [
+    [0x003d0, 0x1c0], [0x04560, 0xe0], [0x06520, -0x14], [0x06990, -0x34],
+    [0x06be0, -0x30], [0x11150, -0x70], [0x820e0, -0x180], [0x82750, -0x18c],
+    [0x82890, -0x190], [0x82ba0, -0x1f0], [0x83550, -0x340], [0x88cb0, -0x370],
+    [0xd8000, 0x0],
+];
+const DOAAE_PROGRAM = [
+    [0x003d0, 0x1c0], [0x03020, 0x180], [0x04490, 0xa0], [0x06520, -0x54],
+    [0x06990, -0x74], [0x06be0, -0x70], [0x0f7c0, -0xd0], [0x10b40, -0x140],
+    [0x11150, -0x180], [0x309c0, -0xb0], [0x3bdc0, -0x8c], [0x3c8d0, -0x60],
+    [0x814c0, 0x1b0], [0x81750, 0x1c0], [0x81bb0, 0x150], [0x820e0, 0x40],
+    [0x82750, 0x34], [0x82890, 0x30], [0x82ba0, -0x30], [0x83550, -0x180],
+    [0x88cb0, -0x1b0], [0xd8000, 0x0],
+];
+
+/* The fight code's routines: every one a program address. */
+const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
+    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
+
+function relocateDoaFighters(F, at, ram) {
+    if (!F) return F;
+    const out = { ...F };
+    for (const k of DOA_FIGHT_CODE) out[k] = at(F[k]);
+    const ramPairs = (l) => l.map(([a, v]) => [ram(a), v]);
+    return {
+        ...out,
+        tables: { ...F.tables, at: at(F.tables.at) },
+        grid: {
+            cells: ram(F.grid.cells), bytes: ram(F.grid.bytes), from: F.grid.from.map(at),
+            alt: { ...F.grid.alt, from: F.grid.alt.from.map(at) },
+        },
+        ai: { start: at(F.ai.start), frame: at(F.ai.frame) },
+        collision: F.collision.map(at), fight: F.fight.map(at), movers: F.movers.map(at),
+        boot: ramPairs(F.boot), pokes: ramPairs(F.pokes),
+    };
+}
+
+function relocateDoaAttract(A, at, ram) {
+    if (!A) return A;
+    return {
+        ...A,
+        stageInit: at(A.stageInit),
+        camera: A.camera.map(([a, v]) => [ram(a), A.programWords.includes(a) ? at(v) : v]),
+        programWords: A.programWords.map(ram),
+        ai: A.ai.map(([a, v]) => [ram(a), v]),
+    };
+}
+
+function relocateDoaStages(D, at, ram) {
+    const S = D.stageSetup;
+    const after = Object.fromEntries(Object.entries(S.after).map(([k, l]) => [k, l.map(at)]));
+    return {
+        ...D,
+        routines: at(D.routines),
+        stageByte: ram(D.stageByte),
+        ram: Object.fromEntries(Object.entries(D.ram).map(([k, v]) => [k, Array.isArray(v) ? v.map(ram) : ram(v)])),
+        visible: D.visible.map(at),
+        pokes: D.pokes.map(([a, v]) => [ram(a), v]),
+        fixes: D.fixes.map(([a, was, now]) => [at(a), ram(was), ram(now)]),
+        sky: { ...D.sky, stages: at(D.sky.stages), lines: { ...D.sky.lines, vscroll: ram(D.sky.lines.vscroll), scroll: ram(D.sky.lines.scroll) } },
+        stageSetup: { ...S, common: at(S.common), table: at(S.table), after, tick: at(S.tick) },
+        fighters: relocateDoaFighters(D.fighters, at, ram),
+        attract: relocateDoaAttract(D.attract, at, ram),
+    };
+}
+
+/**
+ * `base` with its program moved by the `program` runs and its RAM by `ram`:
+ * every address the profile names, and nothing else, goes through them.
+ */
+function relocateDoa(base, { id, name, maincpu, program, ram: ramRuns = [] }) {
+    const at = (a) => relocate({ relocation: program }, a);
+    const ram = (a) => relocate({ relocation: ramRuns }, a);
+    const { palette, texture, colors, sound, rig } = base;
+    return {
+        ...base,
+        id, name,
+        identify: [maincpu[1], maincpu[3]],
+        identifyCrc: [maincpu[2], maincpu[4]],
+        regions: { ...base.regions, maincpu: { size: 0x100000, parts: [maincpu] } },
+        palette: { ...palette, tables: at(palette.tables) },
+        texture: { ...texture, raw: { ...texture.raw, stageSlabs: at(texture.raw.stageSlabs), charSlabs: at(texture.raw.charSlabs) } },
+        colors: {
+            ...colors,
+            doa: { ...colors.doa, stages: at(colors.doa.stages), fighters: { ...colors.doa.fighters, table: at(colors.doa.fighters.table) } },
+        },
+        lighting: { ...base.lighting, materials: { ...base.lighting.materials, at: at(base.lighting.materials.at) } },
+        doa: relocateDoaStages(base.doa, at, ram),
+        sound: { ...sound, stageMusic: at(sound.stageMusic), music: { ...sound.music, table: at(sound.music.table) } },
+        rig: rig && { ...rig, banks: at(rig.banks), loads: at(rig.loads), scripts: at(rig.scripts) },
+    };
+}
+
+/* Revision C, Jan 10 1997: MAME's parent set, so the one a merged set holds
+ * at the top. Revision B moved, fighters and all. */
+const doa = relocateDoa(doab, {
+    id: 'doa',
+    name: 'Dead or Alive (Model 2B, Revision C)',
+    maincpu: [0x00000, 'epr-19379c.15', 0x5cc62fbe, 'epr-19380c.16', 0x58cfeaa9],
+    program: DOA_C_PROGRAM,
+    ram: DOA_C_RAM,
+});
+
+/* The two other 2A builds: Nov 3 1996, the Japanese one and the export. */
+const doaab = relocateDoa(doaa, {
+    id: 'doaab',
+    name: 'Dead or Alive (Model 2A)',
+    maincpu: [0x00000, 'epr-19310.12', 0x3c571e75, 'epr-19311.13', 0x8818363d],
+    program: DOAAB_PROGRAM,
+});
+const doaae = relocateDoa(doaa, {
+    id: 'doaae',
+    name: 'Dead or Alive (Export, Model 2A, Revision A)',
+    maincpu: [0x00000, 'epr-19383a.12', 0x42e61481, 'epr-19384a.13', 0x034a3ab9],
+    program: DOAAE_PROGRAM,
+});
+
+/* Revision C first: a merged set is MAME's parent with its clones beside it,
+ * and the parent is the one it is named for. Then the build with the most to
+ * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2, doaa, doab];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    doa, doab, doaa, doaab, doaae];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

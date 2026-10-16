@@ -38,6 +38,17 @@
  * (`cgTables`); `cgExtra` names a CG list the loader puts in before one of
  * them, and `cgPairs` pairs the code names directly. See js/games.js
  * DAYTONA_CELLS.
+ *
+ * Dead or Alive's format is Tecmo's own (`pictures`): a table of pictures,
+ * each three pointers, its tiles, its colours and its map, so a picture is a
+ * cell that brings its own CG, and CG n is picture n's tiles and colours. The
+ * loader (0x9000 in Revision B) hands each chunk of tiles whole 128-tile
+ * blocks of character RAM and each block its chunk's 16 colours; the map's
+ * entries are the picture's own tiles, which the draw (0x9250) moves on by the
+ * first block, so the group is the block. The panel loads a picture from
+ * block 0. Every map's highest tile is its own list's last: no picture is
+ * drawn over another's tiles. See js/games.js doab.cells and js/scroll.js
+ * buildDoaSky, which reads the same table.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
@@ -48,6 +59,8 @@ const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
 const CG_ENTRIES = 0xb8;        /* _ScrollCG_Initialize's bound */
 const ROW_BYTES = 0x80;         /* the tilemap's row, 64 entries */
 const MAX_SIDE = 64;            /* the tilemap is 64 entries square */
+const MAX_PICTURE_SIDE = 128;   /* Dead or Alive's tallest picture is 69 rows */
+const DOA_BLOCK = 128;          /* tiles to a block of character RAM */
 
 const word = (rom, addr) => { const t = scrollAt(rom, addr); return t.view.getUint32(t.off, true); };
 
@@ -58,7 +71,9 @@ function cellRecords(rom) {
     if (out) return out;
     const C = rom.game.cells;
     out = [];
-    if (C.records) {
+    if (C.pictures) {
+        for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
+    } else if (C.records) {
         for (const [first, end] of C.records) {
             for (let a = first; a < end && out.length < MAX_CELLS;) {
                 const size = recordSize(rom, a);
@@ -83,6 +98,7 @@ function cellRecords(rom) {
 function recordHeader(rom, p) {
     if (!scrollPtrOk(rom, p)) return null;
     const R = scrollAt(rom, p);
+    if (rom.game.cells.pictures) return pictureHeader(R);
     if (R.off + 0x0c > R.u8.length) return null;
     const rows = R.view.getUint32(R.off + 4, true);
     const cols = R.view.getUint32(R.off + 8, true);
@@ -90,7 +106,17 @@ function recordHeader(rom, p) {
     const wide = !rom.game.cells.records || R.view.getUint16(R.off + 2, true) !== 0;
     const bytes = 0x0c + rows * cols * (wide ? 2 : 1);
     if (R.off + bytes > R.u8.length) return null;
-    return { R, base: R.view.getUint16(R.off, true), wide, rows, cols, bytes };
+    return { R, base: R.view.getUint16(R.off, true), wide, rows, cols, bytes, head: 0x0c };
+}
+
+/* A Dead or Alive map: the width and the height, then halfword entries. */
+function pictureHeader(R) {
+    const cols = R.view.getUint16(R.off, true);
+    const rows = R.view.getUint16(R.off + 2, true);
+    if (!rows || !cols || rows > MAX_PICTURE_SIDE || cols > MAX_PICTURE_SIDE) return null;
+    const bytes = 4 + rows * cols * 2;
+    if (R.off + bytes > R.u8.length) return null;
+    return { R, base: 0, wide: true, rows, cols, bytes, head: 4 };
 }
 
 const recordSize = (rom, p) => recordHeader(rom, p)?.bytes ?? 0;
@@ -151,6 +177,15 @@ function cgListsAll(rom) {
     if (all) return all;
     const C = rom.game.cells;
     all = [];
+    if (C.pictures) {
+        const skies = skyNames(rom);
+        for (let n = 0; n < C.pictures.count; n++) {
+            const at = C.pictures.table + n * 12;
+            all.push({ tiles: [word(rom, at)], pal: word(rom, at + 4), picture: true, name: skies.get(n) });
+        }
+        cgCache.set(rom, all);
+        return all;
+    }
     const pairAt = (pair, name, extra) => ({
         tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
     });
@@ -176,6 +211,21 @@ function cgListsAll(rom) {
     return all;
 }
 
+/* Dead or Alive's sky pictures, four a stage (js/scroll.js buildDoaSky):
+ * picture number to its name, "stage 1 sky 2". */
+function skyNames(rom) {
+    const S = rom.game.doa?.sky;
+    const out = new Map();
+    for (let stage = 0; S && stage < rom.game.doa.count; stage++) {
+        if (S.skyless.includes(stage)) continue;
+        for (let k = 0; k < 4; k++) {
+            const n = rom.mainCpuView.getInt16(S.stages + stage * 8 + k * 2, true);
+            out.set(n, [out.get(n), `stage ${stage} sky ${k + 1}`].filter(Boolean).join(', '));
+        }
+    }
+    return out;
+}
+
 /** How many CGs there are: entry pairs below _ScrollCG_Initialize's bound, or
  * the game's tables of them. */
 export function cgCount(rom) {
@@ -197,10 +247,10 @@ export function readCell(rom, cell) {
     const p = cellRecords(rom)[cell];
     const h = p === undefined ? null : recordHeader(rom, p);
     if (!h) return null;
-    const { R, base, wide, rows, cols } = h;
+    const { R, base, wide, rows, cols, head } = h;
     const entries = new Uint16Array(rows * cols);
     for (let i = 0; i < entries.length; i++) {
-        const v = wide ? R.view.getUint16(R.off + 0x0c + i * 2, true) : R.u8[R.off + 0x0c + i];
+        const v = wide ? R.view.getUint16(R.off + head + i * 2, true) : R.u8[R.off + head + i];
         entries[i] = (v + base) & 0xffff;
     }
     return { cols, rows, entries };
@@ -227,6 +277,7 @@ function loadCG(rom, L) {
 
 function loadTiles(rom, L) {
     const charBytes = rom.game.cells.charBytes;
+    if (L.picture) return loadPicture(rom, L, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
     const out = parts[parts.length - 1];
@@ -237,6 +288,33 @@ function loadTiles(rom, L) {
         out.charRuns = r.charRuns.concat(out.charRuns);
     }
     return out;
+}
+
+/* A Dead or Alive picture's tiles and colours, loaded from block 0: each
+ * chunk, a count and that many tiles, starts on a block of its own, and every
+ * block it takes gets its chunk's 16 colours. A count of 0 ends the list. */
+function loadPicture(rom, L, charBytes) {
+    const chars = new Uint8Array(charBytes);
+    const pal = new Uint16Array(0x8000);
+    const charRuns = [], palRuns = [];
+    let t = L.tiles[0], p = L.pal, block = 0;
+    for (;;) {
+        const T = scrollAt(rom, t);
+        const count = T.view.getUint32(T.off, true);
+        const blocks = Math.ceil(count / DOA_BLOCK);
+        if (!count || (block + blocks) * DOA_BLOCK * TILE_BYTES > charBytes || T.off + 4 + count * TILE_BYTES > T.u8.length) break;
+        chars.set(T.u8.subarray(T.off + 4, T.off + 4 + count * TILE_BYTES), block * DOA_BLOCK * TILE_BYTES);
+        charRuns.push([block * DOA_BLOCK, count]);
+        const P = scrollAt(rom, p);
+        for (let b = block; b < block + blocks; b++) {
+            for (let c = 0; c < 16; c++) pal[b * 16 + c] = P.view.getUint16(P.off + c * 2, true);
+        }
+        palRuns.push([block * 16, blocks * 16]);
+        block += blocks;
+        t += 4 + count * TILE_BYTES;
+        p += 32;
+    }
+    return { chars, pal, written: block * 16, charRuns, palRuns };
 }
 
 /* A course CG's palette list writes nothing into the groups its picture
@@ -363,6 +441,11 @@ function courseCGs(rom, R) {
 export function rankCGs(rom, cell) {
     const c = readCell(rom, cell);
     if (!c) return [];
+    /* A Dead or Alive picture brings its own tiles and colours. */
+    return rom.game.cells.pictures ? [{ cg: cell, cover: 1 }] : rankSharedCGs(rom, cell, c);
+}
+
+function rankSharedCGs(rom, cell, c) {
     const cover = cgCover(rom);
     const used = new Map();
     for (const e of c.entries) {

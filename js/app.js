@@ -2,7 +2,7 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './romset.js';
+import { loadRomSet, meshOffsetOf, readModelEntry, readModelName, setRomPatches } from './romset.js';
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
@@ -47,7 +47,11 @@ import { readTrails, trailModels, trailMaskAt, createTrailSim, stepTrails, trail
 import {
     readBodies, readMotions, poseBody, bodySkeletonLines, frameBytes, bodyMotionList, partDraws, readSkin, skinMesh,
 } from './bodies.js';
-import { readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix } from './vf2fighters.js';
+import {
+    readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
+    armouredFighter, armourHalves,
+} from './vf2fighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -101,6 +105,12 @@ const state = {
      * when fight state allows (see poseBout), and the explorer looks on every
      * frame, so with it on a head can turn where the game's doesn't. */
     opponent: false,
+    /* Where it stands: ahead, where a round starts it, or behind, where the
+     * fight has it once a fighter is turned round (see opponentMatrix). */
+    opponentBehind: false,
+    /* Fighting Vipers: which halves of the fighter's armour are broken (see
+     * armouredFighter). */
+    armour: { upper: false, lower: false },
     useSquished: false,
     showSkeleton: true,
     /* Metal Sonic's jet. The board draws the flame whenever his chest object is
@@ -347,6 +357,7 @@ function resetRomState() {
     state.motion.list = null;
     state.motion.decoded = null;
     state.motion.parts = [];
+    state.motion.extras = [];
     state.motion.skeleton = null;
     /* What a fighter carries across a change of tab is this build's: its slot,
      * its chain and the trail it laid. */
@@ -572,16 +583,16 @@ function texramQueue(texSets) {
  * first because the attract and character-select screens leave it resident,
  * and the stage sets do not overwrite its deepest mip levels — without it the
  * corner of the mip chain is blank rather than what the hardware holds. */
-function useRomTexram(texSets) {
+function useRomTexram(texSets, fighters) {
     /* Where a game ties its face palette to the texture set, the palette moves
      * with the set asked for — before the pinned and repeat checks, since a
      * dumped sheet says nothing about which palette is in RAM. */
     if (state.rom.game.palette && texSets.length) state.rom.paletteSet = texSets[texSets.length - 1];
     if (state.texramPinned) return;
-    const key = texSets.join(',');
+    const key = `${texSets.join(',')}${fighters ? `:${JSON.stringify(fighters)}` : ''}`;
     if (key === state.texramKey) return;
 
-    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets));
+    const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets), fighters);
     setAtlasSheets(sheet0, sheet1);
     state.texramKey = key;
 
@@ -924,7 +935,20 @@ function modelCount() {
 /* A game whose face palette changes with the loaded set bakes different colours
  * into the same mesh under each, so the set is part of the key. */
 function getModel(idx) {
+    if (typeof idx === 'string') return getSwappedModel(idx);
     return cachedDecode(state.rom.game.palette ? `${idx}@${state.rom.paletteSet ?? 0}` : idx, idx);
+}
+
+/* A table entry drawn over another mesh, `model/mesh` with the mesh pointer
+ * in hex: Dead or Alive's chests (js/doafighters.js). */
+function getSwappedModel(key) {
+    if (state.modelCache.has(key)) return state.modelCache.get(key);
+    const [model, meshPtr] = key.split('/');
+    const { uvPtr, matPtr } = readModelEntry(state.rom, +model);
+    const at = meshOffsetOf(state.rom, { meshPtr: parseInt(meshPtr, 16) });
+    const m = decodeModel(state.rom, +model, null, { bytes: state.rom.polygons.subarray(at), uvPtr, matPtr });
+    state.modelCache.set(key, m);
+    return m;
 }
 
 /* A draw whose texture points set_obj_tpd replaces gets a decode of its own,
@@ -967,7 +991,7 @@ const ARENA_LAYERS = new Set(['platform', 'cage', 'poles']);
 
 function addModelToScene(decoded, {
     layer = null, matrix = null, geom = null, backdrop = false, shellFirst = false,
-    zWindow = 0, planeBias = 0, material = null,
+    zWindow = 0, underlay = false, planeBias = 0, material = null,
 } = {}) {
     const v = state.viewer;
     /* A draw that names a material of its own is one whose texture set is not
@@ -983,6 +1007,7 @@ function addModelToScene(decoded, {
     /* The geometry processor window the board files the draw in, which the
      * z-sort draws in order — see Viewer.drawScene. */
     mesh.userData.zWindow = zWindow;
+    mesh.userData.underlay = underlay;
     if (matrix) { mesh.matrixAutoUpdate = false; mesh.matrix.copy(matrix); }
     v.root.add(mesh);
 
@@ -1027,16 +1052,22 @@ function composeOps(out, ops) {
 /* Geometry for one frame of an animated draw, kept for the life of the stage.
  * A palm walks 32 models and a carpet flame 64, so each is decoded and uploaded
  * once rather than once a frame; a table is only paid for as it is reached. */
-function frameGeometry(index) {
-    let g = state.anim.geom.get(index);
+function frameGeometry(index, points = null) {
+    const key = frameKey(index, points);
+    let g = state.anim.geom.get(key);
     if (!g) {
-        const d = getModel(index);
+        const d = points ? getTpdModel(index, points.words, points.key) : getModel(index);
         g = d
             ? { mesh: buildGeometry(d), edges: buildEdgeGeometry(d) }
             : { mesh: new THREE.BufferGeometry(), edges: new THREE.BufferGeometry() };
-        state.anim.geom.set(index, g);
+        state.anim.geom.set(key, g);
     }
     return g;
+}
+
+/* A frame is a model, or a model with texture points of its own. */
+function frameKey(index, points) {
+    return points ? `${index}:${points.key}` : index;
 }
 
 function unionBounds(list, fallbackRadius = 20) {
@@ -1082,10 +1113,16 @@ function modelsInDisplayList(list) {
  * scan finds with such a face.
  */
 /* The solved rig's roster (Virtua Fighter 2's, Fighting Vipers'), each
- * record's sixteen parts; nothing for a game with no fighters read. */
+ * record's sixteen parts and the broken armour's; nothing for a game with no
+ * fighters read. */
 function fighterRigModels(add, out) {
     if (state.rom.game.rig?.kind !== 'vf2') return out;
-    for (const f of readFighters(state.rom)) for (const p of f.parts) add(p.model, f.index);
+    for (const f of readFighters(state.rom)) {
+        for (const p of f.parts) add(p.model, f.index);
+        for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
+        if (f.armour?.chest) add(f.armour.chest, f.index);
+        for (const e of f.extras) add(e.model, f.index);
+    }
     return out;
 }
 
@@ -1710,7 +1747,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
     const geom = entry.anim ? frameGeometry(entry.model) : null;
     const { mesh, lines } = addModelToScene(d, {
         layer: entry.layer, matrix, geom, backdrop: entry.backdrop, shellFirst,
-        zWindow: entry.window,
+        zWindow: entry.window, underlay: entry.underlay,
         planeBias: entry.planeBias,
         material,
     });
@@ -1733,7 +1770,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
     let item = null;
     if (moves) {
         item = {
-            entry, mesh, lines, model: entry.model,
+            entry, mesh, lines, model: entry.model, key: frameKey(entry.model, entry.points),
             uvs: entry.scroll || entry.slides ? d.uvs : null,
         };
         state.anim.entries.push(item);
@@ -2042,10 +2079,12 @@ function stepBlockWindow() {
 }
 
 /* Put a moving draw on another of its frames' models. */
-function swapFrame(it, model) {
-    if (model === it.model) return;
+function swapFrame(it, model, points = null) {
+    const key = frameKey(model, points);
+    if (key === (it.key ?? it.model)) return;
     it.model = model;
-    const g = frameGeometry(model);
+    it.key = key;
+    const g = frameGeometry(model, points);
     it.mesh.geometry = g.mesh;
     if (it.lines) it.lines.geometry = g.edges;
 }
@@ -2111,7 +2150,7 @@ function stepStageAnimation(now) {
             /* A draw with state of its own, stepped with the camera — the
              * Daytona horses, which bolt from it. It picks its own model. */
             const r = entry.live(frame, liveCamera(frame));
-            swapFrame(it, r.model);
+            swapFrame(it, r.model, r.points);
             it.shown = !r.hidden;
             it.block = r.block;
             it.mesh.visible = it.shown && state.layerOn[entry.layer] !== false;
@@ -3207,6 +3246,7 @@ const BODY_RIGS = {
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
     vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
+    doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
 };
 
 function bodyRig() {
@@ -3222,8 +3262,16 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
+/* The body as the panel shows it: a fighter with armour wears the broken
+ * parts the armour switch asks for. */
+function shownBody(index) {
+    /* Dead or Alive's roster skips the empty character numbers. */
+    const body = state.bodies.find((b) => b.index === index) ?? state.bodies[0];
+    return body.armour ? armouredFighter(body, state.armour) : body;
+}
+
 function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
-    const body = state.bodies[index] ?? state.bodies[0];
+    const body = shownBody(index);
     state.charIndex = body.index;
     state.character = body;
     const m = state.motion;
@@ -3244,6 +3292,30 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     updateHud();
 }
 
+/* A Dead or Alive fighter is posed in the attract fight's place, against its
+ * player 2: its sheets go in the first fighter's strips and its colours in
+ * the first fighter's rows (js/texture.js, js/colors.js), under the attract
+ * stage's set and the game's one light. */
+function useDoaFighterScene(body) {
+    const u = state.viewer.material.uniforms;
+    const A = state.rom.game.doa.attract;
+    const rival = A.fighters[1];
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    const lit = gameLighting(state.rom);
+    if (lit) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    }
+    const fighters = [{ char: body.index }, { char: rival.char, costume: rival.costume }];
+    useRomTexram([A.stage], fighters);
+    useRomColorLuts({ texSet: [A.stage, A.stage], tint: [1, 1, 1], fighters });
+    const status = $('#tex-status');
+    if (status) status.textContent = `sheets unpacked from ROM (${body.name}'s, and stage ${A.stage}'s set)`;
+}
+
 function bodySceneModel(body) {
     const models = body.parts.map((p) => p.model).filter(Boolean);
     if (body.texSet === undefined) return models[0];
@@ -3262,17 +3334,19 @@ function rebuildBody({ keepCamera = true } = {}) {
      * texture, which loads no sheets, so it is the first that is the
      * fighter's own. */
     const first = bodySceneModel(body);
-    if (first != null) useModelScene(first);
+    if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (first != null) useModelScene(first);
 
     const m = state.motion;
     /* A part can draw more than one model, and which ones changes with the
      * frame, so each keeps a slot per model it has drawn so far and swaps their
      * geometry — the coat alone is a hundred models. */
     m.parts = body.parts.map((p) => ({ part: p.index, slots: [] }));
+    m.extras = extraParts(body);
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2'
-        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })) }
+        ? { body: { ...body }, parts: body.parts.map((p) => ({ part: p.index, slots: [] })), extras: extraParts(body) }
         : null;
     m.skin = readSkin(state.rom, body);
     m.skinMesh = null;
@@ -3283,7 +3357,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     poseRig();
 
     if (!keepCamera) {
-        const drawn = [...m.parts, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
+        const drawn = [...m.parts, ...m.extras, ...m.rival?.parts ?? []].flatMap((p) => p.slots.filter((x) => x.decoded)
             .map((x) => transformedBounds(x.decoded, x.mesh.matrix)));
         frameRig(drawn, 10);
     }
@@ -3311,7 +3385,7 @@ function rankBodyPart(slot) {
 
 /* Point a part's slot at a model, or at nothing. */
 function setBodySlot(slot, model) {
-    if (slot.model === model) return;
+    if (slot.model === model) return false;
     slot.model = model;
     const d = model == null ? null : getModel(model);
     slot.decoded = d?.positions.length ? d : null;
@@ -3320,21 +3394,24 @@ function setBodySlot(slot, model) {
     if (slot.lines) slot.lines.userData.hidden = hidden;
     if (hidden) {
         if (slot.lines) slot.lines.visible = false;
-        return;
+        return true;
     }
     const geom = frameGeometry(model);
     slot.mesh.geometry = geom.mesh;
-    slot.mesh.userData.modelIndex = model;
+    slot.mesh.userData.modelIndex = slot.decoded.index;
     if (slot.lines) {
         slot.lines.geometry = geom.edges;
         slot.lines.visible = state.wireframe;
     }
     rankBodyPart(slot);
+    return true;
 }
 
 /* Draw a body's parts for a frame: each part's models in its slots, placed by
- * the pose's matrices. */
-function placeBodyParts(parts, draws, matrices) {
+ * the pose's matrices. `pose.joined` and `pose.parents` say which parts are
+ * laid on their parent (see rankJoinedParts). */
+function placeBodyParts(parts, draws, matrices, pose = null) {
+    const changed = new Set();
     for (const p of parts) {
         const models = draws[p.part];
         for (let k = 0; k < Math.max(models.length, p.slots.length); k++) {
@@ -3344,14 +3421,50 @@ function placeBodyParts(parts, draws, matrices) {
                 const { mesh, lines } = addRigPart(d, frameGeometry(models[k]));
                 p.slots.push({ mesh, lines, model: models[k], decoded: d });
                 rankBodyPart(p.slots[p.slots.length - 1]);
+                changed.add(p.part);
                 continue;
             }
-            setBodySlot(p.slots[k], k < models.length ? models[k] : null);
+            if (setBodySlot(p.slots[k], k < models.length ? models[k] : null)) changed.add(p.part);
         }
         for (const x of p.slots) {
             placePartAt(x, matrices[p.part]);
         }
     }
+    if (pose?.joined) rankJoinedParts(parts, pose, changed);
+}
+
+/*
+ * Rank the parts laid on one another together. Dead or Alive draws a face as
+ * a part of its own on the head's matrix, eyes and mouth in the plane of the
+ * head's skin, and the board's sort puts it over the skin by the order the
+ * two are sent in; ranked apart, each in its own part, the depth buffer chose
+ * between them. A group is a part and every part joined to it, in draw order,
+ * ranked again when any of their models changes.
+ */
+function rankJoinedParts(parts, { parents, joined }, changed) {
+    const root = (i) => (joined[i] && parents[i] >= 0 ? root(parents[i]) : i);
+    const groups = new Map();
+    for (const p of parts) {
+        const r = root(p.part);
+        if (!groups.has(r)) groups.set(r, []);
+        groups.get(r).push(p);
+    }
+    for (const group of groups.values()) {
+        if (group.length < 2 || !group.some((p) => changed.has(p.part))) continue;
+        const slots = group.flatMap((p) => p.slots.filter((x) => x.decoded && x.mesh.visible));
+        if (slots.length < 2) continue;
+        applyFaceLayers(slots.map((x) => ({ decoded: x.decoded, matrix: IDENTITY_MATRIX, mesh: x.mesh })), slots[0].mesh);
+    }
+}
+
+/* A fighter's pads and skirt (body.extras), each a part of its own whose
+ * matrix the pose gives beside the slots'. */
+function extraParts(body) {
+    return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
+}
+
+function placeExtras(parts, body, matrices) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices);
 }
 
 /* Pose the fighter, and its opponent when there is one: the pair face each
@@ -3359,14 +3472,17 @@ function placeBodyParts(parts, draws, matrices) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
+    const at = opponentMatrix({ behind: state.opponentBehind });
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame },
         { body: m.rival.body, motion: m.decoded, frame: m.frame },
-    ]);
-    const place = new THREE.Matrix4().fromArray(opponentMatrix());
+    ], at);
+    const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
     placeBodyParts(m.rival.parts, draws, placed);
+    placeExtras(m.rival.extras, m.rival.body,
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements));
     return mine;
 }
 
@@ -3374,8 +3490,12 @@ function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    const { matrices, origins } = poseFighterAndRival(body, m);
-    placeBodyParts(m.parts, partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices);
+    /* A rig whose pose says what each part draws (Dead or Alive's) is
+     * taken at its word. */
+    const pose = poseFighterAndRival(body, m);
+    const { matrices, origins, draws, extras } = pose;
+    placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices, pose);
+    placeExtras(m.extras, body, extras ?? []);
 
     /* The skin is rebuilt every frame, as the board rebuilds it: its points on
      * the chest side move with the pose. */
@@ -3399,7 +3519,7 @@ function poseBodyRig() {
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
-        a.array.set(bodySkeletonLines(body, origins));
+        a.array.set(bodySkeletonLines(body, origins, pose.parents));
         a.needsUpdate = true;
         m.skeleton.visible = state.showSkeleton;
     }
@@ -3774,6 +3894,7 @@ function renderOsagePanel() {
 function renderBodyPanel() {
     const body = state.character;
     if (!body) return;
+    if (state.rom.game.rig?.kind === 'doa') return renderDoaBodyPanel(body);
     const drawn = body.parts.filter((p) => p.model).length;
     const fighter = body.texSet !== undefined;
     const sets = fighter ? '<span>texture sets</span><b>' + body.texSet + ', ' + (body.texSet + 1) + '</b>' : '';
@@ -3805,6 +3926,40 @@ function renderBodyPanel() {
         }
         list.appendChild(row);
     }
+    renderArmourPanel();
+    renderMotionPanel();
+}
+
+/* The armour switches, shown only for a fighter whose break table has entries,
+ * one for each half that has a slot to break: which slots break, and what they
+ * show once broken. */
+function renderArmourPanel() {
+    const own = state.bodies?.find((b) => b.index === state.charIndex);
+    const A = own?.armour;
+    $('#armour-field').hidden = !A;
+    if (!A) return;
+    const halves = armourHalves(own);
+    for (const h of ['upper', 'lower']) {
+        $(`#armour-${h}-field`).hidden = !halves[h];
+        $(`#armour-${h}`).checked = !state.armour[h];
+    }
+    const swaps = state.character.parts.filter((p, i) => p.model !== own.parts[i].model)
+        .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
+    $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
+        + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
+}
+
+/* A Dead or Alive fighter has no record of parts: what it draws comes
+ * out of the fight code frame by frame (js/doafighters.js). */
+function renderDoaBodyPanel(body) {
+    $('#char-meta').innerHTML = `
+        <span>character</span><b>${body.index}</b>
+        <span>model bank</span><b>${body.base}</b>
+        <span>joints</span><b>${body.joints}</b>
+        <span>motions</span><b>${bodyMotions(body).lead.length} its own and shared</b>
+    `;
+    $('#slot-list').innerHTML = '';
     renderMotionPanel();
 }
 
@@ -4400,9 +4555,22 @@ function wireOptions() {
     });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
+        $('#char-behind-field').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
     });
+    $('#char-behind').addEventListener('change', (e) => {
+        state.opponentBehind = e.target.checked;
+        if (state.opponent) rebuildBody({ keepCamera: false });
+    });
+    for (const h of ['upper', 'lower']) {
+        $(`#armour-${h}`).addEventListener('change', (e) => {
+            state.armour = { ...state.armour, [h]: !e.target.checked };
+            state.character = shownBody(state.charIndex);
+            rebuildBody({ keepCamera: true });
+            renderAnimPanel();
+        });
+    }
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
         if (state.motion.skeleton) state.motion.skeleton.visible = e.target.checked;
@@ -4644,10 +4812,11 @@ function resetMusic() {
     const choices = musicChoices(state.rom);
     const pick = $('#music-song');
     pick.replaceChildren();
-    pick.append(new Option("the course's own", '-1'));
+    pick.append(new Option(state.rom.game.sound?.music?.own ?? "the course's own", '-1'));
     (choices ?? []).forEach((c, i) => pick.append(new Option(`${c.label}: ${songName(c.code)}`, String(i))));
     pick.value = '-1';
     $('#music-song-field').hidden = !choices || $('#music-field').hidden;
+    if (choices) $('#music-song-field label').title = state.rom.game.sound.music.hint;
     $('#stage-sfx-label').hidden = !state.rom.game.sound?.ambience || $('#music-field').hidden;
 }
 
@@ -4734,16 +4903,19 @@ function applyGameFeatures() {
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
-    const solved = state.rom.game.rig?.kind === 'vf2';
+    const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
-    $('#char-rival-field').hidden = !solved;
+    /* The opponent is VF2's alone. */
+    const rival = state.rom.game.rig?.kind === 'vf2';
+    $('#char-rival-field').hidden = !rival;
+    $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#anim-note').hidden = bodies;
     $('#anim-note-bodies').hidden = !bodies || solved;
     /* The solved rig's note names the game's own addresses. */
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
-    for (const n of ['vf2', 'fv']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;

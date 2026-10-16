@@ -515,9 +515,12 @@ to the face target `+0xB0C`, which the fight writes.
 
 ## Dead or Alive
 
-`doa.zip` (Revision B, Model 2B) loads with the Stages and Models tabs, and so
-does `doaa.zip` (Revision A, Model 2A) dropped together with `doa.zip`, which
-holds the data, model and texture chips the two share. Tecmo's game keeps no
+Every build MAME has loads: `doa.zip` (Revision C, Model 2B), `doab.zip`
+(Revision B), and the Model 2A builds `doaa.zip` (Revision A), `doaab.zip` and
+`doaae.zip` (export). The 2B builds have all four tabs, fighters included; the
+2A builds the Stages, Models and Cells tabs. A merged set, or several zips dropped at
+once, opens as Revision C, and the Build list at the top of the sidebar picks
+another. Tecmo's game keeps no
 stage records: each stage is a routine of its own that places its pieces and
 hands them to the geometry engine, so the explorer runs those routines on an
 i960 interpreter and keeps what they draw ([`js/doa.js`](js/doa.js)). That
@@ -533,17 +536,29 @@ stage, laid round the arena as one ring and placed as the game scrolls them,
 which a MAME frame and the explorer from the same camera agree on. The indoor
 stages have none.
 
-On Revision B, stage 1 has the two fighters of the attract fight MAME shows
+On Revisions B and C, stage 1 has the two fighters of the attract fight MAME shows
 there, Zack against Tina, played from the round's start by the game's own
 fight code, hits, camera, attract AI and all: textured, coloured, with their shadows, and posed as MAME has them
 at that frame, Tina's ribbon included. The stage's ropes and banners hang as
-they swing at that frame too. They hold that one pose; Revision A's fighters
+they swing at that frame too. They hold that one pose; the 2A builds' fighters
 are not read yet.
 
-Stages 0, 2, 3, 4, 8 and 11 have pieces of their own that move (stage 4 is a
-conveyor). The game's own stage code runs them from its setup to the same
-moment of a fight, on both revisions. MAME's attract never reaches those
-stages, so they have not been checked against it.
+Stages 0, 2, 3, 4, 8, 10 and 11 have pieces of their own that move (stage 4 is
+a conveyor). The game's own stage code runs them from its setup to the same
+moment of a fight, on both revisions, and keeps running them a frame at a time
+while you watch, as it does stage 1's ropes. Checked against MAME's attract
+(with the stages swapped in), they move as the board moves them, word for
+word over 300 frames, except where they follow the game's camera (0, 2 and
+10) or scroll the sky (11). Stage 4's code has a
+copy-paste slip that leaves one row of the belt hanging far below the rest for
+part of each cycle; the explorer fixes it, so the belt stays whole.
+
+The **Cells** tab has the game's 242 pictures: the Tecmo logo and warnings,
+the fighters' profiles, portraits and name plates, the stage skies, the
+fight's messages and fonts, the rankings, the endings, the staff roll and the
+title logos. Tecmo's format is not Sega's: each picture brings its own tiles
+and colours, so each cell opens on a CG of its own with the same number (see
+[TECHNICAL.md](TECHNICAL.md#dead-or-alives-pictures-jscellsjs)).
 
 ## Running it
 

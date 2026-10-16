@@ -188,7 +188,7 @@
         <li class="game" data-game="doa" data-zip="doa.zip" tabindex="0">
           <div class="thumb"></div>
           <div class="g-name">Dead or Alive <i>experimental</i></div>
-          <div class="g-meta">Twelve stages and every model, on Model 2B and 2A &middot; <code>doa</code> / <code>doaa</code></div>
+          <div class="g-meta">Twelve stages and every model, on Model 2B and 2A &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code></div>
         </li>
       </ul>
     </section>
@@ -309,7 +309,7 @@
         <label class="check" title="With the music, the stage's own sound effects — a crowd, birds, the sea — sent to the same sound board by the same rules the game's stage-sound task follows: one as the round starts and, on some stages, more at random through the round"><input type="checkbox" id="opt-stage-sfx" checked> stage sounds</label>
       </div>
       <div class="field" id="music-song-field" hidden>
-        <label for="music-song" title="The song the race starts with. The game plays the course's own unless a VR button is held as the race starts, which picks one itself — this is that choice">Song</label>
+        <label for="music-song">Song</label>
         <select id="music-song"></select>
       </div>
       <div class="field" id="view-field" hidden>
@@ -399,6 +399,15 @@
         <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> hammer squished</label>
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> root travel</label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> opponent</label>
+        <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> behind</label>
+      </div>
+      <div class="field" id="armour-field" hidden>
+        <label>Armour</label>
+        <div class="row">
+          <label class="check" id="armour-upper-field"><input type="checkbox" id="armour-upper" checked> upper</label>
+          <label class="check" id="armour-lower-field"><input type="checkbox" id="armour-lower" checked> lower</label>
+        </div>
+        <div id="armour-readout" class="mono dim"></div>
       </div>
       <div class="field">
         <label>Motion</label>
@@ -461,7 +470,11 @@
         (<code>0x296A0</code>) and the parts are then placed along the
         fighter's own skeleton, as the board draws them. The
         <em>opponent</em> (off by default) is the same fighter on the same
-        motion, standing where a round starts the other. Each head then turns
+        motion, standing where a round starts the other, ahead of the
+        fighter. <em>Behind</em> stands it at the fighter's back instead,
+        where it is once the fight has turned a fighter round: a motion does
+        not say which, so turning motions and back-turned ones want it
+        there. Each head then turns
         toward the other's on every frame. The game does that only when the
         fight state allows, which the explorer does not track, so with it on,
         a head can turn where the game's doesn't.
@@ -477,6 +490,18 @@
         other clothes. With the <em>opponent</em> on, each head
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
+      </div>
+      <div class="note" id="anim-note-doa" hidden>
+        The fighters are drawn by the game's own fight code, run in the
+        explorer: the attract's fight is set up with the fighter in player
+        one's place and the motion started as the player routine starts one
+        (<code>0x420C0</code>), then each frame runs the body routine
+        (<code>0x457C0</code>) and the hair and ribbon (<code>0x4FEB0</code>).
+        A motion id indexes the table at <code>0x6000010</code>, or from
+        <code>0x552</code> the one at <code>0x6FC7AC0</code>. A fighter's own
+        moves are the ones its action scripts (<code>0xD8000</code>) start.
+        The fighter steps as the motion does; the hair swings from the
+        frames before.
       </div>
       <div class="note" id="anim-note">
         A motion id indexes <code>offset_list_motions</code> at

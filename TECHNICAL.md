@@ -1150,10 +1150,220 @@ part out along the fighter's own skeleton at player `+0x8C`.
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
 
-Not drawn: the skin at record `+0x24` (VF2 has one at `+0x38`, not drawn
-either), and the special parts `rob_disp`
-(`0x19F10`) swaps in: feet and hands (`set_ashi_ptn`, `set_te_ptn`), chest
-and hips (`mune_unit_change`, `koshi_unit_change`), Picky's hair.
+Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
+the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
+(`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
+`koshi_unit_change`), Picky's hair, and broken armour (below).
+
+#### Armour breaking (read from the ROM; the explorer draws the broken parts)
+
+`rob_disp` draws slot `s` with the model in player `+0x40 + 4s`, not the
+record's list. `action_init` (`0x12554`) copies the record's sixteen parts
+there, and breaking armour overwrites them. Slots are the rig's: 1 chest,
+2 head, 3/6 upper arms, 4/7 forearms, 9 hips, 10/13 thighs, 11/14 shins.
+
+**When it breaks** (`damage_unit`, `0x26A44`, on the fighter hit):
+
+- Each hit adds its damage (`+0x822` of the attack) to `+0x1F00[slot]`, the
+  slot being the lowest bit of the hit mask `+0x704` that is in the attack's
+  height class (`0x27324[+0x821]`: 0 upper, 1 lower; slot 9 and up is lower).
+- `calc_up_down_damage` (`0x2735C`) keeps the old sums in `+0x1F7C`/`+0x1F80`
+  and sums slots 0-8 into `+0x1F74` (upper) and 9-15 into `+0x1F78` (lower).
+- The limits are `+0xAF0`/`+0xAF4`: the record's `+0x3C` pair times the
+  rounds to win (`0x500052`). Upper/lower: Jane, Tokio, Raxel 200/75; Grace,
+  Honey, Picky 150/50; Bahn 250/100; Sanman 250/50; Mahler, B.M. 500/200.
+- A half breaks on a hit whose attack has `+0x26C` bit 1 or 4, from an attacker
+  with `+0x720` bit 5, once both the old and new sum of that half are at the
+  limit. Then every slot of that half with a break entry breaks, and the loop
+  stays on the slot (`b 0x26B9C`), so as read it runs through all of the
+  slot's stages in one go. Bits 2/3 of `+0x7F4` mark the upper/lower half
+  broken, both together set bit 28 of the player's flags.
+- On the deciding round (`+0x1F5C` = rounds to win - 1) with `+0x7D6` bit 0,
+  `mod_fa_effect + 0xA74` is set, every slot's damage becomes `0x1000` and
+  everything breaks with no attack check: the finishing blow strips the lot.
+- `zibaku_ckeck` (`0x270FC`) is a second path that breaks pieces the same way.
+- `action_init` clears it all (`+0x1F48`, `+0x1F4C..`, `+0x1F60..`) only while
+  `0x500055` is 0 or 1.
+
+**What it swaps in** (`0x640EDAC[char]`): 16 entries of 8 bytes, one a slot.
+Bytes 0-3 are the pieces each stage throws off (0 ends the list), `+4` points
+at the pieces, `0x28` bytes each. `+0x1F20[slot]` is the stage reached,
+`+0x1F4C[slot]` the pieces used. On a break `damage_unit` sets bit `slot` in
+`+0x1F48` and calls `efc_crush_parts_set` (`0x2D390`), which launches the
+stage's pieces (`+6` each one's model) and writes the stage's first piece's
+`+4` into `+0x40[slot]`: that is the slot's new model. It skips the write in
+`also_mode` `0xC`/`0xD` and some sub-modes of 3 and 9 (`0x2D4D0`).
+
+| Char | Slots that break (base -> broken model) |
+|---|---|
+| 0 Jane | chest 732 -> 730 -> 729 -> 731 (three stages), 4: 738 -> 737, 5: 576 -> 734, 9: 493 (same), 11: 711 -> 710, 14: 709 -> 708 |
+| 1 Grace | 1: 915 -> 1982, 2: 883 -> 2448, 3: 911 -> 1980, 4: 919 -> 1987, 6: 910 -> 1978, 7: 918 -> 1986, 9: 1736 (same, four pieces), 10: 1743 -> 914, 11: 882 -> 1975, 13: 1742 -> 913, 14: 881 -> 1974 |
+| 2 Honey | 1: 2464 -> 2540, 2: 2435 -> 2552, 3: 2459 -> 2536, 4: 2468 -> 2550, 6: 2458 -> 2535, 7: 2467 -> 2549, 9: same, 10/13: -> 2463, 11: 2434 -> 2530, 14: 2433 -> 2529 |
+| 3 Tokio | 1: 2480 -> 2662, 3: 2475 -> 2659, 4: 2484 -> 2668, 6: 2474 -> 2658, 7: 2483 -> 2667, 10/13: -> 2479, 11: 2472 -> 2654, 14: 2471 -> 2653 |
+| 4 Bahn | 1: 694 -> 2398, 2: 687 -> 31, 3: 689 -> 2397, 6: 688 -> 2396, 9: 2405 -> 690, 11: 686 -> 2394, 14: 685 -> 2393 |
+| 5 Picky | 1: 902 -> 450, 2: 894 -> 893, 3: 899 -> 446, 4: 907 -> 454, 6: 898 -> 445, 7: 906 -> 453, 10: 2414 -> 449, 11: 891 -> 443, 13: 2413 -> 448, 14: 890 -> 442 |
+| 6 Raxel | 1: 966 -> 470, 2: 1538 -> 700, 3: 1540 -> 461, 4: 974 -> 474, 6: 1539 -> 460, 7: 973 -> 473, 9: 1541 -> 964, 11: 1535 -> 458, 12: 1533 -> 456, 14: 1534 -> 457, 15: 1532 -> 455 |
+| 7 Sanman | 1: 1075 -> 1074, 2: 1061 -> 1060, 3: 1068 -> 1067, 4: 1084 -> 1083, 6: 1066 -> 1065, 7: 1082 -> 1081, 11: 1056 -> 1057 -> 1055, 14: 1053 -> 1054 -> 1052 |
+| 8 Mahler | 2: 1497 -> 3887, 3/6: same, 4: 1516 -> 3893, 7: 1515 -> 3892, 11: 1496 -> 3886, 14: 1399 -> 3885 |
+| 9 B.M. | 2: 3589 -> 3588, 3/6: same, 4: 3619 -> 3618, 7: 3617 -> 3616, 11: 3587 -> 3586, 14: 3585 -> 3584 |
+| 13 Jane (jeans) | as Jane: chest 1613 -> 1580 -> 1579 -> 1581, 4: 1620 -> 1619, 5: 1617 -> 1616, 11: 1563 -> 1562, 14: 1561 -> 1560 |
+
+Sonic and the two stand-ins (10-12) have no armour (all entries 0).
+
+**Drawn on top of the slot model**, all keyed on `+0x1F48`:
+
+- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken, and
+  only for Jane, Grace, Honey and Jane in jeans (`0x6421F80[char]`). It then
+  replaces the chest with one of 31 models (table `+4`), picked by a spring
+  (`+0xC68`/`+0xC6C`, clamped to +-15) the body's movement drives: index
+  `15 + round(+0xC6C + 0.5)`. At rest that is entry 15 or 16 (Jane 772/773).
+  Table `+0` is a per-frame list it uses while the move flags `+0x1A4` are
+  exactly `0x200`.
+- `koshi_unit_change` (`0x31ADC`, slot 9): Honey and Bahn (`0x6422400[char]`).
+  It picks the hip model per motion (fixed lists for motions (`+0x1A8`) `0x31` and `0x180`,
+  a 50-frame swing, a per-motion table at `+0x1C`), taking the second of each
+  pair once the hips are broken (`+0x1F48` bit 9). Bahn's pair is 2405/690,
+  the same swap as the break table.
+- `kata_pat_disp` (`0x32A90`, slot 1): shoulder pads on their own swing
+  (`0x642147C[char]`, left then right: model, limit, a second model and its
+  offset at `+0x16`/`+0x18`). Raxel (959/960), Mahler (3889/3891 + 3888/3890)
+  and B.M. (3592/3595 + 3888/3890) have them. The first pad goes when slot 6
+  breaks, the second when slot 3 does.
+- `kosi_mino_disp` (`0x31E54`, slot 9): the skirt panels of characters 0, 1,
+  13 and 14 (`0x6421DE0[char*16]`), gone once the hips break (bit 9).
+- `pky_kami_disp` (`0x1ADDC`, slot 2): Picky's hair is drawn only once his head armour
+  (slot 2, the helmet) has broken.
+- Record `+0x24` is read on slot 9 too, and it is not a model: its `+8`
+  picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
+  Once the chest breaks the game reads `0x642F9EC[char]` instead.
+
+#### Shoulder pads and skirt: how they are placed (read from the ROM)
+
+Both are drawn from `rob_disp`'s per-slot jump table (`0x1A0EC`), straight
+after the slot's own `set_obj`: slot 1 jumps to `kata_pat_disp`, slot 9 (after
+the record `+0x24` geometrizer block) to `kosi_mino_disp`. Each routine starts
+with `0x21804343, 3`, which saves the current matrix (the chest's, or the
+hips') to inner slot 3, and draws every piece as
+
+    push; 0x03 identity; translate; ang_z; ang_y; ang_x;
+    0x05 (read back into the player, for the shadow); 0x46 3; set_obj; pop
+
+`0x46 3` is `current = inner[3] * current`, so each piece is the slot's matrix
+times its own translate and turns. The three `0x13` writes before `0x03` are
+an add whose result is thrown away: a wait. Op names are m2-hle2's
+(`tests/cop_replay.c`): `0x69` is `Fn_mul_mot_yrot` (a bone's rotation from TGP
+memory, with `Ry(arg)` in front), `0x0F` reads the point back, `0x24`/`0x25` are
+`a*sin`/`a*cos`, `0x27` atan, `0x1A` sqrt. Bone `n` of player `p` is at TGP word
+`0x3A00 + 0x100p + 12n`, and the player's `+0x8C + 12n` is that bone's vector.
+
+**Shoulder pads** (`kata_pat_disp`, `0x32A90`). `0x642147C[char]` points at
+two records, left then right. `sub_32A0C`, called from `action_init`, copies
+them into `mod_fa_effect` (`+0x60` for player 2). A record is `0x24` bytes:
+`+0` model (`-1` none), `+2` swing limit, `+4` translate, `+0x10` X turn,
+`+0x12` Y turn, `+0x14` Z turn, `+0x16` second model (0 none), `+0x18` its
+translate.
+
+| Char | Left (drawn until slot 6 breaks) | Right (until slot 3 breaks) | Limit; turns X/Y/Z |
+|---|---|---|---|
+| 6 Raxel | 959 at (0.35, 0, 0.14) | 960 at (0.35, 0, -0.14) | `0x3800`; `0xC000`/0/`0x4000` |
+| 8 Mahler | 3889 at (0.39, 0, 0.17), then 3888 at (0, 0.05, 0.06) | 3891 at (0.39, 0, -0.17), then 3890 at (0, -0.05, 0.06) | the same |
+| 9 B.M. | 3592 at (0.45, 0, 0.17), then 3888 as Mahler's | 3595 at (0.45, 0, -0.17), then 3890 as Mahler's | the same |
+
+Every other fighter points at `0x64216CC`, whose model is `-1`: nothing is
+drawn. A pad is the chest's matrix, its translate, `ang_z(Z)`, `ang_y(-Y)` on
+the left and `ang_y(Y)` on the right, then `ang_x(X + swing)` on the left and
+`ang_x(X - swing)` on the right. The second model follows on the pad's own
+matrix, translated by `+0x18` with no turn. A pad is skipped (and `+0x1B28` /
+`+0x1B2A` cleared) once bit 6 / bit 3 of `+0x1F48` is set, so one break of
+the upper half takes both.
+
+The swing, each frame: the lean `+0xAC8`/`+0xACA` is the pitch and yaw (`0x27`)
+of head (`+0x20C`) minus waist (`+0x1F4`). The upper arm's vector (`+0xD4`,
+bone 6, on the left; `+0xB0`, bone 3, on the right) is turned by that bone's
+rotation and the facing (`0x69`) into `+0xA9C`/`+0xAA8`, and `p` is its
+component along the lean (`+0xAE0`/`+0xAD4`). If `p` is negative the swing is
+0; otherwise it is `atan(sqrt(L^2 - p^2), p)` (`L` the vector's x), at most the
+limit. That is my reading of the ops; the swing in a standing pose has not
+been measured.
+
+**Skirt** (`kosi_mino_disp`, `0x31E54`). Drawn for characters 0, 1, 13 and 14
+only, and not once bit 9 of `+0x1F48` (hips broken) is set; then
+`+0x1B20..0x1B26` are cleared. `0x6421DE0[char * 16]` holds four model numbers
+(`+0`, `+2`, `+4`, `+6`) and a float at `+8`:
+
+| Char | +0 | +2 | +4 | +6 | +8 |
+|---|---|---|---|---|---|
+| 0 Jane | 3045 | 3044 | 0 | 0 | 0.025 |
+| 1 Grace | 2446 | 2445 | 2444 | 2443 | 0 |
+| 13 Jane (jeans) | 3037 | 3036 | 0 | 0 | 0.025 |
+| 14 | 2439 | 2438 | 2437 | 2436 | 0 |
+
+The routine does not check for 0, so for Jane it calls `set_obj` with model 0
+for two panels. 14 is past the roster's 13 and not a fighter the explorer
+lists; its models sit beside Grace's. The placement is the same for everyone:
+`action_init` (`0x12768`) writes constants to `0x50A324..0x50A378`:
+
+| Panel (draw order) | Model | Translate | Turns Z, Y, X | Limit |
+|---|---|---|---|---|
+| 1 | `+4` | (0.013, 0.087, 0) | 0, `0xC000`, `0x4000 + s1` | `0x3000` |
+| 2 | `+6` | (0.013, -0.088, 0) | 0, `0xC000`, `0x4000 - s2` | `0x1E00` |
+| 3 | `+2` | (0, -0.017, 0.107), then (0, 0, `+8`) | 0, `0xC000 + s3`, `0x4000` | `0x1000` |
+| 4 | `+0` | (0, -0.017, -0.107), then (0, 0, `-(+8)`) | 0, `0xC000 - s4`, `0x4000` | `0x1000` |
+
+All are on the hips' matrix. Each swing is `max(0, max(a, b) - limit)`, so a
+panel stays at its base angles until a thigh lifts past the limit. `a` and `b`
+come from the two thighs (bone 13, `+0x128`, and bone 10, `+0x104`, turned by
+`0x69` with the facing word `0x50A398`, which nothing writes, so 0): their
+angles against the hips' `+0xAD4` give `+0xAD8`/`+0xADE` and the terms at
+`0x50A380..0x50A388`, scaled by `sin`/`cos` (`0x21`/`0x22`) through a float
+round trip (`0x17`/`0x18`). This has not been measured either.
+
+So both are drawn on a slot's matrix with fixed offsets and turns, and only
+the swing depends on the pose. At rest the skirt's swing should be 0, because
+a thigh has to pass its limit first. The pads' rest swing depends on `p`, and
+that has not been measured.
+
+**What the explorer draws.** `readArmour` (`js/vf2fighters.js`) reads
+`0x640EDAC` per fighter (`rig.fighters.armour` in the profile) into each
+slot's models by stage, and `0x6421F80`'s `+4` entry 15 as the broken chest
+at rest. The Animation tab's Armour switch (intact / upper broken / lower
+broken / all broken) is one hit per half as the board deals it, all stages at
+once: `armouredFighter` gives each broken slot its last stage's model, the
+chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
+Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
+one is. Bahn's broken hips are the table's 690, the same model
+`koshi_unit_change` takes; Honey's hips do not change. Not checked against
+MAME. The shoulder pads and skirt are drawn as above, at rest only:
+`readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
+matrix (`placeExtra`), with the swing left at 0. That is the skirt's own rest
+value; for the pads it is not measured, so they sit at the fixed offsets and
+turns. Jane's two model-0 panels are skipped like any other empty part, and
+entry 14 is never read. The Armour switch hides both pads with the upper half
+(slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
+own steps: the swings, the chest spring and the hip lists by motion, Picky's
+hair, and the flying pieces.
+
+**The chest bounce: what is missing before it can be drawn.** Everything this
+document says about it is the `mune_unit_change` entry above. That is enough
+to know the part (slot 1), the fighters (0, 1, 2, 13) and two of the models
+(Jane's entries 15 and 16, 772 and 773), but not enough to draw a bounce:
+
+- *Intact or broken.* As written, `mune_unit_change` runs only once the chest
+  is broken. Nothing here says an intact chest bounces or names a model for
+  one, so as far as this document goes the bounce is a broken chest's only.
+- *The 31 models.* Only Jane's entries 15 and 16 are named, and entry 15 for
+  the other three (2844, 2978, 1597). Which way the index runs (which end is
+  up) is not said.
+- *The spring.* `+0xC68`/`+0xC6C` are named and clamped to +-15, but not how
+  they step each frame: which of the two is the velocity, what drives them
+  ("the body's movement": which bone, vector or flag), the stiffness, the
+  damping, the starting value, or whether `action_init` resets them.
+- *The per-frame list.* Table `+0` is used while `+0x1A4` is exactly `0x200`;
+  its length, its entries (model numbers or indices), and how the frame into
+  it is counted are not said, nor what `0x200` means as a move.
+
+Until those are read from `0x31888` (and whatever writes `+0xC68`/`+0xC6C`),
+the explorer keeps the resting model, entry 15, on a broken chest.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
@@ -1169,13 +1379,30 @@ listens on the two ports:
   as the routines chain them), and the geometrizer's draw command reads the
   current matrix and the model pointer, which the model table names;
 - the stage number goes in at `0x5555BE`, and `0x54FCDD = 1` has the
-  routines draw the banners and ropes as well;
+  routines draw the banners and ropes as well. `0x5A75F4 = 2` is what the
+  round start (`0x70950`) sets from the ring size float at `0x54FCE8` (10.0
+  from boot, so 2; 12.0 would be 0): nine stages index short model tables
+  with it to pick the ring floor and its border, so 2 draws the small inner
+  square and the wide Danger Zone MAME shows;
 - the two culling helpers, `0x72600` and `0x72680`, are answered "in view",
   and the view vector at `0x5B9870` is (1, 1, 1), so nothing is culled.
 
 Stages 0-11 draw; 12-15 point at a routine that draws nothing, and are
 skipped. A piece turned only about Y becomes a turn op; anything else becomes
 the new `m` op, a 3x3 by columns.
+
+A piece is named by the model table entry the routine last read before the
+draw. Stages 0 and 10 hand some over from RAM instead: on its first pass the
+routine copies five entries from 0x2099D90 to 0x59FFC0, each a table model's
+material, mesh and face count with another model's texture points, and the
+glass tower's three (models 15995-15997, night 18719-18721) take their points
+from 128 blocks picked by the yaw the routine keeps (0x5A0064 = 0x5A0018 >> 8,
+0x2098B90 for the first). That is the tower's reflection. On stage 10 two
+more pieces (18403) step through their blocks every pass. The explorer names
+such a draw by its material, mesh and face count (the table's first model
+with all three) and draws it with the points the routine sent (`doaPoints`).
+These were left out before: 5 pieces on stage 0 and 7 on stage 10, on both
+revisions.
 
 The textures are slabs of 0xC0000 bytes that the routine at `0x7CBA0` copies
 into texture RAM by mode: rows 0-127 and 512-639 (modes 0, 3), rows 128-255
@@ -1200,7 +1427,28 @@ Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
 model and texture chips are Revision B's; its RAM is laid out the same, and
 everything the explorer reads from the program sits 0x7A40 lower (the sky's
 stage table 0x79C0). All twelve stages draw the same pieces and render pixel
-for pixel the same as Revision B's.
+for pixel the same as Revision B's. Revision A has no attract fight mapped,
+so stage 1 runs from its setups like the other moving stages
+(`stageSetup.moving`): before that its 32 rope and banner pieces hung
+straight and still, up to 2.8 units from where the board's swing puts them.
+The two revisions now draw it the same, still and moving.
+
+Revision C (`doa`, MAME's parent, Jan 10 1997) and the other two 2A builds
+(`doaab`, Nov 3 1996, and the export `doaae`) are Revision B and Revision A
+with their programs moved: code put in or taken out in places, so everything
+after sits a little further on or back. `relocateDoa` in `js/games.js` builds
+their profiles from those two by runs, as Sonic Championship's are built from
+Sonic The Fighters': the two programs matched 16 bytes at a time, each run the
+shift from the first block that matched with it. Every program address a
+profile names falls well inside a run (checked one by one), and nothing else in
+it moves. Revision C moved its RAM as well: 0x20 on from 0x5420D0 and 0x30
+from 0x557C60, found by pairing the RAM addresses that the two programs'
+matched instructions name; the RAM `js/doa.js` sets by hand is the profile's
+`doa.ram` for that reason. The 2A builds keep Revision A's RAM. Revision C
+draws every stage, the attract fight on stage 1 included, pixel for pixel as
+Revision B does, and `doaab` and `doaae` every stage as Revision A does. The
+2A board seats the shared chips in other sockets, so its sets name them
+differently (`DOA_2A_SOCKETS`).
 
 The sky is the tile layer, in a format of Tecmo's own (`buildDoaSky` in
 `js/scroll.js`). Data `0xC0000` is a table of 242 scroll pictures (tiles,
@@ -1230,20 +1478,219 @@ fight, the explorer runs the setup and then 924 passes (`doa.attract.stageInit`,
 draws at frame 2000 match to 0.0001 in angle and position. The other 24 are
 off-screen there; their state is part of that byte-for-byte match.
 
-Six other stages move pieces the same way, each pass of their own routine:
+Seven other stages move pieces the same way, each pass of their own routine:
 0 (16004), 2 (16597 16600 16628 16644), 3 (16867-16870), 4 (a conveyor of
 33 pieces in 17013-17106 that slide on a 1:2 slope and wrap), 8 (17392 and
 17398-17414; some swap models as they go, 17316-17318, and 17392 also reads
-the frame count) and 11 (17704 17707 17715 17718), with their state at
+the frame count), 10 (two 18425s, turned by the stage tick below) and 11
+(17704 17707 17715 17718), with their state at
 0x5A0000-0x5A7667. The game sets them up in two steps: the stage task
 (0x64640) runs the common setup 0x70480 once, and the round start (0x705F0)
 calls the stage's own from the table at 0x70440 (stage 1's and 11's are a bare
 `ret`). The explorer runs both, then 924 passes to frame count 0x75F, the
 attract stage's count (`doa.stageSetup`; 2A's table at 0x68A00, setup 0x68A40).
-MAME's attract shows only stage 1 before it stops on the geometry DSP's
-multiplier op 15 (frame ~5500-6000), so these six are the code's word and
-are not graded against the board. Stages 5, 6, 7, 9 and 10 have nothing that
-moves, and are drawn once from cleared RAM.
+After each pass the stage task (0x71138; 2A 0x696F8) counts on: 0x5A6EDD a
+byte +1, 0x5A75F0 +0x80, 0x5B9720 +0x800 and 0x5B9724 +0x400, unless 0x54FCDE
+is set. Stage 4 picks its belt frame by `(0x5A6EDD >> 2) % 26`, and stages 0
+and 10 send 0x5A75F0 to the copro as an angle (function 0x1B), so stage 10
+turns too; the explorer runs the tick after each pass (`stageSetup.tick`).
+
+These are graded against MAME's attract: `tools/doa-stages/dump.lua` saves the
+board's RAM 300, 301 and 600 frames into each stage (`DOA_SWAP` forces other
+stages in), and `tools/doa-stages/grade.mjs` seeds the explorer with one dump
+and runs it to the next. The fork's shared MAME needs `M2_GEO_SHARC_OFF=1`:
+its real geometry SHARC, running beside the HLE geometry, takes a jump into
+data (handler 0x20C26) and stops the attract with a bogus "op 15". The board
+does not run a stage once a frame: it runs one twice when it falls behind and
+skips one now and then, so the passes are counted from 0x5A75F0. Stages 1, 3,
+4, 5, 6, 7 and 8 leave 0x5A0000-0x5A7667 exactly as MAME has it after 299
+frames, and stage 11 all but 0x5A0140, the camera's sky scroll (below). Stages 0 and 10 copy the camera's yaw and position into their state
+(0x5A0014, 0x5A00F4) and pick pieces by it; stage 2 runs its ring of eight
+(0x67388) only while the camera is in range. Those differ only there, since
+the explorer's camera is not the game's. Stage 9 was not reached.
+
+Stage 11's sky waves. After the stage's pass, the stage task (0x71124) calls
+0x702E0 (2A 0x688A0) when the stage is 11. That routine steps a byte at
+0x5A0144 each pass and, every fourth, the wave's phase at 0x5A0145. It keeps
+the camera's sky scroll 0x54F948 (made by the sky routine, 0x701C8, from the
+camera) in 0x5A0140. Then it fills the scroll chip's line table at 0x1008800:
+the lines above the horizon (0x54F950) at the last scroll, then four lines
+at half the wave (table 0xC76E0, by phase), then the rest at the full wave.
+The explorer runs it as the stage's `after` routine, before the tick.
+0x5A0140 follows the camera, as stages 0, 2 and 10's words do, and is left
+to differ.
+
+0x54F944-0x54F953 is the program's copy of the tile chip's scroll registers
+(0x100A000, uploaded at 0x84CC): 0x54F948 is layer 2's horizontal scroll and
+0x54F950 its vertical. The sky routine sets bit 15 of the horizontal one for
+stage 11 alone (0x6FE70, 2A 0x68430), and with it the chip scrolls each screen
+line by its own word of layer 2's line table (tile RAM word 0x4400 + line,
+segaic24.cpp). 0x702E0's table starts its wave at tilemap row 0xF4 whatever
+the vertical scroll: the lines above it count 0xF4 less that scroll. The
+explorer's panorama rows are the tilemap's, so its stage 11 sky reads the
+table the stage's own run wrote at each frame (`doa.sky.lines`, `doaLineShift`
+in js/doa.js) and shifts each row by its line's word less the scroll every
+line has, through the same row-shift texture as Virtua Fighter 2's sky. The
+sea below row 244 waves by up to two pixels, the four rows at its top by half
+that, and the wave rolls a step every fourth frame. Stages 5, 6, 7
+and 9 have nothing that moves, and are drawn once from cleared RAM.
+
+The moving stages, stage 1 among them, go on moving in the viewer: the routine
+keeps running, one pass a frame from the baked one, and each piece takes the
+model and matrix of the piece the pass drew in its place in the list (`live`
+on each draw, `liveScenery` in `js/doa.js`; a pass costs about half a
+millisecond). Stage 4 draws 82 to 92 pieces depending on the pass, so its list
+has a slot for the most the 924 passes drew, and a slot a pass leaves empty is
+hidden. Stage 1's fighters hold their pose while the ropes go on swinging. If
+the clock starts over, RAM goes back to the baked pass.
+
+Stage 4's belt has four rows (x y z, 12 bytes each from 0x5A7600) stepped at
+0x6BD0C, which wrap only at the top (y > 60). To keep the belt whole, four
+blocks each draw a copy of a row 80 lower: row n's copy when row n stands above
+row n-1. The fourth (0x6A0B0, 2A 0x62670) tests row 3 against row 2 and then
+draws row 2's place, so for a quarter of the cycle a lone row hangs 80 below
+the rest. The explorer runs the routine with that slip fixed
+(`doa.fixes`, five words: the two heights loaded the other way round, the
+compare's operands swapped, and row 3's x and z), patched into its own copy of
+the program; the ROM's other users see it as it is. With the fix the copy sits
+right under the belt's lowest row.
+
+### Dead or Alive's stage pieces (`readDoaStages` in `js/doa.js`)
+
+A stage is put together from five tables, each indexed by the stage number
+(Revision B addresses; the program ones move with the build, the data ones
+do not):
+
+- the routine, `0x719E0 + 4 * stage`, which draws the pieces;
+- the model table at data `0x3A160`: 19330 entries of 16 bytes, the texture
+  points, the material, the mesh and the face count. A piece is the entry the
+  routine sent (above), so the explorer names it by that entry's number;
+- the texture slab, `0xCADA0[stage]`, a data pointer whose rows from `0x40000`
+  on fill texture rows 256-511;
+- the five colour rows, `0x7A7E0[stage]`, and the 32 material slots at `0x6B0`
+  that every stage shares;
+- the four sky pictures, `0xC7660 + 8 * stage`, out of the 242 pictures.
+
+The explorer calls a stage "Stage n", in chapter n: the profile has no names
+for them. Its info lists the stage, the routine's
+address, the pieces drawn and, on the attract stage, the fighters. Stages
+12-15 are not listed: their routine (`0x6F130`) draws nothing.
+
+| stage | pieces | models | model range | slab | sky pictures |
+|---|---|---|---|---|---|
+| 0 | 54 | 40 | 15665-16004 | 0x25C0000 | 52 53 54 55 |
+| 1 | 87 | 68 | 16347-16437 | 0x2680000 | 125 126 127 128 |
+| 2 | 70 | 54 | 16587-16669 | 0x2740000 | 60 61 60 61 |
+| 3 | 82 | 34 | 16814-16881 | 0x2800000 | 121 122 123 124 |
+| 4 | 92 | 45 | 17013-17114 | 0x28C0000 | none |
+| 5 | 25 | 25 | 19071-19175 | 0x2EC0000 | none |
+| 6 | 50 | 45 | 17889-18109 | 0x2B00000 | one plain tile |
+| 7 | 4 | 4 | 16372-16386 | 0x2680000 | none |
+| 8 | 46 | 45 | 17277-17414 | 0x2980000 | 62 63 64 65 |
+| 9 | 1 | 1 | 18109 | 0x2B00000 | none |
+| 10 | 57 | 42 | 18389-18722 | 0x2BC0000 | 67 69 66 68 |
+| 11 | 35 | 35 | 17633-17731 | 0x2A40000 | 134 135 136 133 |
+
+Pieces are the draws of the explorer's pass (stage 4's belt draws 82 to 92;
+the table counts the most), models the distinct entries among them. Each
+stage keeps to its own run of the table, except for the two small ones:
+
+- stage 7 is four of stage 1's models (16372, 16381, 16383, 16386) on stage
+  1's slab, with stage 8's colour rows;
+- stage 9 is one model, 18109, the first piece stage 6 draws, on stage 6's
+  slab and with stage 6's colour rows.
+
+Both are skyless; neither was reached in MAME's attract (above). Stage 2's
+sky is two pictures twice, and stage 10's is the four (66-69) that stage 9's
+entry names in another order; stage 9 itself never shows them. Stage 6 draws
+every fifth entry from 17889 to 18109; the four after each are consecutive
+meshes with the same face count, and nothing the explorer runs picks them:
+not the ring size (`0x5A75F4`, 0-4), not the culling helpers' answer (0.5 to
+5000), and not 400 passes of the stage task's tick.
+
+They are picked by the caller, not by game state. Entries 17889 to 18108
+are 44 characters of five entries each (44 x 5 = 220), and 18109 is the
+one piece outside them. Stage 6's routine (`0x6C500`) draws a 7 by 7 board
+of characters, a byte each from the string at `0xC75E0` ("A" to "Z", `,`,
+`.`, "0" to "9", `!`, `?`, six spaces, then codes 2, 1 and 0), through
+`0x63270(char, variant)`, which draws entry `0xC5A70[char] + variant`. That
+table gives each character its first entry, five apart: "0" 17889 to "9"
+17934, "A" 17939 to "Z" 18064, `,` 18069, code 0 18074, `!` 18079, `.`
+18084, `?` 18089, space 18094 (and every code it has no glyph for), code 2
+and `_` 18099, code 1 18104. The five entries of a character are one shape
+in five colours: each has its own mesh pointer (17939 to 17943: `0x92BA13`,
+`0x92BB1E`, ... `0x92BE3F`) and its own face records (`0x270330`,
+`0x270340`, ... `0x270370`), but the meshes decode to the same vertices and
+face count, and none of their faces is textured; the face records differ in
+colour. Each model has two face records, which differ only in their last
+word, the colour base (bits 6-15); its faces are untextured (bit 14 of the
+first word clear), so the board colours them from palette RAM entry
+`0x1000 + base`, shaded by the face's light. The second record is base 7
+in all five, palette `0xFFFF` (31, 31, 31: white); the first is base 441
+(`0x6E40`) in 17939, palette `0xFDC0` (red 0, green 14, blue 31), 482
+(`0x7880`) in 17940, `0xBBE0` (0, 31, 14), 93 in 17941, `0x81DF` (31, 14,
+0), 84 in 17942, `0x98C6` (6, 6, 6) and 483 in 17943, `0xB81F` (31, 0, 14):
+blue, green, orange, dark grey and pink, each beside white. MAME's palette
+RAM holds the same six values (read in `doab`'s attract, frames 600 to
+5400; the game has one palette table, uploaded at boot).
+Stage 6 passes variant 0 (loaded from `0xC75D0`, a ROM word holding 0) at
+`0x6C614`, `0x6C6A0` and `0x6C70C`. The only other caller is the name entry
+routine at `0x1DD00` (called from `0x1C540` and `0x1C7D8`): its grid of the
+same letters (string `0x91BA0`) passes 1 at `0x1DEAC` and 2 for the letter
+under the cursor (`0x557D48`) at `0x1DE98`; it passes 2 for the digits it
+makes from `0x557D68` (`0x1DFE4`, `0x1E0A4`, `0x1E170`), the `.` at
+`0x1E218`, the three initials `0x557D58`-`0x557D5C` (`0x1E30C`, `0x1E414`,
+`0x1E524`) and a letter at `0x1E690`, and 4 for the letters at `0x1E8A0`.
+Those 14 are every direct `call` to `0x63270` in the program; no instruction
+loads its address and no word in the program or data ROMs holds it, so no
+indirect call reaches it through a stored pointer. No direct call passes 3,
+nothing else reads `0xC5A70`, and no code names those entries by address.
+No indirect transfer reaches it either. A linear disassembly shows 343
+`callx`, `bx` and `balx` and 12 `calls`; followed from the program's own
+entry points (start IP `0x410`, `0x490` after the reinit at `0x3C0`, the
+fault, system procedure and interrupt tables at `0x210`, `0x1C0` and
+`0x7B10`, and the targets below), 80 of them are reachable and the rest are
+data read as code. 71 are `switch` jumps, `ld T[g4*4]` then `bx`, through
+tables of ROM words. Two are the task switcher (`0x25BC`, `0x27B4`), which
+jumps to a task's word +0x10: only `0x8210` writes it, from the constant
+each of its 42 callers loads (`0x2C70`, `0x5550`, ... `0x7D150`, never
+`0x63270`), and `0x2604` writes `0x825C`, the return address of the
+yield's `balx` at `0x8254`, which is one more and goes to the constant
+`0x24E0`. Four are leaf returns
+(`0x4E2F0`, `0x4E98C`, `0x4E99C`, `0x4EFD0`) through the register the
+entry copied `g14` into, a return address. Two are `callx` through the
+stage tables (`0x708AC`: `0x70440[0x5555BE]`; `0x71BD0`: `0x719E0[0x5555BE]`),
+ROM words read with a byte index. None computes its target by arithmetic,
+and the address `0x63270` is not in either ROM at any byte offset, so no
+indirect call or jump can land on it: the 14 direct calls are its only
+callers and each character's dark grey variant is never drawn. As a stage,
+6 shows variant 0 only, which is what the explorer draws.
+
+Its one piece outside the letters, 18109 (stage 9's too), is drawn as
+`18109 + [0x5A6EE0]`, like other stages' pieces. That word is the texture
+slot offset the stage loader sets (`0x715EC`-`0x71608`): 0 while the stage
+sits in the first of two slots (`0x5A6EEE` = 0), `0xC5960[stage]` (250 for
+stage 6) in the second, whose entries are the same meshes with their
+texture points moved on (18359 is 18109's). It does not touch the letters;
+the explorer draws the first slot.
+
+Every build draws the same stages. `readDoaStages` run on `doab`, `doa`,
+`doaa`, `doaab` and `doaae` gives the same models, matrices and texture points
+for every scenery piece of all twelve stages (one hash a stage, the same in
+all five), and the five tables above hold the same values in each: the same
+slab pointers, the same sky pictures, the same colour rows byte for byte and
+the same material slots (at 0x6B0 on the 2B builds and `doaa`, 0x870 on
+`doaab` and `doaae`). The model table is the shared data chips', so a model
+number means the same model in every build. The one difference is stage 1's
+fighters: `doab` and `doa` play the attract fight there and draw its two
+fighters (70 more pieces), while the 2A builds have no attract mapped and
+show the stage empty. The colour pointers of stages 12-15 differ by build,
+but those stages draw nothing. The routines sit at:
+
+| stage | `doab` | `doa` | `doaa` | `doaab` | `doaae` |
+|---|---|---|---|---|---|
+| 0 | 0x646C0 | 0x64770 | 0x5CC80 | 0x5CC10 | 0x5CC20 |
+| 11 | 0x6E8E0 | 0x6E990 | 0x66EA0 | 0x66E30 | 0x66E40 |
 
 ### Dead or Alive's fighters (`runDoaFighters` in `js/doa.js`)
 
@@ -1340,6 +1787,45 @@ display list for that frame all 69 draws match, the ribbon's links
 included, to 0.001 radians in their turn and 0.001 in place.
 
 Not read yet: Revision A's fight code.
+
+On the Animation tab a part is a place in that draw order, and the body
+routine works out every matrix whole (the copro's stack stays flat), so the
+skeleton is not in the ROM to read. `jointsOf` in `js/doafighters.js` finds
+it from the motion: a joint is fixed on its parent's bone, so a part's parent
+is the earlier part in whose frame its place holds still through every frame.
+A joint the motion never bends holds still in several; of those the parent is
+the one whose model comes nearest the joint, the bone it is the end of. That
+gives hips, chest, head, two arms and two legs of three, and the chains that
+hang (Tina's ribbons, Kasumi's sash and ponytail, Jann Lee's belt), the same
+in every motion tried. A part
+drawn on its parent's very matrix in every frame is laid on it: the face
+(eyes and mouth) on the head, the bust on the chest. The board's sort puts
+those over the skin in the order they are sent, so the explorer ranks each
+such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
+ranked one part at a time, the head's skin hid the eyes.
+
+### Dead or Alive's pictures (`js/cells.js`)
+
+The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its
+own tiles, colours and map. The table at data 0x20C0000 (data ROM 0xC0000)
+holds 242 entries of three pointers, 12 bytes each:
+
+- tiles: chunks of a u32 count and that many 32-byte tiles, ending with a
+  count of 0; each chunk starts a fresh block of 128 tiles;
+- palette: 16 colours (32 bytes) a chunk, for every block the chunk fills;
+- map: u16 width and height in tiles, then a u16 entry a tile, the low 13
+  bits the picture's own tile number.
+
+The loader (`0x9000` on Revision B) takes free blocks from its bitmap at
+`0x54F980`, writes the tiles to `0x1080000 + block * 0x1000` and the colours
+to `0x1800000 + block * 32`; the draw (`0x9250`) adds the block to each
+entry's character (`block << 7`) and makes it the palette group too. Every
+map's highest tile number is its own tile count less one, so a picture needs
+nothing loaded with it: the Cells tab gives cell n its own CG n, loaded from
+block 0. The pictures are the Tecmo logo and warnings, the profiles and name
+plates, portraits, the stage skies (named from `doa.sky`), the fight's
+messages, fonts, the rankings, endings, staff roll and title logos. The table
+is the same in every build.
 
 ### Polygon decoding (`js/model.js`)
 
