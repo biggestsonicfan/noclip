@@ -740,6 +740,27 @@ const fvipers = {
      */
     motionTable: { list: 0x06c00004, count: 1055 },
     /*
+     * The sway chains (js/osage.js), Sonic The Fighters' records and code on
+     * this game's data. The definitions by record, `0x63E34[+0x1B0*4]` at
+     * 0x627E8, 26 of them before the empty table at 0x63E9C. Grace's switched
+     * on her upper armour every frame (0x62860). Gravity as 0x7284 stores it.
+     * The wind (0x63B80): each record's two entries at 0x63A58, and the
+     * stages it blows on, by 0x500064, with the direction and which entry
+     * (the second where flag 10 is clear). The head is slot 2.
+     */
+    osage: {
+        table: 0x00063e34, count: 26, gravity: 0.005222222302109003, head: 2,
+        byArmour: { char: 1, broken: 0x00063fcc, whole: 0x00064154 },
+        wind: {
+            table: 0x00063a58,
+            stages: {
+                0: { angle: 0xf000, entry: 0 }, 1: { angle: 0x8000, entry: 1 },
+                4: { angle: 0xf000, entry: 0 }, 5: { angle: 0xc000, entry: 1 },
+                8: { angle: 0x7000, entry: 0 },
+            },
+        },
+    },
+    /*
      * The sound board is Sonic The Fighters', the ROMs laid out the same way
      * and the same three boot commands (0x8574, 0x8B9C, 0x8BAC). FIGHT_INT
      * sends the stage's song in round 1 (0xD5B4) out of level_music_list at
@@ -765,16 +786,30 @@ const fvipers = {
         standardRig: 0x2c194,
         fighters: {
             records: 0x0640d2b0, count: 13, p2: 13, names: FV_NAMES, texSet: 0x20,
-            /* The break table (0x640EDAC) and mune_unit_change's chests
-             * (0x6421F80); js/vf2fighters.js, readArmour. The shoulder pads
+            /* The break table (0x640EDAC), mune_unit_change's chests
+             * (0x6421F80) and koshi_unit_change's hips (0x6422400);
+             * js/vf2fighters.js, readArmour, readHips. The shoulder pads
              * (kata_pat_disp's 0x642147C) and the skirt (kosi_mino_disp's
              * 0x6421DE0, drawn for the characters it compares against;
              * 14 is past the roster); readPads, readSkirt. koshi_unit_change's
-             * hips (0x6422400) for the win streak's hips; readStreakHips. */
+             * hips (0x6422400) for the win streak's hips; readHips. Picky's
+             * hair, pky_kami_disp's, for the characters rob_disp names (18 is
+             * his P2 record); its models are immediates, HAIR_PIECES. */
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
-                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] },
+                pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
+                /* The flying pieces: 0x2D614's outward and upward speeds by
+                 * attack kind, its sixteen headings and speed jitters, and
+                 * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
+                 * 0x2D254's effect, 54 models a record (+0x1B0). */
+                debris: {
+                    out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924,
+                    flipbook: 0x06421760,
+                },
             },
+            /* The midriff, record +0x24, and the one a broken chest draws
+             * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */
+            midriff: { at: 0x24, broken: 0x0642f9ec },
         },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },

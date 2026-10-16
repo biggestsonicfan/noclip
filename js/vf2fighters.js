@@ -80,8 +80,10 @@
  * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
  */
 
-import { buildPose, poseMatrices, viewerMatrix, turnedBy, SLOT_COUNT, SLOT_PARENT } from './pose.js';
+import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
+import { readModelEntry } from './romset.js';
+import { readDebrisTables } from './fvdebris.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -175,6 +177,7 @@ function readFighter(rom, F, record, char) {
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
         extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : [],
+        midriff: F.midriff ? readMidriff(rom, F.midriff, root, record) : null,
         offsets,
         parts: offsets.map((offset, s) => ({
             index: s, model: u32(list + s * 4), offset, joint: s,
@@ -191,41 +194,60 @@ function readFighter(rom, F, record, char) {
  * +0x40), so that is the model the slot shows from then on. `chest` is
  * mune_unit_change's 0x6421F80[char]: for the four fighters it names, a
  * broken chest is one of 31 models (its +4, signed halfwords) a spring picks,
- * 15 + round(spring + 0.5); at rest that is entry `rest`.
+ * 15 + trunc(position + 0.5) (see bounceStep); at rest that is entry `rest`.
  */
 const ARMOUR_ENTRY = 8, ARMOUR_PIECE = 0x28, ARMOUR_STAGES = 4;
 
-/* Per slot, the model each stage leaves on it, in order; empty for a slot
- * that never breaks. */
+/* One piece record as 0x2D390 copies it into a flying slot (fvdebris.js):
+ * +6 the model thrown (0 throws nothing), +8/+0xA/+0xC its X, Y and Z turns,
+ * +0xE/+0x10/+0x12 the turns it settles on (0 none), +0x14 its weight (a
+ * float, whose bits also pick its spin and heading), +0x18 its radius against
+ * the walls, +0x1C its flags, +0x20 its floor. */
+function readArmourPiece(dv, o, slot, stage) {
+    const h = (k) => dv.getInt16(o + k, true);
+    return {
+        slot, stage, model: h(6), angles: [h(8), h(0xa), h(0xc)], targets: [h(0xe), h(0x10), h(0x12)],
+        weight: dv.getFloat32(o + 0x14, true), weightBits: dv.getUint32(o + 0x14, true),
+        radius: dv.getFloat32(o + 0x18, true), flags: dv.getUint32(o + 0x1c, true), floor: dv.getFloat32(o + 0x20, true),
+    };
+}
+
+/* Per slot, the model each stage leaves on it, in order (empty for a slot
+ * that never breaks), and every piece its stages throw off. */
 function readArmourSlots(rom, table) {
-    const slots = [];
+    const slots = [], pieces = [];
     for (let s = 0; s < SLOT_COUNT; s++) {
         const r = table && dataAt(rom, table + s * ARMOUR_ENTRY);
-        const stages = [];
+        const stages = [], thrown = [];
         if (r) {
-            const pieces = r.view.getUint32(r.off + 4, true);
+            const list = r.view.getUint32(r.off + 4, true);
             let k = 0;
             for (let st = 0; st < ARMOUR_STAGES; st++) {
                 const n = r.view.getUint8(r.off + st);
-                if (!n) break;
-                const p = dataAt(rom, pieces + k * ARMOUR_PIECE);
-                if (!p) break;
+                const p = n ? dataAt(rom, list + k * ARMOUR_PIECE) : null;
+                if (!p || p.off + n * ARMOUR_PIECE > p.data.length) break;
                 stages.push(p.view.getInt16(p.off + 4, true));
+                for (let j = 0; j < n; j++) thrown.push(readArmourPiece(p.view, p.off + j * ARMOUR_PIECE, s, st));
                 k += n;
             }
         }
         slots.push(stages);
+        pieces.push(thrown);
     }
-    return slots;
+    return { slots, pieces };
 }
 
-/* The broken chest's model at rest, or null for a fighter with no spring. */
-function readRestingChest(rom, A, i) {
+/* A chest spring: 0x6421F80[char] +4 points at 31 signed halfwords, the
+ * models the spring picks by index. Null for a fighter with no spring. */
+const BOUNCE_MODELS = 31;
+
+function readChestModels(rom, A, i) {
     const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
     const rec = A.chest ? u32(A.chest + i * 4) : 0;
     const list = rec ? u32(rec + 4) : 0;
-    const r = list ? dataAt(rom, list + A.rest * 2) : null;
-    return r ? r.view.getInt16(r.off, true) : null;
+    const r = list ? dataAt(rom, list) : null;
+    if (!r || r.off + BOUNCE_MODELS * 2 > r.data.length) return null;
+    return Array.from({ length: BOUNCE_MODELS }, (_, k) => r.view.getInt16(r.off + k * 2, true));
 }
 
 /*
@@ -235,25 +257,128 @@ function readRestingChest(rom, A, i) {
  * (+0x1F48 bit 9), it draws the model at +0x18's first halfword instead of
  * any it would swing through (0x31B94, 0x31D58). The streak is the versus
  * one: 0xE06C counts it up while the same side keeps winning and sets it back
- * to 1 when the other side wins. Null where the record has no +0x18.
+ * to 1 when the other side wins. readHips reads it as `broken`.
  */
-const STREAK_HIPS = 0x18;
 export const STREAK_WINS = 100;
 
-function readStreakHips(rom, A, i) {
+/*
+ * koshi_unit_change's 0x6422400[char] (Honey and Bahn): eight pointers.
+ * +0 the standing and the low pair, +0xC motion 0x31's list (41 halfwords),
+ * +0x10 motion 0x180's (indexed by frame, unbounded: read for the motion's
+ * frames), +0x18 Honey's broken hips, +0x1C a list of (motion, list) ending
+ * in motion 0, each list a count and then that many pairs. A pair is the
+ * intact model and the broken one. +4, +8 and +0x14 need move flags or fight
+ * state the explorer lacks (TECHNICAL.md, "The hips"), so they are not read.
+ */
+const HIPS_M31 = 0x31, HIPS_M180 = 0x180, HIPS_M31_LAST = 40;
+
+function readHalves(rom, addr, n) {
+    const r = addr ? dataAt(rom, addr) : null;
+    if (!r || r.off + n * 2 > r.data.length) return null;
+    return Array.from({ length: n }, (_, k) => r.view.getInt16(r.off + k * 2, true));
+}
+
+const toPairs = (flat) => flat && Array.from({ length: flat.length >> 1 }, (_, k) => [flat[2 * k], flat[2 * k + 1]]);
+
+function readHips(rom, A, i) {
     const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
-    const rec = A.hips ? u32(A.hips + i * 4) : 0;
-    const list = rec ? u32(rec + STREAK_HIPS) : 0;
-    const r = list ? dataAt(rom, list) : null;
-    return r ? r.view.getInt16(r.off, true) : null;
+    const t = A.hips ? u32(A.hips + i * 4) : 0;
+    if (!t) return null;
+    const [base, low] = toPairs(readHalves(rom, u32(t), 4)) ?? [];
+    const byMotion = new Map();
+    for (let e = u32(t + 0x1C); e && u32(e); e += 8) {
+        const list = u32(e + 4), n = u32(list);
+        const got = n ? toPairs(readHalves(rom, list + 4, n * 2)) : null;
+        if (got) byMotion.set(u32(e), got);
+    }
+    const m180 = decodeMotion(rom, HIPS_M180);
+    return {
+        base, low, byMotion,
+        m31: readHalves(rom, u32(t + 0xC), HIPS_M31_LAST + 1),
+        m180: m180 ? readHalves(rom, u32(t + 0x10), m180.frames + 1) : null,
+        broken: readHalves(rom, u32(t + 0x18), 1)?.[0] ?? null,
+    };
+}
+
+/* Every model readHips can pick, for the roster's model list. */
+export function hipModels(H) {
+    if (!H) return [];
+    const out = [...(H.base ?? []), ...(H.low ?? []), ...(H.m31 ?? []), ...(H.m180 ?? [])];
+    for (const list of H.byMotion.values()) for (const p of list) out.push(...p);
+    if (H.broken != null) out.push(H.broken);
+    return [...new Set(out)].filter((m) => m > 0);
 }
 
 function readArmour(rom, A, i) {
     const r = dataAt(rom, A.table + i * 4);
     const table = r ? r.view.getUint32(r.off, true) : 0;
-    const slots = readArmourSlots(rom, table);
+    const { slots, pieces } = readArmourSlots(rom, table);
     if (!slots.some((x) => x.length)) return null;
-    return { table, slots, chest: readRestingChest(rom, A, i), streakHips: readStreakHips(rom, A, i) };
+    const bounce = readChestModels(rom, A, i);
+    const hips = readHips(rom, A, i);
+    return {
+        table, slots, pieces, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
+        hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
+        flipbook: readFlipbook(rom, A.debris, i),
+    };
+}
+
+/* The flipbook effect a piece with flag bit 3 becomes (0x2D254): the
+ * record's 0x6421760 entry, 54 halfword models, one a frame. */
+const FLIPBOOK_FRAMES = 54;
+
+function readFlipbook(rom, D, i) {
+    const at = (addr) => (D?.flipbook ? dataAt(rom, addr) : null);
+    const r = at(D?.flipbook + i * 4);
+    const list = r && at(r.view.getUint32(r.off, true));
+    if (!list || list.off + FLIPBOOK_FRAMES * 2 > list.data.length) return null;
+    return Array.from({ length: FLIPBOOK_FRAMES }, (_, k) => list.view.getUint16(list.off + k * 2, true));
+}
+
+/*
+ * Picky's hair (TECHNICAL.md, "Picky's hair"). pky_kami_disp (0x1ADDC) draws
+ * it on the head's matrix, for the characters rob_disp names (0x1A1C0), once
+ * the helmet (slot 2, +0x1F48 bit 2) has broken. The models, the translate
+ * and the turns are the immediates pky_kami_init (0x1AD08) writes to player
+ * +0xA70..+0xAA4, the same for anyone: three models, each drawn twice, at
+ * the swing (`s`, +0xA98) and at half of it (`s >> 1`), with the turns sent
+ * in the order listed after the translate.
+ */
+const HAIR_OFFSET = [0, 0, Math.fround(-0.2510)];
+const HAIR_PIECES = [
+    { model: 680, turns: (s) => [[1, 0x4000], [0, 0x8000], [2, -s]] },
+    { model: 680, turns: (s) => [[1, 0x4000], [0, 0x8000], [2, -(s >> 1)]] },
+    { model: 908, turns: (s) => [[1, 0xc000], [2, s]] },
+    { model: 908, turns: (s) => [[1, 0xc000], [2, s >> 1]] },
+    { model: 909, turns: (s) => [[1, s + 0x8000], [2, 0x4000]] },
+    { model: 909, turns: (s) => [[1, (s >> 1) + 0x8000], [2, 0x4000]] },
+];
+
+/*
+ * The hair's swing, stepped once a frame after the draw (0x1B18C), so a frame
+ * draws the swing the frame before left. It is kicked by the head's height
+ * (+0x210, slot 2's y): v is this frame's rise, the kick 180000 times its
+ * change from last frame's v (+0xA88 = 180.0, times 1000.0), negated unless
+ * last frame's v was negative (its sign bit), truncated to an integer. The
+ * swing's speed (+0xA9A) gains the kick, loses 48 (+0xA9C; three times that
+ * with move flags +0x1A4 bit 16 set and bit 15 clear, which the explorer
+ * never has), and is held to at most 0x300 (+0xA9E). The swing gains the
+ * speed; at 0x3000 or more it stops there, at 0 or less it rests at 0, and
+ * either way the speed is cleared. pky_kami_init starts all of it at 0, the
+ * last height too.
+ */
+const HAIR_KICK = Math.fround(180000), HAIR_DAMP = 48, HAIR_SPEED = 0x300, HAIR_TOP = 0x3000;
+
+export function hairStep(h, y) {
+    const v = f32(y - h.y);
+    let dv = f32(v - h.v);
+    if (!(h.v < 0 || Object.is(h.v, -0))) dv = -dv;
+    let w = Math.min(h.w + Math.trunc(f32(HAIR_KICK * dv)) - HAIR_DAMP, HAIR_SPEED);
+    let s = h.s + w;
+    if (s >= HAIR_TOP) { s = HAIR_TOP; w = 0; }
+    if (s <= 0) { s = 0; w = 0; }
+    Object.assign(h, { s, w, y, v });
+    return h;
 }
 
 /* damage_unit's halves: slots 0-8 are the upper body, 9-15 the lower. */
@@ -263,16 +388,21 @@ const LOWER_FIRST = 9, CHEST = 1;
  * Shoulder pads and skirt (TECHNICAL.md, "Shoulder pads and skirt"). Each is
  * drawn on a slot's matrix as rob_disp leaves it: translate, ang_z, ang_y,
  * ang_x, set_obj; a pad's second model is translated again on the pad's own
- * matrix. The swing each routine adds from the arms or thighs is left out:
- * this is the standing fighter. `hiddenBy` is the slot whose bit in +0x1F48
- * skips the piece. A model of 0 (or -1) is no model, as for the parts.
+ * matrix. Each routine adds a swing from the arms or thighs (padSwings,
+ * skirtSwings). `hiddenBy` is the slot whose bit in +0x1F48 skips the piece.
+ * A model of 0 (or -1) is no model, as for the parts.
  *
  * kata_pat_disp (slot 1): 0x642147C[char] points at a left and a right
- * record, 0x24 bytes: +0 model, +4 translate, +0x10/+0x12/+0x14 the X/Y/Z
- * turns (the left's Y negated), +0x16 a second model, +0x18 its translate.
- * The left goes when slot 6 breaks, the right when slot 3 does.
+ * record, 0x24 bytes: +0 model, +2 the swing's limit, +4 translate,
+ * +0x10/+0x12/+0x14 the X/Y/Z turns (the left's Y negated), +0x16 a second
+ * model, +0x18 its translate. The left goes when slot 6 breaks, the right
+ * when slot 3 does; each swings with that upper arm, the left's added to its
+ * X turn and the right's taken off.
  */
-const PAD_SIDES = [{ hiddenBy: 6, flipY: true }, { hiddenBy: 3, flipY: false }];
+const PAD_SIDES = [
+    { hiddenBy: 6, flipY: true, arm: 6, sign: 1 },
+    { hiddenBy: 3, flipY: false, arm: 3, sign: -1 },
+];
 
 function readPads(rom, A, i) {
     const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
@@ -286,7 +416,7 @@ function readPads(rom, A, i) {
         if (model <= 0) return;
         const y = dv.getUint16(o + 0x12, true);
         const pad = {
-            slot: CHEST, hiddenBy, model, offset: vec(dv, o + 4),
+            slot: CHEST, hiddenBy, model, offset: vec(dv, o + 4), pad: side, limit: dv.getInt16(o + 2, true),
             turn: [dv.getUint16(o + 0x10, true), flipY ? -y & 0xffff : y, dv.getUint16(o + 0x14, true)],
         };
         out.push(pad);
@@ -300,14 +430,15 @@ function readPads(rom, A, i) {
  * kosi_mino_disp (slot 9), for the characters it names: four panels from
  * 0x6421DE0[char * 16] (models at +0..+6, a float at +8), placed by the
  * constants action_init writes to 0x50A324..0x50A378, the same for everyone.
- * Panels 3 and 4 step a further +8 / -(+8) along Z. A thigh has to lift past
- * a panel's limit before it swings, so standing they hang at these turns.
+ * Panels 3 and 4 step a further +8 / -(+8) along Z. Each swings about one
+ * axis (`swing`: the turn it adds to, and which way) once a thigh lifts it
+ * past its limit; skirtSwings works out how far.
  */
 const SKIRT_PANELS = [
-    { at: 4, offset: [0.013, 0.087, 0], z: 0 },
-    { at: 6, offset: [0.013, -0.088, 0], z: 0 },
-    { at: 2, offset: [0, -0.017, 0.107], z: 1 },
-    { at: 0, offset: [0, -0.017, -0.107], z: -1 },
+    { at: 4, offset: [0.013, 0.087, 0], z: 0, swing: [0, 1], limit: 0x3000 },
+    { at: 6, offset: [0.013, -0.088, 0], z: 0, swing: [0, -1], limit: 0x1e00 },
+    { at: 2, offset: [0, -0.017, 0.107], z: 1, swing: [1, 1], limit: 0x1000 },
+    { at: 0, offset: [0, -0.017, -0.107], z: -1, swing: [1, -1], limit: 0x1000 },
 ];
 const SKIRT_TURN = [0x4000, 0xc000, 0], HIPS = 9;
 
@@ -315,18 +446,141 @@ function readSkirt(rom, A, i) {
     const r = A.skirt?.chars.includes(i) ? dataAt(rom, A.skirt.table + i * 16) : null;
     if (!r) return [];
     const dv = r.view, f = dv.getFloat32(r.off + 8, true);
-    return SKIRT_PANELS.map(({ at, offset, z }) => ({
-        slot: HIPS, hiddenBy: HIPS, model: dv.getInt16(r.off + at, true),
+    return SKIRT_PANELS.map(({ at, offset, z }, panel) => ({
+        slot: HIPS, hiddenBy: HIPS, model: dv.getInt16(r.off + at, true), panel,
         offset: [offset[0], offset[1], offset[2] + z * f], turn: SKIRT_TURN,
     })).filter((e) => e.model > 0);
+}
+
+/*
+ * How far each panel swings this frame (kosi_mino_disp, 0x31E54; TECHNICAL.md,
+ * "The skirt"). calc_unit_mat reads back each matrix's roll, Fn_get_glo_ang's
+ * third angle, atan2(col0.y, col1.y): the hips' less a half turn (+0xAD4), the
+ * thighs' (slot 13 +0xADA, slot 10 +0xAE0). A thigh's spread is hips + thigh +
+ * a half turn: from 0 up it pushes panels 1 and 3 (or 1 and 4), below 0 panels
+ * 2 and 3 (2 and 4). Its lift (+0xAD8, +0xADE) is atan2(x, sin(hips) z +
+ * cos(hips) y) of the thigh's bone vector as the motion turns it, before the
+ * facing's quarter turn. The board takes slot 13's lift for slot 10's share
+ * of panel 4, and so does this. Measured against MAME's attract mode, the
+ * thighs' rolls and lifts come out as the board's, and the hips' roll as the
+ * board's negated, so it is taken that way round.
+ */
+const SKIRT_THIGHS = [13, 10];
+const roll = (s) => brad(Math.atan2(s.r[1], s.r[4]));
+
+function thighLift(r, o, hips) {
+    // The explorer's (x, y, z) is the board's (z, y, -x): undo the facing.
+    const [z, y, x] = [0, 1, 2].map((k) => r[k] * o[0] + r[k + 3] * o[1] + r[k + 6] * o[2]);
+    return brad(Math.atan2(-x, Math.sin(rad(hips)) * z + Math.cos(rad(hips)) * y));
+}
+
+function skirtSwings(pose, offsets) {
+    const hips = s16(0x8000 - roll(pose[HIPS]));
+    const [a, b] = SKIRT_THIGHS.map((slot) => {
+        const d = s16(hips + roll(pose[slot]) + 0x8000);
+        return { lift: thighLift(pose[slot].r, offsets[slot + 1], hips), out: Math.max(d, 0), back: Math.max(-d, 0) };
+    });
+    const cos = (w) => Math.cos(rad(w)), sin = (w) => Math.sin(rad(w));
+    const by = (spread, f) => (f >= 0 ? Math.trunc(spread * f) : 0);
+    const reach = [
+        [by(a.out, cos(a.lift + 0x8000)), by(b.out, cos(b.lift + 0x8000))],
+        [by(a.back, cos(a.lift)), by(b.back, cos(b.lift))],
+        [by(a.out, sin(a.lift + 0x8000)), by(a.back, sin(a.lift + 0x8000))],
+        [by(b.out, -sin(b.lift + 0x8000)), by(b.back, sin(a.lift + 0x8000))],
+    ];
+    return reach.map((r, k) => Math.max(0, Math.max(...r) - SKIRT_PANELS[k].limit));
+}
+
+/*
+ * How far each pad swings this frame (kata_pat_disp, 0x32A90; TECHNICAL.md,
+ * "The shoulder pads"). The lean is the head's origin less the waist's
+ * (player +0x20C less +0x1F4, slots 2 and 0); p is the upper arm's reach to
+ * the elbow (slot 7's offset, +0xD4, turned by slot 6; slot 4's, +0xB0, by
+ * slot 3) along it. The swing is atan2(p, sqrt(L^2 - p^2)), asin(p / L) with
+ * L that offset's x: 0 while p is below 0, at most the pad's limit. Facing
+ * turns the lean and the arm alike, so the explorer's frame does as well.
+ */
+function padSwing(pose, offsets, arm, limit) {
+    const { r } = pose[arm], o = offsets[arm + 1];
+    const v = [0, 1, 2].map((k) => r[k] * o[0] + r[k + 3] * o[1] + r[k + 6] * o[2]);
+    const lean = [0, 1, 2].map((k) => pose[2].t[k] - pose[0].t[k]);
+    const p = (v[0] * lean[0] + v[1] * lean[1] + v[2] * lean[2]) / Math.hypot(...lean);
+    if (!(p >= 0)) return 0;
+    const L = o[0];
+    return Math.min(p < L ? brad(Math.atan2(p, Math.sqrt(L * L - p * p))) : 0x4000, limit);
+}
+
+/* A pad, panel or lock of hair turned by its swing; one with none, as it is. */
+function swungExtra(e, swings, pose, offsets, hair) {
+    if (e.hair !== undefined) return { ...e, turns: e.turns(hair) };
+    if (e.pad !== undefined) {
+        const { arm, sign } = PAD_SIDES[e.pad];
+        const s = padSwing(pose, offsets, arm, e.limit);
+        return { ...e, swing: s, turn: [(e.turn[0] + sign * s) & 0xffff, e.turn[1], e.turn[2]] };
+    }
+    if (e.panel === undefined || !swings) return e;
+    const [axis, sign] = SKIRT_PANELS[e.panel].swing;
+    return { ...e, turn: e.turn.map((v, k) => (k === axis ? (v + sign * swings[e.panel]) & 0xffff : v)) };
+}
+
+/*
+ * The midriff (TECHNICAL.md, "The midriff"): a strip of triangles from a ring
+ * on the hips to a ring on the chest, in the hips' frame, which calc_unit_mat
+ * (0x17A30) writes into polygon RAM every frame and rob_disp (0x1A2D8) draws
+ * on the hips' matrix. `at` is the record's pointer to it: +8 the model whose
+ * texture points and material it is drawn with, +0x70 the chest's ring, +0xD0
+ * the link count and +0xD4 the links, 0x28 bytes each (an attribute, a normal,
+ * two points), then a closing word and two index bytes a link. An index from 8
+ * up is chest point index - 8, put in the hips' frame; below 8 the link's own
+ * point, already in it. The draw starts 4 words in, past the first attribute
+ * and normal, so the bytes are model.js's records as they stand. A broken
+ * chest (+0x1F48 bit 1) takes `broken[char]`'s model: same points, other
+ * material.
+ */
+const MIDRIFF = { model: 8, ring: 0x70, count: 0xd0, links: 0xd4, link: 0x28, first: 8, ringPoints: 16 };
+
+function midriffLook(rom, dv, at) {
+    const model = dv.getInt32(at + MIDRIFF.model, true);
+    const { uvPtr, matPtr } = readModelEntry(rom, model);
+    return { model, uvPtr, matPtr };
+}
+
+function readMidriff(rom, M, root, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const r = dataAt(rom, u32(root + M.at));
+    if (!r) return null;
+    const dv = r.view, o = r.off, count = dv.getUint32(o + MIDRIFF.count, true);
+    const links = o + MIDRIFF.links, index = links + (10 * count + 1) * 4;
+    if (count < 1 || index + 2 * count > r.data.length) return null;
+    const template = new Uint8Array(MIDRIFF.link * count);
+    template.set(r.data.subarray(links + 16, links + MIDRIFF.link * count + 4));
+    const byPoint = new Map();
+    for (let k = 0; k < 2 * count; k++) {
+        const n = r.data[index + k] - MIDRIFF.first;
+        if (n < 0 || n >= MIDRIFF.ringPoints) continue;
+        if (!byPoint.has(n)) byPoint.set(n, { p: vec(dv, o + MIDRIFF.ring + n * 12), to: [] });
+        byPoint.get(n).to.push(MIDRIFF.link * (k >> 1) + 12 * (k & 1));
+    }
+    const b = dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at));
+    return {
+        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST,
+        ...midriffLook(rom, dv, o), broken: midriffLook(rom, (b ?? r).view, (b ?? r).off),
+    };
 }
 
 /* A pad or panel's board-frame transform on its slot's. */
 function placeExtra(slot, e) {
     const at = (r, t, o) => [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
     const t = at(slot.r, slot.t, e.offset);
-    const r = turnedBy(slot.r, e.turn[0], e.turn[1], e.turn[2]);
+    const r = e.turns ? turnedInOrder(slot.r, e.turns) : turnedBy(slot.r, e.turn[0], e.turn[1], e.turn[2]);
     return { r, t: e.then ? at(r, t, e.then) : t };
+}
+
+/** The tables the flying pieces are thrown by, from the profile's
+ * `armour.debris`; null in a game without them. */
+export function fighterDebrisTables(rom) {
+    const D = rom.game.rig?.fighters?.armour?.debris;
+    return D ? readDebrisTables(rom, D, dataAt) : null;
 }
 
 /** Which halves of a fighter have a slot that breaks: damage_unit breaks one
@@ -340,12 +594,13 @@ export function armourHalves(body) {
 /**
  * The fighter as a hit that breaks a half leaves it: in the board one hit runs
  * every slot of the half through all its stages, so each broken slot shows
- * its last stage's model, and a chest with a spring its resting model.
+ * its last stage's model, and a chest with a spring its resting model, which
+ * `bounce` (the 31 models) lets the spring change frame by frame.
  *
  * @param {object} body from readFighters
  * @param {{upper: boolean, lower: boolean, streak?: boolean}} which the
  *        halves that are broken, and whether the fighter is on a win streak
- *        of STREAK_WINS or more (readStreakHips)
+ *        of STREAK_WINS or more (readHips' `broken`)
  * @returns {object} the body, or a copy with its parts' models swapped
  */
 export function armouredFighter(body, which) {
@@ -353,6 +608,8 @@ export function armouredFighter(body, which) {
     if (!A || (!which.upper && !which.lower)) return body;
     const broken = (s) => (s < LOWER_FIRST ? which.upper : which.lower) && A.slots[s].length > 0;
     const extras = body.extras.filter((e) => !broken(e.hiddenBy));
+    /* Picky's hair shows once the helmet is off (+0x1F48 bit 2). */
+    if (A.hair && broken(HEAD_SLOT)) extras.push(...A.hair);
     const parts = body.parts.map((p) => {
         if (!broken(p.index)) return p;
         const last = A.slots[p.index][A.slots[p.index].length - 1];
@@ -360,7 +617,18 @@ export function armouredFighter(body, which) {
             : p.index === HIPS && which.streak && A.streakHips > 0 ? A.streakHips : last;
         return { ...p, model: model > 0 ? model : 0 };
     });
-    return { ...body, parts, extras };
+    /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
+     * slot model, as mune_unit_change returns it unchanged. */
+    const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
+    const midriff = broken(CHEST) && body.midriff ? { ...body.midriff, ...body.midriff.broken } : body.midriff;
+    /* The fight's +0x7F4 bit 2, which Grace's sway chains are switched on
+     * (js/osage.js) whether or not a slot of the half breaks. */
+    const upperBroken = Boolean(which.upper);
+    /* What each broken half throws off, in damage_unit's order: its slots
+     * ascending, each slot's stages in turn (fvdebris.js). */
+    const thrown = (from, to) => A.pieces.slice(from, to).flat().filter((p) => broken(p.slot));
+    const debris = { upper: thrown(0, LOWER_FIRST), lower: thrown(LOWER_FIRST, SLOT_COUNT) };
+    return { ...body, parts, extras, bounce, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
@@ -537,7 +805,10 @@ const ZERO_BLEND = Array.from({ length: 12 }, () => [0, 0, 0]);
 function liveFor(body) {
     let live = LIVE.get(body);
     if (!live) {
-        live = { motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0] };
+        live = {
+            motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0],
+            spring: null,
+        };
         LIVE.set(body, live);
     }
     return live;
@@ -570,6 +841,121 @@ function blendFor(live, rom, motion, frame, sample) {
     return (live.blend = blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND);
 }
 
+/*
+ * The chest bounce (TECHNICAL.md, "The chest bounce"): mune_unit_change
+ * (0x31888) swaps a broken chest's model on the chest's own matrix, picked by
+ * a spring, +0xC6C the position and +0xC68 the velocity, floats. It is driven
+ * by the distance from the head (+0x20C, this frame's) to +0xC7C, the waist
+ * (+0x1F4) as calc_unit_mat found it before storing this frame's; +0xC64 is
+ * the distance it measured last frame. The per-frame list (0x6421F80 +0) is
+ * not followed: it needs the move flags at +0x1A4 to be exactly 0x200, and
+ * the explorer has no move flags, so this is the spring alone.
+ *
+ * The spring starts at 0/0 whenever the fighter is loaded or its armour
+ * switched, the explorer's round start. That reset is the explorer's choice:
+ * the ROM was not found to clear these at a round start. So is the first
+ * distance being taken as the last one, which starts the spring without a
+ * kick.
+ */
+const f32 = Math.fround;
+const KICK = f32(160), KICK_CAP = f32(4.2), DAMP = f32(0.935);
+const WALL = 15, BOUNCE_BACK = f32(0.78), PULL_UP = f32(0.14), PULL_DOWN = f32(-0.1);
+const BOUNCE_REST = 15;
+
+/* One frame of the spring, the five steps from loc_3191C, in floats. */
+export function bounceStep(s, d) {
+    const k = Math.min(f32(Math.abs(f32(s.last - d)) * KICK), KICK_CAP);
+    s.last = d;
+    let v = s.v;
+    if (v === 0) v = k;
+    else if (k >= Math.abs(v)) v = v < 0 ? -k : k;
+    let p = f32(s.p + v);
+    v = f32(v * DAMP);
+    if (p >= WALL || p <= -WALL) {
+        p = p >= WALL ? WALL : -WALL;
+        v = f32(-v * BOUNCE_BACK);
+    }
+    const negative = p < 0 || Object.is(p, -0);
+    s.v = f32(v + (negative ? PULL_UP : PULL_DOWN));
+    s.p = p;
+    return s;
+}
+
+/* The index into the 31: fix truncates toward zero (MODE1 TRUNC). */
+export function bounceIndex(p) {
+    return BOUNCE_REST + Math.trunc(f32(p + 0.5));
+}
+
+const WAIST_SLOT = 0, HEAD_SLOT = 2;
+
+/*
+ * The hips (TECHNICAL.md, "The hips"): koshi_unit_change (0x31ADC) swaps slot
+ * 9's model on the hips' own matrix, as mune_unit_change does the chest's.
+ * In its order, with the move flags (+0x1A4) all clear, as the explorer has
+ * them: Honey's win-streak hips, where the streak switch asks for them
+ * (STREAK_WINS); motion 0x31's list by frame (to 40); motion 0x180's by
+ * frame, also only on the streak switch (it needs a streak of 10); the
+ * motion's own list by frame (to its last), taken only when it differs from the slot's model; then the standing
+ * pair, or the low one while the waist (+0x1F8) is under 0.4. A missing list
+ * leaves the slot's model. The frame is +0x1AA, which set_motion starts at 1,
+ * as the explorer does.
+ */
+const HIPS_LOW = 0.4;
+
+function hipsModel(body, motion, frame, waistY) {
+    const H = body.armour.hips, k = body.hipsBroken ? 1 : 0;
+    const own = body.parts[HIPS].model;
+    const id = motion?.id;
+    if (k && body.streak && H.broken > 0) return H.broken;
+    if (id === HIPS_M31) return H.m31 ? H.m31[Math.min(frame, HIPS_M31_LAST)] : own;
+    if (id === HIPS_M180) return (body.streak && H.m180?.[frame]) || own;
+    const list = H.byMotion.get(id);
+    const listed = list ? list[Math.min(frame, list.length - 1)][k] : own;
+    if (listed !== own) return listed;
+    if (!H.base) return own;
+    return (waistY < HIPS_LOW ? H.low : H.base)[k];
+}
+
+const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+
+/* The chest's model this frame, stepping the spring once when playback has
+ * moved on a frame. A frame picked on its own holds the spring and takes its
+ * distances afresh, so a jump does not kick it. */
+function bounceChest(body, live, pose, frame, stepped) {
+    const head = pose[HEAD_SLOT].t, waist = pose[WAIST_SLOT].t.slice();
+    let s = live.spring;
+    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist };
+    /* A motion starting (or looping) stands the explorer's fighter back where
+     * its motion starts, a jump the board's fighter does not make, so on that
+     * frame the waist is this frame's. */
+    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : s.waist));
+    else s.last = distance(head, waist);
+    s.waist = waist;
+    s.index = bounceIndex(s.p);
+    return (s.model = body.bounce[s.index]);
+}
+
+/* The hair's swing to draw this frame: the one the last step left, then a
+ * step on this frame's head height when playback has moved on a frame. A
+ * frame picked on its own holds the swing and takes the height afresh. */
+function hairSwing(live, pose, stepped, fresh) {
+    const y = pose[HEAD_SLOT].t[1];
+    const h = (live.hair ??= { s: 0, w: 0, y: 0, v: 0 });
+    const drawn = fresh ? (live.hairDrawn = h.s) : live.hairDrawn;
+    if (stepped && fresh) hairStep(h, y);
+    else if (fresh) Object.assign(h, { y, v: 0 });
+    return drawn;
+}
+
+/* The chest's and hips' models this frame, for the fighters whose chest
+ * bounces or whose hips koshi_unit_change names. */
+function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
+    const held = !fresh && live.spring?.model != null;
+    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
+    const hips = body.armour?.hips ? hipsModel(body, motion, frame, pose[WAIST_SLOT].t[1]) : undefined;
+    return { chest, hips, spring: live.spring };
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
@@ -585,7 +971,13 @@ function blendFor(live, rom, motion, frame, sample) {
  *   the motion's (float object 2, in the targets' space), as the fight writes
  *   the other fighter's head over it at player +0xB0C.
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
- *   `extras` places body.extras (the pads and skirt), one each.
+ *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
+ *   a fighter with one, is each panel's swing this frame, and `pads` each
+ *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
+ *   for a broken chest that bounces, is the model the spring picks; `hips`,
+ *   for a fighter koshi_unit_change names, is the hips' model this frame;
+ *   `pose`, the bones in the board's frame, which the sway chains hang off
+ *   (js/osage.js).
  */
 export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     rom.vf2Rig ??= standardRig(rom);
@@ -607,8 +999,12 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const matrices = poseMatrices(pose);
     const origins = matrices.map((m) => [m[12], m[13], m[14]]);
     live.head = origins[2];
-    const extras = (body.extras ?? []).map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
-    return { matrices, origins, extras };
+    const swings = body.extras?.some((e) => e.panel !== undefined) ? skirtSwings(pose, body.offsets) : null;
+    const hair = body.extras?.some((e) => e.hair !== undefined) ? hairSwing(live, pose, stepped, fresh) : null;
+    const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
+    const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
+    const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
+    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

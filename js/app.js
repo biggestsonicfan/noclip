@@ -26,7 +26,7 @@ import {
 import { CHARACTERS, P2_HALF, readCharacter, faceVariantOwners, ACTION_SLOT_COUNT } from './characters.js';
 import { buildPose, poseMatrices, viewerMatrix, skeletonLines, turnedBy,
     useCoproTrig, SLOT_COUNT, SLOT_NAMES, HEAD_SLOT } from './pose.js';
-import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, NO_FLOOR } from './osage.js';
+import { readOsage, osageParts, createOsageSim, stepOsage, settleOsage, readOsageWind, windStages, NO_FLOOR } from './osage.js';
 import {
     readTails, tailParts, propellerPart,
     PELVIS_SLOT as TAILS_PELVIS_SLOT, LEAD as TAILS_LEAD,
@@ -49,8 +49,9 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE,
 } from './vf2fighters.js';
+import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -113,6 +114,8 @@ const state = {
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
+    /* The stage whose wind blows on the sway chains (js/osage.js), or none. */
+    osageWind: null,
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -1130,7 +1133,11 @@ function fighterRigModels(add, out) {
         for (const p of f.parts) add(p.model, f.index);
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
-        for (const e of f.extras) add(e.model, f.index);
+        for (const m of hipModels(f.armour?.hips)) add(m, f.index);
+        for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
+        /* The sway chains with the upper half broken, which is every chain
+         * the record can wear (Grace's earrings only come with it). */
+        for (const seg of osageSegments(bodyOsage({ ...f, upperBroken: true }))) add(seg.model, f.index);
     }
     return out;
 }
@@ -2968,16 +2975,16 @@ const OSAGE_CATCH_UP = 8;
  * swing. Anything else — a new motion, a scrub backwards, a jump — starts them
  * again and settles them on the pose, which is what a pose held still shows.
  */
-function placeOsage(m, pose, board) {
-    const step = m.tick - m.osageTick;
+function placeOsage(m, pose, board, tick = m.tick) {
+    const step = tick - m.osageTick;
     if (m.osageSim?.osage === m.osage && step >= 1 && step <= OSAGE_CATCH_UP) {
         let placed = [];
         for (let i = 0; i < step; i++) placed = stepOsage(m.osageSim, pose, board);
-        m.osageTick = m.tick;
+        m.osageTick = tick;
         return placed;
     }
     m.osageSim = createOsageSim(m.osage);
-    m.osageTick = m.tick;
+    m.osageTick = tick;
     return settleOsage(m.osageSim, pose, board);
 }
 
@@ -3275,7 +3282,7 @@ function bodyMotions(body) {
     return state.motionRanks.get(body.index);
 }
 
-/* The hips a long win streak leaves Honey in (readStreakHips) are behind a
+/* The hips a long win streak leaves Honey in (readHips' `broken`) are behind a
  * switch the page shows only when its address asks for it. */
 const STREAK_UNLOCKED = new URLSearchParams(location.search).get('hentai') === 'baka';
 
@@ -3372,8 +3379,13 @@ function rebuildBody({ keepCamera = true } = {}) {
      * playback (its blends and its head) under it. */
     dropRivalMaterial(m.rival);
     m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2' ? rivalOf(body) : null;
-    m.skin = readSkin(state.rom, body);
+    /* A Fighting Vipers fighter's midriff is built the same way. */
+    m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
+    /* And its sway chains, the opponent's in its own material. */
+    buildBodyOsage(m, body);
+    if (m.rival) buildBodyOsage(m.rival, m.rival.body, m.rival.material);
+    syncDebris(m, body);
     applyWireVisibility();
 
     m.skeleton = addSkeletonLines(Math.max(1, body.parts.length - 1));
@@ -3403,6 +3415,9 @@ function rivalOf(main) {
         parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
         extras: extraParts(body),
         material: rivalMaterial(main, body),
+        /* Its own midriff, which it builds on its own pose. */
+        skin: body.midriff ?? null,
+        skinMesh: null,
     };
 }
 
@@ -3563,6 +3578,17 @@ function placeExtras(parts, body, matrices, material = null) {
     if (parts.length) placeBodyParts(parts, body.extras.map((e) => [e.model]), matrices, null, material);
 }
 
+/* What each part draws this frame, with a bouncing chest's model (slot 1)
+ * the one its spring picked, and the hips' (slot 9) the one their motion
+ * picked. A rig whose pose says what each part draws (Dead or Alive's) is
+ * taken at its word. */
+function bouncedDraws(body, posed, m) {
+    const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
+    if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
+    if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
+    return draws;
+}
+
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
@@ -3575,43 +3601,193 @@ function poseFighterAndRival(body, m) {
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
-    const draws = partDraws(state.rom, m.rival.body, m.decoded, m.frame, m.tick);
-    placeBodyParts(m.rival.parts, draws, placed, null, m.rival.material);
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material);
+    placeSkin(m.rival, placed);
+    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place);
     return mine;
+}
+
+/* A fighter's sway chains, in a game whose profile names its own table
+ * (Fighting Vipers'): its record's, and Grace's as her upper half has them. */
+function bodyOsage(body) {
+    if (!state.rom.game.osage) return null;
+    return readOsage(state.rom, body.index, { char: body.char ?? body.index, upperBroken: Boolean(body.upperBroken) });
+}
+
+/* The segments that draw a model, in the order stepOsage places them. */
+const osageSegments = (osage) => (osage?.chains ?? []).flatMap((c) => c.segments).filter((seg) => seg.model);
+
+/* Give a figure (the motion state, or the opponent) its chains and a mesh for
+ * each segment, in the material it is drawn with. A model that does not
+ * decode keeps its place in the list, empty, so the rest line up. */
+function buildBodyOsage(holder, body, material = null) {
+    holder.osage = bodyOsage(body);
+    holder.osageSim = null;
+    holder.osageParts = osageSegments(holder.osage).map((seg) => {
+        const d = getModel(seg.model);
+        return d ? { ...addRigPart(d, undefined, material), bounds: d.bounds } : null;
+    });
+}
+
+/* What the chains run against: the ring's floor under a motion (a pose with
+ * none stands nowhere), and the wind the panel's stage blows on the record. */
+function osageBoard(m, body) {
+    if (!m.decoded) return { floorY: NO_FLOOR };
+    const stage = state.osageWind;
+    return { wind: stage == null ? null : readOsageWind(state.rom, body.index, stage) };
+}
+
+/* Run a figure's chains on to the frame and place their segments; `place`
+ * puts the opponent's own frame in the fighter's. */
+function placeBodyOsage(holder, pose, board, tick, place = null) {
+    if (!holder?.osage || !pose) return;
+    const placed = placeOsage(holder, pose, board, tick);
+    holder.osageParts.forEach((part, i) => {
+        if (!part || !placed[i]) return;
+        const mat = viewerMatrix(placed[i]);
+        placePartAt(part, place ? new THREE.Matrix4().fromArray(mat).premultiply(place).elements : mat);
+    });
+}
+
+/*
+ * Fighting Vipers' flying armour pieces (js/fvdebris.js). A half the armour
+ * switch breaks throws its pieces off the pose on screen, with the one sample
+ * hit, and they fly on by board frames of their own, whether the motion plays
+ * or not, with the flipbook effect a piece can become. A half put back whole
+ * takes its pieces and effects back, and another fighter starts with none.
+ * Only the fighter's own: the opponent's armour is whole.
+ */
+const DEBRIS_CATCH_UP = 8;
+const HALVES = ['upper', 'lower'];
+
+/* Note which halves have just broken, and drop the pieces of any made whole.
+ * The scene has just been cleared, so the meshes are built again. */
+function syncDebris(m, body) {
+    m.debrisParts = [];
+    m.effectParts = [];
+    m.effectCycle = null;
+    const tables = state.rom.game.rig?.kind === 'vf2' && body.armour ? fighterDebrisTables(state.rom) : null;
+    if (!tables) { m.debris = null; return; }
+    const d = m.debris?.root === body.root ? m.debris
+        : { root: body.root, sim: createDebrisSim([OPPONENT_DISTANCE / 2, 0, 0], body.armour.flipbook), halves: {}, pending: [], start: null };
+    for (const half of HALVES) {
+        const thrown = body.debris?.[half] ?? [];
+        if (thrown.length && !d.halves[half]) d.pending.push({ half, thrown });
+        if (!thrown.length) {
+            d.sim.slots = d.sim.slots.map((s) => (s?.half === half ? null : s));
+            d.sim.effects = d.sim.effects.map((e) => (e?.half === half ? null : e));
+            d.pending = d.pending.filter((p) => p.half !== half);
+        }
+        d.halves[half] = thrown.length > 0;
+    }
+    d.tables = tables;
+    m.debris = d;
+}
+
+/* Throw what a half has just broken off, each slot's stage as one call of
+ * 0x2D390, which stops when the eight slots are full. */
+function launchPendingDebris(m, pose) {
+    const d = m.debris;
+    if (!d?.pending.length || !pose) return;
+    for (const { half, thrown } of d.pending) {
+        const calls = Map.groupBy(thrown, (p) => p.slot * 16 + p.stage);
+        for (const pieces of calls.values()) launchDebris(d.sim, d.tables, SAMPLE_HIT, pieces, pose, half);
+    }
+    d.pending = [];
+    d.start ??= performance.now() - (d.sim.frame * 1000) / GAME_HZ;
+}
+
+/* Run the pieces on to the frame the clock is at; after a long gap (a held
+ * view, another tab) they carry on from where they were. */
+function stepBodyDebris(now) {
+    const m = state.motion, d = m.debris;
+    if (!d || d.start == null) return;
+    let n = Math.floor(((now - d.start) / 1000) * GAME_HZ) - d.sim.frame;
+    if (n <= 0) return;
+    if (n > DEBRIS_CATCH_UP) {
+        d.start += ((n - DEBRIS_CATCH_UP) * 1000) / GAME_HZ;
+        n = DEBRIS_CATCH_UP;
+    }
+    for (let i = 0; i < n; i++) stepDebris(d.sim);
+    placeDebris(m);
+}
+
+/* One mesh per shared slot, built when a piece first lands in it. */
+function placeDebris(m) {
+    if (!m.debris) return;
+    m.debris.sim.slots.forEach((s, i) => {
+        const part = m.debrisParts[i];
+        if (part?.model !== s?.model) {
+            if (part?.mesh) showPart(part, false);
+            const d = s?.model && getModel(s.model);
+            m.debrisParts[i] = d ? { ...addRigPart(d), model: s.model } : { model: s?.model };
+        }
+        if (s && m.debrisParts[i].mesh) placePartAt(m.debrisParts[i], viewerMatrix(debrisPlace(s)));
+    });
+    placeEffects(m);
+}
+
+/* One mesh per effect slot, swapping through the flipbook's frames, built
+ * once the first effect is thrown. A frame whose model will not decode is
+ * left out, as one of model 0 would be. */
+function placeEffects(m) {
+    const sim = m.debris.sim;
+    sim.effects.forEach((e, i) => {
+        const frames = e && effectFrames(m);
+        let part = m.effectParts[i];
+        if (!frames?.[e.frames]) { if (part) showPart(part, false); return; }
+        part ??= m.effectParts[i] = addCyclePart(frames, e.frames);
+        showPart(part, true);
+        stepCycle(part, e.frames);
+        placePartAt(part, viewerMatrix(effectPlace(e, i)));
+    });
+}
+
+function effectFrames(m) {
+    m.effectCycle ??= m.debris.sim.flipbook.map((n) => {
+        const d = n > 0 && getModel(n);
+        return d ? geomBundle(d) : null;
+    });
+    return m.effectCycle;
+}
+
+/* The skin is rebuilt every frame, as the board rebuilds it: its points on
+ * the chest side move with the pose. `holder` keeps the skin and its mesh. */
+function placeSkin(holder, matrices) {
+    if (!holder.skin) return;
+    const d = decodeModel(state.rom, null, null, skinMesh(holder.skin, matrices));
+    if (!d) return;
+    d.index = null;
+    if (!holder.skinMesh) {
+        holder.skinMesh = addRigPart(d, undefined, holder.material);
+    } else {
+        holder.skinMesh.mesh.geometry.dispose();
+        holder.skinMesh.mesh.geometry = buildGeometry(d);
+        if (holder.skinMesh.lines) {
+            holder.skinMesh.lines.geometry.dispose();
+            holder.skinMesh.lines.geometry = buildEdgeGeometry(d);
+        }
+    }
+    placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
-    /* A rig whose pose says what each part draws (Dead or Alive's) is
-     * taken at its word. */
     const pose = poseFighterAndRival(body, m);
-    const { matrices, origins, draws, extras } = pose;
-    placeBodyParts(m.parts, draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick), matrices, pose);
+    const { matrices, origins, extras } = pose;
+    m.spring = pose.spring;
+    m.hips = pose.hips;
+    placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
     placeExtras(m.extras, body, extras ?? []);
 
-    /* The skin is rebuilt every frame, as the board rebuilds it: its points on
-     * the chest side move with the pose. */
-    if (m.skin) {
-        const d = decodeModel(state.rom, null, null, skinMesh(m.skin, matrices));
-        if (d) {
-            d.index = null;
-            if (!m.skinMesh) {
-                m.skinMesh = addRigPart(d);
-            } else {
-                m.skinMesh.mesh.geometry.dispose();
-                m.skinMesh.mesh.geometry = buildGeometry(d);
-                if (m.skinMesh.lines) {
-                    m.skinMesh.lines.geometry.dispose();
-                    m.skinMesh.lines.geometry = buildEdgeGeometry(d);
-                }
-            }
-            placePartAt(m.skinMesh, matrices[m.skin.hips]);
-        }
-    }
+    placeSkin(m, matrices);
+    placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick);
+    launchPendingDebris(m, pose.pose);
+    placeDebris(m);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -3975,13 +4151,15 @@ function renderExhaustPanel() {
         + `<br><span id="exhaust-now"></span>`;
 }
 
-/* What the sway chains are made of, shown only for the five fighters that have
- * them: each chain's attach bone, its segments and the damping it runs with. */
+/* What the sway chains are made of, shown only for the fighters that have
+ * them: each chain's attach bone, its segments and the damping it runs with,
+ * and in a game with wind, the stage it blows on. */
 function renderOsagePanel() {
     const m = state.motion;
     const field = $('#osage-field');
     field.hidden = !m.osage;
     if (!m.osage) return;
+    renderOsageWind();
 
     const lines = [`table 0x${m.osage.table.toString(16)}`];
     let damping = null, limits = null, chain = 0;
@@ -3995,6 +4173,19 @@ function renderOsagePanel() {
             + (damping === null ? '' : `, damping ${damping.toFixed(2)}${limits ? '' : ', no body limits'}`));
     }
     $('#osage-readout').innerHTML = lines.join('<br>');
+}
+
+/* The stages a game's wind blows on (js/osage.js), named as the Stages tab
+ * names them; none for a game whose chains hang in still air. */
+function renderOsageWind() {
+    const stages = windStages(state.rom);
+    const sel = $('#osage-wind');
+    $('#osage-wind-field').hidden = !stages.length;
+    if (!stages.length) return;
+    const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
+    sel.innerHTML = [['', 'no wind'], ...stages.map((n) => [n, `${name(n)}'s`])]
+        .map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
+    sel.value = state.osageWind ?? '';
 }
 
 function renderBodyPanel() {
@@ -4033,6 +4224,7 @@ function renderBodyPanel() {
         list.appendChild(row);
     }
     renderArmourPanel();
+    renderOsagePanel();
     renderMotionPanel();
     const twin = state.bodies.find((b) => b.index === state.charIndex)?.p2;
     $('#char-p2-field').hidden = !twin;
@@ -4061,6 +4253,9 @@ function renderArmourPanel() {
         .map((p) => `${SLOT_NAMES[p.index]}: ${own.parts[p.index].model} → ${p.model || 'none'}`);
     $('#armour-readout').innerHTML = `break table 0x${A.table.toString(16)}`
         + (A.chest != null ? `<br>broken chest at rest: model ${A.chest}` : '')
+        + (state.character.bounce ? '<br><span id="bounce-now"></span>'
+            + '<br>spring only: the per-frame list needs move flags the explorer lacks' : '')
+        + (A.hips ? '<br><span id="hips-now"></span>' : '')
         + (swaps.length ? `<br>${swaps.join('<br>')}` : '');
 }
 
@@ -4349,6 +4544,21 @@ function renderTrailPanel() {
         + `<br><span id="trail-live"></span>`;
 }
 
+/* A bouncing chest's spring on this frame. */
+function updateBounceReadout(m) {
+    const out = $('#bounce-now');
+    const sp = m.spring;
+    if (!out || sp?.model == null) return;
+    out.textContent = `frame ${m.frame}: chest ${sp.model} (entry ${sp.index}),`
+        + ` spring ${sp.p.toFixed(2)}, speed ${sp.v.toFixed(2)}`;
+}
+
+/* The hips' model koshi_unit_change picks on this frame. */
+function updateHipsReadout(m) {
+    const out = $('#hips-now');
+    if (out && m.hips != null) out.textContent = `frame ${m.frame}: hips ${m.hips}`;
+}
+
 function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
@@ -4361,6 +4571,8 @@ function updateMotionFrameReadout() {
             + (m.chestFromScript ? ' from the script' : ' carried in')
             + (exhaustDrawn(m.chestNow) ? ' — flame up' : ' — no flame');
     }
+    updateBounceReadout(m);
+    updateHipsReadout(m);
     const heli = $('#tails-now');
     if (heli && m.tails) {
         const mode = m.scriptState?.propeller ?? 0;
@@ -4704,6 +4916,10 @@ function wireOptions() {
             renderAnimPanel();
         });
     }
+    $('#osage-wind').addEventListener('change', (e) => {
+        state.osageWind = e.target.value === '' ? null : Number(e.target.value);
+        poseRig();
+    });
     $('#char-skel').addEventListener('change', (e) => {
         state.showSkeleton = e.target.checked;
         if (state.motion.skeleton) state.motion.skeleton.visible = e.target.checked;
@@ -5312,7 +5528,7 @@ function start() {
          * the transform that goes with it. */
         if (state.tab === 'stage' && state.animate) stepStageAnimation(performance.now());
         else if (state.tab === 'anim') {
-            if (state.animate) stepMotion(performance.now());
+            if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();
         }
         /* Not behind `animate`: a billboard turns with the camera, and the

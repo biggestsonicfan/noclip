@@ -69,17 +69,46 @@
  * The wind is dead, as before: `0x68AA4` reads its amplitude from a table at
  * 0x68914 whose 52 entries all point at one record with an amplitude of 0.0f, so
  * the vector at 0x138 added to gravity is always zero.
+ *
+ * ## Fighting Vipers
+ *
+ * Fighting Vipers carries the same code. Its record handlers (the table at
+ * 0x62B04) are Sonic The Fighters' byte for byte, 0x4ED4 lower, and send the
+ * same Fn_osage, which its own coprocessor program (PM 0x20733) runs word for
+ * word as cpres1 does, its jumps moved. What differs is the game's data, which
+ * `osage` in its profile (js/games.js) names:
+ *
+ *   - The definitions are by record, not character: `0x627E8` reads
+ *     `0x63E34[+0x1B0*4]`, so player 2's look (records 13-25) has its own.
+ *     Jane wears earrings and a chain, Grace a ponytail and earrings, Honey two
+ *     tails of four, Mahler and B.M. one tail of six; player 2's Jane and Honey
+ *     wear other models, and record 23 hangs two pieces off the hips.
+ *   - Grace's are switched every frame (`0x62860`): character 1, on either
+ *     side, wears 0x63FCC with her upper armour broken (+0x7F4 bit 2) and
+ *     0x64154, the same stream with the earrings cut off, with it whole. The
+ *     segments' state is kept by position, so the ponytail swings on through
+ *     the switch.
+ *   - Gravity is 0x3BAB1F2D (0.00522, stored at 0x7284), a fifth of the other
+ *     game's; a knockout's slow motion drops it to 0x3A3117C4 (0xE6D4).
+ *   - The wind blows: windStep below.
  */
 
 import { turnedBy, coproSin, coproCos } from './pose.js';
 import { progAddr } from './romset.js';
 
-const OSAGE_PER_CHARACTER = 0x00068d64;
-const RECORD_SIZE = { 1: 0x24, 2: 0x40, 3: 0x0c, 4: 0x18, 5: 0x44 };
-const MATRIX = 1, COLI = 2, ETC = 3, TSUKENE = 4, SEGMENT = 5;
-
 /* The engine's gravity, `flt_50A000`, written as 0x3CCE9ED5 at 0x6BA4. */
 export const GRAVITY = 0.02522222138941288;
+
+/* Sonic The Fighters' definitions, by character (`osage_per_character`), for a
+ * game that does not name its own in its profile. */
+const STF_OSAGE = { table: 0x00068d64, gravity: GRAVITY };
+
+/* How far above the floor the head (+0x210, the profile's `head` bone) has
+ * to be for the wind to blow (0x62A50: below it sets flag 6). */
+const WIND_HEAD_CLEARANCE = 0.5;
+
+const RECORD_SIZE = { 1: 0x24, 2: 0x40, 3: 0x0c, 4: 0x18, 5: 0x44 };
+const MATRIX = 1, COLI = 2, ETC = 3, TSUKENE = 4, SEGMENT = 5;
 
 /* The damping `os_set_etc` substitutes while the fighter is off the ground. */
 const AIRBORNE_DAMPING = Math.fround(0.8);
@@ -132,16 +161,38 @@ const IDENTITY = { r: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] };
 const rsqrt = (x) => (x === 0 ? 0 : 1 / Math.sqrt(x));
 const ltZero = (f) => f < -FLT_MIN;
 
+/* The game's sway chain tables: its profile's `osage`, or Sonic The Fighters'. */
+const osageConfig = (rom) => rom.game.osage ?? STF_OSAGE;
+
+/*
+ * The definition a fighter's chains run on this frame: its entry in the
+ * game's table, or the table a switch puts in its place. Fighting Vipers
+ * points every entry at or past the table's end at the empty one (`cmpobge`
+ * at 0x627F8), which `count` stands for.
+ */
+function osageTable(rom, index, { char = index, upperBroken = false } = {}) {
+    const C = osageConfig(rom);
+    if (C.count !== undefined && index >= C.count) return 0;
+    const sw = C.byArmour;
+    if (sw && char === sw.char) return upperBroken ? sw.broken : sw.whole;
+    return rom.mainCpuView.getUint32(progAddr(rom, C.table) + index * 4, true);
+}
+
 /**
  * Read a fighter's sway chains, or null if it has none.
  *
- * @returns {?{table:number, records:object[],
+ * @param {number} index  what the game's table is indexed by: Sonic The
+ *   Fighters' character, Fighting Vipers' record (player 2's look included)
+ * @param {{char?:number, upperBroken?:boolean}} [look]  the character the
+ *   record is, and whether its upper armour is broken, for a game that
+ *   switches the table on them (Grace's earrings)
+ * @returns {?{table:number, gravity:number, records:object[],
  *             chains:Array<{bone:number, offset:number[],
  *                           segments:Array<{model:number,length:number}>}>}}
  */
-export function readOsage(rom, charIndex) {
+export function readOsage(rom, index, look = {}) {
     const dv = rom.mainCpuView;
-    const table = dv.getUint32(progAddr(rom, OSAGE_PER_CHARACTER) + charIndex * 4, true);
+    const table = osageTable(rom, index, look);
     if (!table || table + 4 > rom.maincpu.length) return null;
 
     const records = [];
@@ -201,7 +252,68 @@ export function readOsage(rom, charIndex) {
         a += size;
     }
     if (!chains.length) return null;
-    return { table, records, chains };
+    const { gravity, head } = osageConfig(rom);
+    return { table, gravity, head, records, chains };
+}
+
+/*
+ * ## The wind
+ *
+ * Fighting Vipers' 0x63B80 runs before the stream is built (called at
+ * 0x62AB4) and writes the vector the MATRIX handler adds to gravity, at
+ * +0x138, in the world's axes:
+ *
+ *   - With no floor (flag 4, NO_FLOOR here) or the head (+0x210, slot 2's
+ *     y) under 0.5 above it (flag 6) there is none, and its phase (+0x130) goes back to zero.
+ *   - The stage (0x500064) picks the direction (+0x134) and which of the
+ *     record's two entries blows (flag 10): the profile's `wind.stages`. On
+ *     any other stage it blows only in game modes 16 and 17 (0x500031), on
+ *     the side 0x500065 names, and never on Grace; the explorer leaves that
+ *     out.
+ *   - The record's entry (`0x63A58[+0x1B0*4]`, +8 for the second) is a 16-bit
+ *     speed and an amplitude. The phase steps by the speed every frame, and
+ *     with gravity G the strength is s = amplitude · (sin phase + 2) · G
+ *     (Fn_sin, mulr, mulr), so it gusts between one and three times the
+ *     amplitude.
+ *   - The vector is (cos angle · s, min(s, G), sin angle · s) (Fn_cosx,
+ *     Fn_sinx, and `cmpr`/`bg` keeping G when s is past it): it pushes the
+ *     chains along the floor and lifts them by up to gravity's own weight.
+ */
+
+/**
+ * A fighter's wind on a stage, or null where none blows: the direction and
+ * the entry its record has for that stage.
+ *
+ * @param {number} index  the record, as readOsage takes it
+ * @param {number} stage  the stage number (0x500064)
+ * @returns {?{angle:number, speed:number, amplitude:number}}
+ */
+export function readOsageWind(rom, index, stage) {
+    const W = osageConfig(rom).wind;
+    const blow = W?.stages[stage];
+    if (!blow) return null;
+    const dv = rom.mainCpuView;
+    const entry = dv.getUint32(progAddr(rom, W.table) + index * 4, true) + blow.entry * 8;
+    if (!entry || entry + 8 > rom.maincpu.length) return null;
+    return { angle: blow.angle, speed: dv.getInt16(entry, true), amplitude: dv.getFloat32(entry + 4, true) };
+}
+
+/* The stages a game's wind blows on, by number. */
+export const windStages = (rom) => Object.keys(osageConfig(rom).wind?.stages ?? {}).map(Number);
+
+/* One frame of the wind into the chain struct, as 0x63B80 writes it. */
+function windStep(sim, pose, { floorY, wind }) {
+    const head = pose[sim.osage.head]?.t[1] ?? Infinity;
+    const calm = !wind || floorY === NO_FLOOR || head < floorY + WIND_HEAD_CLEARANCE;
+    if (calm) {
+        sim.windPhase = 0;
+        sim.wind = [0, 0, 0];
+        return;
+    }
+    const f = Math.fround, G = sim.osage.gravity;
+    sim.windPhase = (sim.windPhase + wind.speed) | 0;
+    const s = f(f(wind.amplitude * f(coproSin(sim.windPhase) + 2)) * G);
+    sim.wind = [f(coproCos(wind.angle) * s), s > G ? G : s, f(coproSin(wind.angle) * s)];
 }
 
 /**
@@ -223,6 +335,8 @@ export function createOsageSim(osage) {
         root: [0, 0, 0],          /* +0xFC */
         running: [0, 0, 0],       /* +0x108 */
         saved: IDENTITY,          /* inner matrix 2, which ost_save leaves */
+        windPhase: 0,             /* +0x130 */
+        wind: [0, 0, 0],          /* +0x138 */
     };
 }
 
@@ -231,13 +345,15 @@ export function createOsageSim(osage) {
  *
  * @param {object} sim  from createOsageSim()
  * @param {Array<{r:number[],t:number[]}>} pose  from buildPose(), board frame
- * @param {{floorY?:number, airborne?:boolean}} [board]  the fighter's own state:
- *   the floor the chains stop at (0 in the ring, -0.5 outside it) and whether
- *   the fighter is off the ground, which drops the bias and the damping
+ * @param {{floorY?:number, airborne?:boolean, wind?:?object}} [board]  the
+ *   fighter's own state: the floor the chains stop at (0 in the ring, -0.5
+ *   outside it), whether the fighter is off the ground, which drops the bias
+ *   and the damping, and the wind blowing on it (readOsageWind)
  * @returns {Array<{model:number, r:number[], t:number[], end:number[],
  *                  chain:number, segment:number}>}
  */
-export function stepOsage(sim, pose, { floorY = 0, airborne = false } = {}) {
+export function stepOsage(sim, pose, { floorY = 0, airborne = false, wind = null } = {}) {
+    windStep(sim, pose, { floorY, wind });
     const stream = buildStream(sim, pose, { floorY, airborne });
     const placed = runCoprocessor(sim, stream);
     /* `osage_copro`, as it reads each segment back: the chain's first two
@@ -290,9 +406,10 @@ function buildStream(sim, pose, { floorY, airborne }) {
             const r = turnedBy(b.r, rec.ax, rec.ay, rec.az);
             F = { r, t: xform({ r, t: b.t }, rec.offset) };
             Finv = invert(F);
-            /* Gravity (plus the dead wind) turned into the frame, with the
+            /* Gravity plus the wind turned into the frame, with the
              * inverse's translation zeroed first (Fn_base_point). */
-            const g = rotate(Finv.r, [0, -GRAVITY * rec.scale, 0]);
+            const w = sim.wind;
+            const g = rotate(Finv.r, [w[0], w[1] - sim.osage.gravity * rec.scale, w[2]]);
             if (sim.init) sim.gravityInit = g;
             const prev = sim.prev[matrices];
             const M1 = sim.init || !prev ? IDENTITY : compose(Finv, prev);

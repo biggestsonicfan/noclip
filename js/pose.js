@@ -525,6 +525,14 @@ export function turnedBy(r, ax, ay, az) {
     return m;
 }
 
+/** `r` turned by `turns`, [axis, angle] pairs (0 x, 1 y, 2 z) in the order sent. */
+export function turnedInOrder(r, turns) {
+    const m = r.slice();
+    const rot = [rotX, rotY, rotZ];
+    for (const [axis, a] of turns) rot[axis](m, cosA(a), sinA(a));
+    return m;
+}
+
 /** Line segments tracing the slot tree, for the skeleton overlay. */
 export function skeletonLines(pose) {
     const pts = [];

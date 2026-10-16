@@ -1160,10 +1160,22 @@ part out along the fighter's own skeleton at player `+0x8C`.
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
 
-Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
-the special parts `rob_disp` (`0x19F10`) swaps in: feet and hands
-(`set_ashi_ptn`, `set_te_ptn`), chest and hips (`mune_unit_change`,
-`koshi_unit_change`), Picky's hair, and broken armour (below).
+Record `+0x24` is the midriff and is drawn (below, "The midriff"; VF2's
+`+0x38` is still not). The special parts `rob_disp` (`0x19F10`) swaps in for
+the chest and hips (`mune_unit_change`, `koshi_unit_change`), broken armour,
+the pieces it throws (with one sample hit) and Picky's hair are drawn, below.
+
+**Hands and feet are never swapped.** `rob_disp` calls the foot routine
+(`set_ashi_ptn`, `0x1AB74`: slots 12 and 15, 32 models from player `+0x5F0`
+picked by the foot's turn and height) only while `+0x5F0` is set, and the
+hand routine (`set_te_ptn`, `0x1AC80`: slots 5 and 8, `+0x6AC` entry
+`+0x6FD`/`+0x6F7` & 31, the right hand `+0x180` on, as VF2's `0x19E34`)
+only while `+0x6AC` is set. `action_init` (`0x125EC..0x12624`) copies them
+from the record's `+0x10` and `+0x28`, with `+0x0C` (an upper-arm table read
+by `0x1ACB8`, which nothing calls) beside them, and all three are 0 in all
+sixteen records at `0x640D2B0`. So both are skipped and every fighter draws
+its part list's hands and feet, as the explorer does. Even with a table the
+feet would not change: `rob_disp` drops what `0x1AB74` returns (`0x19FEC`).
 
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
@@ -1204,6 +1216,132 @@ stage's pieces (`+6` each one's model) and writes the stage's first piece's
 `+4` into `+0x40[slot]`: that is the slot's new model. It skips the write in
 `also_mode` `0xC`/`0xD` and some sub-modes of 3 and 9 (`0x2D4D0`).
 
+**The flying pieces (drawn, with one sample hit).** `0x2D374` (from
+`damage_unit`) gives each piece a launch speed (`0x2D614`) from the
+attacker's attack, its damage `+0x83D`, kind `+0x843` and direction `+0x82A`
+(set by the move script, `0x1BB20`), and `0x2D390` puts it in one of eight
+`0x48`-byte slots at `mod_fa_effect + 0x88`, at the broken slot's place
+(`+0x1F4 + 12·slot`). Each frame `0x2CE68` drops them on the stage's gravity,
+floor and ring walls (`0x50A000`, `0x50A00C`, `0x50A010`) and spins them, and
+`0x2E17C` draws model `+0x22` at the piece's place turned Y, X, Z, with a
+floor shadow (`+0x44`, `0x77E48`/`0x78384`). With d = min(damage, 70) / 60,
+`0x2D614` throws each piece out at d × `0x64216D0[kind]` and up at
+(d × `0x64216E8[kind]` + 0.06) (1.5 times that for `+0xA74` = 1), both plus
+an entry of `0x6421720` (the rise twice), heading the attacker's facing plus
+its `+0x82A` less an entry of `0x6421700`; both entries are picked by those
+two, the slot, the piece's `+6` and the bits of its `+0x14`, & 15.
+
+The explorer's Armour switch breaks with no attack, so it throws the pieces
+with one fixed hit, a real one from the ROM: **damage 60, kind 0, direction
+0**, the attack (op 4, 19 bytes, `0x1BB20`) in move 128's setup script
+(`0x641E26B`), at `0x641E27E`: `04 15 04 3c 02 00 00 07 40 00 00 00 ...`,
+whose `+3` is the damage, `+5` the direction (a signed halfword) and `+10`
+the kind. It sits inside the routine's limits: 60 is under the cap of 70, so
+d = 1, and kind 0 picks the first entries (out 0.06, up 0.04 + 0.06). The
+attacker stands straight ahead facing the fighter, so its facing is the
+fighter's plus `0x8000` and direction 0 throws the pieces straight back
+from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
+`SAMPLE_HIT`).
+
+`js/fvdebris.js` follows the three routines in single floats:
+
+- **The launch (`0x2D390`)**, per broken slot and stage in `damage_unit`'s
+  order (upper half, slots ascending, stages ascending). Each record goes
+  into the first free slot with flags `+0x1C` | bit 11, its place, its
+  speed, model `+6`, radius `+0x18`, weight `+0x14`, floor `+0x20`, X turn
+  `+8`, Y turn the facing plus `+0xA`, Z turn `+0xC` (low half), the turns
+  it settles on (`+0xE`/`+0x10`/`+0x12`, 0 none) and a spin
+  `0x640F924[(bits of x + y + z + weight) & 15]`. A bit-3 record is the
+  flipbook effect (`0x2D254`) instead when bit 1 is clear, or when two slots
+  already hold bit-3 pieces (`0x2D8D4`), and **that ends the stage's loop**
+  (`0x2D3F0`), as eight full slots do. A record with model 0 still takes a
+  slot that nothing moves, draws or frees (`0x2CE68` and `0x2E17C` skip
+  model 0), and it counts toward those two. So Jane's upper half throws 715
+  and 714; her third chest stage's first record (719) is the effect and
+  ends that stage, slot 4's 580 is the effect too, and slot 5's model 0 holds
+  a slot. Grace's lower half throws four pieces (1740, 1741, 1985 twice) and
+  two effects (slots 9 and 10), and her upper, whose records all have bit 3,
+  only effects. Which records become effects depends on what is already
+  flying: with Jane's lower half broken first, its two 486s make 715 and 714
+  effects as well.
+- **The flipbook effect (`0x2D254`, `0x2D2F4`).** Two `0x24`-byte slots at
+  `mod_fa_effect + 0x508`; `0x2D254` takes the first whose `+0x1E` (the model
+  shown) is 0, and with neither free nothing is launched. It writes the
+  broken slot's place at `+0`, the piece's throw times (0.2, 0.01, 0.2)
+  (`0x3E4CCCCD`, `0x3C23D70A`) at `+0xC`, the record number `+0x1B0` at
+  `+0x1C`, a frame count of 0 at `+0x20` and the first model of
+  `0x6421760[record]` at `+0x1E`. That list is 54 halfword models a record,
+  one a frame (Jane 1849..1902, Grace 2110..2163, Honey 3910..3963); they are
+  a burst of shreds in the fighter's colours, 180 points each, that spread
+  from 0.3 to about 10 across in model space as the frames go on. It also
+  keeps the three speeds' bits summed, plus slot × `0x400`, at `+0x1A`, which
+  nothing reads. Each frame, after the pieces (`0x2CDC4`, `0x2CDC8`),
+  `0x2D2F4` adds one to the count; at 54 it clears `+0x1E`, else it shows
+  entry `count`, takes gravity (`0x50A000`) off the Y speed and moves by the
+  speed: no floor, drag or wall, so it falls through the floor about 7.4
+  below where it started by the last frame, while the shreds rise in the
+  model. `0x2E17C` draws it after the pieces: push, translate, Y turn
+  `0x8000` for the first slot and `0x4000` for the second, whatever the
+  fighter faces, scale 1, model `+0x1E`, then model `+0x18`, which nothing
+  sets, so 0; pop.
+- **The fall (`0x2CF24`).** vy −= 0.005222 (`0x3BAB1F2D`), vx and vz × 0.98,
+  then the place moves by the speed. At or under the floor (`+0x40`, 0.5
+  lower once out of the ring) the bounce is counted, the y step taken back,
+  and vy = −vy × (0.2 + 0.2 / weight). Once |vy| ≤ 0.001 the piece rests
+  (bit 7, speed 0); otherwise vx and vz × 0.9. The rest test is on the
+  bounce's speed, and that speed settles near g·k/(1 + k) with k the bounce
+  factor, so a piece whose bounce lands it just over the threshold chatters
+  within a couple of millimetres of its floor without ever setting bit 7, in
+  the ROM as here.
+- **The walls**, below y 3.1 (`0x50027C`), about the ring's centre: past
+  5.5 a piece is out (bit 19) and falls to the lower floor; past 5 less its
+  radius it is put back and its speed on that axis × −0.3. The centre is
+  half the opponent's distance ahead of the fighter. Every wall is up, as
+  at the start of a round (`0x574004`).
+- **The turns (`0x2D118`).** While flying and for its first four bounces a
+  piece adds its spin to Y, and to X with flag bit 12 and Z with bit 14.
+  After that each turn with a target steps onto it, `0x800` a frame
+  (`0x1000` at rest), Y's step over (bounces + 1). The ROM keeps its two
+  bounds in r11/r14 and Y's step leaves r14 the divisor, which Z's test then
+  reads; that is kept.
+
+The explorer runs the effect as above (`launchEffect`, `stepEffect` and
+`effectPlace` in `js/fvdebris.js`; `readFlipbook` in `js/vf2fighters.js`),
+one mesh per effect slot swapping through the 54 frames' geometry
+(`placeEffects` in `js/app.js`).
+
+Not followed: the push out of both fighters' bodies (TGP `0x77`
+`Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
+is off screen (`0x316F0`), the floor shadow and the sound (flag bits 28 to
+31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
+own; the opponent's armour stays whole. They run in board frames of their
+own, so they fly with the motion held as well as playing. Breaking a half
+throws its pieces and effects from the pose on screen at that moment, making
+it whole again takes them back, and another fighter starts with none.
+
+**Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
+and 360, each half broken while the motion plays, and Jane with it held):
+the drawn piece's translation equals the broken slot's drawn translation at
+the launch, to 0.0001. Every drawn piece leaves it, rising 1.3 to 6.2 above
+the floor, and lands 1.8 to 6.2 away, on its floor (0.05, or 0.008 for
+Grace's slot 9), behind the fighter, away from the attacker. One of Grace's
+leaves the ring and drops to the lower floor. Turns with targets reach them.
+
+The effect, checked the same way (Jane and Grace, motions 21 and 360, each
+half broken while the motion plays, in both orders): each effect's drawn
+translation equals its broken slot's drawn translation at the launch, to
+1e-5 (Jane's chest and forearm, 1 and 4, or her shins, 11 and 14; Grace's
+hips and thigh, 9 and 10, or chest and head, 1 and 2), and moves with the
+pose: Jane's forearm effect starts at (0.42, 1.04, 0.06) in motion 21 and
+(0.31, 0.81, 0.18) in 360. The drawn mesh shows the frame the slot names
+on every frame sampled, frames 0 to 53, and is hidden once the slot frees.
+The first slot is drawn a quarter turn from the second. With the armour
+whole none is launched.
+The launch turn is not measurable against the armour: the piece models do
+not sit on the intact slot model in any quarter turn (mean nearest vertex
+0.04 to 0.08 for all four), so it rests on `0x2E17C`'s order alone. Not
+checked against MAME.
+
 | Char | Slots that break (base -> broken model) |
 |---|---|
 | 0 Jane | chest 732 -> 730 -> 729 -> 731 (three stages), 4: 738 -> 737, 5: 576 -> 734, 9: 493 (same), 11: 711 -> 710, 14: 709 -> 708 |
@@ -1222,18 +1360,16 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
 
 **Drawn on top of the slot model**, all keyed on `+0x1F48`:
 
-- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken, and
-  only for Jane, Grace, Honey and Jane in jeans (`0x6421F80[char]`). It then
-  replaces the chest with one of 31 models (table `+4`), picked by a spring
-  (`+0xC68`/`+0xC6C`, clamped to +-15) the body's movement drives: index
-  `15 + round(+0xC6C + 0.5)`. At rest that is entry 15 or 16 (Jane 772/773).
-  Table `+0` is a per-frame list it uses while the move flags `+0x1A4` are
-  exactly `0x200`.
+- `mune_unit_change` (`0x31888`, slot 1): only once the chest is broken
+  (`+0x1F48` bit 1), and only for characters with a table at
+  `0x6421F80[char]`: Jane, Grace, Honey, Jane in jeans and character 14.
+  It swaps the chest's model for one of 31 picked by a spring, or for a
+  per-frame list on some moves. The whole routine is below, under "The
+  chest bounce".
 - `koshi_unit_change` (`0x31ADC`, slot 9): Honey and Bahn (`0x6422400[char]`).
-  It picks the hip model per motion (fixed lists for motions (`+0x1A8`) `0x31` and `0x180`,
-  a 50-frame swing, a per-motion table at `+0x1C`), taking the second of each
-  pair once the hips are broken (`+0x1F48` bit 9). Bahn's pair is 2405/690,
-  the same swap as the break table.
+  It swaps the hips' model by motion and frame, by the waist's height and by
+  move flags, taking the second of each pair once the hips are broken
+  (`+0x1F48` bit 9). The whole routine is below, under "The hips".
 - `kata_pat_disp` (`0x32A90`, slot 1): shoulder pads on their own swing
   (`0x642147C[char]`, left then right: model, limit, a second model and its
   offset at `+0x16`/`+0x18`). Raxel (959/960), Mahler (3889/3891 + 3888/3890)
@@ -1242,7 +1378,8 @@ Sonic and the two stand-ins (10-12) have no armour (all entries 0).
 - `kosi_mino_disp` (`0x31E54`, slot 9): the skirt panels of characters 0, 1,
   13 and 14 (`0x6421DE0[char*16]`), gone once the hips break (bit 9).
 - `pky_kami_disp` (`0x1ADDC`, slot 2): Picky's hair is drawn only once his head armour
-  (slot 2, the helmet) has broken.
+  (slot 2, the helmet) has broken. The whole routine is below, under "Picky's
+  hair".
 - Record `+0x24` is read on slot 9 too, and it is not a model: its `+8`
   picks 16 bytes at `0x20E0004` that go to the geometrizer before the skirt.
   Once the chest breaks the game reads `0x642F9EC[char]` instead.
@@ -1264,7 +1401,9 @@ an add whose result is thrown away: a wait. Op names are m2-hle2's
 (`tests/cop_replay.c`): `0x69` is `Fn_mul_mot_yrot` (a bone's rotation from TGP
 memory, with `Ry(arg)` in front), `0x0F` reads the point back, `0x24`/`0x25` are
 `a*sin`/`a*cos`, `0x27` atan, `0x1A` sqrt. Bone `n` of player `p` is at TGP word
-`0x3A00 + 0x100p + 12n`, and the player's `+0x8C + 12n` is that bone's vector.
+`0x3A00 + 0x100p + 12n`, and the player's `+0x80 + 12n` is slot `n`'s
+skeleton offset in its parent's frame (the list copied to `+0x8C` starts at
+slot 1).
 
 **Shoulder pads** (`kata_pat_disp`, `0x32A90`). `0x642147C[char]` points at
 two records, left then right. `sub_32A0C`, called from `action_init`, copies
@@ -1287,14 +1426,8 @@ matrix, translated by `+0x18` with no turn. A pad is skipped (and `+0x1B28` /
 `+0x1B2A` cleared) once bit 6 / bit 3 of `+0x1F48` is set, so one break of
 the upper half takes both.
 
-The swing, each frame: the lean `+0xAC8`/`+0xACA` is the pitch and yaw (`0x27`)
-of head (`+0x20C`) minus waist (`+0x1F4`). The upper arm's vector (`+0xD4`,
-bone 6, on the left; `+0xB0`, bone 3, on the right) is turned by that bone's
-rotation and the facing (`0x69`) into `+0xA9C`/`+0xAA8`, and `p` is its
-component along the lean (`+0xAE0`/`+0xAD4`). If `p` is negative the swing is
-0; otherwise it is `atan(sqrt(L^2 - p^2), p)` (`L` the vector's x), at most the
-limit. That is my reading of the ops; the swing in a standing pose has not
-been measured.
+The swing works out how far each upper arm is raised; it is under "The
+shoulder pads", after the skirt below, measured against MAME.
 
 **Skirt** (`kosi_mino_disp`, `0x31E54`). Drawn for characters 0, 1, 13 and 14
 only, and not once bit 9 of `+0x1F48` (hips broken) is set; then
@@ -1326,12 +1459,13 @@ come from the two thighs (bone 13, `+0x128`, and bone 10, `+0x104`, turned by
 `0x69` with the facing word `0x50A398`, which nothing writes, so 0): their
 angles against the hips' `+0xAD4` give `+0xAD8`/`+0xADE` and the terms at
 `0x50A380..0x50A388`, scaled by `sin`/`cos` (`0x21`/`0x22`) through a float
-round trip (`0x17`/`0x18`). This has not been measured either.
+round trip (`0x17`/`0x18`). The whole of it is under "The skirt", after
+the midriff below, measured against MAME.
 
 So both are drawn on a slot's matrix with fixed offsets and turns, and only
-the swing depends on the pose. At rest the skirt's swing should be 0, because
-a thigh has to pass its limit first. The pads' rest swing depends on `p`, and
-that has not been measured.
+the swing depends on the pose. At rest the skirt's swing is 0, because
+a thigh has to pass its limit first. A pad swings once its upper arm rises
+past square to the body, which a guard often does.
 
 **What the explorer draws.** `readArmour` (`js/vf2fighters.js`) reads
 `0x640EDAC` per fighter (`rig.fighters.armour` in the profile) into each
@@ -1341,39 +1475,553 @@ broken / all broken) is one hit per half as the board deals it, all stages at
 once: `armouredFighter` gives each broken slot its last stage's model, the
 chest of Jane, Grace, Honey and Jane in jeans the resting one (Jane 772,
 Grace 2844, Honey 2978, jeans 1597), and the fighter is rebuilt the way a new
-one is. Bahn's broken hips are the table's 690, the same model
-`koshi_unit_change` takes; Honey's hips do not change. Not checked against
-MAME. The shoulder pads and skirt are drawn as above, at rest only:
+one is. The hips of Honey and Bahn are `koshi_unit_change`'s every frame
+(below, "The hips"). Not checked against MAME. The shoulder pads and skirt are drawn as above:
 `readPads`/`readSkirt` turn each piece into an extra on the chest's or hips'
-matrix (`placeExtra`), with the swing left at 0. That is the skirt's own rest
-value; for the pads it is not measured, so they sit at the fixed offsets and
-turns. Jane's two model-0 panels are skipped like any other empty part, and
+matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
+pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
-(slots 6 and 3) and the skirt with the lower (slot 9). Left for later, as their
-own steps: the swings, the chest spring and the hip lists by motion, Picky's
-hair, and the flying pieces.
+(slots 6 and 3) and the skirt with the lower (slot 9). Picky's hair
+swings with the head ("Picky's hair", below). Not drawn, and not drawable
+from what the explorer has: the chest's per-frame list needs the move flags
+(below). The flying pieces are thrown by one sample hit (above).
+Hands and feet have nothing to swap (above).
 
-**The chest bounce: what is missing before it can be drawn.** Everything this
-document says about it is the `mune_unit_change` entry above. That is enough
-to know the part (slot 1), the fighters (0, 1, 2, 13) and two of the models
-(Jane's entries 15 and 16, 772 and 773), but not enough to draw a bounce:
+**The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
+`mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
+own model (`+0x44`) in `g0`, and draws whatever comes back in `g0` on the
+slot's own matrix: the chest's, already sent (`0x19FD0`, slot × `0xC`). The
+routine sends no matrix, offset or scale. The bounce is a model swap, nothing
+else.
 
-- *Intact or broken.* As written, `mune_unit_change` runs only once the chest
-  is broken. Nothing here says an intact chest bounces or names a model for
-  one, so as far as this document goes the bounce is a broken chest's only.
-- *The 31 models.* Only Jane's entries 15 and 16 are named, and entry 15 for
-  the other three (2844, 2978, 1597). Which way the index runs (which end is
-  up) is not said.
-- *The spring.* `+0xC68`/`+0xC6C` are named and clamped to +-15, but not how
-  they step each frame: which of the two is the velocity, what drives them
-  ("the body's movement": which bone, vector or flag), the stiffness, the
-  damping, the starting value, or whether `action_init` resets them.
-- *The per-frame list.* Table `+0` is used while `+0x1A4` is exactly `0x200`;
-  its length, its entries (model numbers or indices), and how the frame into
-  it is counted are not said, nor what `0x200` means as a move.
+*When it runs.* It returns the slot model unchanged unless the character has
+a table at `0x6421F80[char]` and `+0x1F48` bit 1 (chest broken) is set. Only
+characters 0, 1, 2, 13 and 14 have a table, so only their broken chests
+bounce. An intact chest never does: there is no other path. Jane's chest
+breaks in three stages; bit 1 is set at the first one, so the bounce starts
+then. Character 14 is in neither the break table above nor the explorer, but
+`0x640EDAC[14]` does have a one-stage slot-1 entry. `debug_flag` bit 5
+skips the spring step (and the copy at `0x1716C`) but still picks a model.
 
-Until those are read from `0x31888` (and whatever writes `+0xC68`/`+0xC6C`),
-the explorer keeps the resting model, entry 15, on a broken chest.
+*The table* (`0x6421F80[char]` → two words): `+0` points at the per-frame
+list (a count word, then that many 16-bit model numbers), `+4` at 31 16-bit
+model numbers (entries 0-30, ending in a 0 word).
+
+| Char | Table | 31 models (entry 0 → 30) | Per-frame list |
+|---|---|---|---|
+| 0 Jane | `0x6422018` | 701, 758-778, 864-872 | 21 frames |
+| 1 Grace | `0x6422000` | 2829-2859 | 51 frames |
+| 2 Honey | `0x6421FE8` | 2963-2993 | 68 frames |
+| 13 Jane (jeans) | `0x6422024` | 1582-1612 | 21 frames |
+| 14 | `0x642200C` | 436, 873, 2800-2828 | 51 frames |
+
+The per-frame lists, as stored:
+
+- Jane: 778 778 864 778 777 775 773 771 769 768 767 766 765 766 767 768 769
+  771 773 775 777
+- Grace: 2853 2850 2851 2852 2853 2853 2852 2851 2850 2849 2848 2846 2844
+  2842 2840 2839 2838 2837 2838 2839 2840 2842 2844 2846 2848 2849 2850 2851
+  2852 2853 2853 2852 2851 2850 2849 2848 2846 2844 2842 2840 2839 2838 2837
+  2838 2839 2840 2842 2844 2846 2848 2849
+- Honey: 2971 2971 2971 2970 2970 2970 2971 2971 2971 2972 2972 2973 2973
+  2974 2974 2975 2975 2976 2976 2977 2977 2978 2979 2979 2980 2980 2981 2981
+  2982 2982 2983 2983 2984 2984 2985 2985 2985 2986 2986 2986 2985 2985 2985
+  2984 2984 2983 2983 2982 2982 2981 2981 2980 2980 2979 2979 2978 2977 2977
+  2976 2976 2975 2975 2974 2974 2973 2973 2972 2972
+- Jane (jeans): 1603 1603 1604 1603 1602 1600 1598 1596 1594 1593 1592 1591
+  1590 1591 1592 1593 1594 1596 1598 1600 1602
+- 14: 2822 2819 2820 2821 2822 2822 2821 2820 2819 2818 2817 2815 2813 2811
+  2809 2808 2807 2806 2807 2808 2809 2811 2813 2815 2817 2818 2819 2820 2821
+  2822 2822 2821 2820 2819 2818 2817 2815 2813 2811 2809 2808 2807 2806 2807
+  2808 2809 2811 2813 2815 2817 2818
+
+They are model numbers from the same character's 31 (entries 8-22 for Jane
+and Jane in jeans, 8-24 for Grace and 14, 7-23 for Honey), not indices.
+
+*The spring.* `+0xC6C` is the position, `+0xC68` the velocity, both floats.
+`change_unit_init` (`0x2CA10`, from `efc_ram_init`, for both fighters) sets
+three constants: `+0xC74` = 160.0, `+0xC70` = 0.14, `+0xC78` = -0.1. What
+drives it is the distance from the head (`+0x20C`) to `+0xC7C`, a copy of
+the waist (`+0x1F4`) that `calc_unit_mat` takes as it starts (`0x1716C`),
+before it stores the new waist (`0x172D4`) and head (`0x17450`). The distance
+is coprocessor function `0x2C` (`0x16002C2C`, six floats in, one out). In
+FV's own coprocessor program (uploaded from `0x6400000` by
+`b_crx_copro_down`, `0x1810`) entry `0x2C` of the dispatch table goes to
+`0x20670`, the same instructions as cpres1's official `Fn_get_3d_r`:
+`sqrt(dx² + dy² + dz²)` (its square root, `0x20281`, is the same code too).
+Each frame, from `loc_3191C`:
+
+1. `d` = that distance; `k` = `|+0xC64 - d|` × `+0xC74` (160), capped at
+   4.2. `+0xC64` = `d` (kept for next frame); `+0xC88` = `k` (nothing reads
+   it).
+2. The kick: if the velocity is exactly 0 it becomes `k`; else if
+   `k` ≥ |velocity| it becomes `k` with the velocity's sign; else it is left
+   alone. So the kick only ever raises the speed, and only a spring at a
+   dead stop is pushed in the + direction.
+3. position += velocity; then velocity × 0.935.
+4. If position ≥ 15: position = 15, velocity = -velocity × 0.78. If
+   position ≤ -15: position = -15, the same.
+5. velocity += 0.14 (`+0xC70`) if position is negative (sign bit), else
+   -0.1 (`+0xC78`). The pull back is a constant, not proportional to the
+   position, and stronger from below than from above.
+
+*Which model.* Index = 15 + `int(position + 0.5)`, the conversion being
+coprocessor function `0x18` (`0x0C001818`). In FV's program it goes to
+`0x205A3`, the same bytes as cpres1's `r0 = fix f1`, and the program sets
+`MODE1 = 0x18000` once (`0x20080`) and never again: bit 15, TRUNC, is on,
+so `fix` truncates toward zero. With position in [-15, 15] the index runs
+1-30; entry 0 (Jane 701, Grace 2829, Honey 2963, jeans 1582, 14's 436) is
+never picked. Index 15 covers positions above -1.5 and below 0.5, two units
+wide; every other index one unit. A higher index means a more positive
+position. Which way that moves the chest on screen is in the models, not
+the code. The model is stored in `+0xC94` and returned.
+
+At rest (no kick) the constant pull keeps the position swinging about 0:
+from 0/0, worked through the five steps above in floats, it settles within
+±0.26, so the resting model is entry 15 (Jane 772, Grace 2844, Honey 2978,
+jeans 1597, 14's 2813). Entry 16 (Jane 773) needs position ≥ 0.5.
+
+*Reset.* `change_unit_init` sets only the three constants. Nothing in the
+program ROM stores to `+0xC64`, `+0xC68`, `+0xC6C`, `+0xC90` or `+0xC94`
+outside this routine. The one reset found is in it (`0x31A60`): when
+`also_mode` is 9, `0x500031` is `0x11` and `+0x1A4` bit 16 is set, velocity
+and position are set to 0 and the slot model is returned. Whether a block
+clear of the fighter's work area zeroes them at a round start was not found.
+
+*The per-frame list.* At the top (`0x318B4`), with `+0x1A4` bit 9 set and
+bits 14 and 16 clear:
+
+- If `+0xC90` is already set, the spring is not stepped. If `+0x1A4` is
+  exactly `0x200` the model is list[`+0x1AA` mod count]; otherwise the slot
+  model. `+0x1AA` is the motion frame (the move script steps against it),
+  so the list plays at one entry per motion frame and wraps.
+- Otherwise `+0xC90` is set, and the list taken (as above, `0x200` check
+  included), when list[`+0x1AA` mod count] equals the model last
+  picked (`+0xC94`) and |velocity| ≤ 0.8. Failing that, `+0xC90` is cleared
+  and the spring runs.
+
+Any other `+0x1A4` clears `+0xC90` and runs the spring. So the list takes
+over only where it meets the spring's current model with the spring nearly
+still: Jane and Jane in jeans's lists never hold their resting models (772,
+1597), so they enter only from entry 16 or another listed model. While on
+the list the spring is frozen and `+0xC64` is not updated, so the first
+frame back measures the distance against the one from before the list
+(capped by the 4.2). `+0x1A4` is built from the move record and its
+set-up and script (see "When the chest twists"); which moves leave it at
+exactly `0x200` was not read.
+
+*What the explorer draws.* The spring, and not the list. With the Armour
+switch on upper or all broken, Jane, Grace, Honey and Jane in jeans draw
+their chest as the 31 models' entry 15 + `int(position + 0.5)`, stepped once
+per frame of playback (`bounceStep`/`bounceChest` in `js/vf2fighters.js`)
+with the five steps above in 32-bit floats. The head is slot 2's translation
+in the posed skeleton and the waist slot 0's, the waist as the frame before
+left it. An intact chest keeps its slot model. Worked from 0/0 with no kick,
+the code settles within -0.25..0.21, entry 15, as above. The Animation
+panel's armour readout shows the model, entry, position and velocity per
+frame.
+
+These are the explorer's choices, not read from the ROM:
+
+- The spring starts at position 0, velocity 0 whenever the fighter is
+  loaded or its armour switched (the explorer's round start). The last
+  distance (`+0xC64`) starts at the first frame's, so it starts with no kick.
+- When a motion starts or loops, the explorer stands the fighter back where
+  the motion starts, which the board's fighter does not do. On that frame the
+  waist is that frame's own, not the one before.
+- A frame picked on its own (scrubbing) holds the spring and only takes the
+  new distance.
+
+The per-frame list is not followed. It needs `+0x1A4` to be exactly `0x200`,
+and the explorer has no move flags. In a moving motion the spring often
+reaches the ±15 walls. Where the board would switch to the list in a stance,
+the explorer keeps the spring.
+
+**The hips (read from the ROM; drawn).** `rob_disp` calls
+`koshi_unit_change` (`0x31ADC`) for slot 9 only (`0x1A024`), the same way as
+the chest: the slot's own model (`+0x64`) in `g0`, and whatever comes back is
+drawn on the hips' own matrix, already sent. The routine sends no matrix,
+offset or scale; it is a model swap.
+
+`0x6422400[char]` is 0 for everyone but Honey (2, `0x64224A8`), Bahn (4,
+`0x6422468`) and entry 15. A table is eight pointers (0 is none):
+
+| Offset | What | Honey | Bahn |
+|---|---|---|---|
+| `+0` | two pairs: standing, low | 2927/2927, 2931/2931 | 2405/690, 2407/1788 |
+| `+4` | 80 pairs by frame (move flag bit 9) | none | none |
+| `+8` | two pointers: 48 pairs by `+0x7FA`, 12 pairs by `+0xAEC` (move flag bit 4) | 2932..2962; 2932..2937 | 3189..3219/3243..3273; 3179..3184/3233..3238 |
+| `+0xC` | motion `0x31`: halfwords by frame | none | 3223 to frame 30, then 3224..3232 from 31 to 39 |
+| `+0x10` | motion `0x180`: halfwords by frame | 2932, up to 2962 at 21, back to 2932 | none |
+| `+0x14` | 50 halfwords, a count at `+0xC8C` | 2932..2962..2932 | none |
+| `+0x18` | broken hips | 2537 | none |
+| `+0x1C` | per-motion lists: (motion, list) pairs to motion 0; a list is a count, then that many pairs | 302 and 1014 (90: 2932 to frame 74, then up to 2955), 1029 (2: 2927) | 548, 632, 633, 656, 832 (41: 3179 up to 3188 at 10, back to 3179; broken 3233..3242) |
+
+A pair is the intact model, then the broken one; the routine adds 2 to the
+address once `+0x1F48` bit 9 is set. Honey's own slot-9 model is 2460, which
+the routine replaces in nearly every frame; Bahn's is 2405 (690 once broken).
+
+The routine, in order (`g7` the player, `+0x1A8` the motion, `+0x1AA` its
+frame, which `set_motion` starts at 1; `0x5000A2` is the versus win streak:
+at a round's end `0xE05C` adds one to it while the side that won (`0x50004E`)
+is the side that won before (`0x500066`), and starts it again otherwise):
+
+1. *The ring.* When this fighter's `+0x1B1` is 5, `0x5000A2` is at least 20,
+   the motion is `0x19D` or `0x19E` at frame 17, and `+0x5B8` bit 0 is clear,
+   `+0x254` is saved to `0x50A420` and a radius `0x50A42C` set to 0.01. Each
+   call it grows 0.16 and goes back to 0 past 15. `kuc_sukebo_check`
+   (`0x31DEC`) sets `+0xC8C` to 1 while the distance from that point to the
+   waist (`+0x1F4`) is within 0.4 inside the radius: a ring sweeping out
+   from where that move was played. Who has `+0x1B1` = 5 was not read. Then the table is looked up; with none, the
+   slot's model is drawn.
+2. Honey's win-streak hips: with `+0x18`, a streak of at least 100 and the
+   hips broken, `+0x18`'s first halfword (2537), whatever the motion.
+3. Motion `0x31` with `+0x1A4` bit 29 clear: `+0xC` halfword
+   [min(frame, 40)], or the slot's model with no list. `+0xC8C` cleared.
+4. Motion `0x180`: the slot's model until the streak is 10, then `+0x10`
+   halfword [frame] (no limit), or the slot's model with no list.
+5. `kuc_motion`: the first `+0x1C` entry for the motion, pair
+   [min(frame, count - 1)]. Taken only if it differs from the slot's model;
+   otherwise on to 6.
+6. By the move flags `+0x1A4`: bit 4 (set by `fix_hara`, `0x19B44`, with the
+   fighter's place on the waist), `+0x8`, unless `+0x1C` equals `+0xC5C` or
+   `+0xA0E` is set: with bit 14 the `+0xAEC` list [`+0xAEC` mod 12];
+   otherwise, unless status `+0` bit 3 or `+0x7FA` is 0, the `+0x7FA` list
+   [`+0x7FA`, or 31 + (`+0x7FA` mod 17) from 31 on]. Bit 16: 7 below. With
+   `+0xC8C` set, the `+0x14` list [`+0xC8C` + 1], counting `+0xC8C` up and
+   back to 0 (and the slot's model) at 50. Bit 9: `+4` [min(frame - 1, 79)],
+   or the slot's model with no list.
+7. The standing pair, or the low pair while the waist's height `+0x1F8` is
+   under 0.4 (0.6 with `+0x1A4` bit 15; plus the raised floor `0x50A010` when
+   `+0x624` is set).
+
+**What the explorer draws** (`readHips`, `hipsModel` in `js/vf2fighters.js`).
+`readHips` reads `+0`, `+0xC`, `+0x10` (as many entries as motion `0x180`
+has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
+and 7 every frame, the hips broken when the Armour switch breaks the lower
+half. The explorer has no move flags, other fighter or game state, so it
+takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), the streak as under
+10 unless the 100-win switch (`?hentai=baka`, Honey only) asks for 100, no
+ring (`+0xC8C` 0) and no raised floor. The waist
+height is the explorer's slot 0 `y`, which is the board's `+0x1F8` above a
+floor at 0. So:
+
+- Honey stands on 2927 and drops to 2931 when her waist goes under 0.4
+  (motion 1 from frame 26 to 48); her skirt lifts through the end of 302
+  and 1014, and through motion 384 only on the 100-win switch, which is
+  also what puts her in 2537 in every motion once her lower half breaks.
+  In motion 49 (`0x31`) she has no list and shows her own 2460.
+- Bahn stands on 2405 (690 broken), drops to 2407 (1788 broken) under 0.4,
+  plays 3223..3232 through motion 49 and his coat swings through 3179..3188
+  (3233..3242 broken) in motions 548, 632, 633, 656 and 832.
+
+The Animation panel's armour readout shows the hips' model per frame. Not
+checked against MAME. Every list picked by motion id (with or without the
+frame) is drawn; the three left out hang on fight state, not on the motion:
+
+- `+8`, the swing: needs `+0x1A4` bit 4, in the air (set by `fix_hara`,
+  `0x19B44`, cleared on landing by `rob_check_stage`, `0x18950`). Its index
+  is `+0x7FA`, which `rob_disp` (`0x19F44`) counts up only while that bit is
+  set, or with bit 14 `+0xAEC`, `rob_disp`'s count of frames drawn (`0x19F38`).
+- `+0x14`, the ring: needs `+0xC8C`, set by `kuc_sukebo_check` (`0x31DEC`)
+  from the ring at `0x50A420`/`0x50A42C`.
+- `+4`: needs `+0x1A4` bit 9; neither Honey nor Bahn has the list.
+
+**The hip matrix.** `koshi_unit_change` only picks the model; the matrix it
+is drawn on is slot 9's, built by `calc_unit_mat` (`0x17160`) once a frame
+and stored on the coprocessor. `rob_disp`'s part loop (`0x19F78`) adds
+nothing to it: for each slot it sends `0x1B803737`, the player byte `+4` and
+`slot × 0xC`, which loads the matrix `calc_unit_mat` stored under that index,
+then the model. Slot 9's stretch of `calc_unit_mat` is `0x17838`..`0x17910`:
+
+1. `0x1000202` pops back to the waist's matrix (slot 0, pushed at
+   `0x172E0` after it was stored): the hips hang off the waist, not the
+   chest.
+2. `0x3000606` moves by `+0xEC`, the skeleton's entry 8 (player `+0x8C` +
+   8 × 12, copied from the character record's `+4`): slot 9's offset in the
+   waist's frame.
+3. `0x1F803F3F` with `+0xBC4`, `+0xBC2`, `+0xBC0`: float object 9's euler, Z
+   then Y then X (the pose's angle table runs from `+0xB8A`, 6 bytes an
+   object; the head's is the same op with `+0xBAE`..).
+4. `0x4800909` `+0xC20`, `0x4000808` `+0xC1E`, `0x5000A0A` `+0xC22`: Y, X, Z
+   by object 9's blend (`+0xBE8` + 9 × 6), what is left of the last motion.
+5. `0x5000A0A` `+0x172`, then `0x4800909` `+0x170`: the pelvis look, Z then
+   Y; the motion's held angles (object 17, `+0xBDC`) or the aim 0x2901C
+   worked out, which for all but one motion is the quarter-turn roll.
+6. `0x1A803535`, player, `0x6C` (9 × 0xC) stores it; `0x7800F0F` reads the
+   translation back to `+0x260` for `set_coli_ball_data(9)`.
+
+No scale, and no offset or turn of its own on top of the bone. So the hip
+model's matrix is: waist × T(skeleton entry 8) × object 9's euler × blend ×
+look. The explorer's matches it step for step: `buildPose` turns slot 9 from
+the waist's rotation by `A(9)`, the blend and the held look or aim, and
+`onOwnSkeleton` places it at the waist plus the waist's matrix times
+`offsets[9]` (the same entry 8), with `SLOT_PARENT[9] = 0`; the hip model is
+drawn on that matrix as it stands. Nothing to change.
+
+**The midriff.** `rob_disp` calls one more routine after each slot's model,
+picked by the table at `0x1A0EC`: `0x1A1E0` for slot 1, `0x1A12C` for slot
+2, `0x1A2D8` for slot 9 and `0x1A4B4` for the rest. `0x1A2D8` draws the band
+that closes the gap between the chest and the hips, on slot 9's matrix as
+it still stands from the hip model. (An earlier note here had it on "the
+spring's own vectors"; there is no spring, and the matrix is slot 9's.)
+
+The player's `+0x190` is its character record (`0x640D2B0[char]`, set at
+`0x1244C`); the record's `+0x24` points at the midriff, a ROM struct. Characters 10
+to 12 have none, so nothing is drawn; 0 to 9 and 13 to 15 all have one. Jane's is `0x642B3CC`:
+
+| Offset | What |
+|---|---|
+| `+8` | the model whose texture points and material it is drawn with (the only field `0x1A2D8` reads) |
+| `+0x70` | the chest's ring: 12-byte points in the chest's frame |
+| `+0xD0` | `n`, the link count (20) |
+| `+0xD4` | `n` links of `0x28` bytes: an attribute, a normal, two points |
+| `+0xD4 + 10n × 4` | a closing word |
+| `+0xD4 + (10n + 1) × 4` | two index bytes a link |
+
+The work is split. `calc_unit_mat`, once slot 9's matrix is stored
+(`0x178E0`) and its collision ball sent (`0x18304`), runs `0x17A30` ..
+`0x17BA4` with slot 9's matrix still current:
+
+1. `0x800101` pushes, `0x6000C0C` inverts it in place and `0x9801313` (a
+   float add) waits for the inverse: H⁻¹.
+2. `0x1B803737` multiplies by the stored slot 1 (the chest, C): H⁻¹·C, the
+   chest's frame seen from the hips'.
+3. `0x14802929` for each of the 16 points at `+0x70`, read back into the
+   player's `+0x1860` + 12 per point: the chest's ring, now in the hips'
+   frame. Only 8 are ever used.
+4. Geometrizer command 5, polygon data, to address `player << 8`, `10n + 1`
+   words: each link's attribute and normal, then its two points, each taken
+   from `+0x1800 + index × 12` (chest point `index - 8`) when its index byte
+   is 8 or more, else the link's own point, which is the hips' ring and
+   already in the hips' frame; then the closing word.
+5. `0x1000202` pops.
+
+`0x1A2D8` itself takes `r4 = record +0x24`, or `0x642F9EC[char]` when
+`+0x1F48` bit 1 (the chest broken) is set, and returns if it is 0. It sets
+geometrizer mode 3 (`0x58F0`), which makes the board work out each face's
+normal from its points and skip the stored one. It reads the model table
+entry `0x20E0004 + (+8) × 16` and sends `0x101` with the entry's texture
+points, its material (plus `hi16` of its fourth word × 4 for player 2, the
+other player's colours), the object address `player × 0x100 + 4` (the
+polygon RAM written above, past the first attribute and normal) and a count
+of -1 (to the closing word). In some move states it swaps the material word
+for `1 << 23` or `0x802000`. Then it sets mode 1 again, and calls
+`kosi_mino_disp` (`0x31E54`, the skirt panels) and the default `0x1CB2C`.
+
+So the midriff is drawn in the hips' frame on the hips' matrix: the hips'
+ring stands as stored, and the chest's ring is H⁻¹·C·p. Every link is a
+triangle (`attr & 3 = 2`), which reads its first point and skips the second
+(each link stores the point twice). The link types alternate 3 (`0x1702`)
+and 1 (`0x1502`), so the strip zig-zags between the two rings and closes the
+waist in 16 triangles; the last links add two slivers by the hips' origin.
+In the rest pose the chest's ring lands on the points the links store for
+it, a band 0.008 tall (the ring is 0.15 across) that the chest and hip
+models cover. It shows when the chest bends away from the hips: Bahn's
+motion 360, or 362 for anyone. A broken chest keeps the same points; only
+the model, and so the texture and material, change (for characters 2, 4, 7
+and 15 the struct differs). For Honey that is her bare midriff (2461 for
+2521), for Bahn 691 for 2406.
+
+**What the explorer draws** (`readMidriff` in `js/vf2fighters.js`, `skinMesh`
+in `js/bodies.js`). It reads the struct as above and keeps the links from
+the first link's points on: those are `js/model.js`'s 40-byte records as
+they stand (points, then the next link's attribute and normal). Every frame
+it writes the chest's ring into the points the index bytes name, carried by
+H⁻¹·C as The House of the Dead's chest-to-hips skin is, and draws the result
+on slot 9 with the model's texture points and material, or the broken one's
+when the Armour switch breaks the upper half. The opponent gets the same.
+Checked in the view: characters 0 to 9 and their P2 looks, armour whole or
+broken, motions 21, 360 and 362 stepped a frame at a time. Every chest-ring
+point lands on the chest's drawn matrix to within 4e-8, and the band
+changes shape against the hips by up to 0.07 in motion 21 and 0.38 (Sanman)
+in 360, so it follows the pose, not the rest. The broken models
+are the ones listed above, with P2's own for Honey (2625, 2493), Bahn (2402,
+1707) and Sanman (1684, 1683). Sonic, Tails and the dummies draw none.
+Not checked against MAME. Player 2's material offset is not drawn, the move
+states' material swaps are left out, and the stored normals are used for
+lighting where the board works them out from the points.
+
+**The skirt (read from the ROM, measured against MAME).** `kosi_mino_disp`
+(`0x31E54..0x32A08`) is the call at the end of `0x1A2D8`, the hips' draw. It
+draws the four skirt panels of `0x6421DE0` (the table, models and fixed
+placement are under "Shoulder pads and skirt" above) for characters 0, 1, 13
+and 14 while `+0x1F48` bit 9 (hips broken) is clear; otherwise it clears
+`+0x1B20..0x1B26` and draws nothing. Each panel is `set_obj` on the hips'
+matrix after its translate and `ang_z`, `ang_y`, `ang_x` (`0x0A`, `0x09`,
+`0x08`); the swings below are added to the turns there.
+
+What it reads. `calc_unit_mat` leaves each matrix's angles in the player
+struct, from `Fn_get_glo_ang` (`0x51`), whose third angle is the roll
+`atan2(col0.y, col1.y)`: the hips' (slot 9, `0x179A4`) less a half turn in
+`+0xAD4`, the left thigh's (slot 13, `0x1802C`) in `+0xADA`, the right
+thigh's (slot 10, `0x17CE4`) in `+0xAE0`. `kosi_mino_disp` then works out each
+thigh's lift from the thigh's bone vector, the skeleton entry for the knee
+(`+0x128` for slot 13, `+0x104` for slot 10), turned by the thigh's rotation
+(`0x69`, with `0x50A398`, which nothing writes, as the extra yaw):
+`lift = atan2(v.x, sin(AD4)·v.z + cos(AD4)·v.y)` (`0x27`, `0x24`, `0x25`).
+It stores the lifts over the board's own `+0xAD8` and `+0xADE`.
+
+The swings. `0x50A380..0x50A388` are zeroed, then each thigh's spread is
+`d = s16(AD4 + roll + 0x8000)`; a positive one goes to the "out" word
+(`0x50A380` for slot 13, `0x50A386` for slot 10), a negative one to the "back"
+word (`0x50A382`, `0x50A388`). With `by(s, f) = f ≥ 0 ? trunc(s·f) : 0`
+(`0x17`/`0x18`):
+
+| Panel | Terms | Swing applied | Final angle |
+|---|---|---|---|
+| 1 (`+4`) | `by(out13, cos(lift13+0x8000))`, `by(out10, cos(lift10+0x8000))` | X `0x4000 + s1` | `0x50A36E` |
+| 2 (`+6`) | `by(back13, cos lift13)`, `by(back10, cos lift10)` | X `0x4000 - s2` | `0x50A372` |
+| 3 (`+2`) | `by(out13, sin(lift13+0x8000))`, `by(back13, sin(lift13+0x8000))` | Y `0xC000 + s3` | `0x50A376` |
+| 4 (`+0`) | `by(out10, -sin(lift10+0x8000))`, `by(back10, sin(lift13+0x8000))` | Y `0xC000 - s4` | `0x50A37A` |
+
+Each `s` is `max(0, max(terms) - limit)` with the limits `0x3000`, `0x1E00`,
+`0x1000`, `0x1000`. The panel 3 terms go to `0x50A3B8`/`0x50A3BA` and the
+panel 4 terms to `0x50A3BC`/`0x50A3BE`. Panel 4's second term takes slot 13's
+lift, not slot 10's. That is how the code reads, and the explorer keeps it.
+
+Measured. A Lua tap on MAME's attract mode logged `+0xAD4..+0xAE0` and the
+`0x50A380` words for Jane in 40 frames of 20 motions. The spreads come out as
+above (Jane in one frame: `-16973 - 9058 + 0x8000 = 6737` in `0x50A380`,
+and with her lift `-17765` panel 3's angle `0x50A376` is `0xCA16`, a swing
+of `0xA16` = 2582, where the table gives `trunc(6737 · 0.991) - 0x1000`). The
+explorer's thigh rolls agree with the board's to a few units. Its hips' roll
+is the board's negated (the explorer's pelvis is built the other way about,
+so `+0xAD4` is `0x8000 - roll` there, `-0x4000` at rest). Its thigh vector is
+the board's after the facing's quarter turn, so the board's `(x, y, z)` is
+the explorer's `(-z, y, x)`. With those two, the swings worked out from the
+explorer's pose agree with those worked out from the board's own words to
+within about 150 in most frames (motion 610 frame 12: board 1743/0/10665/0,
+explorer 1657/0/10577/0). Some are a frame apart (motions 112, 29). Some
+differ more where the board blends from the previous motion and the explorer
+starts the motion fresh (116, 359, 477, 515, 620). Panels 1 and 3 swing in
+kicks and wide stances; panel 2 mostly stays put, behind its lower limit.
+
+**What the explorer draws** (`skirtSwings` and `swungExtra` in
+`js/vf2fighters.js`). `poseFighter` works out the four swings each frame for
+a fighter with a skirt, from the posed slots 9, 10 and 13 and the skeleton
+offsets, as above, and adds them to the panels' turns before `placeExtra`.
+It returns them as `skirt`. Jane's and Jane in jeans' empty panels 1 and 2
+are still skipped, so for them only panels 3 and 4 (her hip flaps) move.
+The hip matrix and the panels' fixed placement are as before.
+
+**The shoulder pads (read from the ROM, measured against MAME).**
+`kata_pat_disp` (`0x32A90..0x331B0`) is slot 1's entry in `rob_disp`'s
+table at `0x1A0EC`, after the chest's own `set_obj`. It draws Raxel's, Mahler's
+and B.M.'s pads (records, models and fixed placement are under "Shoulder pads
+and skirt" above) on the chest's matrix. Its working words are in the block
+whose pointer is at `0x500844` (`+0x60` for player 2), not in the player.
+
+What it reads. `calc_unit_mat` reads back each slot's origin into the player
+from `+0x1F4`, 12 bytes a slot (`0x172D4` slot 0, the waist; `0x17450` slot 2,
+the head). The lean is head less waist, `d`: its yaw `atan2(d.x, d.z)` goes to
+`+0xACA` and its pitch `atan2(d.y, d.x·sin(yaw) + d.z·cos(yaw))` to `+0xAC8`
+(`0x27` is `atan2(second, first)`, `0x24`/`0x25` `arg2·sin`/`arg2·cos` of
+`arg1`). For each pad the routine pushes, loads identity, loads the upper
+arm's rotation with the facing in front (`0x69`: bone 6 at TGP `0x3A48` for
+the left, bone 3 at `0x3A24` for the right, `+0x100` for player 2, and `+0x26`),
+translates by the elbow's skeleton offset (`+0xD4`, slot 7's, on the left;
+`+0xB0`, slot 4's, on the right) and reads the point back (`0x0F`) into
+`+0xA9C` / `+0xAA8`: the upper arm's vector, turned. Its component along the
+lean, `p = v.y·sin(pitch) + cos(pitch)·(v.x·sin(yaw) + v.z·cos(yaw))`, goes
+to `+0xAE0` (left) and `+0xAD4` (right), with its two terms in `+0xADC`/`+0xAD8`
+and `+0xAD0`/`+0xACC`.
+
+The swing. `p` below 0 (bit 31 set) is a swing of 0. Otherwise it is
+`atan2(p, sqrt(L² − p²))` (`0x1A`, `0x27`), `asin(p / L)` with `L` the offset's
+x (0.25 for Raxel and Mahler, 0.28 for B.M.), and at most the record's `+2`
+(`0x3800` for all three; an unsigned compare). The left pad's X turn is
+`+0xABA + swing`, the right's `+0xAB4 − swing`, written to `+0xAC0` before
+the draw. So a pad starts to swing out once its upper arm rises past square
+to the head-waist line and is at most 79° up. The second model follows on the
+pad's matrix, so it swings with it. Before `set_obj` the routine reads the
+pad's matrix back (`0x05`) into `+0x1AC0` (left) and `+0x1AF0` (right).
+
+Measured. A Lua tap on MAME's attract mode logged Raxel's block (`+0xAE0`,
+`+0xAD4`, `+0xAC0`, `+0xAC8`, `+0xACA`) in 35 motions. `+0xAC0`, the right
+pad's angle, is `0xC000 − asin(p / L)` from the logged `p`: motion 671
+frame 8, `p = 0.08512`, a swing of 3624 and `+0xAC0` = −20007. The explorer's
+swings from its own pose agree in which pad moves and which way in every
+sample, and at frame 30 to within about 300 in most motions (994: 3301
+against the board's 3301; 576: 8281 against 8314; 78: 10219 and 14336
+against 9927 and 14336). Motions 527, 620 and 676 differ by 600 to 3300,
+and at frame 8 more motions do, where the board is still blending from the
+previous motion and the explorer starts each motion fresh.
+
+**What the explorer draws** (`padSwing` and `swungExtra` in
+`js/vf2fighters.js`). `poseFighter` works out each pad's swing from the posed
+slots 0, 2 and the upper arm, and the elbow's offset, as above. The lean and
+the arm are both in the explorer's frame, so the facing's turn and the
+explorer's axes cancel in `p`, and nothing like the skirt's corrections is
+needed. It adds the swing to the left pad's X turn and takes it off the
+right's, for the second model as well, and returns the two swings as `pads`.
+
+**Picky's hair (read from the ROM; not checked against MAME).**
+`pky_kami_disp` (`0x1ADDC..0x1B23C`) is called from slot 2's entry in
+`rob_disp`'s table (`0x1A0EC` → `0x1A12C`), after the head's own `set_obj`,
+only while the character byte `+0x1B0` is 5 (Picky) or 18 and `+0x1F48`
+bit 2 is set: the helmet (slot 2, 894 → 893) has broken. Its state is player
+`+0xA70..+0xAA6`, which `pky_kami_init` (`0x1AD08`, called from
+`action_init` at `0x12B2C` for every fighter) fills with immediates, not
+from a per-character table:
+
+| Field | Value | Use |
+|---|---|---|
+| `+0xA70` | (0, 0, −0.2510) | translate on the head's matrix |
+| `+0xAA2`, `+0xAA0`, `+0xAA4` | 680, 908, 909 | the three models |
+| `+0xA92`, `+0xA90` | `0x4000`, `0x8000` | 680's Y, then X turn |
+| `+0xA8E` | `0xC000` | 908's Y turn |
+| `+0xA96`, `+0xA94` | `0x8000`, `0x4000` | 909's Y (plus the swing), Z turn |
+| `+0xA98`, `+0xA9A` | 0, 0 | the swing `s` and its speed `w` |
+| `+0xA9C`, `+0xA9E` | 48, `0x300` | the speed's pull and its cap |
+| `+0xA88` | 180.0 | the kick's gain |
+| `+0xA7C`, `+0xA80`/`+0xA84` | 0 | last head height, this and last rise |
+
+How the mesh is placed. On the head's matrix it pushes, translates by
+`+0xA70`, and draws each model twice, each draw in its own push/pop, turns
+sent in this order (`0x09` Y, `0x08` X, `0x0A` Z):
+
+1. 680: Y `0x4000`, X `0x8000`, then Z `−s` and, again, Z `−(s >> 1)`;
+2. 908: Y `0xC000`, then Z `s` and Z `s >> 1`;
+3. 909: Y `s + 0x8000` and Y `(s >> 1) + 0x8000`, then Z `0x4000`.
+
+So each lock is drawn at the whole swing and at half of it. Each draw is
+`0x5BE4` (`g2 = 0x800000`) with `+0x1A4` bit 26 and `+0x1AA` at most 4, or
+(`g2 = 0x802000`) with `+0x720` bit 2 and an odd `+0x1AA` at most 4;
+otherwise `0x5A48`.
+
+What it reads. Only the head's height, `+0x210` (slot 2's y; the slots'
+places run from `+0x1F4`, 12 bytes each), and the move flags. After the
+draw (`0x1B18C`) it steps the swing, so a frame draws what the frame before
+left:
+
+- `v = y − +0xA7C` (stored at `+0xA80`), `dv = v − +0xA84`, negated unless
+  `+0xA84` has its sign bit set (last frame's rise negative);
+- the kick, `trunc(1000.0 × 180.0 × dv)` (`0xC001818`, the coprocessor's
+  float to integer), goes on `w`; `w` loses `+0xA9C` (three times it with
+  `+0x1A4` bit 16 set and bit 15 clear) and is held to at most `+0xA9E`;
+- `s += w`; at `0x3000` or more `s` stops there, at 0 or less it rests at 0,
+  and either way `w` is cleared;
+- `+0xA7C = y`, `+0xA84 = v`.
+
+So the hair hangs at rest and is flung up whenever the head stops rising or
+stops falling (a landing, the top of a hop), then sinks back at a pull of 48 a
+frame. The fighters' records play no part.
+
+**What the explorer draws** (`HAIR_PIECES`, `hairStep` and `hairSwing` in
+`js/vf2fighters.js`; the profile's `armour.hair` lists characters 5 and 18).
+`readArmour` gives Picky the six draws as extras on slot 2, placed with the
+turns in the order above (`turnedInOrder` in `js/pose.js`).
+`armouredFighter` adds them once the Armour switch breaks the upper half.
+`poseFighter` keeps the swing per fighter, like the chest bounce: it draws
+the swing the last step left, then steps on this frame's head height when
+playback moves on a frame; a frame picked on its own holds the swing and
+takes the height afresh, with no rise. The explorer starts from the first
+frame's height with no rise (the board starts both at 0, which gives a kick
+on the second frame); that is the explorer's choice. The move flags are
+clear, so the pull is always 48. Returned as `hair`. In headless Chrome
+Picky's hair hangs at rest in motion 3 and stands up by frame 30, and the
+swing reaches `0x3000` in many of his motions.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
@@ -3979,6 +4627,53 @@ doubles. Taking the bones from frame N instead of N+1 puts the points up to
 1.58 out, so the chains run after the frame's rig. No table in the game uses
 root modes 1 or 3, the cylinder never pushed, and Bark's table, whose records
 have the same shape as Espio's, lost its swap before it could be graded.
+
+#### Fighting Vipers
+
+FV runs the same chains. Its main-CPU handlers are STF's moved by `+0x4ED4`,
+and its own coprocessor program carries `Fn_osage` (`0x4A`) at PM `0x20733`:
+compared word for word with cpres1's at `0x2076E`, the two differ only in
+relocated jumps and one data address, and `Fn_sin`, `Fn_sinx` and `Fn_cosx`,
+which it calls, match too. So `js/osage.js` steps FV's chains with the STF port
+and only the data around it changes, in the `osage` block of the game's entry
+in `js/games.js`.
+
+The table at `0x63E34` has 26 entries, one per **record**, not per character.
+P2 costumes and the bosses are records of their own, so Honey (`0x64810`) and
+Honey P2 (`0x64AD4`) each have their eight twintail segments, and Mahler and
+B.M. their tails. Jane's earrings and chain, Sonic P2's two tails and the rest
+come out of the same table. Grace is the exception: the routine at `0x62860`
+skips her table entry and picks one of two streams on her armour. If bit 2 of
+`+0x7F4` is set (upper armour broken), it uses `0x63FCC`: the ponytail and the
+earrings. Otherwise it uses `0x64154`, which is the first part of the same
+stream, the ponytail only, with the earrings cut off. The explorer takes that
+bit from the armour panel.
+
+Gravity is `0.0052222` (`0x50A000`, stored at `0x7284`), about a fifth of STF's.
+A KO slow-motion swaps in a smaller one, which the explorer leaves out.
+
+FV's wind is switched on. `0x63B80` blows on five stages, picked by the stage
+byte `0x500064`:
+
+| stage | angle | entry |
+|-------|-------|-------|
+| 0 | `0xF000` | 0 |
+| 1 | `0x8000` | 1 |
+| 4 | `0xF000` | 0 |
+| 5 | `0xC000` | 1 |
+| 8 | `0x7000` | 0 |
+
+The entry is one of two `{int16 speed, float amplitude}` pairs at
+`0x63A58 + record*4` (entry 1 is 8 bytes on). Each frame the phase steps by the
+speed, `s = amplitude * (sin(phase) + 2) * gravity`, and the vector is
+`(cos(angle) * s, min(s, gravity), sin(angle) * s)` in world axes. The MATRIX
+record adds it to gravity before turning both into the chain's frame:
+`[wx, wy - gravity * scale, wz]`. There is no wind, and the phase and vector are
+cleared, when there is no floor, or when the head (slot 2) is less than 0.5
+above the floor. A low motion keeps the chains calm for that reason. Any other
+stage blows only in modes 16 and 17, from the side `0x500065` names, and never
+on Grace. The explorer leaves that case out. The Animation tab's sway panel has
+a wind picker for the five stages.
 
 ### Tails' tails
 
