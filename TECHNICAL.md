@@ -1160,10 +1160,11 @@ part out along the fighter's own skeleton at player `+0x8C`.
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
 
-Not drawn: record `+0x24` (VF2 has one at `+0x38`, not drawn either), and
-the flying armour pieces (below). The special parts `rob_disp` (`0x19F10`)
-swaps in for the chest and hips (`mune_unit_change`, `koshi_unit_change`),
-broken armour and Picky's hair are drawn, below.
+Not drawn: the flying armour pieces (below), the one part left. Record
+`+0x24` is the midriff and is drawn (below, "The midriff"; VF2's `+0x38` is
+still not). The special parts `rob_disp` (`0x19F10`) swaps in for the chest
+and hips (`mune_unit_change`, `koshi_unit_change`), broken armour and Picky's
+hair are drawn, below.
 
 **Hands and feet are never swapped.** `rob_disp` calls the foot routine
 (`set_ashi_ptn`, `0x1AB74`: slots 12 and 15, 32 models from player `+0x5F0`
@@ -1225,7 +1226,15 @@ attacker's attack, its damage `+0x83D`, kind `+0x843` and direction `+0x82A`
 floor and ring walls (`0x50A000`, `0x50A00C`, `0x50A010`) and spins them, and
 `0x2E17C` draws model `+0x22` at the piece's place turned Y, X, Z, with a
 floor shadow (`+0x44`, `0x77E48`/`0x78384`). The explorer's Armour switch
-breaks armour with no attack, so it has no launch to follow.
+breaks armour with no attack, so it has no launch to follow. `0x2D614` makes
+that plain: with d = min(damage, 70) / 60, each piece flies
+out at d × `0x64216D0[kind]` and up at (d × `0x64216E8[kind]` + 0.06) (1.5
+times that for `+0xA74` = 1), both plus an entry of `0x6421720` (the rise
+twice), heading the defender's facing `+0x26` plus the attack's `+0x82A` bent
+by `0x6421700`; both tables are indexed by those two, `+0xA7E` and the piece's
+own `+6` and `+0x14`, & 15.
+Every term but the piece's own comes from the hit, so nothing short of a
+made-up attack would launch them.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|
