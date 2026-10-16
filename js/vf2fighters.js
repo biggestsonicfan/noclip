@@ -850,9 +850,9 @@ const WAIST_SLOT = 0, HEAD_SLOT = 2;
  * 9's model on the hips' own matrix, as mune_unit_change does the chest's.
  * In its order, with the move flags (+0x1A4) all clear, as the explorer has
  * them: Honey's win-streak hips, where the streak switch asks for them
- * (STREAK_WINS); motion 0x31's list by frame
- * (to 40); motion 0x180's by frame; the motion's own list by frame (to its
- * last), taken only when it differs from the slot's model; then the standing
+ * (STREAK_WINS); motion 0x31's list by frame (to 40); motion 0x180's by
+ * frame, also only on the streak switch (it needs a streak of 10); the
+ * motion's own list by frame (to its last), taken only when it differs from the slot's model; then the standing
  * pair, or the low one while the waist (+0x1F8) is under 0.4. A missing list
  * leaves the slot's model. The frame is +0x1AA, which set_motion starts at 1,
  * as the explorer does.
@@ -865,7 +865,7 @@ function hipsModel(body, motion, frame, waistY) {
     const id = motion?.id;
     if (k && body.streak && H.broken > 0) return H.broken;
     if (id === HIPS_M31) return H.m31 ? H.m31[Math.min(frame, HIPS_M31_LAST)] : own;
-    if (id === HIPS_M180) return H.m180?.[frame] ?? own;
+    if (id === HIPS_M180) return (body.streak && H.m180?.[frame]) || own;
     const list = H.byMotion.get(id);
     const listed = list ? list[Math.min(frame, list.length - 1)][k] : own;
     if (listed !== own) return listed;

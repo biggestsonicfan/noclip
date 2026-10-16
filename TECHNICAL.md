@@ -1547,8 +1547,9 @@ address once `+0x1F48` bit 9 is set. Honey's own slot-9 model is 2460, which
 the routine replaces in nearly every frame; Bahn's is 2405 (690 once broken).
 
 The routine, in order (`g7` the player, `+0x1A8` the motion, `+0x1AA` its
-frame, which `set_motion` starts at 1; `0x5000A2` counts the frames since the
-game state `0x50004E` changed):
+frame, which `set_motion` starts at 1; `0x5000A2` is the versus win streak:
+at a round's end `0xE05C` adds one to it while the side that won (`0x50004E`)
+is the side that won before (`0x500066`), and starts it again otherwise):
 
 1. *The ring.* When this fighter's `+0x1B1` is 5, `0x5000A2` is at least 20,
    the motion is `0x19D` or `0x19E` at frame 17, and `+0x5B8` bit 0 is clear,
@@ -1558,11 +1559,11 @@ game state `0x50004E` changed):
    waist (`+0x1F4`) is within 0.4 inside the radius: a ring sweeping out
    from where that move was played. Who has `+0x1B1` = 5 was not read. Then the table is looked up; with none, the
    slot's model is drawn.
-2. Honey's broken hips: with `+0x18`, `0x5000A2` at least 100 and the hips
-   broken, `+0x18`'s first halfword (2537), whatever the motion.
+2. Honey's win-streak hips: with `+0x18`, a streak of at least 100 and the
+   hips broken, `+0x18`'s first halfword (2537), whatever the motion.
 3. Motion `0x31` with `+0x1A4` bit 29 clear: `+0xC` halfword
    [min(frame, 40)], or the slot's model with no list. `+0xC8C` cleared.
-4. Motion `0x180`: the slot's model until `0x5000A2` is 10, then `+0x10`
+4. Motion `0x180`: the slot's model until the streak is 10, then `+0x10`
    halfword [frame] (no limit), or the slot's model with no list.
 5. `kuc_motion`: the first `+0x1C` entry for the motion, pair
    [min(frame, count - 1)]. Taken only if it differs from the slot's model;
@@ -1584,15 +1585,17 @@ game state `0x50004E` changed):
 has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
 and 7 every frame, the hips broken when the Armour switch breaks the lower
 half. The explorer has no move flags, other fighter or game state, so it
-takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), `0x5000A2` as past
-100 (a fight under way), no ring (`+0xC8C` 0) and no raised floor. The waist
+takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), the streak as under
+10 unless the 100-win switch (`?hentai=baka`, Honey only) asks for 100, no
+ring (`+0xC8C` 0) and no raised floor. The waist
 height is the explorer's slot 0 `y`, which is the board's `+0x1F8` above a
 floor at 0. So:
 
 - Honey stands on 2927 and drops to 2931 when her waist goes under 0.4
-  (motion 1 from frame 26 to 48); her skirt lifts through motion 384 and the
-  end of 302 and 1014; once her lower half breaks, she wears 2537 in every
-  motion. In motion 49 (`0x31`) she has no list and shows her own 2460.
+  (motion 1 from frame 26 to 48); her skirt lifts through the end of 302
+  and 1014, and through motion 384 only on the 100-win switch, which is
+  also what puts her in 2537 in every motion once her lower half breaks.
+  In motion 49 (`0x31`) she has no list and shows her own 2460.
 - Bahn stands on 2405 (690 broken), drops to 2407 (1788 broken) under 0.4,
   plays 3223..3232 through motion 49 and his coat swings through 3179..3188
   (3233..3242 broken) in motions 548, 632, 633, 656 and 832.
