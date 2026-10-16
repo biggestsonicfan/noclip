@@ -1716,6 +1716,13 @@ it writes the chest's ring into the points the index bytes name, carried by
 H⁻¹·C as The House of the Dead's chest-to-hips skin is, and draws the result
 on slot 9 with the model's texture points and material, or the broken one's
 when the Armour switch breaks the upper half. The opponent gets the same.
+Checked in the view: characters 0 to 9 and their P2 looks, armour whole or
+broken, motions 21, 360 and 362 stepped a frame at a time. Every chest-ring
+point lands on the chest's drawn matrix to within 4e-8, and the band
+changes shape against the hips by up to 0.07 in motion 21 and 0.38 (Sanman)
+in 360, so it follows the pose, not the rest. The broken models
+are the ones listed above, with P2's own for Honey (2625, 2493), Bahn (2402,
+1707) and Sanman (1684, 1683). Sonic, Tails and the dummies draw none.
 Not checked against MAME. Player 2's material offset is not drawn, the move
 states' material swaps are left out, and the stored normals are used for
 lighting where the board works them out from the points.
