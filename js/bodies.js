@@ -543,7 +543,7 @@ export function skinMesh(skin, matrices) {
             view.setFloat32(o + 8, -l[2], true);
         }
     }
-    return { bytes, uvPtr: skin.uvPtr, matPtr: skin.matPtr };
+    return { bytes, uvPtr: skin.uvPtr, matPtr: skin.matPtr, planeNormals: skin.planeNormals };
 }
 
 /** Line segments from each part to its parent, for the skeleton overlay;

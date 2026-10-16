@@ -1177,6 +1177,59 @@ sixteen records at `0x640D2B0`. So both are skipped and every fighter draws
 its part list's hands and feet, as the explorer does. Even with a table the
 feet would not change: `rob_disp` drops what `0x1AB74` returns (`0x19FEC`).
 
+#### The motion list: the fighter's own motions first
+
+As in Sonic The Fighters, the motion list opens on the fighter's stance, then
+its moves, then the rest of what it plays, then every other motion.
+
+- **Action table**: record `+0x14`, which `action_init` copies to player
+  `+0x1A0` and the action code reads as `ldos n(g6)`: 55 motion ids, the
+  same layout for every fighter. Slot 0 is the stance: `set_mot_dat`
+  (`0x1B5B0`) is handed it as the round starts (`0x12AB8`) and as a move
+  winds back to neutral (`0x1379C`, `0x1C150`). The ids keep their low 13
+  bits there (`and 0x1FFF`); bit 15 turns the fighter round. Bahn, Mahler and
+  B.M. share one table (stance 21).
+- **Moves**: `0x1D360` runs `ld 0x1EBE0[+0x1B1*4]`, one input program per
+  fighter, through the opcode table at `0x1EC34`. The program and its opcodes
+  are Sonic The Fighters' (`js/moves.js`): the lengths agree op for op over
+  FV's 59 handlers, so the same walk lists every motion a commit names (Jane
+  79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
+  are listed by number only.
+- **Hand-overs**: set-up op 1 of a motion's `mot_list` record
+  (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
+  `0x13`'s two write the motion that plays as this one runs out, `+0x802` and
+  `+0x86C` (`0x1C114`), in place of the stance. Followed from the action
+  table and the moves, they add a few per fighter: Jane's 900, Grace's 953
+  and 954, Picky's 906 and 910. Set-up op 4 is 19 bytes here (STF: 18).
+  Op `0xA` is a switch, `{key, frame, motion}` (`+0x838`): a command of type
+  20 sets `+0x60C` to the key and `0x1CC4C` plays the motion once the frame
+  comes (Bahn's 97). After set-up op 8, the play half (`0x1C24C`, handlers
+  `0x1D028`, lengths from each handler's `addo n, g4, g4`) has three more
+  switches, through `+0x852` and `0x1CCA4`: ops `0xA`, `0xB` (at random) and
+  `0x17`. Honey's and Sanman's stances fidget that way (272, 449).
+- **Round and attract poses**, by `+0x1B1`:
+  - Intro: `0xC77C` commands `0x641F81E[char]` (u16) as the round starts
+    (Jane 809, Bahn 807, Sonic 857).
+  - Win: `0x3CCB8` takes one of four u16 tables, `0x641F78A[0..3]`, by the
+    Guard, Punch or Kick held (`0x500700`), else by the time and life left.
+  - Time up: `0x3CD98` plays `0x641F7F2[char]` (u32), 21 for everyone.
+  - The attract showcase (`0x52628`) runs two scripts a player, one of three
+    pairs a cycle. `0x529BC`'s twenty-byte records swap the fighter (`+0x10`)
+    at the frame in `+0xE`; `0x52BF8`'s eight-byte ones put the command at
+    `+0` in `+0x198` at the frame in `+4`, and `0x131D8` plays it once the
+    current motion is done (Grace's 776, Raxel's 463, Jane's 116). Script B
+    swaps to Honey a frame before its 438, so she plays Picky's pose too.
+
+**Checked against MAME** (7000 frames of attract fights, player `+0x1A8` each
+frame): every fighter seen fighting played its slot 0 most (Jane 904, Grace
+224, Honey 271, Tokio 759, Bahn 21, Picky 916, Raxel 928, Sanman 169), and
+most frames' motions are in the fighter's own groups (Jane 2371 of 3540,
+Bahn 2128 of 2551). A 40000-frame attract pass, which runs all three
+showcase scripts, and a coined match put every showcase and intro pose in
+its fighter's pose group. What stays under every other motion: hit
+reactions and throw victims, which the attacker picks (player `+0x19C`,
+`0x26978`; 589, 798, 304-320), and the shared 648/649 and 804 (`0x13570`).
+
 #### Armour breaking (read from the ROM; the explorer draws the broken parts)
 
 `rob_disp` draws slot `s` with the model in player `+0x40 + 4s`, not the
@@ -1482,12 +1535,11 @@ matrix (`placeExtra`). The pads swing with the upper arms ("The shoulder
 pads", below) and the skirt with the thighs ("The skirt", below). Jane's two model-0 panels are skipped like any other empty part, and
 entry 14 is never read. The Armour switch hides both pads with the upper half
 (slots 6 and 3) and the skirt with the lower (slot 9). Picky's hair
-swings with the head ("Picky's hair", below). Not drawn, and not drawable
-from what the explorer has: the chest's per-frame list needs the move flags
-(below). The flying pieces are thrown by one sample hit (above).
+swings with the head ("Picky's hair", below). The chest's per-frame list
+is drawn on the move flags the motion itself sets (below). The flying pieces are thrown by one sample hit (above).
 Hands and feet have nothing to swap (above).
 
-**The chest bounce (read from the ROM; the spring is drawn).** `rob_disp` calls
+**The chest bounce (read from the ROM; drawn).** `rob_disp` calls
 `mune_unit_change` (`0x31888`) for slot 1 only (`0x1A00C`), with the slot's
 own model (`+0x44`) in `g0`, and draws whatever comes back in `g0` on the
 slot's own matrix: the chest's, already sent (`0x19FD0`, slot × `0xC`). The
@@ -1606,11 +1658,48 @@ still: Jane and Jane in jeans's lists never hold their resting models (772,
 1597), so they enter only from entry 16 or another listed model. While on
 the list the spring is frozen and `+0xC64` is not updated, so the first
 frame back measures the distance against the one from before the list
-(capped by the 4.2). `+0x1A4` is built from the move record and its
-set-up and script (see "When the chest twists"); which moves leave it at
-exactly `0x200` was not read.
+(capped by the 4.2). The list never updates `+0xC94`, so the model compared
+on the way in is the spring's last pick, not the list's last entry.
 
-*What the explorer draws.* The spring, and not the list. With the Armour
+*Which motions leave `+0x1A4` at `0x200`.* `set_mot_dat` (`0x1B880`) starts
+the word from the motion's setup script, `0x6411E94[motion]`: its first word,
+with bit 21 cleared and, when bits 8 and 15 are both set, bit 15 moved to 16
+(`0x1B964`). The setup ops follow at +12 (lengths at `0x1CE86`; op 16 is
+2 + 2 × its count byte; op 0 or op 8 ends them, and the script starts there,
+past op 8's byte). Setup op 2 sets bit 1 and gives three frames (`+0x808`,
+`+0x80A`, `+0x80C`), which the per-frame step (`0x1C180`, after `+0x1AA` is
+counted at `0x12BF8`) walks through: from the first, bit 1 goes (and bit 16
+when bits 8 and 15 were set); from the second, bits 26, 16 and 8 go, bit 15
+too with bit 8, and bit 2 comes on; from the third, bits 12 and 0 go (bit 0
+earlier, from setup op 3's frame `+0x850`, while bits 12 and 4 are set). Past
+the third it re-runs all three every frame. Then the script after the setup
+(`0x1C24C`, op table `0x1D028`, each op a frame word and run once the motion
+frame reaches it) changes the word: op 5 sets, 6 clears and 7 flips the bit
+named by its operand, op 1 flips bit 21, op 13 sets or clears bit 25, op 22
+sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`). All of it
+runs before `rob_disp`, so the chest sees this frame's word.
+
+Stepped that way, 86 of the 1054 motions with a setup run at exactly `0x200`
+from their first frame to their last, and no other motion reaches it on any
+frame: they are stances, win poses and other standing loops (21, 116,
+123-125, 169, 187-192, 224, 231-233, 271, 272, 299-303, ... 1046). Motions
+8, 152, 426 and 914 run at `0x208`, the list's gate with something else, so
+once on the list those draw the slot model. Checked against MAME's attract
+mode (30,000 frames, both players): on 29,480 of the 29,481 frames where the
+board's `+0x1A4` was `0x200` the motion gives `0x200` too, and the list's
+gate (bit 9 without 14 and 16) agrees on 58,412 of 58,414 frames. The
+misses are fight state: on 55 frames in 116, 224, 271, 448, 904 and 928 the
+fight had also set bit 7 (`0x280`), which the motion alone does not say.
+
+The rule itself was checked the same way, with `+0x1F48` bit 1 forced on for
+Jane, Grace and Honey so their chests bounce in attract mode (20,000
+frames): fed the board's own word, frame, `+0xC94` and velocity, it gives the
+board's `+0xC90` on 16,889 of 16,920 frames, 5,709 of them on the list (Honey
+in 271, 272, 302 and 21, Grace in 224, 776 and 1016, Jane in 904 and 116, and
+Grace in 152 at `0x208`). The 31 misses fall where a motion changes, where
+the word read after the frame is not the one the chest saw.
+
+*What the explorer draws.* The spring and the list. With the Armour
 switch on upper or all broken, Jane, Grace, Honey and Jane in jeans draw
 their chest as the 31 models' entry 15 + `int(position + 0.5)`, stepped once
 per frame of playback (`bounceStep`/`bounceChest` in `js/vf2fighters.js`)
@@ -1632,10 +1721,18 @@ These are the explorer's choices, not read from the ROM:
 - A frame picked on its own (scrubbing) holds the spring and only takes the
   new distance.
 
-The per-frame list is not followed. It needs `+0x1A4` to be exactly `0x200`,
-and the explorer has no move flags. In a moving motion the spring often
-reaches the ±15 walls. Where the board would switch to the list in a stance,
-the explorer keeps the spring.
+The per-frame list is followed on the move flags `moveFlags` steps from the
+motion's setup and script, as above (`chestFromList`): on a frame with bit 9
+and neither 14 nor 16, the chest goes on the list when list[frame mod count]
+is the spring's last pick and |velocity| ≤ 0.8, stays on it while the gate
+holds, and draws the list's model at exactly `0x200`, the slot model the
+break left (Jane 731, Grace 1982, Honey 2540, jeans 1581) otherwise. On the
+list the spring is held and its last distance kept; the waist copy still
+moves on. In headless Chrome, played from the loaded fighter in motion 21,
+Grace joins her list at frame 10, Honey at 21 and Jane at 27, each from a
+spring that had settled near its rest, and stays on it through the loop.
+The fight's own changes to `+0x1A4` (a hit, bit 7, `fix_hara`'s bit 4) are
+left out.
 
 **The hips (read from the ROM; drawn).** `rob_disp` calls
 `koshi_unit_change` (`0x31ADC`) for slot 9 only (`0x1A024`), the same way as
@@ -1699,7 +1796,7 @@ is the side that won before (`0x500066`), and starts it again otherwise):
 `readHips` reads `+0`, `+0xC`, `+0x10` (as many entries as motion `0x180`
 has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
 and 7 every frame, the hips broken when the Armour switch breaks the lower
-half. The explorer has no move flags, other fighter or game state, so it
+half. The hips do not use the move flags, and the explorer has no other fighter or game state, so it
 takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), the streak as under
 10 unless the 100-win switch (`?hentai=baka`, Honey only) asks for 100, no
 ring (`+0xC8C` 0) and no raised floor. The waist
@@ -1806,7 +1903,7 @@ points, its material (plus `hi16` of its fourth word × 4 for player 2, the
 other player's colours), the object address `player × 0x100 + 4` (the
 polygon RAM written above, past the first attribute and normal) and a count
 of -1 (to the closing word). In some move states it swaps the material word
-for `1 << 23` or `0x802000`. Then it sets mode 1 again, and calls
+for `1 << 23` or `0x802000` (the hit flash, below). Then it sets mode 1 again, and calls
 `kosi_mino_disp` (`0x31E54`, the skirt panels) and the default `0x1CB2C`.
 
 So the midriff is drawn in the hips' frame on the hips' matrix: the hips'
@@ -1838,9 +1935,33 @@ changes shape against the hips by up to 0.07 in motion 21 and 0.38 (Sanman)
 in 360, so it follows the pose, not the rest. The broken models
 are the ones listed above, with P2's own for Honey (2625, 2493), Bahn (2402,
 1707) and Sanman (1684, 1683). Sonic, Tails and the dummies draw none.
-Not checked against MAME. Player 2's material offset is not drawn, the move
-states' material swaps are left out, and the stored normals are used for
-lighting where the board works them out from the points.
+Not checked against a MAME picture. The move states' material swaps are drawn
+as the hit flash (below).
+
+*Lit by its planes.* `0x58F0` sends geometrizer command 7 (`0x707`), the
+mode, and mode 3 is MAME's `geo_parse_nn_s`: the stored normal is skipped
+and each face takes `(p1 - p0) × (p2 - p0)` of the strip's two last points
+and its new one, for its lighting and for which side faces the camera. So
+`readMidriff` marks the mesh `planeNormals`, and `decodeModel` takes the
+plane path a mode-2 game uses for every model. Walking the midriff's bytes
+the way `geo_parse_nn_s` does gives the explorer's face normals on all 16
+band faces (dot 1.00, Jane and Bahn in motion 21). It matters: the plane and
+the stored normal are 27° (Jane) to 79° (Bahn) apart on average, and on Bahn
+and Honey six faces of the band face the other way even in motion 21 (their
+attribute's bit 17 is clear, so they are drawn from one side only). In
+motion 362 Sanman's shirt band had a wedge missing at the belt on the stored
+normals; on the planes it is whole.
+
+*Player 2's block is not needed here.* A fighter model's material records
+run on past the first `hi16` (of its fourth table word), and those are player
+2's. Over all 28,658 faces of the playable records (0-10, 13-23) the second
+block is the first with the texture on the other sheet (`th2` bit 12) and
+palette entries 1-5 moved to 8-12 and 29/30 to 31/32, nothing else: the rows
+`send_tex_col_part` and the skin upload fill for the second player. Ordinary
+parts hand the coprocessor the player byte instead (`0x5A48`). The explorer
+draws every fighter, opponent included, from player 1's block over sheets and
+rows filled for that fighter alone (`rivalSheets`, `rivalColours`), so the
+midriff stays on player 1's block like the rest of the body.
 
 **The skirt (read from the ROM, measured against MAME).** `kosi_mino_disp`
 (`0x31E54..0x32A08`) is the call at the end of `0x1A2D8`, the hips' draw. It
@@ -2022,6 +2143,46 @@ on the second frame); that is the explorer's choice. The move flags are
 clear, so the pull is always 48. Returned as `hair`. In headless Chrome
 Picky's hair hangs at rest in motion 3 and stands up by frame 30, and the
 swing reaches `0x3000` in many of his motions.
+
+#### The hit flash (read from the ROM; not checked against MAME)
+
+Every fighter draw swaps the material word on its first frames in some
+motions: `rob_disp` (`0x1A04C`, `0x1A09C`), `set_obj_fifo` (`0x5DC0`) and the
+midriff (`0x1A364..0x1A390`). The rule, the same in each:
+
+- `+0x1A4` bit 26 set and `+0x1AA` (the motion's frame, 1 on its first) at
+  most 4: the material is `1 << 23`;
+- else `+0x720` bit 2 set, `+0x1AA` at most 4 and odd: the material is
+  `0x802000`.
+
+`set_mot_dat` (`0x1B880`) fills both words from the motion's setup script,
+`0x6411E94[motion]`: its word +0 goes to `+0x804` then `+0x1A4`, word +4 to
+`+0x860` then `+0x720`. Bit 26 is set in motions 605-611, 820-831, 864 and
+1006 (a white-out on frames 1-4); bit 2 of the second word in 706 and 949
+(a blink on frames 1 and 3). The debris pieces and the armour flipbook
+(`0x2E17C`) never flash.
+
+A material pointer with bit 23 reads the board's texture-header RAM, word
+`ptr & 0xFFFF`. Fighting Vipers does not copy that from data: at boot
+`0x12154` (`sub_121BC`) fills five blocks of `0x1000` words from `0x800000`,
+each with one four-halfword header repeated, taken from the program ROM at
+`0x12240`, eight bytes a block. So every face drawn through a block gets
+that header. Block 0 (`0x800000`) is `4000 0000 1C1E 0400`: a textured tile
+of texel 15 at sheet 1 (960, 512), colour base 16, a flat light beige. Block
+2 (`0x802000`) has colour base 567 (`th3 = 0x8DC0`), a bright green. The
+tile is in texture set 36, the boot set the explorer loads for every
+fighter.
+
+**What the explorer draws** (`flashMaterial` in `js/vf2fighters.js`, the
+profile's `rig.fighters.flash` and `modelTable.textureRamFill`). `textureAt`
+in `js/model.js` builds the five blocks from the ROM once and reads a bit-23
+material from them. `poseBodyRig` asks `flashMaterial` for the motion's
+material at the shown frame; when there is one, every part, extra, osage
+piece and the midriff, the opponent's too, is drawn from the model decoded
+with that material (`model#800000`). In headless Chrome Jane's 605 and 820
+draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
+and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
+flashes.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

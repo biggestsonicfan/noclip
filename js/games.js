@@ -484,7 +484,16 @@ const fvipers = {
         select: 0x800000,
         banks: [{ region: 'mainData', base: 0x1000000 }, { region: 'xtraBank', base: 0 }],
     },
-    modelTable: { offset: 0x000e0004, count: 5413, stride: 16 },
+    /* Texture RAM is not copied from data here: at boot 0x12154 fills five
+     * 0x1000-word blocks (0x800000, 0x801000 .. 0x804000), each with one
+     * four-halfword material header over and over, read from the program ROM
+     * at 0x12240, eight bytes a block. A pointer into a block gives every face
+     * that header; the fighters' hit flash draws with two of them
+     * (js/vf2fighters.js, flashMaterial). */
+    modelTable: {
+        offset: 0x000e0004, count: 5413, stride: 16,
+        textureRamFill: { headers: 0x12240, blocks: 5, words: 0x1000 },
+    },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
     /* The whole texture pipeline carried across: every routine texture.js ports
@@ -786,6 +795,21 @@ const fvipers = {
         standardRig: 0x2c194,
         fighters: {
             records: 0x0640d2b0, count: 13, p2: 13, names: FV_NAMES, texSet: 0x20,
+            /* The action table, record +0x14, and the input programs by
+             * character (0x1EBE0, the matcher's opcodes at 0x1EC34);
+             * js/vf2fighters.js, fighterMotionList. `handover` is the
+             * mot_list table set_mot_dat reads (0x1B880), for the motions
+             * one hands over to as it ends. */
+            actions: { at: 0x14, count: 55 }, commands: { table: 0x0001ebe0 },
+            handover: { table: 0x06411e94, head: 12 },
+            /* The intro, win, time-up and attract showcase poses; readPoses. */
+            poses: {
+                intro: 0x0641f81e, wins: 0x0641f78a, timeUp: 0x0641f7f2, count: 11,
+                showcase: [
+                    [0x06ce759e, 0x06ce767a], [0x06ce7466, 0x06ce7546], [0x06ce7826, 0x06ce7902],
+                    [0x06ce76ca, 0x06ce77a6], [0x06ce7a36, 0x06ce7b12], [0x06ce795a, 0x06ce7996],
+                ],
+            },
             /* The break table (0x640EDAC), mune_unit_change's chests
              * (0x6421F80) and koshi_unit_change's hips (0x6422400);
              * js/vf2fighters.js, readArmour, readHips. The shoulder pads
@@ -798,6 +822,10 @@ const fvipers = {
             armour: {
                 table: 0x0640edac, chest: 0x06421f80, rest: 15, hips: 0x06422400,
                 pads: 0x0642147c, skirt: { table: 0x06421de0, chars: [0, 1, 13, 14] }, hair: [5, 18],
+                /* set_mot_dat's setup scripts, 0x6411E94[motion]: the move
+                 * flags (+0x1A4) the chest's per-frame list is gated on;
+                 * js/vf2fighters.js, moveFlags. */
+                setups: 0x06411e94,
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
@@ -810,6 +838,11 @@ const fvipers = {
             /* The midriff, record +0x24, and the one a broken chest draws
              * with (rob_disp, 0x1A2D8); js/vf2fighters.js, readMidriff. */
             midriff: { at: 0x24, broken: 0x0642f9ec },
+            /* The motions' setup scripts, set_mot_dat's 0x6411E94[motion]:
+             * their first two words become the move flags (+0x1A4) and
+             * +0x720, which every draw of the fighter tests for the flash
+             * (js/vf2fighters.js, flashMaterial). */
+            flash: { setups: 0x06411e94 },
         },
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },

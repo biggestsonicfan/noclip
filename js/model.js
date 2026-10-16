@@ -54,10 +54,16 @@ function bgr555(cw, out) {
  *   frame, slid by the camera, which is its reflection moving; read here they
  *   are the boot's.
  *
+ *   Fighting Vipers: five blocks of one material header each, filled at
+ *   boot (`textureRamFill`, textureRamImage).
+ *
  * A pointer into texture RAM that no run covers has no points to read.
  */
 function textureAt(rom, ptr) {
     const runs = rom.game.modelTable?.textureRam;
+    if ((ptr & 0x800000) !== 0 && rom.game.modelTable?.textureRamFill) {
+        return { src: textureRamImage(rom), base: (ptr & 0xffff) * 2 };
+    }
     if (runs && (ptr & 0x800000) !== 0) {
         const w = ptr & 0xffff;
         const run = runs.findLast((r) => w >= r.from);
@@ -65,6 +71,20 @@ function textureAt(rom, ptr) {
         return { src: rom.mainData, base: -1 };
     }
     return { src: rom.textures, base: ptr * 2 };
+}
+
+/* Texture RAM as a game's boot fills it block by block, each block one
+ * four-halfword header repeated, the headers read from the program ROM. */
+function textureRamImage(rom) {
+    if (rom.textureRamImage) return rom.textureRamImage;
+    const { headers, blocks, words } = rom.game.modelTable.textureRamFill;
+    const ram = new Uint8Array(0x10000 * 2);
+    const dv = new DataView(ram.buffer);
+    for (let b = 0; b < blocks; b++) {
+        const h = [0, 1, 2, 3].map((k) => rom.mainCpuView.getUint16(headers + b * 8 + k * 2, true));
+        for (let w = 0; w < words; w++) dv.setUint16((b * words + w) * 2, h[w & 3], true);
+    }
+    return (rom.textureRamImage = ram);
 }
 
 /* A model's mesh in polygon RAM, as a data ROM offset; false where it is not. */
@@ -90,7 +110,8 @@ function polygonRamOffset(rom, meshPtr) {
  *   texture pointers a table entry would carry. The House of the Dead builds
  *   the polygons that join an enemy's chest to its hips this way, a template
  *   with some points moved every frame, and hands them to the geometry engine
- *   exactly as it does a model.
+ *   exactly as it does a model. `planeNormals` set lights it by its faces'
+ *   planes, whatever the game's own mode.
  * @returns {null|object}   null when the table entry has no mesh
  */
 export function decodeModel(rom, modelIdx, points = null, mesh = null) {
@@ -433,7 +454,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
      * of its palette.
      */
     let hdr = matBase;
-    const planeNormals = rom.game.lighting?.planeNormals === true;
+    const planeNormals = mesh?.planeNormals ?? rom.game.lighting?.planeNormals === true;
     let faceCount = 0;
     let texturedFaces = 0;
 
@@ -563,7 +584,8 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                 zSrc[0] = A; zSrc[1] = B; zSrc[2] = D; zSrc[3] = C;
             }
         }
-        /* A game that runs the geometry engine in mode 2 has it ignore the
+        /* A game that runs the geometry engine in mode 2 (or a mesh drawn in
+         * mode 3, `planeNormals` on the mesh) has it ignore the
          * normal in ROM and take the plane of the polygon's first three points
          * instead — P0(n-1), P1(n-1) and P0(n), which are A, B and C here on
          * every link type (MAME geo_parse_nn_ns, vector_cross3). Negated,

@@ -84,6 +84,7 @@ import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_CO
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables } from './fvdebris.js';
+import { commandMotions } from './moves.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -163,6 +164,7 @@ function readFighter(rom, F, record, char) {
     const root = u32(F.records + record * 4);
     const list = u32(root + PARTS);
     const offsets = readOffsets(rom, u32(root + SKELETON));
+    const actions = F.actions ? readActions(rom, F.actions, u32(root + F.actions.at)) : [];
     return {
         index: record,
         char,
@@ -172,7 +174,10 @@ function readFighter(rom, F, record, char) {
         roles: [],
         skin: -1,
         hitMotions: [],
-        start: -1,
+        start: actions[0] ?? -1,
+        actions,
+        commands: F.commands ? readCommands(rom, F.commands, char) : [],
+        poses: F.poses ? readPoses(rom, F.poses, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
@@ -250,6 +255,18 @@ function readChestModels(rom, A, i) {
     return Array.from({ length: BOUNCE_MODELS }, (_, k) => r.view.getInt16(r.off + k * 2, true));
 }
 
+/* The chest's per-frame list, 0x6421F80[char] +0: a count word, then that
+ * many 16-bit models (mune_unit_change, 0x318B4). Null with none. */
+function readChestList(rom, A, i) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const rec = A.chest ? u32(A.chest + i * 4) : 0;
+    const at = rec ? u32(rec) : 0;
+    const n = at ? u32(at) : 0;
+    const r = n ? resolveData(rom, at + 4) : null;
+    if (!r || r.off + n * 2 > r.data.length) return null;
+    return Array.from({ length: n }, (_, k) => r.view.getUint16(r.off + k * 2, true));
+}
+
 /*
  * The hips a long win streak leaves: koshi_unit_change (0x31ADC) draws slot 9
  * for a fighter with a record at 0x6422400[char], and where that record's
@@ -318,6 +335,7 @@ function readArmour(rom, A, i) {
     const hips = readHips(rom, A, i);
     return {
         table, slots, pieces, bounce, chest: bounce ? bounce[A.rest] : null, hips, streakHips: hips?.broken ?? null,
+        bounceList: bounce ? readChestList(rom, A, i) : null,
         hair: A.hair?.includes(i) ? HAIR_PIECES.map((p, k) => ({ ...p, slot: HEAD_SLOT, offset: HAIR_OFFSET, hair: k })) : null,
         flipbook: readFlipbook(rom, A.debris, i),
     };
@@ -535,7 +553,8 @@ function swungExtra(e, swings, pose, offsets, hair) {
  * point, already in it. The draw starts 4 words in, past the first attribute
  * and normal, so the bytes are model.js's records as they stand. A broken
  * chest (+0x1F48 bit 1) takes `broken[char]`'s model: same points, other
- * material.
+ * material. It is drawn in geometrizer mode 3 (0x58F0), which skips the stored
+ * normals and lights each face by its plane, so the band shades as it bends.
  */
 const MIDRIFF = { model: 8, ring: 0x70, count: 0xd0, links: 0xd4, link: 0x28, first: 8, ringPoints: 16 };
 
@@ -563,7 +582,7 @@ function readMidriff(rom, M, root, i) {
     }
     const b = dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at));
     return {
-        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST,
+        template, points: [...byPoint.values()], hips: HIPS, chest: CHEST, planeNormals: true,
         ...midriffLook(rom, dv, o), broken: midriffLook(rom, (b ?? r).view, (b ?? r).off),
     };
 }
@@ -620,6 +639,10 @@ export function armouredFighter(body, which) {
     /* Only a broken chest bounces (+0x1F48 bit 1); an intact one keeps its
      * slot model, as mune_unit_change returns it unchanged. */
     const bounce = broken(CHEST) && A.bounce ? A.bounce : null;
+    /* The per-frame list, and the model the break left in the slot (+0x44),
+     * which mune_unit_change hands back on a frame it leaves both alone. */
+    const bounceList = bounce ? A.bounceList : null;
+    const chestSlot = bounce ? A.slots[CHEST][A.slots[CHEST].length - 1] : null;
     const midriff = broken(CHEST) && body.midriff ? { ...body.midriff, ...body.midriff.broken } : body.midriff;
     /* The fight's +0x7F4 bit 2, which Grace's sway chains are switched on
      * (js/osage.js) whether or not a slot of the half breaks. */
@@ -628,7 +651,7 @@ export function armouredFighter(body, which) {
      * ascending, each slot's stages in turn (fvdebris.js). */
     const thrown = (from, to) => A.pieces.slice(from, to).flat().filter((p) => broken(p.slot));
     const debris = { upper: thrown(0, LOWER_FIRST), lower: thrown(LOWER_FIRST, SLOT_COUNT) };
-    return { ...body, parts, extras, bounce, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
+    return { ...body, parts, extras, bounce, bounceList, chestSlot, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
@@ -644,9 +667,165 @@ export function readFighterMotions(rom) {
     return list;
 }
 
-/** Any motion plays on any fighter; nothing in the record names its own. */
+/*
+ * A fighter's own motions, where the game names them (`rig.fighters.actions`
+ * and `commands`, Fighting Vipers'). Record +0x14 is the action table,
+ * action_init's `ld 0x14(g5)` to player +0x1A0, which the action code reads as
+ * `ldos n(g6)`: 55 motion ids, the stance first (set_mot_dat, 0x1B5B0, plays
+ * slot 0 as a round starts, 0x12AB8, and as a move winds back to neutral). The
+ * commands are the input program the matcher runs for the fighter,
+ * `ld 0x1EBE0[+0x1B1*4]` at 0x1D360, through js/moves.js. set_mot_dat keeps an
+ * id's low 13 bits; bit 15 turns the fighter round.
+ */
+const MOTION_ID = 0x1fff;
+
+function readActions(rom, A, at) {
+    const r = at && dataAt(rom, at);
+    if (!r) return [];
+    const out = [];
+    for (let i = 0; i < A.count && r.off + i * 2 + 2 <= r.data.length; i++) out.push(r.view.getUint16(r.off + i * 2, true) & MOTION_ID);
+    return out;
+}
+
+/*
+ * The motions a motion hands over to when it ends. set_mot_dat (0x1B880) runs
+ * the set-up half of the motion's mot_list record (`rig.fighters.handover`,
+ * 0x6411E94[id], twelve bytes of head) through the handlers at 0x1B9A4: op 1's
+ * u16 and op 0x13's two go to +0x802 and +0x86C, which 0x1C114 plays as the
+ * motion runs out in place of the stance. Op 0xA's {key, frame, motion} is a
+ * switch (+0x838): a command of type 20 sets +0x60C to the key, and 0x1CC4C
+ * plays the motion once the frame comes. The lengths are each handler's
+ * `addo n, r11, r11`; 0x10 is a count and that many u16s; 0 and 8 end it.
+ */
+const SETUP_LENGTH = {
+    0x01: 3, 0x02: 7, 0x03: 14, 0x04: 19, 0x05: 14, 0x06: 6, 0x07: 3, 0x09: 15,
+    0x0a: 6, 0x0b: 11, 0x0c: 4, 0x0d: 3, 0x0e: 15, 0x0f: 3, 0x11: 7, 0x12: 7,
+    0x13: 7, 0x14: 3, 0x15: 6, 0x16: 5, 0x17: 3, 0x18: 13,
+};
+const SETUP_LIST = 0x10, SETUP_NEXT = 0x01, SETUP_NEXT_PAIR = 0x13, SETUP_SWITCH = 0x0a;
+
+/*
+ * After set-up op 8 comes the play half, which 0x1C24C runs as the motion's
+ * frame passes each op's u16 (handlers 0x1D028; the lengths are their
+ * `addo n, g4, g4`). Ops 0xA, 0xB (at random: Honey's and Sanman's stances
+ * fidget) and 0x17 switch to the motion at the offset in PLAY_SWITCH, through
+ * +0x852 and 0x1CCA4.
+ */
+const PLAY_LENGTH = [
+    0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3,
+    4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4,
+];
+const PLAY_SWITCH = { 0x0a: 5, 0x0b: 5, 0x17: 4 };
+const SETUP_PLAY = 0x08;
+
+function handovers(rom, H, id) {
+    const rec = dataAt(rom, H.table + id * 4);
+    const r = rec && dataAt(rom, rec.view.getUint32(rec.off, true) + H.head);
+    if (!r) return [];
+    const out = [];
+    const u8 = (k) => r.view.getUint8(r.off + k), u16 = (k) => r.view.getUint16(r.off + k, true);
+    const fits = (k) => r.off + k + 8 <= r.data.length;
+    let k = 0;
+    while (fits(k)) {
+        const op = u8(k);
+        if (op === SETUP_LIST) { k += 2 + u8(k + 1) * 2; continue; }
+        if (!SETUP_LENGTH[op]) break;
+        if (op === SETUP_NEXT || op === SETUP_NEXT_PAIR) out.push(u16(k + 1));
+        if (op === SETUP_NEXT_PAIR) out.push(u16(k + 3));
+        if (op === SETUP_SWITCH) out.push(u16(k + 4));
+        k += SETUP_LENGTH[op];
+    }
+    if (u8(k) === SETUP_PLAY) {
+        for (k++; fits(k) && PLAY_LENGTH[u8(k)]; k += PLAY_LENGTH[u8(k)]) {
+            if (PLAY_SWITCH[u8(k)]) out.push(u16(k + PLAY_SWITCH[u8(k)]));
+        }
+    }
+    return out.map((n) => n & MOTION_ID).filter((n) => n && n !== MOTION_ID);
+}
+
+/* Every motion `ids` hand over to, and those hand over to, not in `ids`. */
+function handedOver(rom, H, ids) {
+    const have = new Set(ids);
+    const todo = [...ids];
+    const out = [];
+    while (todo.length) {
+        for (const n of handovers(rom, H, todo.shift())) {
+            if (have.has(n)) continue;
+            have.add(n);
+            out.push(n);
+            todo.push(n);
+        }
+    }
+    return out;
+}
+
+/* The program table is the program ROM's, where the matcher runs. */
+function readCommands(rom, C, char) {
+    const at = C.table + char * 4;
+    if (at + 4 > rom.maincpu.length) return [];
+    return commandMotions(rom, rom.mainCpuView.getUint32(at, true)).map((id) => id & MOTION_ID);
+}
+
+/*
+ * The poses round flow and the attract mode give a fighter, by +0x1B1. At
+ * round start 0xC77C commands `intro`'s u16; the win pick 0x3CCB8 takes one
+ * of `wins`' four u16 tables, by the button held or the time and life left;
+ * 0x3CD98 plays `timeUp`'s u32, 21 for all. The attract showcase (0x52628)
+ * runs two scripts a player: 0x529BC's twenty-byte records swap the fighter
+ * (+0x10) at the frame in +0xE, 0x52BF8's eight-byte ones command the u32 at
+ * +0 at the frame in +4. A frame no later than the one before ends a script.
+ */
+function readPoses(rom, P, char) {
+    if (char >= P.count) return [];
+    const u16 = (a) => { const r = dataAt(rom, a); return r ? r.view.getUint16(r.off, true) : 0; };
+    const u32 = (a) => { const r = dataAt(rom, a); return r ? r.view.getUint32(r.off, true) : 0; };
+    const out = [u16(P.intro + char * 2)];
+    for (let k = 0; k < 4; k++) out.push(u16(u32(P.wins + k * 4) + char * 2));
+    out.push(u32(P.timeUp + char * 4));
+    for (const [fighters, poses] of P.showcase) {
+        const who = scriptRows(rom, fighters, 20, 0xe).map(([at, r]) => [at, r.view.getUint8(r.off + 0x10)]);
+        for (const [at, r] of scriptRows(rom, poses, 8, 4)) {
+            if (who.findLast(([from]) => from <= at)?.[1] === char) out.push(r.view.getUint32(r.off, true));
+        }
+    }
+    return out.map((id) => id & MOTION_ID).filter(Boolean);
+}
+
+function scriptRows(rom, at, size, frame) {
+    const rows = [];
+    for (let prev = -1; ; at += size) {
+        const r = dataAt(rom, at);
+        const f = r ? r.view.getUint16(r.off + frame, true) : -1;
+        if (f <= prev) return rows;
+        rows.push([f, r]);
+        prev = f;
+    }
+}
+
+/**
+ * The stance, then the fighter's moves, then the rest of its action table,
+ * what those hand over to, its round and attract poses, then every other
+ * motion. Virtua Fighter 2's records name none of their own,
+ * so there it is the table as it stands: any motion plays on any fighter.
+ */
 export function fighterMotionList(rom, body, motions) {
-    return { fits: motions.filter(Boolean), lead: [], label: '', every: 'Every motion in the table' };
+    const fits = motions.filter(Boolean);
+    const every = 'Every motion in the table';
+    if (!body.actions.length) return { fits, lead: [], label: '', every };
+    const taken = new Set();
+    const own = (ids) => ids.map((id) => motions[id]).filter((m) => m && !taken.has(m) && taken.add(m));
+    const groups = [
+        { label: 'Idle', list: own(body.actions.slice(0, 1)) },
+        { label: 'Its moves, by the input table', list: own(body.commands) },
+        { label: 'The rest of its action table', list: own(body.actions) },
+    ];
+    const H = rom.game.rig.fighters.handover;
+    if (H) groups.push({ label: 'What those hand over to', list: own(handedOver(rom, H, [...body.actions, ...body.commands])) });
+    if (body.poses?.length) {
+        const poses = H ? [...body.poses, ...handedOver(rom, H, body.poses)] : body.poses;
+        groups.push({ label: 'Its intro, win and show poses', list: own(poses) });
+    }
+    return { fits, lead: groups.flatMap((g) => g.list), groups, label: '', every, other: 'Every other motion' };
 }
 
 const REST = {
@@ -847,9 +1026,9 @@ function blendFor(live, rom, motion, frame, sample) {
  * a spring, +0xC6C the position and +0xC68 the velocity, floats. It is driven
  * by the distance from the head (+0x20C, this frame's) to +0xC7C, the waist
  * (+0x1F4) as calc_unit_mat found it before storing this frame's; +0xC64 is
- * the distance it measured last frame. The per-frame list (0x6421F80 +0) is
- * not followed: it needs the move flags at +0x1A4 to be exactly 0x200, and
- * the explorer has no move flags, so this is the spring alone.
+ * the distance it measured last frame. The per-frame list (0x6421F80 +0)
+ * takes over on the frames chestFromList says, with the move flags the
+ * motion's own setup and script give (moveFlags).
  *
  * The spring starts at 0/0 whenever the fighter is loaded or its armour
  * switched, the explorer's round start. That reset is the explorer's choice:
@@ -889,6 +1068,126 @@ export function bounceIndex(p) {
 const WAIST_SLOT = 0, HEAD_SLOT = 2;
 
 /*
+ * The move flags (+0x1A4) on each frame of a motion, as far as the motion
+ * itself sets them (TECHNICAL.md, "The per-frame list"). set_mot_dat
+ * (0x1B880) takes the setup script's first word (0x6411E94[motion]), clears
+ * bit 21 and moves bit 15 to 16 when bit 8 is set too; setup op 2 sets bit 1
+ * and gives three frames (+0x808, +0x80A, +0x80C) that 0x1C180 steps
+ * through; then the script after the setup (0x1C24C, ops by frame) sets,
+ * clears and flips bits, and bit 20 is cleared once it has run (0x1C950).
+ * What the fight does to the word besides (a hit, the air, fix_hara's bit 4)
+ * is fight state, left out.
+ */
+const SETUP_LENGTH = 0x1ce86, SETUP_OPS = 25, SETUP_END = 0, SETUP_LAST = 8;
+const SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TABLE = 16, SETUP_HEAD = 12;
+const SCRIPT_LENGTH = [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4];
+const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT_25 = 13, OP_BIT_6 = 22;
+
+/* The setup ops after the head: op 2's three frames, op 3's +0x850, and
+ * where the script starts. */
+function readMoveSetup(rom, dv, at) {
+    const len = (op) => rom.mainCpuView.getUint8(SETUP_LENGTH + op);
+    const out = { times: null, window: 0 };
+    for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
+        if (op === SETUP_END) return { ...out, script: at };
+        if (op === SETUP_LAST) return { ...out, script: at + 1 };
+        if (op >= SETUP_OPS) return null;
+        if (op === SETUP_TIMES) out.times = [1, 3, 5].map((k) => dv.getInt16(at + k, true));
+        if (op === SETUP_WINDOW) out.window = dv.getUint16(at + 12, true);
+        at += op === SETUP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : len(op);
+    }
+}
+
+function readScriptOps(dv, at) {
+    const ops = [];
+    for (let op = dv.getUint8(at); op !== 0 && op < SCRIPT_LENGTH.length; op = dv.getUint8(at)) {
+        ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3) });
+        at += SCRIPT_LENGTH[op];
+    }
+    return ops;
+}
+
+/* One frame of 0x1C180's walk through op 2's frames. It enters at the step
+ * +0xA00 names and falls through the later ones; past the third it starts
+ * again from the first every frame. */
+function moveTimesStep(m, st, f, w) {
+    const [t0, t1, t2] = m.times, raised = (m.word >> 8 & 1) && (m.word >> 15 & 1);
+    let at = st.stage === 2 ? 2 : st.stage === 3 ? 3 : 1;
+    if (at === 1) {
+        if (raised && f >= t0) w &= ~0x10000;
+        if (f < t0) return w;
+        w &= ~2; st.stage++; at = 2;
+    }
+    if (at === 2) {
+        if (f < t1) return w;
+        if (w & 0x100) w &= ~0x8000;
+        w = (w & ~0x4010100) | 4; st.stage++;
+    }
+    if ((w & 0x1010) === 0x1010 && m.window && f >= m.window) w &= ~1;
+    if (f < t2) return w;
+    st.stage++;
+    return w & ~0x1001;
+}
+
+function scriptOp(w, { op, arg }) {
+    if (op === OP_SET) return w | (1 << arg);
+    if (op === OP_CLEAR) return w & ~(1 << arg);
+    if (op === OP_FLIP) return w ^ (1 << arg);
+    if (op === OP_FLIP_21) return w ^ (1 << 21);
+    if (op === OP_BIT_25) return arg ? w & ~(1 << 25) : w | (1 << 25);
+    if (op === OP_BIT_6) return w | (1 << 6);
+    return w;
+}
+
+/** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */
+export function moveFlags(rom, motion) {
+    const at = rom.game.rig?.fighters?.armour?.setups;
+    if (!at || motion?.id == null) return null;
+    const cache = (rom.fvMoveFlags ??= new Map());
+    if (cache.has(motion.id)) return cache.get(motion.id);
+    const ptr = dataAt(rom, at + motion.id * 4);
+    const r = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
+    const setup = r && r.off + SETUP_HEAD < r.data.length ? readMoveSetup(rom, r.view, r.off + SETUP_HEAD) : null;
+    let out = null;
+    if (setup) {
+        const word = r.view.getUint32(r.off, true), m = { ...setup, word };
+        const ops = readScriptOps(r.view, setup.script), st = { stage: setup.times ? 1 : 0 };
+        let w = word & ~(1 << 21), k = 0;
+        if ((word >> 8 & 1) && (word >> 15 & 1)) w = (w & ~0x8000) | 0x10000;
+        if (setup.times) w |= 2;
+        out = new Uint32Array(motion.frames + 1);
+        for (let f = 1; f <= motion.frames; f++) {
+            if (st.stage) w = moveTimesStep(m, st, f, w);
+            for (; k < ops.length && ops[k].frame <= f; k++) w = scriptOp(w, ops[k]);
+            out[f] = (w & ~(1 << 20)) >>> 0;
+            w = out[f];
+        }
+    }
+    cache.set(motion.id, out);
+    return out;
+}
+
+/*
+ * mune_unit_change's per-frame list (0x318B4): with move flag bit 9 set and
+ * bits 14 and 16 clear, the list may take the chest from the spring. It does
+ * when it is already on it (+0xC90), or when list[frame mod count] is the
+ * model the spring last picked (+0xC94) and the spring is all but still
+ * (|velocity| <= 0.8). On the list the spring is not stepped, and the chest is
+ * the list's model while the flags are exactly 0x200, else the slot's own.
+ * Returns that model, or null for the spring.
+ */
+const LIST_BIT = 1 << 9, LIST_OFF = (1 << 14) | (1 << 16), LIST_ONLY = 0x200, LIST_STILL = f32(0.8);
+
+function chestFromList(body, s, flags, frame) {
+    const list = body.bounceList;
+    if (!list?.length || !(flags & LIST_BIT) || (flags & LIST_OFF)) return (s.onList = false, null);
+    const entry = list[frame % list.length];
+    if (!s.onList && !(entry === s.picked && Math.abs(s.v) <= LIST_STILL)) return null;
+    s.onList = true;
+    return flags === LIST_ONLY ? entry : body.chestSlot;
+}
+
+/*
  * The hips (TECHNICAL.md, "The hips"): koshi_unit_change (0x31ADC) swaps slot
  * 9's model on the hips' own matrix, as mune_unit_change does the chest's.
  * In its order, with the move flags (+0x1A4) all clear, as the explorer has
@@ -916,23 +1215,56 @@ function hipsModel(body, motion, frame, waistY) {
     return (waistY < HIPS_LOW ? H.low : H.base)[k];
 }
 
+/*
+ * The hit flash (TECHNICAL.md, "The flash"). Every routine that draws a
+ * fighter's models (rob_disp's slots at 0x1A094, the hips, the midriff, the
+ * pads, skirt, hair and sway chains) sends the model with its material
+ * pointer swapped while the motion is in its first four frames (+0x1AA, which
+ * set_motion starts at 1, at most 4): for `1 << 23` when move flag +0x1A4
+ * bit 26 is set, else for 0x802000 on the odd ones when +0x720 bit 2 is.
+ * set_mot_dat (0x1B880) copies both from the first two words of the motion's
+ * setup script, 0x6411E94[motion], so they are the motion's own. Both
+ * pointers are texture RAM blocks the boot fills (games.js, textureRamFill).
+ */
+const FLASH_FRAMES = 4, FLASH_BIT = 26, BLINK_BIT = 2;
+const FLASH = 0x800000, BLINK = 0x802000;
+
+/** The material pointer a fighter is drawn with on this frame of a motion,
+ * or null for its own. */
+export function flashMaterial(rom, motion, frame) {
+    const F = rom.game.rig?.fighters?.flash;
+    if (!F || motion?.id == null || frame < 0 || frame > FLASH_FRAMES) return null;
+    const ptr = dataAt(rom, F.setups + motion.id * 4);
+    const setup = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
+    if (!setup || setup.off + 8 > setup.data.length) return null;
+    const flags = setup.view.getUint32(setup.off, true), word720 = setup.view.getUint32(setup.off + 4, true);
+    if ((flags >>> FLASH_BIT) & 1) return FLASH;
+    if ((word720 >>> BLINK_BIT) & 1 && frame & 1) return BLINK;
+    return null;
+}
+
 const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
 
 /* The chest's model this frame, stepping the spring once when playback has
  * moved on a frame. A frame picked on its own holds the spring and takes its
  * distances afresh, so a jump does not kick it. */
-function bounceChest(body, live, pose, frame, stepped) {
+function bounceChest(body, live, pose, frame, stepped, flags) {
     const head = pose[HEAD_SLOT].t, waist = pose[WAIST_SLOT].t.slice();
     let s = live.spring;
-    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist };
+    if (!s) s = live.spring = { p: 0, v: 0, last: distance(head, waist), waist, onList: false, picked: null };
+    const before = s.waist;
+    /* calc_unit_mat copies the waist (+0xC7C) on every frame, list or not. */
+    s.waist = waist;
+    s.flags = flags;
+    const listed = chestFromList(body, s, flags, frame);
+    if (listed != null) return (s.model = listed);
     /* A motion starting (or looping) stands the explorer's fighter back where
      * its motion starts, a jump the board's fighter does not make, so on that
      * frame the waist is this frame's. */
-    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : s.waist));
+    if (stepped) bounceStep(s, distance(head, frame === 1 ? waist : before));
     else s.last = distance(head, waist);
-    s.waist = waist;
     s.index = bounceIndex(s.p);
-    return (s.model = body.bounce[s.index]);
+    return (s.model = s.picked = body.bounce[s.index]);
 }
 
 /* The hair's swing to draw this frame: the one the last step left, then a
@@ -949,9 +1281,10 @@ function hairSwing(live, pose, stepped, fresh) {
 
 /* The chest's and hips' models this frame, for the fighters whose chest
  * bounces or whose hips koshi_unit_change names. */
-function swappedModels(body, live, pose, { motion, frame, stepped, fresh }) {
+function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) {
     const held = !fresh && live.spring?.model != null;
-    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped)) : undefined;
+    const flags = () => moveFlags(rom, motion)?.[frame] ?? 0;
+    const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped, flags())) : undefined;
     const hips = body.armour?.hips ? hipsModel(body, motion, frame, pose[WAIST_SLOT].t[1]) : undefined;
     return { chest, hips, spring: live.spring };
 }
@@ -1004,7 +1337,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(body, live, pose, { motion, frame, stepped, fresh }) };
+    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*
