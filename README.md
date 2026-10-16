@@ -809,10 +809,20 @@ the lighting model and the MAME capture tools are written up in
 This viewer is the browser end of two other projects of mine, and most of what
 it knows about the board and the game comes from them:
 
-- `m2-hle2` — my Model 2 HLE emulator, in C11, with *Sonic The Fighters* as its
-  reference game. The polygon decoder, material format and ROM layout here are
-  ports of its implementations. It is unreleased — there is no public repo to
-  link, and nothing here depends on having it.
+- [`m2-hle2`](https://github.com/biggestsonicfan/m2-hle2) — my Model 2 HLE
+  emulator, in C11, with *Sonic The Fighters* as its reference game. The polygon
+  decoder, material format and ROM layout here are ports of its
+  implementations, and the in-page music is its sound board compiled to
+  WebAssembly. It plays *Sonic The Fighters* (arcade and console versions),
+  *Sega Rally Championship* and *Cyber Troopers Virtual-On* in the browser at
+  [arcade.sonicthefighte.rs](https://arcade.sonicthefighte.rs), *Sonic The
+  Fighters* online too, and *Fighting Vipers* on the desktop build. *Virtua
+  Cop*, *Daytona USA* and *The House of the Dead*, which this explorer opens,
+  are prepared profiles there that do not run yet; they take their model tables
+  from `js/games.js`. It carries this repository as a submodule
+  (`vendor/noclip`), and its graders (`tools/grade-stages.mjs`,
+  `grade-models.mjs` and the rest) check what the explorer draws against its own
+  decoder and the display lists the board builds. Nothing here needs it to run.
 - [`stfdecomp`](https://github.com/biggestsonicfan) — my *Sonic The Fighters*
   decompilation, reversed and written by hand, source of the stage table,
   `CHAR_PARTS`, the bone tables, the motion-table addresses, the frame and
@@ -851,8 +861,8 @@ NVIDIA-only artifact traced to perspective-correct interpolation of a constant),
 building the MAME capture and diff tooling (*Capture the board's display list
 and check the stage against it*), and the animation and object work the later
 half of the log is made of. The companion emulator this ports from is the same
-way — 35 of 35 commits AI co-authored — so the code on both sides of that port
-is AI-written, and only the layer under it is not.
+way — 580 of its 583 commits (merges aside) are AI co-authored — so the code
+on both sides of that port is AI-written, and only the layer under it is not.
 
 **What AI did not provide.**
 
