@@ -306,13 +306,8 @@ function shortName(name) {
  *   with the input that reaches it (the strings as their presses, joined by
  *   " , ") and the CPU table's name where one lands on it.
  */
-export function readMoves(rom, charIndex) {
-    const m = rom.maincpu, dv = rom.mainCpuView;
-    const base = baseIndex(charIndex);
-    if (base >= 24) return null;
-    const root = dv.getUint32(progAddr(rom, MOVESET_ARRAY) + base * 4, true);
-    if (!root || root >= m.length || m[root] !== HEADER) return null;
-
+/* The table at `root` and every follow-up table its entries reach, by address. */
+function readTables(m, dv, root) {
     const tables = new Map();
     const todo = [root];
     while (todo.length) {
@@ -322,6 +317,32 @@ export function readMoves(rom, charIndex) {
         tables.set(a, es);
         for (const e of es) if (e.follow && !tables.has(e.follow)) todo.push(e.follow);
     }
+    return tables;
+}
+
+/**
+ * Every motion an input program commits to, in any situation, in the order
+ * the tables are walked: the root's entries first, then the follow-ups'.
+ * Fighting Vipers' matcher is this one at other addresses, with the same
+ * opcodes and lengths, so this needs only the program's address.
+ * @returns {number[]} the commits' low sixteen bits, each once
+ */
+export function commandMotions(rom, root) {
+    const m = rom.maincpu;
+    if (!root || root >= m.length || m[root] !== HEADER) return [];
+    const out = new Set();
+    for (const es of readTables(m, rom.mainCpuView, root).values()) for (const e of es) out.add(e.motion);
+    return [...out];
+}
+
+export function readMoves(rom, charIndex) {
+    const m = rom.maincpu, dv = rom.mainCpuView;
+    const base = baseIndex(charIndex);
+    if (base >= 24) return null;
+    const root = dv.getUint32(progAddr(rom, MOVESET_ARRAY) + base * 4, true);
+    if (!root || root >= m.length || m[root] !== HEADER) return null;
+
+    const tables = readTables(m, dv, root);
 
     /* Name the entries by typing the CPU's scripts into the tree. A script
      * that jumps before its first press is an air attack, which this ground

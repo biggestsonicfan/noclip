@@ -4279,7 +4279,7 @@ function renderBodyMotionPanel() {
     if (!body) return;
     const sel = $('#motion-select');
     sel.innerHTML = '';
-    const { fits, lead, label, every } = bodyMotions(body);
+    const { fits, lead, label, every, groups, other } = bodyMotions(body);
     const group = (label, list) => {
         if (!list.length) return;
         const g = el('optgroup');
@@ -4292,9 +4292,11 @@ function renderBodyMotionPanel() {
         }
         sel.appendChild(g);
     };
-    group(`${label} (${lead.length})`, lead);
+    if (groups) for (const g of groups) group(`${g.label} (${g.list.length})`, g.list);
+    else group(`${label} (${lead.length})`, lead);
     const rest = every ?? `Motions for ${body.joints} joints`;
-    group(lead.length ? `Every other motion for ${body.joints} joints (${fits.length - lead.length})`
+    const others = other ?? `Every other motion for ${body.joints} joints`;
+    group(lead.length ? `${others} (${fits.length - lead.length})`
         : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
     if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
