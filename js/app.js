@@ -54,6 +54,7 @@ import {
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
+import { readCarried, carriedDraws } from './fvitem.js';
 import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
@@ -3658,6 +3659,7 @@ function poseFighterAndRival(body, m) {
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
+    placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
@@ -4020,6 +4022,42 @@ function burstKit(holder) {
 }
 
 /*
+ * Fighting Vipers' carried item (js/fvitem.js), on the fighter and on the
+ * opponent, each from the motion it plays: the record's model on this
+ * frame's pose, and while it is held the copies from the frames before it,
+ * each on a stand-in posed on its frame. `place` puts the opponent's where
+ * it stands.
+ */
+const CARRIED_POOL = 5;
+
+function placeCarried(holder, body, pose, motion, frame, mirrored, place = null) {
+    const kit = carriedKit(holder, body);
+    if (!kit) {
+        for (const p of holder.carriedPool ?? []) showPart(p, false);
+        return;
+    }
+    const draws = motion ? carriedDraws(state.rom, kit.carried, motion, frame, {
+        pose, mirrored, poseAt: (f) => poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose,
+    }) : [];
+    for (const d of draws) {
+        if (kit.geoms.has(d.model)) continue;
+        const g = getModel(d.model);
+        if (g) kit.geoms.set(d.model, geomBundle(g));
+    }
+    if (!draws.length) for (const p of holder.carriedPool ?? []) showPart(p, false);
+    else placeEffectPool(holder, 'carriedPool', CARRIED_POOL, kit.geoms, draws, place);
+}
+
+/* The fighter's item records and the models built so far; none in a game
+ * or for a fighter without them. */
+function carriedKit(holder, body) {
+    if (holder.carried?.rom !== state.rom || holder.carried.body !== body) {
+        holder.carried = { rom: state.rom, body, carried: readCarried(state.rom, body), geoms: new Map() };
+    }
+    return holder.carried.carried ? holder.carried : null;
+}
+
+/*
  * The fighters' floor shadows (js/fightershadow.js), each under the light of
  * the stage the panel names. `pose` is in the fighter's board frame, the
  * opponent's too: the light is the stage's, not the figure's own.
@@ -4145,6 +4183,7 @@ function poseBodyRig() {
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeBursts(m, pose.pose, m.decoded, m.frame);
+    placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
     strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);

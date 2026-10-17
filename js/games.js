@@ -881,6 +881,10 @@ const fvipers = {
          * name the models, drawn at 0.5 while +0x720 has `lightBit` or
          * +0x1A4 has bit `flag`. */
         burst: { table: 0x06ce35e4, last: 15, scale: 0.5, lightBit: 10, flag: 26 },
+        /* The carried item rob_disp draws (0x1A4B4); js/fvitem.js. Fighter
+         * record +0x2C's item records, `size` bytes each with the mirrored
+         * one `mirror` in, script op 17's byte picks one; `ring` copies. */
+        carried: { op: 17, records: 0x2c, size: 0x70, mirror: 0x38, ring: 4 },
         /* Each fighter's own light (0x1F1FC); js/fvstrobe.js. +0x720 starts
          * as the setup's second word (0x1B98C); script ops 25 and 26 set and
          * clear a bit of it, op 27 sets bit 3 or clears it. While it has

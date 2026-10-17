@@ -1440,6 +1440,19 @@ export function hitSparkScript(rom, id) {
 }
 
 /*
+ * Fighting Vipers' script op 17 (0x1C6E4) on motion `id`, for the carried
+ * item (js/fvitem.js): each one's frame and its byte (+3), which a byte other
+ * than 0 writes to +0xAFC with +0 bit 27 set, and a byte of 0 clears both.
+ * Null for a motion with none, or a game without it.
+ */
+export function carriedScript(rom, id) {
+    const op = rom.game.rig?.carried?.op;
+    const m = op && id != null ? moveSetup(rom, id) : null;
+    const ops = m?.ops.filter((o) => o.op === op).map((o) => ({ frame: o.frame, item: o.arg }));
+    return ops?.length ? { ops } : null;
+}
+
+/*
  * Fighting Vipers' +0x720 on frames 1..frames of motion `id` (index =
  * frame), for the light strobe (js/fvstrobe.js): set_mot_dat copies the
  * setup's second word (+0x860, 0x1B98C), then script ops 25 (0x1C870) and 26

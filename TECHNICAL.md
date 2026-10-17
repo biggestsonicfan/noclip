@@ -1631,10 +1631,11 @@ plays on any fighter, so all of them can be opened. Shun 666 frame 1 shows
 the gourd in his hand, and 172 shows it from frame 90 to 143. Before this,
 the explorer drew no gourd at all.
 
-FV has no counterpart. Its op 17 (`0x1C6E4`) also sets or clears bit 27,
-but through `0x1CA84` it loads a strike-part record (`+0x784`, from fighter
-record `+0x2C`) for the hit check (`0x2B404`). FV's part-loop table
-(`0x1A0EC`) has cases only for slots 1, 2 and 9, so nothing is drawn.
+FV's op 17 (`0x1C6E4`) is not the gourd, and it does draw. It picks the
+item record (`+0x784`, from fighter record `+0x2C`) that `rob_disp`
+(`0x1A4B4`) draws on every slot's turn of the part loop. That is Picky's
+board, Raxel's guitar and Bahn's hat: see "The carried item" below. The
+gourd does not take part in it, and FV has no gourd.
 
 Left out: op 14's camera shake (`[0x500814]+0xFC`, the camera, not the
 fighter) and ops 20/21, the command VM's pointer and counter (input).
@@ -3239,6 +3240,63 @@ to ±0.7 (`0x23`). The gate holds on frames 1–15 of motions 605–611, 820–8
   - `+0` bit 25's debug ball (`0x19790`) and the `+0x2A` name characters
     (`0x198C0`), which are set only by game-mode code
   - the per-slot culling in `0x19EBC`
+
+#### The carried item (FV, `0x1A4B4`; read from the ROM, checked against MAME)
+
+`js/fvitem.js`. Every frame `0x1CB2C` copies an item record into player
+`+0x784`. The record is at fighter record `+0x2C`, plus `0x70 × (+0xAFC − 1)`
+when `+0xAFC` is not 0, plus `0x38` when the fighter is mirrored (`+0` bit 6).
+`0x1CB2C` reads the byte at `[0x50016c]+0x3350`, which would pick `+0x38`'s
+table (Picky's board `0x6D3`). It was 0 for the whole attract and no motion
+sets it, so it is left out.
+
+Script op 17, on its own frame, with a byte other than 0, sets `+0xAFC` to
+that byte and sets `+0` bit 27. A byte of 0 clears both. Loading a fighter
+clears `+0xAFC`, so a motion the explorer plays cold starts on record 0
+with bit 27 clear.
+
+`rob_disp` draws while the record's first model (`+0x78A`) is not 0. It
+draws that model on the record's slot (`+0x788`), moved by `+0x78C` and
+turned Y, X, Z by `+0x79A`, `+0x798` and `+0x79C`. While bit 27 is set it
+uses the second half instead (slot `+0x7A0`, model `+0x7A2`, offset
+`+0x7A4`, turns `+0x7B2`, `+0x7B0` and `+0x7B4`), so the item moves to the
+hand. Before drawing, it steps the ring index `+0xF00` (mod 4; not while
+`0x508000` bit 5 pauses), reads the matrix back into the ring entry at
+`+0xF34 + 0x34 × index`, and sets the entry's `+0x30` while bit 27 is set
+and `+0x1A4` bit 2 is clear. It then draws `+0x7F8` (the record's `+0x34`)
+at every entry whose `+0x30` is set, so up to 4 copies, one of them at
+the item itself.
+
+- Picky: the board `0x2A9` on slot 1. In the hand it is `0x2AA` on slot 5,
+  with copies of `0xAAE`. Mirrored, the hand half is `0x970` on slot 8, and
+  the copies come from the mirrored half's `+0x34`, `0xAAD`.
+- Raxel: the guitar `0x703` on slot 1. In the hand it is `0x704` on slot 5,
+  with copies of `0xAB0`.
+- Bahn: byte 2 (record 1) is `0x707` on slot 5.
+- Everyone else's record 0 has model 0, so they draw nothing.
+- Op 17's motions: 75, 76, 600 and 603 (frames 9–60); 78 (9–150); 89, 412
+  and 816 (7–45); 323 (15–70); 357 (19–75); 413 and 414 (5–47); 452
+  (15–60); 509 (15–45); 601 (5–45); 602 (1–60); byte 2 on frame 1 in 1002,
+  1015, 1025 and 1028.
+- The ring holds only the motion's own frames. A motion played cold starts
+  with an empty ring, and copies left over from the motion before (fight
+  history) are left out.
+- Node, old code against new: the old code drew none of these models. With
+  the new code, Picky motion 1 frame 1 draws `0x2A9` on slot 1, and so does
+  its last frame (60), which has no op 17. Raxel motion 1 frame 1 draws
+  `0x703` on slot 1. Picky 89 frame 7 draws `0x2AA` on slot 5 and one
+  `0xAAE` copy, by frame 9 three, and no board on slot 1. From frame 45 the
+  board is back on slot 1. Mirrored, 89 frame 7 draws `0x970` on slot 8.
+  Bahn 1025 frame 1 draws `0x707` on slot 5. Grace draws nothing. Headless
+  Chrome shows the same models in the pool, and no page errors.
+- MAME attract, with a breakpoint on the draw: Picky's slot 1 is `0x2A9`
+  (`+0xAFC` 0) across many motions, and Raxel's is `0x703` in 928. Picky 413
+  draws `0x2AA` on slot 5 (`+0xAFC` 1) from frame 5, with copies of `0xAAE`.
+  Raxel 1015 draws `0x703` on slot 8 (`+0xAFC` 2), with copy model 0, so no
+  copies. Bahn 1025 draws `0x707` on slot 5 (`+0xAFC` 2).
+  `[0x50016c]+0x3350` stayed 0 throughout.
+- The flash materials `rob_disp` gives the item (`+0x1A4` bit 26 or `+0x720`
+  bit 2, frames ≤ 4) are not drawn on it.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
