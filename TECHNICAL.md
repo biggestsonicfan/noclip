@@ -1242,8 +1242,9 @@ Fighting Vipers sets the model outright (`0x1C718`): `0x640EBF4[record]`
 holds four s16 models per hand, hand * 4 + shape, and the op writes it over
 the part list's (`+0x40`) slot 5 + 3 * hand, unless it is 0. A mirrored
 fighter's hand is turned first (1 to 0, else 1). Shape 0 is the part list's
-own model. FV keeps the eased picker (`0x1AC80`), but nothing writes the
-`+0x6AC` it reads.
+own model. FV keeps the eased picker (`0x1AC80`), but the `+0x6AC` that
+turns it on is record `+0x28` (action_init, `0x12624`), 0 in all thirteen
+records.
 
 So the mirror moves shapes, not models: each slot keeps its own table, and
 the two tables are mirror images (every pair checked). Most motions shape
@@ -1275,6 +1276,50 @@ are at frame 20, so frames 1-20 hold shape 0 (it used to show 3 from frame
 1), and the hands ease to 2 by frame 30 (one short of 3). In FV, Grace 302
 holds the part list's hands to frame 9, where they used to be shape 2 from
 frame 1.
+
+No other op touches a hand. Every handler in both tables (VF2's 24, FV's
+31) was read: none but op 18 writes the hand bytes or slots 5 and 8, and the
+rest of what bears on a hand is this.
+
+- **Loops.** When a motion runs past its last frame (VF2 `0x1AB74`, FV
+  `0x1C114`) the game reads `+0x802`, which set_mot_dat clears and setup op
+  1's u16 sets (FV's op 0x13 too): 0 holds the last frame, a motion id
+  starts that motion, and 0xFFFF plays this one again, the frame back to 1
+  and the script back to its start (`+0x6D0`, FV `+0x700`; VF2 `0x1ABD8`, FV
+  `0x1C160`). The hands are left as the pass ended. The explorer plays every
+  motion over and over, so a motion the game loops now starts each pass
+  after the first from the hands the last one ended on (`playedOver` counts
+  the passes, and the opponent's stance and the stance frame it is caught on
+  count their own); any other motion starts each pass as before, since the
+  game never plays it twice running. In VF2, 34 motions loop, and on Akira
+  16 of them show it, its stance (1285) among them: it eases to 31 from
+  frame 1 and back to 15 from frame 80, so from the second pass it sets out
+  from 15, not 0, and frame 10 is shape 19 (it was 7), frame 30 shape 26 (it
+  was 23). The bytes never quite settle (a truncated step leaves a few
+  1/256ths a pass), so every pass is worked out from the one before. An
+  Akira caught on stance frame 11 carries shape 19 into the throw on the
+  second pass, 8 on the first. FV's 15 looping motions with an op 18 all set
+  both hands outright on frame 1, so a loop never shows there: no FV motion
+  differs.
+- **Op 23** (both games) tests `+0x5B8` bit 0 against its byte and, when
+  they match, sets `+0x60C` to 31 and `+0x852`/`+0x853` from the op and
+  returns from the script, past VF2's hand step (`0x1B438` to `0x1B530`), so
+  no hand steps that frame. It is fight state, and it is in no motion with
+  an op 18 (VF2 has it in 28 motions, FV in none).
+- **Slow motion.** VF2 doubles every op's frame when `0x500068` bit 20 is
+  set (`0x1AD80`; op 3 halves its speed under the same bit), but not op 18's
+  end, so an ease would run short there. The explorer has no such state.
+- **The draw.** VF2's slots 5 and 8 come from the table whenever `+0x67C` is
+  set, which only action_init writes; the other swaps in the part loop are
+  slots 12 and 15 (`+0x5F0`, `0x19D28`) and 3 and 6 (`0x19E6C`), not hands.
+  The per-part bytes (`+0x688`, FV `+0x6B8`) are a visibility test of each
+  part's place, not a hand state.
+- **FV armour.** The per-frame part refresh (`0x27528`, `0x27650`) rebuilds
+  every slot from the part list and the broken-armour bits except 2, 5 and 8,
+  so it leaves the hands to op 18. A hit's armour break (`0x2D588`) does
+  write a slot itself, and Jane's armour table (`0x640EDAC`) has slot 5: it
+  gets model 0x2DE, the one all her op 18s write there. A break is fight
+  state the explorer does not model.
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 

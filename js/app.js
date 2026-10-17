@@ -3621,7 +3621,8 @@ function bouncedDraws(body, posed, m) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     const mirrored = state.mirrored && state.rom.game.rig?.kind === 'vf2';
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored });
+    const handsPass = playedOver(m);
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -3630,8 +3631,8 @@ function poseFighterAndRival(body, m) {
      * so the one thrown is mirrored with the fighter. Otherwise the opponent's
      * own bit is fight state, and left clear. */
     const [mine, theirs] = poseBout(state.rom, [
-        { body, motion: m.decoded, frame: m.frame, mirrored },
-        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown), handsFrom: own.handsFrom },
+        { body, motion: m.decoded, frame: m.frame, mirrored, handsPass },
+        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown), handsFrom: own.handsFrom, handsPass: own.handsPass ?? 0 },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
@@ -3650,14 +3651,22 @@ function poseFighterAndRival(body, m) {
  * place and facing (opponentMatrix's `thrown`). */
 function rivalPlays(m) {
     const R = rivalReaction(m);
-    if (!R) return { decoded: m.decoded, frame: m.frame, flash: m.flash };
+    if (!R) return { decoded: m.decoded, frame: m.frame, flash: m.flash, handsPass: playedOver(m) };
     if (R.motion && m.frame >= R.lands) {
         const frame = Math.min(m.frame - R.lands + 1, R.motion.frames);
         const thrown = R.attack.victim != null;
         return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown, handsFrom: caughtIn(R) };
     }
     const wait = R.stance ?? R.motion ?? m.decoded;
-    return { decoded: wait, frame: wait === R.stance ? 1 + ((m.frame - 1) % wait.frames) : 1, flash: null };
+    if (wait !== R.stance) return { decoded: wait, frame: 1, flash: null };
+    return { decoded: wait, frame: 1 + ((m.frame - 1) % wait.frames), flash: null, handsPass: Math.floor((m.frame - 1) / wait.frames) };
+}
+
+/* How many times the motion on show has played over since it was picked: a
+ * motion the game loops carries its hands from one pass into the next
+ * (js/fighterhands.js). */
+function playedOver(m) {
+    return m.decoded?.frames ? Math.floor(Math.max(0, m.tick) / m.decoded.frames) : 0;
 }
 
 /* The stance frame the opponent was shown on when the move landed, which its
@@ -3665,7 +3674,8 @@ function rivalPlays(m) {
  * first, the reaction starts cold. */
 function caughtIn(R) {
     if (!R.stance || R.lands < 2) return null;
-    return { motion: R.stance, frame: 1 + ((R.lands - 2) % R.stance.frames), mirrored: false };
+    const shown = R.lands - 2;
+    return { motion: R.stance, frame: 1 + (shown % R.stance.frames), pass: Math.floor(shown / R.stance.frames), mirrored: false };
 }
 
 /* The reaction to the motion on show, read once per motion and choice. */

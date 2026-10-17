@@ -19,7 +19,7 @@
  * four s16 models per hand, and the op writes hand h's model for its shape
  * over the part list's (player +0x40) for slot 5 + 3h, unless it is 0. A
  * mirrored fighter has h turned to the other hand first. Its 0x1AC80, the
- * same eased picker, reads a +0x6AC that nothing writes.
+ * same eased picker, is off: the +0x6AC it reads is record +0x28, always 0.
  *
  * So mirroring moves the shapes, not the models: each slot keeps its own
  * hand's table, and the shape a motion names for one hand goes to the other.
@@ -32,11 +32,16 @@
  * start copies the part list back. So a motion with nothing live before it
  * starts cold (VF2 shape 0, FV the part list's); only a motion the explorer
  * has just shown carries over, as the opponent's stance does into the
- * reaction when the move lands, mid-ease if it is.
+ * reaction when the move lands, mid-ease if it is. A motion the game loops
+ * (+0x802 0xFFFF) carries its hands from one pass into the next.
+ *
+ * No other move-script op touches a hand (TECHNICAL.md lists what else
+ * bears on one: op 23, slow motion, FV's armour, none of it reachable here).
  */
 import { resolveData } from './motion.js';
 
-const OP_END = 0, OP_LAST = 8, OP_TABLE = 0x10, OP_HAND = 18;
+const OP_END = 0, OP_NEXT = 1, OP_LAST = 8, OP_TABLE = 0x10, OP_NEXT_PAIR = 0x13, OP_HAND = 18;
+const LOOP = 0xffff;
 const MOTION_ID = 0x1fff;
 const HANDS = 2, SLOTS = [5, 8];
 const SHAPE_MASK = 31, FV_SHAPES = 4;
@@ -49,27 +54,31 @@ function dataAt(rom, addr) {
 const u32At = (rom, addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
 
 /* Past the setup ops (rig.reactions' walk), where the script starts: op 0
- * ends the setup on itself, op 8 just past it. */
+ * ends the setup on itself, op 8 just past it. Op 1's u16 (and FV op 0x13's
+ * first) is the motion that follows, +0x802; 0xFFFF plays this one again. */
 function scriptStart(rom, R, dv, at) {
+    let next = 0;
     for (;;) {
         const op = dv.getUint8(at);
-        if (op === OP_END) return at;
-        if (op === OP_LAST) return at + 1;
-        if (op >= R.ops) return -1;
+        if (op === OP_END) return { at, next };
+        if (op === OP_LAST) return { at: at + 1, next };
+        if (op >= R.ops) return { at: -1, next };
         const len = op === OP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : rom.mainCpuView.getUint8(R.lengths + op);
-        if (!len || at + len >= dv.byteLength) return -1;
+        if (!len || at + len >= dv.byteLength) return { at: -1, next };
+        if (op === OP_NEXT || op === OP_NEXT_PAIR) next = dv.getUint16(at + 1, true);
         at += len;
     }
 }
 
-/* Motion `id`'s op 18s, in script order, as {frame, hand, shape, end}. */
+/* Motion `id`'s op 18s, in script order, as {frame, hand, shape, end}, and
+ * whether the game loops it. */
 function handOps(rom, id) {
     const R = rom.game.rig.reactions, lengths = rom.game.rig.script;
     const ptr = u32At(rom, R.setups + (id & MOTION_ID) * 4);
     const r = ptr && dataAt(rom, ptr);
-    if (!r) return [];
+    if (!r) return { ops: [], loops: false };
     const dv = r.view, ops = [];
-    let at = scriptStart(rom, R, dv, r.off + R.head);
+    let { at, next } = scriptStart(rom, R, dv, r.off + R.head);
     while (at >= 0 && at + 7 <= dv.byteLength) {
         const op = dv.getUint8(at);
         if (op === OP_END || op >= lengths.length) break;
@@ -78,7 +87,7 @@ function handOps(rom, id) {
         }
         at += lengths[op];
     }
-    return ops;
+    return { ops, loops: next === LOOP };
 }
 
 const s16 = (v) => (v << 16) >> 16;
@@ -121,8 +130,8 @@ function easeRun(ops, last, start) {
 const VF2 = {
     table: (rom, body, H) => u32At(rom, body.root + H.at),
     powerOn: () => [0, 1].map(() => ({ count: 0, now: 0, step: 0 })),
-    run(rom, table, H, id, last, mirrored, start) {
-        const { shapes, end } = easeRun(handOps(rom, id), last, start);
+    run(rom, table, H, ops, last, mirrored, start) {
+        const { shapes, end } = easeRun(ops, last, start);
         const models = shapes.map((pair) => SLOTS.map((slot, k) => {
             const hand = (k === 0) !== mirrored ? 1 : 0;
             return u32At(rom, table + (k === 0 ? 0 : H.other) + pair[hand] * 4) || null;
@@ -149,8 +158,7 @@ const FV = {
         return (table && dataAt(rom, table)) || null;
     },
     powerOn: (body) => SLOTS.map((slot) => body.parts[slot]?.model ?? null),
-    run(rom, r, H, id, last, mirrored, start) {
-        const ops = handOps(rom, id);
+    run(rom, r, H, ops, last, mirrored, start) {
         const written = ops.map((op) => fvModel(r, op, mirrored));
         const now = [...start], models = [];
         let next = 0;
@@ -165,14 +173,49 @@ const FV = {
     },
 };
 
-/* What a motion starts from: the hands motion `from.motion` has on its frame
- * `from.frame`, itself started cold; or, without one, the cold hands (VF2's
- * power on, FV's round start). */
-function startHands(rom, G, { body, table, H }, from) {
-    const cold = G.powerOn(body);
-    if (!from?.motion || !(from.frame > 0)) return cold;
-    return G.run(rom, table, H, from.motion.id, Math.min(from.frame, from.motion.frames), Boolean(from.mirrored), cold).end;
+/* A motion's passes, one run each, from `start`: a motion the game loops
+ * (+0x802 0xFFFF: VF2 0x1ABD8, FV 0x1C160 put the frame back to 1 and the
+ * script to its start, and leave the hands be) starts each pass where the
+ * last one ended; any other only ever plays its first. Kept per motion and
+ * start, and grown to the pass asked for, until one ends where it began. */
+function passes(rom, motion, key, start) {
+    const cache = (rom.fighterHands ??= new Map());
+    if (!cache.has(key)) {
+        const { ops, loops } = handOps(rom, motion.id);
+        cache.set(key, { ops, loops, runs: [], next: start });
+    }
+    return cache.get(key);
 }
+
+function passAt(rom, G, ctx, list, motion, mirrored, pass) {
+    while (list.runs.length <= pass && list.next) {
+        const start = list.next;
+        const run = G.run(rom, ctx.table, ctx.H, list.ops, motion.frames, mirrored, start);
+        const last = list.runs.at(-1);
+        // A pass that looks as the last one did shares its frames.
+        if (last && JSON.stringify(last.models) === JSON.stringify(run.models)) run.models = last.models;
+        list.runs.push({ start, ...run });
+        const settled = !list.loops || JSON.stringify(run.end) === JSON.stringify(start);
+        list.next = settled ? null : run.end;
+    }
+    return list.runs[Math.min(pass, list.runs.length - 1)];
+}
+
+const handsKey = (body, motion, mirrored, after) => `${body.index}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
+
+/* What a motion starts from: the hands motion `from.motion` has on its frame
+ * `from.frame` of its pass `from.pass`, itself started cold; or, without
+ * one, the cold hands (VF2's power on, FV's round start). */
+function startHands(rom, G, ctx, from) {
+    const cold = G.powerOn(ctx.body);
+    if (!from?.motion || !(from.frame > 0)) return cold;
+    const mirrored = Boolean(from.mirrored);
+    const list = passes(rom, from.motion, handsKey(ctx.body, from.motion, mirrored, ''), cold);
+    const { start } = passAt(rom, G, ctx, list, from.motion, mirrored, from.pass ?? 0);
+    return G.run(rom, ctx.table, ctx.H, list.ops, Math.min(from.frame, from.motion.frames), mirrored, start).end;
+}
+
+const fromKey = (from) => (from?.motion ? `${from.motion.id}@${from.pass ?? 0}.${from.frame}${from.mirrored ? 'm' : ''}` : '');
 
 /**
  * The hand models a motion gives slots 5 and 8 on each frame: index = frame,
@@ -181,22 +224,22 @@ function startHands(rom, G, { body, table, H }, from) {
  *
  * A hand keeps its shape from one motion into the next: nothing but op 18
  * (and VF2's step) writes it, and a motion's setup does not reset it. So the
- * motion starts from `from` ({motion, frame, mirrored}: the motion on show
- * just before, as a reaction starts from the stance frame the opponent was
- * caught on), or else from the game's cold hands.
+ * motion starts from `from` ({motion, frame, pass, mirrored}: the motion on
+ * show just before, as a reaction starts from the stance frame the opponent
+ * was caught on), or else from the game's cold hands. `pass` counts the
+ * times the motion has played over on screen: one the game loops carries its
+ * hands from each pass into the next; any other starts each one afresh.
  */
-export function handModels(rom, body, motion, mirrored = false, from = null) {
+export function handModels(rom, body, motion, mirrored = false, from = null, pass = 0) {
     const H = rom.game.rig?.fighters?.hands;
     if (!H || motion?.id == null) return null;
-    const cache = (rom.fighterHands ??= new Map());
-    const after = from?.motion ? `${from.motion.id}@${from.frame}${from.mirrored ? 'm' : ''}` : '';
-    const key = `${body.index}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
-    if (!cache.has(key)) {
-        const G = H.eased ? VF2 : FV;
-        const table = G.table(rom, body, H);
-        cache.set(key, table ? G.run(rom, table, H, motion.id, motion.frames, mirrored, startHands(rom, G, { body, table, H }, from)).models : null);
-    }
-    return cache.get(key);
+    const G = H.eased ? VF2 : FV;
+    const table = G.table(rom, body, H);
+    if (!table) return null;
+    const ctx = { body, table, H };
+    const key = handsKey(body, motion, mirrored, fromKey(from));
+    const list = rom.fighterHands?.get(key) ?? passes(rom, motion, key, startHands(rom, G, ctx, from));
+    return passAt(rom, G, ctx, list, motion, mirrored, pass).models;
 }
 
 /** Slot → model for the frame, for the slots the motion sets. */

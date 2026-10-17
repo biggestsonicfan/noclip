@@ -1360,7 +1360,7 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
-export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false, handsFrom = null } = {}) {
+export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false, handsFrom = null, handsPass = 0 } = {}) {
     rom.vf2Rig ??= standardRig(rom);
     const live = liveFor(body);
     const sample = sampleFor(rom, motion, frame, mirrored);
@@ -1385,7 +1385,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = f
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    const hands = handsAt(handModels(rom, body, motion, mirrored, handsFrom), frame);
+    const hands = handsAt(handModels(rom, body, motion, mirrored, handsFrom, handsPass), frame);
     return { matrices, origins, extras, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
@@ -1467,8 +1467,8 @@ function headSeenFrom(other, across) {
  */
 export function poseBout(rom, [first, second], place = opponentMatrix()) {
     const one = poseFighter(rom, first.body, first.motion, first.frame,
-        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored });
+        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored, handsPass: first.handsPass });
     const two = poseFighter(rom, second.body, second.motion, second.frame,
-        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored, handsFrom: second.handsFrom });
+        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored, handsFrom: second.handsFrom, handsPass: second.handsPass });
     return [one, two];
 }
