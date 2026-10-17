@@ -869,6 +869,9 @@ const fvipers = {
             floor: { models: 0x06444520, sizes: 0x064445c0 },
             waist: 0x064446c0,
         },
+        /* Script op 30's throw spark; js/fvhitspark.js. 0x2DB78's flipbooks
+         * for a record with flag bit 8: +0x1E's by age, +0x20's by half. */
+        hitSpark: { op: 30, books: [{ at: 0x064212b4 }, { at: 0x064211e0, halved: true }] },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup

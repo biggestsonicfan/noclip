@@ -2723,6 +2723,96 @@ on frame 9, gone by frame 17; on Grace's 3, 1 on frame 2 and 10 by frame
 12; on 589, one waist spark from frame 142 (0x3A2) to 157 (0x3AD); on 283,
 the feet's sparks and from frame 18 the floor puff, two frames in four.
 
+#### The throw spark (script op 30; read from the ROM, checked against MAME)
+
+When a throw lands, Fighting Vipers puts a flash and a spray of red shards on
+the thrown fighter's head or arm. It comes from move-script op 30
+(`0x1C93C`, four bytes), which writes byte +3 to `+0xC56`. Only nine motions
+use it, all of them a thrown fighter's: 898, 945, 959, 961, 997, 999, 1031,
+1038 and 1051, whose throwers play 897, 944, 958, 960, 996, 998, 1030, 1037
+and 1050. Each has one op 30, with byte 1 or 2. VF2 has no op 30.
+
+In the same tick, after both players' scripts (`0x1C24C`), `0x278DC` (called
+from `0x24AB8` and `0x24ACC`) does the following:
+
+- It ORs `1 << +0xC56` into `+0x770` and clears `+0xC56`.
+- If `+0x1A4` has bit 16, it stops there. None of the nine motions has that
+  bit on its op 30's frame.
+- Otherwise it sets bit 8 (`0x100`) in the module's `+0xA68` and copies that
+  to `+0x772`.
+- It takes the first free record of five at `*0x500844 + 0x748` (0x34 bytes
+  each) and writes flags `0x101` to it.
+- The record's point is `+0x1F4 + 12 · (+0x770)`. That is the slot the
+  *mask* names, not the bit: byte 1 gives slot 2 (the head) and byte 2 gives
+  slot 4 (the left forearm). The read comes before the tick builds its pose,
+  so it takes the pose of the frame before.
+
+`0x27FE0` clears `+0x770`, `+0x772` and the module word every tick.
+
+`0x2DB78`, the step, picks models for each live record by its age, then adds
+1 to the age. With flag bit 8, two tables apply. Each table is a u32 count,
+a float size, then the models.
+
+- `+0x1E` comes from `0x64212B4`: 15 models, 0x723 to 0x731 (the shards), at
+  size 0.9, indexed by the age.
+- `+0x20` comes from `0x64211E0`: 2 models, 0x733 and 0 (the flash), at
+  size 5.0, indexed by half the age, but only while the age is under 2.
+
+The record is freed once the age reaches the first table's count.
+
+`0x2DDE8`, the draw, runs only while the module's `+0` has bit 31. It pushes,
+translates to the point, scales by the size, then turns by the camera's
+angles: z (`0x5000A0A`, `g13+0x28`), y (`0x4800909`, `+0x26`) and x
+(`0x4000808`, `+0x24`). So each model is a full billboard. Then it draws and
+pops.
+
+**Checked in MAME.** Breakpoints in a fight (`0x50002B` = 3, `0x500031` =
+0xA) give this order each tick: the scripts, the spawn (`0x278DC`), the draw
+(`0x1FEE4` → `0x2DDE8`, then the trails' `0x21FAC`), then the step
+(`0x2DB78`). So an op 30 on frame N shows nothing on N. It draws 0x723 + k
+at 0.9 on frame N + 1 + k (k = 0 to 14), and 0x733 at 5.0 on N + 1 and N + 2.
+The record's point matched the head (slot 2) as logged after the tick
+before.
+
+The fight made one record per op 30. `0x277D4`, a second spawner that picks
+its slot by scanning the mask's bits, runs only behind `0x27428`'s game-mode
+gate, in the round intro, so the explorer leaves it out.
+
+**What the explorer draws** (`js/fvhitspark.js`; `hitSparkScript` in
+`js/vf2fighters.js`, the profile's `rig.hitSpark`; `placeHitSparks` in
+`js/app.js`):
+
+- For each op 30 of the motion on screen, on frames N + 1 to N + 15, it draws
+  the models the age picks. They sit at the slot's point in the pose of
+  frame N − 1, on a stand-in posed with `poseFighter`, and are turned to face
+  the explorer camera.
+- It does this for the fighter playing the motion, and for the opponent when
+  the opponent plays the thrown half of a throw.
+- The afterimages' switch turns it off.
+
+Before this the explorer drew no spark. In Node:
+
+- On 898 (op 30 at frame 80, slot 4) it now draws nothing on frame 80. Frame
+  81 has 0x723 at 0.9 and 0x733 at 5.0, frame 82 has 0x724 and 0x733, frame
+  83 has 0x725 alone, frame 95 has 0x731, and frame 96 has nothing.
+- On 959 (op 30 at 43, slot 2) it draws from frame 44 to 58, at the head.
+
+In headless Chrome:
+
+- Motion 959 on its own draws the spark on frames 44 to 58, and none on 43 or
+  59.
+- Thrower 958 with the opponent playing 959 draws the opponent's 0x723 and
+  0x733 on frame 44, and 0x729 by frame 50.
+
+Left out, because the explorer cannot reach them:
+
+- The hit sparks a landed blow leaves through `+0x704`. They come from the
+  fight's hit test.
+- Op 29, armour damage, and the armour break (`0x2D588`, under "The hands"
+  above). Both are fight state.
+- Op 24, a wall-hit state.
+- The re-anchoring of the place to the fight's history.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named

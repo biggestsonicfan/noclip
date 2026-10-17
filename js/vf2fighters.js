@@ -1395,6 +1395,19 @@ export function trailScript(rom, id) {
     return ops?.length ? { word: m.word, ops } : null;
 }
 
+/*
+ * Fighting Vipers' script op 30 (0x1C93C) on motion `id`, for its throw spark
+ * (js/fvhitspark.js): each one's frame and the slot whose point the spark
+ * takes, +0x770 with the op's bit (byte +3) set; a byte of 0 makes none. Null
+ * for a motion with none, or a game without it.
+ */
+export function hitSparkScript(rom, id) {
+    const op = rom.game.rig?.hitSpark?.op;
+    const m = op && id != null ? moveSetup(rom, id) : null;
+    const ops = m?.ops.filter((o) => o.op === op && o.arg).map((o) => ({ frame: o.frame, slot: 1 << o.arg }));
+    return ops?.length ? { ops } : null;
+}
+
 /** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */
 export function moveFlags(rom, motion) {
     const rig = rom.game.rig;

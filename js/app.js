@@ -50,8 +50,9 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, moveFlags,
-    trailScript,
+    trailScript, hitSparkScript,
 } from './vf2fighters.js';
+import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
@@ -3648,6 +3649,7 @@ function poseFighterAndRival(body, m) {
         (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, own.flash, theirs.shown);
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
+    placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     return mine;
 }
 
@@ -3913,12 +3915,18 @@ function cameraYaw() {
 /* One mesh per ring slot, built in the rig's scene, each swapping geometry for
  * the model its spark is on. */
 function placeSparkMeshes(m, draws) {
-    const geoms = m.sparks.geoms;
+    placeEffectPool(m, 'sparkPool', SPARK_POOL, m.sparks.geoms, draws);
+}
+
+/* `size` meshes kept on `holder[key]`, one per draw ({ model, r, t } in the
+ * board frame), each swapping geometry for its draw's model; `place` puts
+ * them where the opponent stands. */
+function placeEffectPool(holder, key, size, geoms, draws, place = null) {
     if (!geoms.size) return;
-    let pool = m.sparkPool;
+    let pool = holder[key];
     if (!pool?.length || pool[0].mesh.parent !== state.viewer.root) {
         const first = geoms.values().next().value;
-        pool = m.sparkPool = Array.from({ length: SPARK_POOL }, () => ({ ...addRigPart(first.decoded, first), model: first.decoded.index }));
+        pool = holder[key] = Array.from({ length: size }, () => ({ ...addRigPart(first.decoded, first), model: first.decoded.index }));
     }
     pool.forEach((p, i) => {
         const d = draws[i], g = d && geoms.get(d.model);
@@ -3930,12 +3938,62 @@ function placeSparkMeshes(m, draws) {
             p.mesh.userData.modelIndex = d.model;
             if (p.lines && g.edges) p.lines.geometry = g.edges;
         }
-        placePartAt(p, viewerMatrix(d));
+        placePartAt(p, place ? new THREE.Matrix4().fromArray(viewerMatrix(d)).premultiply(place).elements : viewerMatrix(d));
     });
 }
 
 function hideSparks(m) {
     for (const p of m.sparkPool ?? []) showPart(p, false);
+}
+
+/*
+ * Fighting Vipers' throw spark (js/fvhitspark.js), on the fighter and on the
+ * opponent, each from the motion it plays: script op 30's flash, at the
+ * slot's point on a stand-in posed with no blend or look carried in, turned
+ * to face the explorer's camera. It shows with the trails. `place` puts the
+ * opponent's where it stands.
+ */
+const HIT_SPARK_POOL = 4;
+
+function placeHitSparks(holder, body, motion, frame, mirrored, place = null) {
+    const kit = hitSparkKit(holder);
+    if (!kit) return;
+    const script = state.showTrails && motion ? hitSparkScript(state.rom, motion.id) : null;
+    const draws = script ? hitSparkDraws(kit.spark, script, frame, {
+        poseAt: (f) => poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose,
+        flags: moveFlags(state.rom, motion), turn: cameraTurn(place),
+    }) : [];
+    if (draws.length || holder.hitSparkPool) placeEffectPool(holder, 'hitSparkPool', HIT_SPARK_POOL, kit.geoms, draws, place);
+}
+
+/* The spark's flipbooks and their models, read once per ROM; none in a game
+ * without op 30's spark. */
+function hitSparkKit(holder) {
+    if (holder.hitSpark?.rom !== state.rom) {
+        const spark = readHitSpark(state.rom), geoms = new Map();
+        for (const id of spark ? hitSparkModels(spark) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.hitSpark = { rom: state.rom, spark, geoms };
+    }
+    return holder.hitSpark.spark ? holder.hitSpark : null;
+}
+
+/* The camera's turn in the board frame of the figure `place` stands (the
+ * rig's own without), as the pose keeps a turn (each axis's image in turn): a
+ * model turned by it has its +y along the camera's up and its +z along its
+ * view, as 0x2DDE8's turn by the camera's three angles leaves it. */
+function cameraTurn(place = null) {
+    const into = state.viewer.root.matrixWorld.clone();
+    if (place) into.multiply(place);
+    into.invert();
+    const cam = state.viewer.camera;
+    const v = cam.getWorldDirection(new THREE.Vector3()).transformDirection(into);
+    const u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.getWorldQuaternion(new THREE.Quaternion())).transformDirection(into);
+    const z = new THREE.Vector3(v.x, v.y, -v.z), y = new THREE.Vector3(u.x, u.y, -u.z);
+    const x = new THREE.Vector3().crossVectors(y, z);
+    return [x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z];
 }
 
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
@@ -3976,6 +4034,7 @@ function poseBodyRig() {
     launchPendingDebris(m, pose.pose);
     placeDebris(m);
     placeSparks(m, body);
+    placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
