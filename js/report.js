@@ -248,7 +248,7 @@ export async function fileIssue(state, button) {
 
 /* What the file is called: the build and what was on screen, then the time, so
  * a folder of them sorts by game and a pair taken a second apart do not clash. */
-function screenshotName(state) {
+function viewFileName(state, ext) {
     const parts = ['noclip', state?.rom?.game?.id];
     if (state?.tab === 'stage') parts.push(`stage${state.stageIndex}`);
     else if (state?.tab === 'model') parts.push(`model${state.modelIndex}`);
@@ -261,7 +261,7 @@ function screenshotName(state) {
     const pad = (n) => String(n).padStart(2, '0');
     parts.push(`${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}`
         + `-${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}`);
-    return `${parts.filter((p) => p !== undefined && p !== null && p !== '').join('-')}.png`;
+    return `${parts.filter((p) => p !== undefined && p !== null && p !== '').join('-')}.${ext}`;
 }
 
 /**
@@ -280,21 +280,53 @@ export function saveScreenshot(state, button) {
     if (!viewer) return;
     const cell = state.tab === 'cell' ? document.getElementById('cell-view') : null;
     if (!cell) viewer.render();
-    const name = screenshotName(state);
+    const name = viewFileName(state, 'png');
     (cell ?? viewer.canvas).toBlob((blob) => {
         if (!blob) return;
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-        if (button) {
-            button.classList.add('done');
-            setTimeout(() => button.classList.remove('done'), 1500);
-        }
+        download(blob, name);
+        flash(button);
     }, 'image/png');
+}
+
+function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+function flash(button) {
+    if (!button) return;
+    button.classList.add('done');
+    setTimeout(() => button.classList.remove('done'), 1500);
+}
+
+/**
+ * Save the models in view, at this frame, as a .glb for Blender: see
+ * js/export.js. The Cells tab has no models, so it saves nothing.
+ */
+export async function saveModels(state, button) {
+    const viewer = state?.viewer;
+    if (!viewer || state.tab === 'cell' || button?.disabled) return;
+    if (button) button.disabled = true;
+    try {
+        viewer.render();
+        /* Loaded on the click, not with this module: the report button has to
+         * work when three.js itself would not load. */
+        const { exportView } = await import('./export.js');
+        const glb = await exportView(viewer);
+        if (glb) {
+            download(new Blob([glb], { type: 'model/gltf-binary' }), viewFileName(state, 'glb'));
+            flash(button);
+        }
+    } catch (e) {
+        console.error('model export failed:', e);
+    } finally {
+        if (button) button.disabled = false;
+    }
 }
 
 /** Wire the buttons in the corner of the view. */
@@ -305,6 +337,8 @@ export function wireReportButtons(state) {
     if (button) button.addEventListener('click', () => fileIssue(state, button));
     const shot = document.getElementById('tool-shot');
     if (shot) shot.addEventListener('click', () => saveScreenshot(state, shot));
+    const models = document.getElementById('tool-export');
+    if (models) models.addEventListener('click', () => saveModels(state, models));
     wireBuildBadge();
 }
 
