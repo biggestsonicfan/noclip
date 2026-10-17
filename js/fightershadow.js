@@ -165,15 +165,21 @@ function laid(r, flags, leave) {
     return flags & leave.x ? laidFlat(r, true) : r;
 }
 
+/* How far along x and z the light slides a point per unit of height on its
+ * way down (0x501990, 0x501994). */
+function slide({ a0, a1 }) {
+    const cot = coproCos(a0) / coproSin(a0);
+    const r = (a1 + 0x8000) & 0xffff;
+    return [-coproSin(r) * cot, coproCos(r) * cot];
+}
+
 /*
  * Fn_kage_flag: each slot's ball slid along the light to y = 0, near while
  * it is above the floor and within the near margin of the middle (on both
  * axes, or round), far once it is past the far one. Slot 0 takes slot 9's.
  */
-function masks(balls, pose, { light: { a0, a1 }, near: n, far: f, round }) {
-    const cot = coproCos(a0) / coproSin(a0);
-    const r = (a1 + 0x8000) & 0xffff;
-    const kx = -coproSin(r) * cot, kz = coproCos(r) * cot;
+function masks(balls, pose, { light, near: n, far: f, round }) {
+    const [kx, kz] = slide(light);
     let near = 0, far = 0;
     balls.forEach((ball, s) => {
         if (!ball) return;
@@ -226,4 +232,66 @@ export function placedPose(at, pose) {
     const r = [0, 1, 2].flatMap((c) => [0, 1, 2].map((w) => ((c === 2) !== (w === 2) ? -1 : 1) * at[c * 4 + w]));
     const P = { r, t: [at[12], at[13], -at[14]] };
     return pose.map((p) => times(P, p));
+}
+
+/* FV's flying armour pieces' shadows (0x60350, the tail of 0x602F0). The
+ * stage flag that ends the fighters' shadows before they are reached: bit 9
+ * (the Factory, Bay Side), the stages 0x76A70 gives 0x78384's floor copy. */
+const PIECE_GATE = 1 << 9;
+/* 0x608B8's margins: a piece is on the ring inside the ring less 0.5, off it
+ * from the ring plus 0.4 (0x3F000000, 0x3ECCCCCD), and between keeps what it
+ * was. */
+const PIECE_NEAR = -0.5;
+const PIECE_FAR = Math.fround(0.4);
+/* +0x24 bit 8, which 0x608B8 latches and 0x609B0 reads. */
+export const PIECE_ON_RING = 1 << 8;
+
+/**
+ * What the pieces' shadows are drawn with on stage `stage`: shadowSetting's
+ * light, ground and round test with 0x608B8's margins; null on a stage
+ * 0x602F0 leaves before 0x60350: no shadows (bit 8 or 31), the lamps
+ * (0x60468 returns from its own path) or bit 9.
+ */
+export function pieceShadowSetting(rom, shadows, stage) {
+    const S = shadows.spec;
+    if (!S.pieces) return null;
+    if (S.gates && u32(rom, S.gates + 12 * stage) & (NO_SHADOW | PIECE_GATE)) return null;
+    if (S.lamps && u8(rom, S.lamps.stages + stage) !== 0) return null;
+    const setting = shadowSetting(rom, shadows, stage, [0, 0, 0]);
+    return setting && { ...setting, near: S.ring + PIECE_NEAR, far: Math.fround(S.ring + PIECE_FAR) };
+}
+
+/**
+ * 0x608B8, once a board frame: each piece (model +0x22 not 0) slid along the
+ * light onto y = 0 sets bit 8 of its flags while it is at or above the floor
+ * and within the near margin of the ring's `centre`, and clears it once it is
+ * past the far one, whatever its height. `slots` are js/fvdebris.js's.
+ */
+export function latchPieces(slots, setting, centre) {
+    const [kx, kz] = slide(setting.light);
+    for (const s of slots) {
+        if (!s?.model) continue;
+        const [x, y, z] = s.p;
+        const fx = x + kx * y - centre[0], fz = z + kz * y - centre[2];
+        const d = setting.round ? ROUND * Math.hypot(fx, fz) : Math.max(Math.abs(fx), Math.abs(fz));
+        if ((y > 0 || Object.is(y, 0)) && !(d > setting.near)) s.flags |= PIECE_ON_RING;
+        if (!(d < setting.far)) s.flags &= ~PIECE_ON_RING;
+    }
+}
+
+/**
+ * 0x609B0: each piece's +0x44 model on inner[0] times the piece's own
+ * matrix (`place(s)`, translate and its Y, X and Z turns), laid flat along
+ * its x (Fn_kage_leave_x_axis), then inner[1] with bit 8 set, else inner[2].
+ * { model, r, t } in the board frame, as shadowDraws.
+ */
+export function pieceShadowDraws(slots, setting, place) {
+    const P = projections(setting.light, setting.ground);
+    const out = [];
+    for (const s of slots) {
+        if (!s?.model || !s.shadow) continue;
+        const cur = times(P.flat, place(s));
+        out.push({ model: s.shadow, ...times(s.flags & PIECE_ON_RING ? P.ring : P.ground, { r: laidFlat(cur.r, true), t: cur.t }) });
+    }
+    return out;
 }

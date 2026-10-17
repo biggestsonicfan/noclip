@@ -56,7 +56,7 @@ import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
 import { readCarried, carriedDraws, itemHeld, wallItem } from './fvitem.js';
 import { readWallShadows, wallShadowModels, wallSetting, wallShadowDraws } from './fvwallshadow.js';
-import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
+import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose, pieceShadowSetting, latchPieces, pieceShadowDraws } from './fightershadow.js';
 import { reflectionModels, stageReflects, reflectionDraws } from './vf2reflection.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
@@ -3837,8 +3837,19 @@ function stepBodyDebris(now) {
         d.start += ((n - DEBRIS_CATCH_UP) * 1000) / GAME_HZ;
         n = DEBRIS_CATCH_UP;
     }
-    for (let i = 0; i < n; i++) stepDebris(d.sim);
+    const lit = pieceSetting(m);
+    for (let i = 0; i < n; i++) {
+        stepDebris(d.sim);
+        if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
+    }
     placeDebris(m);
+}
+
+/* The light the pieces' shadows are slid along on the panel's stage; null
+ * where 0x602F0 does not reach 0x60350. */
+function pieceSetting(m) {
+    const kit = shadowKit(m);
+    return kit && pieceShadowSetting(state.rom, kit.shadows, state.sparkStage);
 }
 
 /* One mesh per shared slot, built when a piece first lands in it. */
@@ -3857,11 +3868,14 @@ function placeDebris(m) {
     placeDebrisShadows(m);
 }
 
-/* 0x78384's floor shadows under the pieces near the floor, on the stages
- * 0x76A70 draws them on (the Factory and Bay Side). */
+/* The pieces' shadows: 0x78384's floor copy under those near the floor on
+ * the stages 0x76A70 draws it on (the Factory and Bay Side), and on the rest
+ * 0x609B0's, slid along the stage's light as the fighters' are. */
 function placeDebrisShadows(m) {
-    const on = debrisShadowStage(state.rom, state.sparkStage);
-    const draws = on ? debrisShadowDraws(m.debris.sim) : [];
+    const sim = m.debris.sim;
+    const lit = pieceSetting(m);
+    const draws = debrisShadowStage(state.rom, state.sparkStage) ? debrisShadowDraws(sim)
+        : lit ? pieceShadowDraws(sim.slots, lit, debrisPlace) : [];
     if (!draws.length && !m.debrisShadowPool) return;
     if (m.debrisShadowGeoms?.rom !== state.rom) m.debrisShadowGeoms = { rom: state.rom, geoms: new Map() };
     const { geoms } = m.debrisShadowGeoms;

@@ -919,6 +919,9 @@ const fvipers = {
             stages: { at: 0x06ce1048, stride: 256, light: 0x08 },
             gates: 0x06442ba8, round: 0x60b98,
             lamps: { stages: 0x5fa6c, at: 0x60620, heights: 0x06ce35a4 },
+            /* The flying armour pieces' shadows, 0x608B8 and 0x609B0, which
+             * 0x602F0 goes on to unless the stage has flag bit 9. */
+            pieces: true,
         },
         /* The wall shadows (js/fvwallshadow.js): rob_kabe_kage_disp
          * (0x76944) under stage flag bit 31, the tables by +0x1B0, each

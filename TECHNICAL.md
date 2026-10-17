@@ -1741,9 +1741,9 @@ Left out:
   (`[0x500020]` parity); the explorer refreshes every frame;
 - FV's `name_char_kage_disp` (`+0x2A`) and the extra entry at table + 360,
   both fight state;
-- FV's debris and object shadows on the light (`0x608B8`, `0x609B0`,
-  from `0x60350`, not followed). The Factory's and Bay
-  Side's own floor copy is drawn ("The pieces' floor shadows");
+- FV's flying armour pieces' shadows on the light (`0x608B8`, `0x609B0`,
+  from `0x60350`) are drawn, as is the Factory's and Bay Side's own floor
+  copy: both under "The pieces' floor shadows";
 - stages whose light turns take the record's start (the round's first frame).
 
 ### Fighting Vipers' wall shadows (`js/fvwallshadow.js`)
@@ -2078,8 +2078,7 @@ one mesh per effect slot swapping through the 54 frames' geometry
 
 Not followed: the push out of both fighters' bodies (TGP `0x77`
 `Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`), the light-slid floor shadow on the other stages
-(`0x609B0`, below) and the sound (flag bits 28 to
+is off screen (`0x316F0`) and the sound (flag bits 28 to
 31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
@@ -2144,6 +2143,62 @@ Not checked against MAME: attract never breaks armour. In the shared build,
 about 29 minutes of attract (over 30,000 frames, through stages 0 to 8 and
 the Factory and Bay Side twice) never reached the launch (`0x2D390`) or
 either of `0x78384`'s draws.
+
+**The pieces' shadows on the light (drawn, every other stage).** The
+fighters' shadow routine `0x602F0`, which `camera_control` calls for each
+player shown (`0x1FC60`, `0x1FC74`), ends in `0x60350`: `call 0x608B8; call
+0x609B0`. It gets there only on a stage that draws the fighters' shadows
+(flags without bit 8, or bit 31 with bit 7 and the event bits up), is not
+the Factory's lamps (`0x5FA6C`: `0x60468` returns on its own path), and,
+after the fighter's own `0x60640` (`+0x2A` = 0), has no flag bit 9
+(`bbs 9, r12, ret` at `0x6034C`). Read for stages 0 to 11: every stage but
+1 (`0x20F`, lamps and bit 9) and 5 (`0x8000028F`, bit 31 and bit 9), so
+it and `0x78384` never meet. Both read the eight shared slots
+(`[0x500844] + 0x88`).
+
+- `0x608B8` latches `+0x24` bit 8 for each slot with a model (`+0x22`):
+  slid along the light to y = 0 by `0x501990`/`0x501994` (Fn_kage_flag's
+  kx, kz), the distance is max(|x|, |z|), or `Fn_get_2d_len` / sqrt 2 on the
+  round stages (`0x60B98`, 0 and 4). Bit 8 is set when y ≥ 0 (an integer
+  test, so −0 is below) and the distance ≤ ring − 0.5 (`0x3F000000`), and
+  cleared when it is ≥ ring + 0.4 (`0x3ECCCCCD`); between, it keeps what it
+  had. No record has bit 8 at the launch.
+- `0x609B0`, in geometrizer mode 2: push, `Fn_load_matrix_inner 0`
+  (inner[0], the flattening), then for each slot with a model:
+
+      push; T(+0x00); Ry(+0x1E); Rx(+0x1C); Rz(+0x20);
+      Fn_kage_leave_x_axis (0x41); Fn_mul_matrix_inner_rev g5 (0x46);
+      draw +0x44; pop
+
+  with g5 = 1 (the ring's floor) when bit 8 is set, else 2 (the ground,
+  `0x50A010`). So it is the fighters' part shadow (inner[1] or inner[2] ·
+  laid flat (inner[0] · piece)) with the piece's own matrix, the same
+  `+0x44` model as `0x78384` (0xD36, or 0xD38), at its own size: no scale
+  and no height test. A piece out of the ring (bit 19) goes through the
+  lower window (`0x501844`), as the piece itself. The effects get none.
+  The table `0x60BA8` it reads by `+0x32` is overwritten by `+0x44` before
+  the draw. Both players' passes draw the same slots, so each shadow is sent
+  twice, to the same place; the explorer draws it once.
+
+The explorer runs `0x608B8` after each board frame of the pieces
+(`latchPieces`) and draws `pieceShadowDraws` (`js/fightershadow.js`) from
+the pieces it already flies, on the stages `pieceShadowSetting` passes, with
+the stage's light and ground as the fighters' shadows take them. The ring
+test is about the pieces' own ring centre (the walls', half the opponent's
+distance ahead), where the fighters' test is about the fighter. Before, it
+drew none there.
+
+Checked in node and headless Chrome, Jane, motion 21, upper half broken,
+`SAMPLE_HIT`: the gate passes stages 0, 2-4 and 6-11. On stage 0 both 715
+and 714 have their shadow from the first frame, on y = 0, slid along the
+light (0.414 a unit of height, `a0` 0xD000) and meeting the piece once it
+rests (at 0.05). On stage 2 (a0 0xEB00, 1.77 a unit) the shadows of the
+pieces at 1.8 to 2.6 lie 3.2 to 4.5 away. Stages 1 and 5 draw `0x78384`'s
+copy only, as before. Honey, motion 360, both halves: the piece that drops
+off the ring to −0.49 stays latched (it lands 4.9 out by the round
+stage's measure, inside the 5.4) and keeps its ring-floor shadow, as the
+ROM's latch would. Not checked against MAME, for the same reason as the
+floor copy: attract never launches a piece.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|
