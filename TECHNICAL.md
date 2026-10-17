@@ -1503,6 +1503,40 @@ and +8 for Kage's `+0x700` bit 4; the game-mode tests at the top of
 `0x4B640` (attract and the ending scenes); and the scene resets
 (`0x4B5B0`), which are not motions.
 
+### The held item (`js/fighterhands.js`, `js/vf2fighters.js`)
+
+VF2 only: Shun's gourd. Script op 17 (`0x1B2D0`) runs only on its own
+frame (`cmpobne`: `+0x1AA` must equal the op's frame, not just pass it). It
+sets player `+0` bit 27 when its byte is 1 and clears it otherwise. The
+fighter's load (`0x14098`) clears the bit, and nothing else in a motion
+touches it, so it carries into the next motion like the hands do. The
+explorer's cold start has it clear.
+
+While the bit is set, rob_disp's part loop (jump table `0x191D8`, after the
+slot's own model at `0x1918C`) draws one more model:
+
+- slot 8 (`0x19530`) when not mirrored, z = +0.03;
+- slot 5 (`0x19544`) when mirrored (`+0` bit 6), z = −0.03.
+
+Both go on to `0x19554`: translate (0.15, 0.01, z) (`0x37806F6F`), turn
+about Z by `0x9DF0` (`0x37006E6E`), then draw model `0x98A` (116 faces,
+the gourd) through `0x7C60`. The explorer draws the extra only on frames
+where the bit is set.
+
+Motions with op 17: 172 (on at 90, off at 144); 666, 667, 1045 and
+1205–1208 (on at 1); 1172 and 1202 (on at 14, off at 45). Any VF2 motion
+plays on any fighter, so all of them can be opened. Shun 666 frame 1 shows
+the gourd in his hand, and 172 shows it from frame 90 to 143. Before this,
+the explorer drew no gourd at all.
+
+FV has no counterpart. Its op 17 (`0x1C6E4`) also sets or clears bit 27,
+but through `0x1CA84` it loads a strike-part record (`+0x784`, from fighter
+record `+0x2C`) for the hit check (`0x2B404`). FV's part-loop table
+(`0x1A0EC`) has cases only for slots 1, 2 and 9, so nothing is drawn.
+
+Left out: op 14's camera shake (`[0x500814]+0xFC`, the camera, not the
+fighter) and ops 20/21, the command VM's pointer and counter (input).
+
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
 Fighting Vipers poses its fighters the way Virtua Fighter 2 does, and the

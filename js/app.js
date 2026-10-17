@@ -3600,14 +3600,14 @@ function rankJoinedParts(parts, { parents, joined }, changed) {
     }
 }
 
-/* A fighter's pads and skirt (body.extras), each a part of its own whose
- * matrix the pose gives beside the slots'. */
+/* A fighter's pads and skirt, or VF2's item (body.extras), each a part of
+ * its own whose matrix the pose gives beside the slots'. */
 function extraParts(body) {
     return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
 }
 
-function placeExtras(parts, body, matrices, material = null, flash = null) {
-    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [flashed(e.model, flash)]), matrices, null, material);
+function placeExtras(parts, body, matrices, material = null, flash = null, shown = null) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e, i) => (shown?.[i] === false ? [] : [flashed(e.model, flash)])), matrices, null, material);
 }
 
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
@@ -3645,7 +3645,7 @@ function poseFighterAndRival(body, m) {
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
     placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, { ...m, ...own }), placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
-        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, own.flash);
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, own.flash, theirs.shown);
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     return mine;
@@ -3969,7 +3969,7 @@ function poseBodyRig() {
     m.spring = pose.spring;
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
-    placeExtras(m.extras, body, extras ?? [], null, m.flash);
+    placeExtras(m.extras, body, extras ?? [], null, m.flash, pose.shown);
 
     placeSkin(m, matrices, m.flash);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);

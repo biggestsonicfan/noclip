@@ -79,14 +79,15 @@ function scriptStart(rom, R, dv, at) {
 
 /* Motion `id`'s op 18s, in script order, as {frame, hand, shape, end}; its
  * face ops (`rig.fighters.face`: op 16 and VF2's op 9) as {frame, op, arg};
- * and whether the game loops it. */
+ * its item ops (`rig.fighters.item`, VF2's op 17) as {frame, on}; and
+ * whether the game loops it. */
 function handOps(rom, id) {
     const R = rom.game.rig.reactions, lengths = rom.game.rig.script;
-    const F = rom.game.rig.fighters?.face;
+    const { face: F, item: I } = rom.game.rig.fighters ?? {};
     const ptr = u32At(rom, R.setups + (id & MOTION_ID) * 4);
     const r = ptr && dataAt(rom, ptr);
-    if (!r) return { ops: [], faces: [], loops: false };
-    const dv = r.view, ops = [], faces = [];
+    if (!r) return { ops: [], faces: [], items: [], loops: false };
+    const dv = r.view, ops = [], faces = [], items = [];
     let { at, next } = scriptStart(rom, R, dv, r.off + R.head);
     while (at >= 0 && at + 7 <= dv.byteLength) {
         const op = dv.getUint8(at);
@@ -96,9 +97,10 @@ function handOps(rom, id) {
             ops.push({ frame, hand: dv.getUint8(at + 3), shape: dv.getUint8(at + 4), end: dv.getUint16(at + 5, true) });
         }
         if (F && (op === F.op || op === F.talk?.op)) faces.push({ frame, op, arg: dv.getUint8(at + 3) });
+        if (op === I?.op) items.push({ frame, on: dv.getUint8(at + 3) === 1 });
         at += lengths[op];
     }
-    return { ops, faces, loops: next === LOOP };
+    return { ops, faces, items, loops: next === LOOP };
 }
 
 /** Whether the game plays motion `id` over and over (+0x802 0xFFFF). */
@@ -285,17 +287,40 @@ const VF2_FACE = {
     },
 };
 
-/* What a run starts from, cold: the hands' and the face's. */
-const coldStart = (ctx) => ({ hands: ctx.G?.powerOn(ctx.body) ?? null, face: ctx.Face?.powerOn(ctx) ?? null });
+/* VF2's item (op 17, 0x1B2D0): +0 bit 27, set or cleared by an op on its
+ * own frame only, and clear from the fighter's load. */
+const ITEM = {
+    powerOn: () => false,
+    run(ops, last, start) {
+        const shown = [];
+        let on = start, next = 0;
+        for (let f = 1; f <= last; f++) {
+            for (; next < ops.length && ops[next].frame <= f; next++) if (ops[next].frame === f) on = ops[next].on;
+            shown[f] = on;
+        }
+        return { shown, end: on };
+    },
+};
 
-/* One pass from `start`: per frame [slot 5's, slot 8's, slot 2's] model,
- * and where it ends. */
+/* What a run starts from, cold: the hands', the face's and the item's. */
+const coldStart = (ctx) => ({
+    hands: ctx.G?.powerOn(ctx.body) ?? null, face: ctx.Face?.powerOn(ctx) ?? null, item: ctx.I ? ITEM.powerOn() : null,
+});
+
+/* One pass from `start`: per frame [slot 5's, slot 8's, slot 2's model,
+ * whether the item shows], and where it ends. */
 function runPass(ctx, list, motion, mirrored, start, last = motion.frames) {
     const hands = ctx.G ? ctx.G.run(ctx.rom, ctx.table, ctx.H, list.ops, last, mirrored, start.hands) : null;
     const face = ctx.Face ? ctx.Face.run(ctx, list.faces, last, start.face) : null;
+    const item = ctx.I ? ITEM.run(list.items, last, start.item) : null;
+    return { models: frameModels(hands, face, item, last), end: { hands: hands?.end ?? null, face: face?.end ?? null, item: item?.end ?? null } };
+}
+
+/* Each frame's [slot 5 hand, slot 8 hand, face, item shown]. */
+function frameModels(hands, face, item, last) {
     const models = [];
-    for (let f = 1; f <= last; f++) models[f] = [...(hands?.models[f] ?? [null, null]), face?.models[f] ?? null];
-    return { models, end: { hands: hands?.end ?? null, face: face?.end ?? null } };
+    for (let f = 1; f <= last; f++) models[f] = [...(hands?.models[f] ?? [null, null]), face?.models[f] ?? null, item?.shown[f] ?? false];
+    return models;
 }
 
 /* A motion's passes, one run each, from `start`: a motion the game loops
@@ -307,8 +332,7 @@ function runPass(ctx, list, motion, mirrored, start, last = motion.frames) {
 function passes(rom, motion, key, start) {
     const cache = (rom.fighterHands ??= new Map());
     if (!cache.has(key)) {
-        const { ops, faces, loops } = handOps(rom, motion.id);
-        cache.set(key, { ops, faces, loops, runs: [], next: start });
+        cache.set(key, { ...handOps(rom, motion.id), runs: [], next: start });
     }
     return cache.get(key);
 }
@@ -345,26 +369,28 @@ function startHands(ctx, from) {
 
 const fromKey = (from) => (from?.motion ? `${from.motion.id}@${from.pass ?? 0}.${from.frame}${from.mirrored ? 'm' : ''}` : '');
 
-/* The hands' game and table, and the face's, for this fighter; null if it
- * has neither. */
+/* The hands' game and table, the face's and the item's, for this fighter;
+ * null if it has none of them. */
 function scriptContext(rom, body) {
-    const { hands: H, face: F } = rom.game.rig?.fighters ?? {};
+    const { hands: H, face: F, item: I } = rom.game.rig?.fighters ?? {};
     const G = H ? (H.eased ? VF2 : FV) : null;
     const table = G ? G.table(rom, body, H) : null;
     const Face = F ? (F.eased ? VF2_FACE : FV_FACE) : null;
-    if (!table && !Face) return null;
-    return { rom, body, H, G: table ? G : null, table, F, Face };
+    if (!table && !Face && !I) return null;
+    return { rom, body, H, G: table ? G : null, table, F, Face, I };
 }
 
 /**
- * The models a motion's script gives slots 5, 8 and 2 on each frame: index
- * = frame, each [slot 5's, slot 8's, slot 2's], null where the part list's
- * stands. Null when the game has neither hands (`rig.fighters.hands`) nor a
- * face (`rig.fighters.face`) for the fighter.
+ * The models a motion's script gives slots 5, 8 and 2 on each frame, and
+ * whether its item shows: index = frame, each [slot 5's, slot 8's, slot 2's,
+ * item], a model null where the part list's stands. Null when the game has
+ * no hands (`rig.fighters.hands`), face (`rig.fighters.face`) or item
+ * (`rig.fighters.item`) for the fighter.
  *
  * A hand keeps its shape from one motion into the next: nothing but op 18
  * (and VF2's step) writes it, and a motion's setup does not reset it; the
- * head the same with op 16 (and VF2's face step). So the motion starts from
+ * head the same with op 16 (and VF2's face step), and VF2's item with op 17.
+ * So the motion starts from
  * `from` ({motion, frame, pass, mirrored}: the motion on show just before,
  * as a reaction starts from the stance frame the opponent was caught on), or
  * else from the game's cold ones. `pass` counts the times the motion has
@@ -378,6 +404,11 @@ export function handModels(rom, body, motion, mirrored = false, from = null, pas
     const key = handsKey(body, motion, mirrored, fromKey(from));
     const list = rom.fighterHands?.get(key) ?? passes(rom, motion, key, startHands(ctx, from));
     return passAt(ctx, list, motion, mirrored, pass).models;
+}
+
+/** Whether the item (`rig.fighters.item`) shows on the frame. */
+export function itemAt(models, frame) {
+    return Boolean(models?.[Math.max(1, Math.min(frame, models.length - 1))]?.[3]);
 }
 
 /** Slot → model for the frame, for the slots the motion sets. */

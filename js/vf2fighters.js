@@ -86,7 +86,7 @@ import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables } from './fvdebris.js';
 import { commandMotions } from './moves.js';
-import { handModels, handsAt, gameLoops } from './fighterhands.js';
+import { handModels, handsAt, itemAt, gameLoops } from './fighterhands.js';
 import { setupWord } from './reactions.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
@@ -184,7 +184,7 @@ function readFighter(rom, F, record, char) {
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
-        extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : [],
+        extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : F.item ? [itemExtra(F.item)] : [],
         midriff: F.midriff ? readMidriff(rom, F.midriff, root, record) : null,
         offsets,
         parts: offsets.map((offset, s) => ({
@@ -591,6 +591,15 @@ function readMidriff(rom, M, root, i) {
 }
 
 /* A pad or panel's board-frame transform on its slot's. */
+/* VF2's item (games.js `item`), an extra that shows only while the motion
+ * has it out. */
+const itemExtra = (I) => ({ item: true, slot: I.slots[0], model: I.model, offset: I.offset, turns: [[2, I.turn]] });
+
+/* The item's place when mirrored: the other hand, z negated (0x19544). */
+function mirroredItem(e, I) {
+    return { ...e, slot: I.slots[1], offset: [e.offset[0], e.offset[1], -e.offset[2]] };
+}
+
 function placeExtra(slot, e) {
     const at = (r, t, o) => [0, 1, 2].map((k) => t[k] + r[k] * o[0] + r[3 + k] * o[1] + r[6 + k] * o[2]);
     const t = at(slot.r, slot.t, e.offset);
@@ -1580,7 +1589,8 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   fighter played before, whose hands this motion starts with (else the
  *   game's cold hands; js/fighterhands.js).
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
- *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
+ *   `extras` places body.extras (the pads and skirt, VF2's item), one each,
+ *   and `shown` says whether each is drawn this frame; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
@@ -1613,11 +1623,15 @@ export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirro
     live.head = origins[2];
     const swings = body.extras?.some((e) => e.panel !== undefined) ? skirtSwings(pose, body.offsets) : null;
     const hair = body.extras?.some((e) => e.hair !== undefined) ? hairSwing(live, pose, stepped, fresh) : null;
-    const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
+    const I = rom.game.rig.fighters?.item;
+    const swung = (body.extras ?? []).map((e) => (e.item && mirrored ? mirroredItem(e, I) : swungExtra(e, swings, pose, body.offsets, hair)));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    const hands = handsAt(handModels(rom, body, motion, mirrored, handsFrom, handsPass), frame);
-    return { matrices, origins, extras, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
+    const scripted = handModels(rom, body, motion, mirrored, handsFrom, handsPass);
+    const hands = handsAt(scripted, frame);
+    const item = itemAt(scripted, frame);
+    const shown = swung.map((e) => !e.item || item);
+    return { matrices, origins, extras, shown, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

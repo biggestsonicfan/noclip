@@ -847,8 +847,8 @@ const fvipers = {
              * hand; js/fighterhands.js. */
             hands: { table: 0x0640ebf4 },
             /* Move-script op 16's heads (0x2DDB0), 0x640D31C[op][record]:
-             * a pair of s16 models, the second once the helmet has broken
-             * (+0x1F48 bit 2); js/fighterhands.js. */
+             * a pair of s16 models, of which the explorer reads the first
+             * (the second is the broken helmet's); js/fighterhands.js. */
             face: { op: 16, table: 0x0640d31c },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat's setups
@@ -3271,6 +3271,13 @@ const vf2 = {
                 op: 16, table: 0x02006278, cold: 0x020062a0, eased: true,
                 talk: { op: 9, voices: 0x0201e44c, times: 0x0201e498, at: 25, keep: 1, to: 2 },
             },
+            /* Script op 17 (0x1B2D0), on its own frame, sets +0 bit 27 when
+             * its byte is 1 and clears it otherwise; the fighter's load
+             * (0x14098) clears it. While it is set rob_disp's part loop
+             * (0x19530, 0x19544) draws `model` on slot 8, or slot 5 when
+             * mirrored (+0 bit 6, z negated), moved by `offset` and turned
+             * `turn` about Z: Shun's gourd. */
+            item: { op: 17, model: 0x98a, slots: [8, 5], offset: [0.15, 0.01, 0.03], turn: 0x9df0 },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at
