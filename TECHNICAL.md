@@ -1741,7 +1741,9 @@ Left out:
   (`[0x500020]` parity); the explorer refreshes every frame;
 - FV's `name_char_kage_disp` (`+0x2A`) and the extra entry at table + 360,
   both fight state;
-- FV's debris and object shadows (`0x608B8`, `0x609B0`);
+- FV's debris and object shadows on the light (`0x608B8`, `0x609B0`,
+  from `0x60350`, not followed). The Factory's and Bay
+  Side's own floor copy is drawn ("The pieces' floor shadows");
 - stages whose light turns take the record's start (the round's first frame).
 
 ### Fighting Vipers' wall shadows (`js/fvwallshadow.js`)
@@ -2076,7 +2078,8 @@ one mesh per effect slot swapping through the 54 frames' geometry
 
 Not followed: the push out of both fighters' bodies (TGP `0x77`
 `Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`), the floor shadow and the sound (flag bits 28 to
+is off screen (`0x316F0`), the light-slid floor shadow on the other stages
+(`0x609B0`, below) and the sound (flag bits 28 to
 31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
@@ -2105,6 +2108,42 @@ The launch turn is not measurable against the armour: the piece models do
 not sit on the intact slot model in any quarter turn (mean nearest vertex
 0.04 to 0.08 for all four), so it rests on `0x2E17C`'s order alone. Not
 checked against MAME.
+
+**The pieces' floor shadows (drawn, Factory and Bay Side).** `camera_control`
+calls `0x76A70` (`0x1FC7C`), which calls `0x78384` when the stage flags u32
+`[0x6442BA8 + 12·stage]` have bit 9 or bit 31: stage 1, the Factory
+(`0x20F`), and stage 5, Bay Side (`0x8000028F`). In geometrizer mode 2
+(`0x58F0`) it saves the camera to inner slot 3 (`0x21804343, 3`) and walks the
+eight piece slots, skipping model `+0x22` = 0 (the effects get none). The
+floor is 0, or ground `0x50A010` for a piece out of the ring (bit 19). A piece
+at y ≤ floor + 0.3 (`0x3E99999A`; `cmpr`/`bl` skips only a higher one) gets
+its `+0x44` drawn on
+
+    push; T(x, floor, z); S(1, 0, 1); Ry(+0x1E); Rx(+0x1C); Rz(+0x20);
+    S(1.25) (0x3FA00000); 0x46 3; draw; pop
+
+so the piece's own turns flattened onto the floor, a quarter bigger. Out of
+the ring it goes through the lower window (`0x501844`), as `0x2E17C` draws
+the piece itself. `+0x44` is the break record's `+0x24`, copied at the
+launch (`0x2D48C`): 0xD36 in every record of every fighter, and 0xD38 in
+some of Honey's, Bahn's and Raxel's.
+
+The explorer reads `+0x24` with the record (`readArmourPiece`) and draws
+`debrisShadowDraws` (`js/fvdebris.js`) from the pieces it already flies, on
+the stages `debrisShadowStage` passes. For a piece out of the ring it uses
+the same stand-in for `0x50A010` the fall does (−0.5). Before, it drew none.
+
+Checked in node and in headless Chrome: the gate passes stages 1 and 5 only.
+Jane, motion 21, upper half broken, `SAMPLE_HIT`: 714 gets its shadow on
+frame 59 after the break (y 0.134), 715 on frame 64; they come and go as
+the pieces bounce, and from frame 81 both stay, at rest at y 0.050 and 0.052,
+each with 0xD36 at its own x, z and y = 0. In the page the pool shows the
+same draws on the Factory and Bay Side (one at frame 74, both from 81 on)
+and none on stage 0.
+Not checked against MAME: attract never breaks armour. In the shared build,
+about 29 minutes of attract (over 30,000 frames, through stages 0 to 8 and
+the Factory and Bay Side twice) never reached the launch (`0x2D390`) or
+either of `0x78384`'s draws.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|

@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
     trailScript, hitSparkScript, brokenSlots,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
@@ -63,7 +63,7 @@ import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
-import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
+import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3854,6 +3854,23 @@ function placeDebris(m) {
         if (s && m.debrisParts[i].mesh) placePartAt(m.debrisParts[i], viewerMatrix(debrisPlace(s)));
     });
     placeEffects(m);
+    placeDebrisShadows(m);
+}
+
+/* 0x78384's floor shadows under the pieces near the floor, on the stages
+ * 0x76A70 draws them on (the Factory and Bay Side). */
+function placeDebrisShadows(m) {
+    const on = debrisShadowStage(state.rom, state.sparkStage);
+    const draws = on ? debrisShadowDraws(m.debris.sim) : [];
+    if (!draws.length && !m.debrisShadowPool) return;
+    if (m.debrisShadowGeoms?.rom !== state.rom) m.debrisShadowGeoms = { rom: state.rom, geoms: new Map() };
+    const { geoms } = m.debrisShadowGeoms;
+    for (const d of draws) {
+        if (geoms.has(d.model)) continue;
+        const g = getModel(d.model);
+        if (g) geoms.set(d.model, geomBundle(g));
+    }
+    placeEffectPool(m, 'debrisShadowPool', DEBRIS_SLOTS, geoms, draws);
 }
 
 /* One mesh per effect slot, swapping through the flipbook's frames, built

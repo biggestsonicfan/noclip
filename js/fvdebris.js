@@ -120,7 +120,7 @@ export function launchDebris(sim, T, hit, pieces, pose, half) {
             half, model: p.model, slot: p.slot, flags: p.flags | FLAG.live,
             p: at, v: throwOf(T, hit, p), from: at.slice(),
             angles: [short(p.angles[0]), short(p.angles[1]), short(p.angles[2])], targets: p.targets.map(short),
-            spin, weight: p.weight, radius: p.radius, floor: p.floor, frames: 0, bounces: 0,
+            spin, weight: p.weight, radius: p.radius, floor: p.floor, shadow: p.shadow ?? 0, frames: 0, bounces: 0,
         };
     }
 }
@@ -241,4 +241,33 @@ export function debrisPlace(s) {
  * always 0. */
 export function effectPlace(e, k) {
     return { r: turnedInOrder([1, 0, 0, 0, 1, 0, 0, 0, 1], [[1, ((EFFECT_SLOTS - k) << 14) - 0x4000]]), t: e.p };
+}
+
+/* 0x78384's floor shadows: from 0x76A70, on a stage whose flags
+ * (0x6442BA8 + 12 x stage) have bit 9 or bit 31, the Factory and Bay Side. */
+const SHADOW_STAGES = (1 << 9) | (1 << 31);
+const SHADOW_ABOVE = fromBits(0x3e99999a), SHADOW_SCALE = fromBits(0x3fa00000);
+
+/** Whether 0x76A70 calls 0x78384 on a stage with these flags. */
+export function debrisShadowsOn(stageFlags) {
+    return (stageFlags & SHADOW_STAGES) !== 0;
+}
+
+/**
+ * 0x78384: under each piece (model +0x22 not 0) at most 0.3 above its floor
+ * (0, or 0x50A010 once out of the ring, the same stand-in fall() drops it
+ * by), the slot's +0x44 laid on that floor: T(x, floor, z) S(1, 0, 1), the
+ * piece's own Y, X and Z turns, then S(1.25). { model, r, t } in the board
+ * frame; the effects get none.
+ */
+export function debrisShadowDraws(sim) {
+    const out = [];
+    for (const s of sim.slots) {
+        if (!s?.model || !s.shadow) continue;
+        const floor = s.flags & FLAG.out ? OUT_DROP : 0;
+        if (f(floor + SHADOW_ABOVE) < s.p[1]) continue;
+        const { r } = debrisPlace(s);
+        out.push({ model: s.shadow, r: r.map((v, i) => (i % 3 === 1 ? 0 : v * SHADOW_SCALE)), t: [s.p[0], floor, s.p[2]] });
+    }
+    return out;
 }

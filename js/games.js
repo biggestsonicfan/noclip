@@ -829,10 +829,12 @@ const fvipers = {
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
-                 * 0x2D254's effect, 54 models a record (+0x1B0). */
+                 * 0x2D254's effect, 54 models a record (+0x1B0). `gates`
+                 * are the stage flags 0x76A70 tests for their floor
+                 * shadows (0x78384). */
                 debris: {
                     out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924,
-                    flipbook: 0x06421760,
+                    flipbook: 0x06421760, gates: 0x06442ba8,
                 },
             },
             /* The midriff, record +0x24, and the one a broken chest draws

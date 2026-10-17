@@ -84,7 +84,7 @@
 import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
-import { readDebrisTables } from './fvdebris.js';
+import { readDebrisTables, debrisShadowsOn } from './fvdebris.js';
 import { commandMotions } from './moves.js';
 import { handModels, handsAt, itemAt, gameLoops } from './fighterhands.js';
 import { setupWord } from './reactions.js';
@@ -212,13 +212,15 @@ const ARMOUR_ENTRY = 8, ARMOUR_PIECE = 0x28, ARMOUR_STAGES = 4;
  * +6 the model thrown (0 throws nothing), +8/+0xA/+0xC its X, Y and Z turns,
  * +0xE/+0x10/+0x12 the turns it settles on (0 none), +0x14 its weight (a
  * float, whose bits also pick its spin and heading), +0x18 its radius against
- * the walls, +0x1C its flags, +0x20 its floor. */
+ * the walls, +0x1C its flags, +0x20 its floor, +0x24 the model 0x78384 lays
+ * under it as its floor shadow (0x2D48C copies it to the slot's +0x44). */
 function readArmourPiece(dv, o, slot, stage) {
     const h = (k) => dv.getInt16(o + k, true);
     return {
         slot, stage, model: h(6), angles: [h(8), h(0xa), h(0xc)], targets: [h(0xe), h(0x10), h(0x12)],
         weight: dv.getFloat32(o + 0x14, true), weightBits: dv.getUint32(o + 0x14, true),
         radius: dv.getFloat32(o + 0x18, true), flags: dv.getUint32(o + 0x1c, true), floor: dv.getFloat32(o + 0x20, true),
+        shadow: dv.getInt32(o + 0x24, true),
     };
 }
 
@@ -643,6 +645,14 @@ function placeExtra(slot, e) {
 export function fighterDebrisTables(rom) {
     const D = rom.game.rig?.fighters?.armour?.debris;
     return D ? readDebrisTables(rom, D, dataAt) : null;
+}
+
+/** Whether the stage draws the pieces' floor shadows (0x76A70's test of the
+ * stage flags, `debris.gates`). */
+export function debrisShadowStage(rom, stage) {
+    const D = rom.game.rig?.fighters?.armour?.debris;
+    const r = D?.gates && dataAt(rom, D.gates + 12 * stage);
+    return Boolean(r) && debrisShadowsOn(r.view.getUint32(r.off, true));
 }
 
 /** The slots a break of the halves `which` leaves broken, as +0x1F48's
