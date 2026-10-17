@@ -1458,10 +1458,13 @@ alongside 5 and 8. The face carries from one motion into the next, and over
 a loop's passes, the same way the hands do.
 
 - **Fighting Vipers** (`0x2DDB0`) writes the model outright:
-  `0x640D31C[op][record]` points at two s16 models, and it takes the second
-  once the helmet is off (`+0x1F48` bit 2, which `armouredFighter` now
-  reports as `helmetBroken`). Before any op the slot holds what the round
-  start or the armour break left, i.e. the part list's model. Nothing else
+  `0x640D31C[op][record]` points at two s16 models. The explorer reads the
+  first. The game takes the second once the helmet is off (`+0x1F48`
+  bit 2), and only a hit's armour break (`0x2D588`) sets that bit. No
+  motion does, so the broken-helmet column is not read, for the same reason
+  the armour break is left out above: it is fight state. With the
+  explorer's armour switch on, op 16 still draws the first column. Before
+  any op the slot holds the round start's model, the part list's. Nothing else
   writes `+0x48` but replay save and restore (`0x3C5E8`, `0x3C94C`). The
   per-frame part refresh skips slot 2, and the face step (`0x4AF18`) works out
   a model but never stores it. Op 16 is in 285 motions. Every stance

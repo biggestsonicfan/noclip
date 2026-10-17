@@ -654,7 +654,7 @@ export function armouredFighter(body, which) {
      * ascending, each slot's stages in turn (fvdebris.js). */
     const thrown = (from, to) => A.pieces.slice(from, to).flat().filter((p) => broken(p.slot));
     const debris = { upper: thrown(0, LOWER_FIRST), lower: thrown(LOWER_FIRST, SLOT_COUNT) };
-    return { ...body, parts, extras, bounce, bounceList, chestSlot, midriff, debris, hipsBroken: broken(HIPS), helmetBroken: broken(HEAD_SLOT), upperBroken, streak: Boolean(which.streak) };
+    return { ...body, parts, extras, bounce, bounceList, chestSlot, midriff, debris, hipsBroken: broken(HIPS), upperBroken, streak: Boolean(which.streak) };
 }
 
 /**
