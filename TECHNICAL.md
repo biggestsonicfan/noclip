@@ -3576,8 +3576,28 @@ the item itself.
   Raxel 1015 draws `0x703` on slot 8 (`+0xAFC` 2), with copy model 0, so no
   copies. Bahn 1025 draws `0x707` on slot 5 (`+0xAFC` 2).
   `[0x50016c]+0x3350` stayed 0 throughout.
-- The flash materials `rob_disp` gives the item (`+0x1A4` bit 26 or `+0x720`
-  bit 2, frames ≤ 4) are not drawn on it.
+- The hit flash ("The hit flash" above) is drawn on the item too. `0x1A4B4`
+  tests it twice, with the body's rule: the item's model at `0x1A638`
+  (`+0x1A4` bit 26 and `+0x1AA` ≤ 4: `set_obj_thd` with `1 << 23`; else
+  `+0x720` bit 2, `+0x1AA` ≤ 4 and odd: `0x802000`; else `set_obj`), and
+  each copy in the ring at `0x1A6EC`, the same test. `+0x1AA` is the
+  fighter's own frame, so the copies flash with the item, not on their own
+  frames. `placeCarried` (`js/app.js`) takes the fighter's `flashMaterial`
+  (the opponent's from the motion it plays) and keys every draw
+  `model#material`, as the parts are.
+  - Headless Chrome: Picky's board (681) and Raxel's guitar (1795) draw
+    from block 0 (`#800000`) on frames 1–4 of 605–611, 820–831, 864 and
+    1006 and as normal from 5; from block 2 (`#802000`) on frames 1 and 3
+    of 706 and 949. Bahn's record 0 has no model, so nothing changes for
+    him. No page errors.
+  - MAME attract, breakpoints on the two `set_obj_thd` calls of the item
+    (`0x1A64C`, `0x1A670`) and the copies' (`0x1A700`, `0x1A724`): Picky
+    draws `0x2A9` with `1 << 23` on frames 1–4 of `0x25F` (607) and `0x263`
+    (611), Raxel `0x703` on frames 1–4 of `0x261` (609) and `0x33E` (830),
+    and player 2's Picky `0x674` the same way. In `0x263` the copies
+    (`0xAAC`, left in the ring by the motion before) flashed on frames 1
+    and 2 with the item. 50,400 frames of attract showed no blink
+    (`0x802000`): 706 and 949 never played with an item on.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 

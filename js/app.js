@@ -3661,7 +3661,7 @@ function poseFighterAndRival(body, m) {
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
-    placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
+    placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place, own.flash);
     m.rivalPose = placedPose(at, theirs.pose);
     placeShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame);
     placeWallShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame, mirrored && Boolean(own.thrown), (p) => placedPose(at, p));
@@ -4074,19 +4074,20 @@ function burstKit(holder) {
  * opponent, each from the motion it plays: the record's model on this
  * frame's pose, and while it is held the copies from the frames before it,
  * each on a stand-in posed on its frame. `place` puts the opponent's where
- * it stands.
+ * it stands. On a frame that flashes, the item and its copies take the
+ * flash's material, as the body does (0x1A638, 0x1A6EC).
  */
 const CARRIED_POOL = 5;
 
-function placeCarried(holder, body, pose, motion, frame, mirrored, place = null) {
+function placeCarried(holder, body, pose, motion, frame, mirrored, place = null, flash = null) {
     const kit = carriedKit(holder, body);
     if (!kit) {
         for (const p of holder.carriedPool ?? []) showPart(p, false);
         return;
     }
-    const draws = motion ? carriedDraws(state.rom, kit.carried, motion, frame, {
+    const draws = (motion ? carriedDraws(state.rom, kit.carried, motion, frame, {
         pose, mirrored, poseAt: (f) => poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose,
-    }) : [];
+    }) : []).map((d) => ({ ...d, model: flashed(d.model, flash) }));
     for (const d of draws) {
         if (kit.geoms.has(d.model)) continue;
         const g = getModel(d.model);
@@ -4335,7 +4336,7 @@ function poseBodyRig() {
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeBursts(m, pose.pose, m.decoded, m.frame);
-    placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2', null, m.flash);
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
     placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeReflection(m, body, pose.pose);
