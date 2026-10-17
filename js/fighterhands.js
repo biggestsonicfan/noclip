@@ -37,13 +37,20 @@
  *
  * No other move-script op touches a hand (TECHNICAL.md lists what else
  * bears on one: op 23, slow motion, FV's armour, none of it reachable here).
+ *
+ * The head (slot 2, player +0x48) is the script's the same way, by op 16
+ * (TECHNICAL.md, "The face"), and keeps its model from one motion into the
+ * next by the same rules, so the same runs carry it. Fighting Vipers' op
+ * writes it outright (0x2DDB0). Virtua Fighter 2's starts a chain of timed
+ * records that 0x4B640 steps every frame after the script, easing a value
+ * that picks the model; a voice (op 9) switches the chain as it runs out.
  */
 import { resolveData } from './motion.js';
 
 const OP_END = 0, OP_NEXT = 1, OP_LAST = 8, OP_TABLE = 0x10, OP_NEXT_PAIR = 0x13, OP_HAND = 18;
 const LOOP = 0xffff;
 const MOTION_ID = 0x1fff;
-const HANDS = 2, SLOTS = [5, 8];
+const HANDS = 2, SLOTS = [5, 8], HEAD = 2;
 const SHAPE_MASK = 31, FV_SHAPES = 4;
 
 function dataAt(rom, addr) {
@@ -70,24 +77,28 @@ function scriptStart(rom, R, dv, at) {
     }
 }
 
-/* Motion `id`'s op 18s, in script order, as {frame, hand, shape, end}, and
- * whether the game loops it. */
+/* Motion `id`'s op 18s, in script order, as {frame, hand, shape, end}; its
+ * face ops (`rig.fighters.face`: op 16 and VF2's op 9) as {frame, op, arg};
+ * and whether the game loops it. */
 function handOps(rom, id) {
     const R = rom.game.rig.reactions, lengths = rom.game.rig.script;
+    const F = rom.game.rig.fighters?.face;
     const ptr = u32At(rom, R.setups + (id & MOTION_ID) * 4);
     const r = ptr && dataAt(rom, ptr);
-    if (!r) return { ops: [], loops: false };
-    const dv = r.view, ops = [];
+    if (!r) return { ops: [], faces: [], loops: false };
+    const dv = r.view, ops = [], faces = [];
     let { at, next } = scriptStart(rom, R, dv, r.off + R.head);
     while (at >= 0 && at + 7 <= dv.byteLength) {
         const op = dv.getUint8(at);
         if (op === OP_END || op >= lengths.length) break;
+        const frame = dv.getUint16(at + 1, true);
         if (op === OP_HAND) {
-            ops.push({ frame: dv.getUint16(at + 1, true), hand: dv.getUint8(at + 3), shape: dv.getUint8(at + 4), end: dv.getUint16(at + 5, true) });
+            ops.push({ frame, hand: dv.getUint8(at + 3), shape: dv.getUint8(at + 4), end: dv.getUint16(at + 5, true) });
         }
+        if (F && (op === F.op || op === F.talk?.op)) faces.push({ frame, op, arg: dv.getUint8(at + 3) });
         at += lengths[op];
     }
-    return { ops, loops: next === LOOP };
+    return { ops, faces, loops: next === LOOP };
 }
 
 /** Whether the game plays motion `id` over and over (+0x802 0xFFFF). */
@@ -178,24 +189,134 @@ const FV = {
     },
 };
 
+/* Fighting Vipers' face: op 16 writes slot 2 (0x2DDB0) with the first of
+ * 0x640D31C[op][record]'s two models, or the second once the helmet has
+ * broken. Before any op the slot keeps what the round start or the break
+ * left (null: the part list's, as the explorer draws it). */
+const FV_FACE = {
+    powerOn: () => ({ model: null }),
+    run(ctx, ops, last, start) {
+        const now = { ...start }, models = [];
+        let next = 0;
+        for (let f = 1; f <= last; f++) {
+            for (; next < ops.length && ops[next].frame <= f; next++) {
+                const pair = u32At(ctx.rom, u32At(ctx.rom, ctx.F.table + ops[next].arg * 4) + ctx.body.index * 4);
+                const r = pair && dataAt(ctx.rom, pair);
+                if (r) now.model = r.view.getInt16(r.off + (ctx.body.helmetBroken ? 2 : 0), true);
+            }
+            models[f] = now.model;
+        }
+        return { models, end: now };
+    },
+};
+
+/* Virtua Fighter 2's face records (0x4B604): u16 +0 the frames, s16 +4 the
+ * value aimed at (+6, a second, only times the voice), u32 +8 the model
+ * picker, +0x10 the next record (0: the chain stops). The picker: u16 +2
+ * steps, +4 the models (16 bytes each, +0 the one drawn), +8 a step's
+ * entry. */
+const FACE_SCALE = 1001, FACE_ENTRY = 16;
+
+function faceLoad(rom, s, at) {
+    if (!at) return;
+    const r = dataAt(rom, at);
+    if (!r) return;
+    Object.assign(s, {
+        record: at, count: r.view.getUint16(r.off, true), aim: r.view.getInt16(r.off + 4, true),
+        picker: r.view.getUint32(r.off + 8, true), next: r.view.getUint32(r.off + 0x10, true),
+    });
+}
+
+const faceChain = (ctx, table, op) => u32At(ctx.rom, u32At(ctx.rom, table + op * 4) + (ctx.body.char ?? ctx.body.index) * 4);
+
+/* The model the picker gives for value `v`: entry trunc(v · steps / 1001). */
+function facePick(rom, picker, v) {
+    const r = dataAt(rom, picker);
+    if (!r) return null;
+    const steps = r.view.getUint16(r.off + 2, true);
+    const k = Math.floor(((v * steps) >>> 0) / FACE_SCALE);
+    const e = dataAt(rom, picker + 8 + k);
+    return e ? u32At(rom, r.view.getUint32(r.off + 4, true) + e.view.getUint8(e.off) * FACE_ENTRY) : null;
+}
+
+/* One frame's script ops: op 16 starts its chain; op 9 on its own frame
+ * sets the voice's time left (0x1B05C), if the table names a voice. */
+function faceOp(ctx, s, op, f) {
+    const { F, rom } = ctx, T = F.talk;
+    if (op.op === F.op) faceLoad(rom, s, faceChain(ctx, F.table, op.arg));
+    else if (op.frame === f && faceChain(ctx, T.voices, op.arg)) {
+        const r = dataAt(rom, u32At(rom, T.times + op.arg * 4) + (ctx.body.char ?? ctx.body.index) * 2);
+        const t = r ? r.view.getUint16(r.off, true) : 0;
+        if (t) s.timer = t;
+    }
+}
+
+/* 0x4B640, after the script: the voice's switch, then a step of the value
+ * toward the aim (all the way on the last), the model it picks, and at the
+ * record's end the next one. A chain that has stopped leaves the model. */
+function faceStep(ctx, s) {
+    const T = ctx.F.talk;
+    if (s.timer === T.at && s.record !== faceChain(ctx, ctx.F.table, T.keep)) faceLoad(ctx.rom, s, faceChain(ctx, ctx.F.table, T.to));
+    if (!s.count) return;
+    const n = --s.count;
+    s.value = n ? s.value + Math.trunc((s.aim - s.value) / n) : s.aim;
+    s.model = facePick(ctx.rom, s.picker, s.value) ?? s.model;
+    if (!n) faceLoad(ctx.rom, s, s.next);
+}
+
+/* VF2: action_init (0x4B5D0) zeroes the value and starts the fighter's own
+ * chain; the voice's time left (+0x770) counts down before the script. */
+const VF2_FACE = {
+    powerOn(ctx) {
+        const s = { record: 0, count: 0, aim: 0, picker: 0, next: 0, value: 0, timer: 0, model: null };
+        faceLoad(ctx.rom, s, u32At(ctx.rom, ctx.F.cold + (ctx.body.char ?? ctx.body.index) * 4));
+        return s;
+    },
+    run(ctx, ops, last, start) {
+        const s = { ...start }, models = [];
+        let next = 0;
+        for (let f = 1; f <= last; f++) {
+            if (s.timer > 0) s.timer--;
+            for (; next < ops.length && ops[next].frame <= f; next++) faceOp(ctx, s, ops[next], f);
+            faceStep(ctx, s);
+            models[f] = s.model;
+        }
+        return { models, end: s };
+    },
+};
+
+/* What a run starts from, cold: the hands' and the face's. */
+const coldStart = (ctx) => ({ hands: ctx.G?.powerOn(ctx.body) ?? null, face: ctx.Face?.powerOn(ctx) ?? null });
+
+/* One pass from `start`: per frame [slot 5's, slot 8's, slot 2's] model,
+ * and where it ends. */
+function runPass(ctx, list, motion, mirrored, start, last = motion.frames) {
+    const hands = ctx.G ? ctx.G.run(ctx.rom, ctx.table, ctx.H, list.ops, last, mirrored, start.hands) : null;
+    const face = ctx.Face ? ctx.Face.run(ctx, list.faces, last, start.face) : null;
+    const models = [];
+    for (let f = 1; f <= last; f++) models[f] = [...(hands?.models[f] ?? [null, null]), face?.models[f] ?? null];
+    return { models, end: { hands: hands?.end ?? null, face: face?.end ?? null } };
+}
+
 /* A motion's passes, one run each, from `start`: a motion the game loops
  * (+0x802 0xFFFF: VF2 0x1ABD8, FV 0x1C160 put the frame back to 1 and the
- * script to its start, and leave the hands be) starts each pass where the
- * last one ended; any other only ever plays its first. Kept per motion and
- * start, and grown to the pass asked for, until one ends where it began. */
+ * script to its start, and leave the hands and face be) starts each pass
+ * where the last one ended; any other only ever plays its first. Kept per
+ * motion and start, and grown to the pass asked for, until one ends where it
+ * began. */
 function passes(rom, motion, key, start) {
     const cache = (rom.fighterHands ??= new Map());
     if (!cache.has(key)) {
-        const { ops, loops } = handOps(rom, motion.id);
-        cache.set(key, { ops, loops, runs: [], next: start });
+        const { ops, faces, loops } = handOps(rom, motion.id);
+        cache.set(key, { ops, faces, loops, runs: [], next: start });
     }
     return cache.get(key);
 }
 
-function passAt(rom, G, ctx, list, motion, mirrored, pass) {
+function passAt(ctx, list, motion, mirrored, pass) {
     while (list.runs.length <= pass && list.next) {
         const start = list.next;
-        const run = G.run(rom, ctx.table, ctx.H, list.ops, motion.frames, mirrored, start);
+        const run = runPass(ctx, list, motion, mirrored, start);
         const last = list.runs.at(-1);
         // A pass that looks as the last one did shares its frames.
         if (last && JSON.stringify(last.models) === JSON.stringify(run.models)) run.models = last.models;
@@ -206,50 +327,62 @@ function passAt(rom, G, ctx, list, motion, mirrored, pass) {
     return list.runs[Math.min(pass, list.runs.length - 1)];
 }
 
-const handsKey = (body, motion, mirrored, after) => `${body.index}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
+const handsKey = (body, motion, mirrored, after) =>
+    `${body.index}${body.helmetBroken ? 'h' : ''}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
 
-/* What a motion starts from: the hands motion `from.motion` has on its frame
- * `from.frame` of its pass `from.pass`, itself started cold; or, without
- * one, the cold hands (VF2's power on, FV's round start). */
-function startHands(rom, G, ctx, from) {
-    const cold = G.powerOn(ctx.body);
+/* What a motion starts from: the hands and face motion `from.motion` has on
+ * its frame `from.frame` of its pass `from.pass`, itself started cold; or,
+ * without one, the cold ones (VF2's power on and action_init, FV's round
+ * start). */
+function startHands(ctx, from) {
+    const cold = coldStart(ctx);
     if (!from?.motion || !(from.frame > 0)) return cold;
     const mirrored = Boolean(from.mirrored);
-    const list = passes(rom, from.motion, handsKey(ctx.body, from.motion, mirrored, ''), cold);
-    const { start } = passAt(rom, G, ctx, list, from.motion, mirrored, from.pass ?? 0);
-    return G.run(rom, ctx.table, ctx.H, list.ops, Math.min(from.frame, from.motion.frames), mirrored, start).end;
+    const list = passes(ctx.rom, from.motion, handsKey(ctx.body, from.motion, mirrored, ''), cold);
+    const { start } = passAt(ctx, list, from.motion, mirrored, from.pass ?? 0);
+    return runPass(ctx, list, from.motion, mirrored, start, Math.min(from.frame, from.motion.frames)).end;
 }
 
 const fromKey = (from) => (from?.motion ? `${from.motion.id}@${from.pass ?? 0}.${from.frame}${from.mirrored ? 'm' : ''}` : '');
 
+/* The hands' game and table, and the face's, for this fighter; null if it
+ * has neither. */
+function scriptContext(rom, body) {
+    const { hands: H, face: F } = rom.game.rig?.fighters ?? {};
+    const G = H ? (H.eased ? VF2 : FV) : null;
+    const table = G ? G.table(rom, body, H) : null;
+    const Face = F ? (F.eased ? VF2_FACE : FV_FACE) : null;
+    if (!table && !Face) return null;
+    return { rom, body, H, G: table ? G : null, table, F, Face };
+}
+
 /**
- * The hand models a motion gives slots 5 and 8 on each frame: index = frame,
- * each [slot 5's, slot 8's], null where the part list's stands. Null when
- * the game has no hands (`rig.fighters.hands`) or the fighter no table.
+ * The models a motion's script gives slots 5, 8 and 2 on each frame: index
+ * = frame, each [slot 5's, slot 8's, slot 2's], null where the part list's
+ * stands. Null when the game has neither hands (`rig.fighters.hands`) nor a
+ * face (`rig.fighters.face`) for the fighter.
  *
  * A hand keeps its shape from one motion into the next: nothing but op 18
- * (and VF2's step) writes it, and a motion's setup does not reset it. So the
- * motion starts from `from` ({motion, frame, pass, mirrored}: the motion on
- * show just before, as a reaction starts from the stance frame the opponent
- * was caught on), or else from the game's cold hands. `pass` counts the
- * times the motion has played over on screen: one the game loops carries its
- * hands from each pass into the next; any other starts each one afresh.
+ * (and VF2's step) writes it, and a motion's setup does not reset it; the
+ * head the same with op 16 (and VF2's face step). So the motion starts from
+ * `from` ({motion, frame, pass, mirrored}: the motion on show just before,
+ * as a reaction starts from the stance frame the opponent was caught on), or
+ * else from the game's cold ones. `pass` counts the times the motion has
+ * played over on screen: one the game loops carries them from each pass into
+ * the next; any other starts each one afresh.
  */
 export function handModels(rom, body, motion, mirrored = false, from = null, pass = 0) {
-    const H = rom.game.rig?.fighters?.hands;
-    if (!H || motion?.id == null) return null;
-    const G = H.eased ? VF2 : FV;
-    const table = G.table(rom, body, H);
-    if (!table) return null;
-    const ctx = { body, table, H };
+    if (motion?.id == null || !rom.game.rig?.reactions || !rom.game.rig.script) return null;
+    const ctx = scriptContext(rom, body);
+    if (!ctx) return null;
     const key = handsKey(body, motion, mirrored, fromKey(from));
-    const list = rom.fighterHands?.get(key) ?? passes(rom, motion, key, startHands(rom, G, ctx, from));
-    return passAt(rom, G, ctx, list, motion, mirrored, pass).models;
+    const list = rom.fighterHands?.get(key) ?? passes(rom, motion, key, startHands(ctx, from));
+    return passAt(ctx, list, motion, mirrored, pass).models;
 }
 
 /** Slot → model for the frame, for the slots the motion sets. */
 export function handsAt(models, frame) {
-    const pair = models?.[Math.max(1, Math.min(frame, models.length - 1))];
-    if (!pair) return null;
-    return SLOTS.map((slot, k) => [slot, pair[k]]).filter(([, model]) => model != null);
+    const set = models?.[Math.max(1, Math.min(frame, models.length - 1))];
+    if (!set) return null;
+    return [...SLOTS, HEAD].map((slot, k) => [slot, set[k]]).filter(([, model]) => model != null);
 }

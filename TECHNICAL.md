@@ -1448,6 +1448,58 @@ rest of what bears on a hand is this.
   gets model 0x2DE, the one all her op 18s write there. A break is fight
   state the explorer does not model.
 
+### The face (`js/fighterhands.js`)
+
+The head (slot 2, `+0x48`) changes with the move script too: op 16 swaps
+its model, for an expression (eyes shut on a hit, a talking mouth in a win
+pose). Its byte 3 picks a row of a table by fighter. The explorer used to
+draw the part list's head on every frame. Now `handModels` gives slot 2
+alongside 5 and 8. The face carries from one motion into the next, and over
+a loop's passes, the same way the hands do.
+
+- **Fighting Vipers** (`0x2DDB0`) writes the model outright:
+  `0x640D31C[op][record]` points at two s16 models, and it takes the second
+  once the helmet is off (`+0x1F48` bit 2, which `armouredFighter` now
+  reports as `helmetBroken`). Before any op the slot holds what the round
+  start or the armour break left, i.e. the part list's model. Nothing else
+  writes `+0x48` but replay save and restore (`0x3C5E8`, `0x3C94C`). The
+  per-frame part refresh skips slot 2, and the face step (`0x4AF18`) works out
+  a model but never stores it. Op 16 is in 285 motions. Every stance
+  starts with row 0 on frame 1, and win and intro poses use row 7 (the
+  part list's head). Jane's stance 904 frame 1 shows 488 (shut eyes, the
+  same mesh as 489 with other UVs); it used to show the part list's 712.
+- **Virtua Fighter 2** (`0x1B2B0`) starts a chain:
+  `0x4B604(0x2006278[op][char])` loads a record (u16 +0 frames, s16 +4 the
+  value aimed at, u32 +8 the model picker, +0x10 the next record; null
+  changes nothing) and leaves the current value (`+0x6A8`) as it was. The
+  face step `0x4B640`, run at `0x14408` after the frame counter and script,
+  counts the frames down by one and moves the value a truncated
+  1/frames-left of the way to the aim (all of it on the last frame). The
+  picker (u16 +2 steps, +4 a table of 16-byte entries, +8 a byte per step)
+  then gives entry `value × steps / 1001`, whose first word goes in `+0x48`.
+  At a record's end the next one loads, and a chain whose frames are 0
+  leaves the model alone. action_init (`0x4B5D0`) zeroes the value and loads
+  the fighter's own chain (`0x20062A0[char]`): one frame at 0, the part
+  list's head. Akira's hit 251 has op 16 row 8 on frame 1 (six frames to
+  1000: 412, 680, 680, 681, 681, 681) and row 9 on frame 7 (15 frames back
+  to 0, so 412 again by frame 20). It used to show 412 throughout. Dural
+  has no tables, so the head never changes.
+- **VF2's voice** (op 9, `0x1B05C`) runs only on its own frame. It names a
+  voice by `0x201E44C[op][char]` (0: nothing). If it does, it sets the voice's
+  time left (`+0x770`) to `0x201E498[op][char]`. That counts down by 1 at
+  each frame's start (`0x14358`) and stops at 0. When it reads 25, the
+  face step loads row 2's chain (the talking mouth) unless row 1's is the
+  one running. Both are in the motion, so this is modelled. The op is
+  skipped while the sound sequencer waits (`0x504070`), which is taken as
+  never.
+
+Left out: the record's second value and its picker's id, which only time
+sound requests (`0x4B7B0`, `0x4B7E8`); the picker's other columns, +4
+for player 2's look when both pick the same fighter (`+0x1B0` ≠ `+0x1B1`)
+and +8 for Kage's `+0x700` bit 4; the game-mode tests at the top of
+`0x4B640` (attract and the ending scenes); and the scene resets
+(`0x4B5B0`), which are not motions.
+
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
 Fighting Vipers poses its fighters the way Virtua Fighter 2 does, and the

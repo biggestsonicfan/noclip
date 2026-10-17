@@ -846,6 +846,10 @@ const fvipers = {
             /* Move-script op 18's hand models, 0x640EBF4[record]: four a
              * hand; js/fighterhands.js. */
             hands: { table: 0x0640ebf4 },
+            /* Move-script op 16's heads (0x2DDB0), 0x640D31C[op][record]:
+             * a pair of s16 models, the second once the helmet has broken
+             * (+0x1F48 bit 2); js/fighterhands.js. */
+            face: { op: 16, table: 0x0640d31c },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat's setups
          * past their 12-byte head, the lengths at 0x1CE86; op 4 (sub_1BB20)
@@ -3256,6 +3260,17 @@ const vf2 = {
             /* The hands' 32 shapes each, record +0x3C: slot 5's at +0,
              * slot 8's at +0x180 (0x19E34); js/fighterhands.js. */
             hands: { at: 0x3c, other: 0x180, eased: true },
+            /* The face (js/fighterhands.js): script op 16 (0x1B2B0) starts
+             * the chain 0x2006278[op][char], action_init (0x4B5D0) the one
+             * at 0x20062A0[char], and 0x4B640 steps it after the script.
+             * Script op 9 (0x1B05C) sets the voice's time left, +0x770,
+             * from 0x201E498[op][char] when 0x201E44C names a voice; at
+             * `talk.at` left the chain switches to 0x2006278[talk.to]
+             * unless it is already on [talk.keep]'s. */
+            face: {
+                op: 16, table: 0x02006278, cold: 0x020062a0, eased: true,
+                talk: { op: 9, voices: 0x0201e44c, times: 0x0201e498, at: 25, keep: 1, to: 2 },
+            },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at
