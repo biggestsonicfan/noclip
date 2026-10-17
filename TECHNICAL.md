@@ -994,8 +994,9 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   stands its opponent 2 ahead, turned half round: in the fighter's viewer
   frame the opponent's (x, y, z) is (2 - x, y, -z), and the target is the
   opponent's head as (2 - x, y, -z) read in the motions' (z, y, x) order. The
-  opponent is the same fighter on the same motion, a body of its own so it
-  keeps its own playback.
+  opponent is a body of its own so it keeps its own playback: the same
+  fighter on the same motion unless the panel picks another fighter, or a
+  reaction for it to play (see The opponent's reaction below).
 
 **When the game looks.** The store is `stt r12, 0xb0c(g7)` at `0x286A0`, after
 op `0x31806363`. Four branches to `0x286A4` skip it:
@@ -1116,6 +1117,57 @@ in attract mode the head is up to 134 degrees off where the game looks at the
 motion's own target. That is fight state (see When the game looks above), so
 the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
 frames match. The misses are the fight's blend choices above.
+
+### The opponent's reaction (`js/reactions.js`)
+
+When a move lands, the game picks the motion the one on the end of it plays,
+and Virtua Fighter 2 and Fighting Vipers pick it the same way, at addresses of
+their own (`rig.reactions`):
+
+| | Virtua Fighter 2 | Fighting Vipers |
+|---|---|---|
+| set_mot_dat | `0x1A1E4` | `0x1B880` |
+| setup scripts, head | `0x200D34C`, 8 bytes | `0x6411E94`, 12 bytes |
+| op lengths (program ROM) | `0x1B7F6`, ops to `0x11` | `0x1CE86`, ops to `0x18` |
+| strike's kind (op 4) | `+0xA` | `+7` (`sub_1BB20`) |
+| reaction picker | `0x230D4` | `0x26978` |
+| reaction table | `0x201CCFC`, 30 kinds | `0x641F834`, 22 kinds |
+
+Three setup ops say how a motion hurts. Op 2's three u16s (`+1`, `+3`, `+5`)
+go to `+0x808..+0x80C`, the frames the attack opens, closes and winds down on.
+Op 4, the strike, writes a u16 to `+0x828`: the low byte is the kind of blow,
+bit 15 the side it comes from. Op 5, the throw, writes its u16 at `+1` there
+instead, and the throw code (VF2 `0x14570`, FV `0x13054`) finds it again
+through calc_mht_adr and starts it on the one thrown with command `0x11`: the
+throw motion and the thrown one's are neighbours in the table (FV 31 and 32,
+VF2 15 and 16). Fighting Vipers has 394 strikes and 111 throws, Virtua
+Fighter 2 569 and 112.
+
+coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
+and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
+second frame. The explorer plays the reaction from the first such frame
+(`moveFlags`, where the profile has the flags: Fighting Vipers), else from
+`+0x808`. A throw's motion starts with the throw.
+
+`table[kind]` is forty u32s, five categories of eight. The category is
+attack_hit's callers' `r8`: 0 and 1 the guards, 2 the hit, 3 the counter hit
+(the path with the "counter" string), 4 the knock-down, which writes command
+`0xC000000` where the others write `0xF000000`. Within one, the index adds 4
+if the one hit crouches (`+0x1A4` bit 3), 2 unless it faces the attacker, and
+the blow's side. The low 13 bits are the motion; bit 15 turns the fighter
+round. Fighting Vipers' kind 0 reads guard `0xFA`/`0xF9`, hit
+`0x134`/`0x136`, counter `0x135`/`0x137` and knock-down `0x24D`.
+
+The explorer's opponent stands and faces the fighter, so it takes the
+standing, facing entries. Left out as fight state: the side's other terms
+(both players' `+0` words and the defender's `+0x1A4` bit 21), Virtua Fighter
+2's program-ROM table at `0x23D98` for a defender with bit 25 set, Fighting
+Vipers' `0x26A04`, which swaps `0x24D` for `0x250` when the defender's waist
+is low, and the category 5 entry the pickers index at `0x28`.
+
+While it waits for the blow, the opponent plays its stance, slot 0 of its
+action table (record `+0x14` in both games: VF2's action_init puts it at
+player `+0x1A0` at `0x13F1C`, 84 ids, as FV's does with 55).
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
