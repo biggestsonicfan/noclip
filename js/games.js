@@ -3299,6 +3299,13 @@ const vf2 = {
              * mirrored (+0 bit 6, z negated), moved by `offset` and turned
              * `turn` about Z: Shun's gourd. */
             item: { op: 17, model: 0x98a, slots: [8, 5], offset: [0.15, 0.01, 0.03], turn: 0x9df0 },
+            /* The midriff, record +0x38: Fighting Vipers' struct, built at
+             * 0x16F3C and drawn on slot 9 at 0x195F8; no broken one. */
+            midriff: { at: 0x38 },
+            /* The same struct's word +0xC: rob_disp (0x19090) draws it on
+             * slot 9 while the waist (+0x1F8) is under `under`, or `bit15`
+             * with move flag 15. Lau's and Shun's differ from slot 9's. */
+            lowHips: { at: 0x38, model: 0xc, under: 0.2, bit15: 0.4 },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at

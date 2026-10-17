@@ -186,6 +186,7 @@ function readFighter(rom, F, record, char) {
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
         extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : F.item ? [itemExtra(F.item)] : [],
         midriff: F.midriff ? readMidriff(rom, F.midriff, root, record) : null,
+        lowHips: F.lowHips ? readLowHips(rom, F.lowHips, root, u32(list + HIPS * 4)) : null,
         offsets,
         parts: offsets.map((offset, s) => ({
             index: s, model: u32(list + s * 4), offset, joint: s,
@@ -583,11 +584,28 @@ function readMidriff(rom, M, root, i) {
         if (!byPoint.has(n)) byPoint.set(n, { p: vec(dv, o + MIDRIFF.ring + n * 12), to: [] });
         byPoint.get(n).to.push(MIDRIFF.link * (k >> 1) + 12 * (k & 1));
     }
-    const b = dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at));
+    const b = M.broken ? dataAt(rom, u32(u32(M.broken + i * 4) ? M.broken + i * 4 : root + M.at)) : null;
     return {
         template, points: [...byPoint.values()], hips: HIPS, chest: CHEST, planeNormals: true,
         ...midriffLook(rom, dv, o), broken: midriffLook(rom, (b ?? r).view, (b ?? r).off),
     };
+}
+
+/* VF2's low hips (games.js `lowHips`): the struct's model for slot 9 while
+ * the waist is low, kept only where it is not slot 9's own. */
+function readLowHips(rom, L, root, own) {
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const at = u32(root + L.at), model = at ? u32(at + L.model) : 0;
+    return model && model !== own ? { model, under: L.under, bit15: L.bit15 } : null;
+}
+
+/* 0x19090: the low model while +0x1F8 is under the limit, which move flag 15
+ * raises. */
+const LOW_HIPS_BIT = 1 << 15;
+
+function lowHipsModel(body, waistY, flags) {
+    const L = body.lowHips;
+    return waistY < (flags & LOW_HIPS_BIT ? L.bit15 : L.under) ? L.model : body.parts[HIPS].model;
 }
 
 /* A pad or panel's board-frame transform on its slot's. */
@@ -1560,12 +1578,14 @@ function hairSwing(live, pose, stepped, fresh) {
 }
 
 /* The chest's and hips' models this frame, for the fighters whose chest
- * bounces or whose hips koshi_unit_change names. */
+ * bounces or whose hips koshi_unit_change (or VF2's low hips) names. */
 function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) {
     const held = !fresh && live.spring?.model != null;
     const flags = () => moveFlags(rom, motion)?.[frame] ?? 0;
     const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped, flags())) : undefined;
-    const hips = body.armour?.hips ? hipsModel(body, motion, frame, pose[WAIST_SLOT].t[1]) : undefined;
+    const waistY = pose[WAIST_SLOT].t[1];
+    const hips = body.armour?.hips ? hipsModel(body, motion, frame, waistY)
+        : body.lowHips ? lowHipsModel(body, waistY, flags()) : undefined;
     return { chest, hips, spring: live.spring };
 }
 
@@ -1634,7 +1654,8 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   a fighter with one, is each panel's swing this frame, and `pads` each
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
- *   for a fighter koshi_unit_change names, is the hips' model this frame;
+ *   for a fighter koshi_unit_change (or VF2's low hips) names, is the
+ *   hips' model this frame;
  *   `hands`, [slot, model] for the hands, as the motion's script shapes
  *   them (js/fighterhands.js), which go to the other side when mirrored;
  *   `pose`, the bones in the board's frame, which the sway chains hang off

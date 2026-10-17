@@ -1244,6 +1244,55 @@ explorer's opponent is still off by default. Across all sixteen slots, 470 of 53
 frames match. The misses are the fight's blend choices above (since
 modelled where they are the motion's: Which switches blend in).
 
+#### The midriff and the low hips (record `+0x38`; read from the ROM, the hips checked against MAME)
+
+Every VF2 record points at a struct from `+0x38` that has the same layout as
+Fighting Vipers' midriff (record `+0x24`, see "The midriff" under Fighting
+Vipers' fighters). VF2 uses it in the same way and a little more:
+
+- `0x18FCC`, at the top of every draw, copies its word `+0` into slot 9's
+  model (`+0x64`) and `+4` into slot 1's (`+0x44`). For all 26 records they
+  are the part list's own, so nothing changes.
+- `0x16F3C`, in `calc_unit_mat` right after slot 9's matrix, runs the same
+  instructions as Fighting Vipers' `0x17A30`: invert the hips' matrix, take
+  the chest's (slot 1) into it, carry the 16 ring points at `+0x70`, then
+  write the `+0xD0` links (20 for every record) to polygon RAM.
+- `rob_disp`'s slot 9 entry (`0x195F8`, from the jump table at `0x191D8`)
+  draws it in geometrizer mode 3 with the model named by word `+8` (Akira's
+  is 0x995), with the same player-2 colour offset as Fighting Vipers'
+  `0x1A2D8`. There is no hit flash and no broken one. It is skipped only
+  while `0x500068` bit 25 is set and the fighter's `+0x700` bit 5 is clear,
+  the gate the replay's afterimage draws at `0x18F14` use too. The explorer
+  draws it on every frame.
+- `0x19090`, in the part loop: on slot 9, while the waist (`+0x1F8`, slot
+  0's height) is under 0.2, or under 0.4 when move flag `+0x1A4` bit 15 is
+  set, the model is word `+0xC` instead. Only Lau (0xAC6 → 0xF08, player 2
+  0x2CC → 0xF07) and Shun (0xA2A → 0x1238, player 2 0xD69 → 0x1237) have a
+  different word there. It is the robe lying flat, used while they are down
+  or getting up.
+
+**What the explorer draws.** The profile's `rig.fighters.midriff` (`at:
+0x38`) builds the band with `readMidriff`, as for Fighting Vipers.
+`rig.fighters.lowHips` gives `readLowHips` word `+0xC`, kept only where it
+differs from slot 9's model, and `lowHipsModel` picks it from the posed slot
+0 height (after the crouch) and the motion's move flags. Node, old code
+against new:
+
+- Midriff: old none for every record; now each of the 13 has one (8 chest
+  points). In headless Chrome, Akira 180 frame 13 bends the chest far enough
+  from the hips (the chest's ring moves 0.31 from rest) that the old picture has a hole in
+  the belt at the bend, and the band now fills it.
+- Low hips: Lau 175 frame 10 (waist 0.100) was 0xAC6 and is now 0xF08; Lau
+  169 frame 20 (waist 0.303, flag 15) was 0xAC6 and is now 0xF08, and frame
+  29 (0.606) stays 0xAC6; Shun 175 frame 10 was 0xA2A and is now 0x1238. Lau's
+  stance 1226 (0.950) is unchanged.
+
+MAME attract mode, a breakpoint at `0x190E8` on slot 9 logging the record,
+`+0x1F8`, `+0x1A4` and the model: 11,595 Lau and Shun frames (878 low, 78 of
+those between 0.2 and 0.4 with bit 15) all match the rule. The midriff's
+geometry was not checked against MAME separately; its code is
+instruction for instruction Fighting Vipers' one, which was.
+
 ### The opponent's reaction (`js/reactions.js`)
 
 When a move lands, the game picks the motion the one on the end of it plays,
@@ -1616,7 +1665,7 @@ part out along the fighter's own skeleton at player `+0x8C`.
   Its gate on the move flags is `0x6C119`, VF2's `0x6C111` with bit 3.
 
 Record `+0x24` is the midriff and is drawn (below, "The midriff"; VF2's
-`+0x38` is still not). The special parts `rob_disp` (`0x19F10`) swaps in for
+`+0x38`, the same struct, is too: "The midriff and the low hips"). The special parts `rob_disp` (`0x19F10`) swaps in for
 the chest and hips (`mune_unit_change`, `koshi_unit_change`), broken armour,
 the pieces it throws (with one sample hit) and Picky's hair are drawn, below.
 

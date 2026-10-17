@@ -1168,6 +1168,7 @@ function fighterRigModels(add, out) {
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
         for (const m of hipModels(f.armour?.hips)) add(m, f.index);
+        if (f.lowHips) add(f.lowHips.model, f.index);
         for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
         /* The sway chains with the upper half broken, which is every chain
          * the record can wear (Grace's earrings only come with it). */
