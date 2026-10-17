@@ -5536,6 +5536,7 @@ function start() {
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
     state.viewer.beforeDraw = rankFaceLayers;
     $('#tool-shot').hidden = false;
+    $('#tool-export').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);
     state.viewer.smoothHoles($('#opt-smooth-holes').checked);
     state.viewer.microTextures($('#opt-micro').checked);

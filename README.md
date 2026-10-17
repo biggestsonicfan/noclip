@@ -702,8 +702,9 @@ still to be written on a machine with those sets.
 
 ## Reporting something wrong
 
-Three buttons sit in the top right of the window, over everything: **Copy
-diagnostics and file an issue**, a camera, and **GitHub**.
+Four buttons sit in the top right of the window, over everything: **Copy
+diagnostics and file an issue**, a camera, a cube, and **GitHub**. The cube is
+the model export, below.
 
 The camera saves what the view is showing as a PNG, at the canvas's own
 resolution and without the panel or the hud over it, named after the build, what
@@ -740,6 +741,27 @@ link lives in the fragment because the fragment never goes to the server, and
 because the query string belongs to the `?mobile` / `?desktop` switch.
 
 The one thing worth adding by hand is a screenshot. Drag it into the issue.
+
+## Exporting models
+
+The cube in the top right saves the models in view as a `.glb`, at the frame
+they are on: pause a motion or a stage where you want it and every draw is
+written at that pose and in that place, one object each, in world space. It
+costs nothing and needs nothing but the ROM set already loaded; like the rest,
+it is done in the tab.
+
+Blender opens it with **File > Import > glTF 2.0**, and **Save As** makes it a
+`.blend`. The page writes glTF rather than `.blend` itself because `.blend` is
+Blender's own memory layout, which changes from release to release.
+
+The board has no RGB textures to hand over (a face names a 4-bit tile, a luma
+band, a material slot and a palette row, and the fill path turns those into a
+colour with the light in it), so the export runs the fill shader once more into
+a texture sheet: each face gets a cell of its own, drawn flat at a pixel to a
+texel, with this frame's palette and light, and its UVs point at that cell. The
+material is unlit, so what Blender shows is what the view showed, lighting
+included. A half-transparent (checker) face comes out at half alpha. The sky
+panorama and the scroll layers are not models and are not in it.
 
 ### The game's own camera (Sonic the Fighters)
 
@@ -797,6 +819,18 @@ in their own tab.
 That is the one thing the deploy needs no server of ours for. Locally
 stf-tools' `serve.mjs` still refuses a `.zip` per request, and still should — a
 working checkout is exactly where the zips do sit.
+
+## Support
+
+noclip is free and stays free, exports included. It exists because of hardware
+and hours: a serial link to the Model 2B board that I reverse engineered and
+built, EPROMs and a ZIF adapter to run test code on real hardware, a twin stick,
+the Dreamcast research, and a lot of AI time. None of that is a plea; it is
+where this is going. If you want to push it further, [support link] funds the
+next goal: *[current milestone]*.
+
+Support buys the research, never the models. The games' art is Sega's, and an
+export is yours for nothing whether you give or not.
 
 ## How it works
 

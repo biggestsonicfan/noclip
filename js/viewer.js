@@ -23,14 +23,22 @@ const VERT_SHADER = /* glsl */`
     in float aFlags;     // 1 = transparent, 2 = checker, 4 = sheet, 8/16 = mirror X/Y
                          // bits 5-6 = the face's z source, see below
     in float aMaterial;  // which of the 32 material slots lights this face
+#ifndef BAKE
     in vec3 aZc0;        // the four corners of the polygon this face is sorted
     in vec3 aZc1;        // by; a triangle repeats one, and a face that asked
     in vec3 aZc2;        // for the previous polygon's z carries that polygon's
     in vec3 aZc3;        // corners instead of its own
+#endif
     in vec3 aFacePt;     // the point the board tests the normal against
     in float aLayer;     // how many coplanar faces lie under this one (js/layers.js)
     in vec4 aPlane;      // the plane its group takes depth from, n.p = w; zeros if none
     // bit 7 of aFlags = drawn from both sides; 256/512 = filter wraps in X/Y
+#ifdef BAKE
+    // Where the face's texels land in the export's texture (js/export.js), in
+    // clip space: the face is drawn flat into its own cell there, lit as it is
+    // now, instead of through the camera.
+    in vec2 aBake;
+#endif
 
     // Set per game -- see ZSORT_RECEDE below.
     uniform float uZsortRecede;
@@ -118,6 +126,9 @@ const VERT_SHADER = /* glsl */`
         // The board can afford that; a viewer whose whole point is to fly
         // around cannot, so what a polygon would gain is left to the depth
         // buffer and only what it gives up is honoured.
+#ifndef BAKE
+        // (Not in the export's bake: it has no depth to sort, and WebGL's
+        // sixteen attributes are all spoken for without the corners.)
         int zmode = (int(aFlags + 0.5) >> 5) & 3;
         float z0 = (modelViewMatrix * vec4(aZc0, 1.0)).z;
         float z1 = (modelViewMatrix * vec4(aZc1, 1.0)).z;
@@ -238,6 +249,7 @@ const VERT_SHADER = /* glsl */`
             float zw = projectionMatrix[2][3] * zf + projectionMatrix[3][3];
             gl_Position.z = clamp(zc / max(zw, 1e-6), -1.0, 1.0) * gl_Position.w;
         }
+#endif
 
         // The board's front/back test (see the facing point in model.js): a
         // polygon not marked as drawn from both sides is thrown out when its
@@ -260,6 +272,9 @@ const VERT_SHADER = /* glsl */`
 
 #ifdef ZSORT_PLATES
         vKey = vec2(zb, determinant(mat3(modelMatrix)) < 0.0 ? 1.0 : 0.0);
+#endif
+#ifdef BAKE
+        gl_Position = vec4(aBake, 0.0, 1.0);
 #endif
     }
 `;
@@ -654,7 +669,9 @@ const FRAG_SHADER = /* glsl */`
         // on every other screen pixel and whatever is behind it shows through
         // the rest (model2rd.ipp steps x by 2 and skips the opposite parity).
         // South Island uses it on the water planes and the waterfall.
+#ifndef BAKE
         if (flags(2) && ((int(gl_FragCoord.x) ^ int(gl_FragCoord.y)) & 1) == 0) discard;
+#endif
 
 #ifdef ZSORT_PLATES
         // A face drawn by its key, as the board's z-sort draws it, but only
@@ -798,6 +815,11 @@ const FRAG_SHADER = /* glsl */`
         rgb = mix(rgb, transfer(uFogColor), clamp(1.0 - exp(-d * d), 0.0, 1.0));
 
         fragColor = vec4(rgb, coverage);
+#ifdef BAKE
+        // A texture has no other pixel to show through, so an export carries
+        // the checker as the half alpha it stands for.
+        if (flags(2)) fragColor.a *= 0.5;
+#endif
 #ifdef ZSORT_PLATES
         // The nearest surface for pass 2: its key, its view z, whether it is
         // mirrored, and how squarely it faces the camera: its plane's distance
@@ -884,6 +906,35 @@ export function createModelMaterial() {
         /* Only the smooth-holes switch writes an alpha below 1; everything
          * else writes 1, which covers every sample, as without it. */
         alphaToCoverage: true,
+    });
+}
+
+/**
+ * The fill shader as the export runs it (js/export.js): each face drawn flat
+ * into its cell of a texture, with `source`'s uniforms as they stand this frame
+ * -- the same object, so the palette, light and texture set are the ones on
+ * screen. What only means anything through a camera is left out: the depth
+ * passes, the board's front/back test, which keeps a face the camera happens
+ * to see from behind, and the fog, which belongs to the view, not the model.
+ */
+export function createBakeMaterial(source) {
+    const defines = { ...(source.defines ?? {}), BAKE: '' };
+    for (const d of ['ZSORT_PLATES', 'FACE_LAYERS', 'PLANE_BIAS']) delete defines[d];
+    return new THREE.ShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        vertexShader: VERT_SHADER,
+        fragmentShader: FRAG_SHADER,
+        defines,
+        uniforms: {
+            ...source.uniforms,
+            uBoardCull: { value: 0 },
+            uFogDensity: { value: 0 },
+            uZPass: { value: 0 },
+        },
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.NoBlending,
     });
 }
 
