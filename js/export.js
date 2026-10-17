@@ -136,12 +136,13 @@ function maskMaterial() {
     });
 }
 
-function renderSheet(renderer, scene, width, height) {
+/* Drawn through the view's camera, though nothing lands where it looks: the
+ * light's front/back test of a two-sided face is taken in its space. */
+function renderSheet(renderer, scene, camera, width, height) {
     const target = new THREE.WebGLRenderTarget(width, height, {
         minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
         depthBuffer: false, generateMipmaps: false,
     });
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     renderer.setRenderTarget(target);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, false, false);
@@ -165,16 +166,21 @@ function bakeSheet(viewer, draws, plan) {
         const src = d.mesh.material;
         if (!bakeMats.has(src)) bakeMats.set(src, createBakeMaterial(src));
         const m = new THREE.Mesh(bakeGeometry(d, plan.cells[i], plan.width, plan.height), bakeMats.get(src));
+        /* Placed where the draw stands: the shader lights a face by its normal
+         * through this matrix, and with none every part was lit as if unposed
+         * and unturned. Where the face lands in the sheet is aBake's alone. */
+        m.matrixAutoUpdate = false;
+        m.matrix.copy(d.mesh.matrixWorld);
         m.frustumCulled = false;
         scene.add(m);
         return m;
     });
     r.autoClear = false;
     try {
-        const rgba = renderSheet(r, scene, plan.width, plan.height);
+        const rgba = renderSheet(r, scene, viewer.camera, plan.width, plan.height);
         const mask = maskMaterial();
         for (const m of meshes) m.material = mask;
-        const covered = renderSheet(r, scene, plan.width, plan.height);
+        const covered = renderSheet(r, scene, viewer.camera, plan.width, plan.height);
         mask.dispose();
         return { rgba, covered };
     } finally {
