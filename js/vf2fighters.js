@@ -1302,7 +1302,10 @@ function readMoveSetup(rom, R, dv, at) {
 function readScriptOps(lengths, dv, at) {
     const ops = [];
     for (let op = dv.getUint8(at); op !== 0 && op < lengths.length; op = dv.getUint8(at)) {
-        ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3), value: dv.getInt16(at + 3, true) });
+        ops.push({
+            frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3), value: dv.getInt16(at + 3, true),
+            third: lengths[op] > 5 ? dv.getInt8(at + 5) : 0,
+        });
         at += lengths[op];
     }
     return ops;
@@ -1367,6 +1370,20 @@ function playMoveFlags(m, frames, bit) {
         w = out[f];
     }
     return out;
+}
+
+/*
+ * Fighting Vipers' script op 28 (0x1C8CC) on motion `id`, for its trails
+ * (js/fvtrails.js): each one's frame, the kind it writes to +0xA25 (byte +3,
+ * byte +4 shifted up a nibble) and the life to +0xA24 (byte +5); with the
+ * setup word (+0x804). Null for a motion with none, or a game without it.
+ */
+export function trailScript(rom, id) {
+    const op = rom.game.rig?.trails?.op;
+    const m = op && id != null ? moveSetup(rom, id) : null;
+    const ops = m?.ops.filter((o) => o.op === op)
+        .map((o) => ({ frame: o.frame, kind: (o.arg | (o.value >> 8) << 4) & 0xff, life: o.third }));
+    return ops?.length ? { word: m.word, ops } : null;
 }
 
 /** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */

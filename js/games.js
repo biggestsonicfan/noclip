@@ -855,6 +855,16 @@ const fvipers = {
         /* The move script's op lengths, by the handlers 0x1C24C runs
          * (table 0x1D028); js/fighterhands.js. */
         script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4],
+        /* Script op 28's trails; js/fvtrails.js. 0x7C178's tables by life:
+         * the feet's models by stage (0x500064) and sizes, the hands', the
+         * floor puff's, and the waist's models (one set for every stage). */
+        trails: {
+            op: 28,
+            feet: { models: 0x064445f0, sizes: 0x06444690 },
+            hands: { models: 0x06444430, sizes: 0x06444490 },
+            floor: { models: 0x06444520, sizes: 0x064445c0 },
+            waist: 0x064446c0,
+        },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup

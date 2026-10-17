@@ -2533,6 +2533,107 @@ draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
 and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
 flashes.
 
+#### Move trails (script op 28; read from the ROM, checked against MAME)
+
+Many Fighting Vipers moves shed a stippled trail off the feet, the hands or
+the waist: Bahn's swing (motion 624), Grace's kick (3), the floor puff of a
+fall (283). It comes from move-script op 28 (`0x1C8CC`, six bytes), which
+writes a kind to `+0xA25` (byte +3, with byte +4 shifted up a nibble) and a
+life to `+0xA24` (byte +5). `set_mot_dat` clears the kind at `0x1B8C0` as a
+motion starts, so a kind holds from its op's frame to the next op 28 or the
+end of the motion; 308 motions carry one. VF2 has no op 28 (its script ops
+stop at 23) and draws no such trail.
+
+The bits of the kind: 0 lets the first ring drop; 1 is the waist and 2 the
+floor; 5 and 4 the left and right foot; 7 and 6 the left and right hand.
+The values the ROM uses (b3/b4/b5 → kind, motions):
+
+| b3/b4/b5 | kind | what | motions |
+|---|---|---|---|
+| 1/1/9 | `0x11` | right foot | 101 (3@1, 86@10) |
+| 3/0/9 | `0x03` | waist | 92 (32@43, 589@141) |
+| 1/2/9 | `0x21` | left foot | 63 (74@2) |
+| 1/3/9, 1/3/10, 1/3/6 | `0x31` | both feet | 45, 3, 1 (624@3, life 6) |
+| 5/0/9 | `0x05` | floor | 3 (283@16, 515@9, 566@14) |
+| 1/4/9 | `0x41` | right hand | 3 (709@20, 710@20, 868@15) |
+| 0/0/9 | 0 | off | 125 |
+
+Every frame `0x7BDC0` (skipped while `0x508000` bit 5 is set) drops sparks
+for both players into two shared rings of sixteen, the first at `*0x500890`
+and the second at `*0x500894`. A drop takes the ring's next slot (byte +0x42
+plus 1, mod 16): the point at +0x74 + 12·slot, the slot's bit in the live
+mask at +0x40, the kind at +0x174 + slot and the life at +0x64 + slot. The
+points are the player's slot translations, `+0x1F4 + 12·slot`, in the
+board's frame.
+
+- `0x7BE10`, the first ring: bit 0 is needed. A kind without bit 1 drops
+  nothing while the frame counter `0x500020` has bit 1, so two frames in
+  four. Bit 1 drops at the body (slot 0) 0.2 lower (`0xBE4CCCCD` added to
+  y); otherwise bit 2 drops at the body's x and z on the floor (y = 0). The
+  life is always 15.
+- `0x7BEDC`, the second ring, in this order: bit 5 at `+0x284` (slot 12, the
+  left foot), bit 4 at `+0x2A8` (slot 15, the right foot), bit 7 at `+0x230`
+  (slot 5, the left hand), bit 6 at `+0x254` (slot 8, the right hand), each
+  with life `+0xA24`. Mirrored (`+0` bit 6), each pair reads the other
+  side's slot. With `+0x1A4` bit 27 the feet's sparks go on the floor (the
+  hands' don't). Nothing drops while the setup word (`+0x804`) has bit 8
+  and `+0x1A4` has bit 2.
+
+Then a task, `0x7C178` (installed by `0x7C140`), ages each ring: a live slot
+takes its life's model and size (+0x44 + 2·slot, +0x134 + 4·slot), loses a
+life, and is freed once the life falls below 0. A free slot's model is 0.
+The tables are indexed by life, the per-stage ones by `0x500064 & 15`:
+
+- bit 2 (floor): model `(*0x6444520[stage])[life]`, 0x453 on every stage;
+  size `0x64445C0[life]` = 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 3, then all but 0.
+- bit 1 (waist): model `0x64446C0[life]`, 0x3A2 at life 15 up to 0x3AD as
+  the life runs out; size 1.
+- bit 6 or 7 (hands): model `(*0x6444430[stage])[life]`, 0xEA4 for the
+  longest lives up to 0xEA9 at life 0, the same on every stage; size `0x6444490[life]` = 0.2.
+- otherwise (feet): model `(*0x64445F0[stage])[life]`: 0x44E/0x44D/0x44C on
+  stage 0, 0x452/0x451/0x450 on stages 2 and 3, 0x449/0x448/0x447 on the
+  rest; size `0x6444690[life]` × 0.35 (`0x3EB33333`), so it grows from
+  0.175 to 1.575 at life 8 and falls back to 0 by life 12.
+
+`0x21FAC`, from the frame's draw list (`0x1FEE8`), draws each slot whose
+model is not 0 as push, translate to its point, scale by its size, turn
+about y by the camera's yaw (`g13+0x26`, and a quarter turn more in the
+second ring), draw, pop. The models are two-face stippled quads (the feet
+and floor), 18-face (hands) and 32-face (waist) shapes.
+
+**Order in a frame, checked in MAME.** Breakpoints on `0x7BDC0`, `0x7C178`,
+`0x21FAC` and `0x1C8CC` in attract mode show, each frame: the script step
+(op 28 included), then the draw (`0x21FAC`), then the drop (`0x7BDC0`), then
+the ageing. So what is drawn on a frame is what the frame before picked: a
+spark dropped on frame n shows from frame n + 1 with its life's model, and
+for life L it is drawn L + 1 times. At the drop, `+0xA25` is set by the op
+28s at or before `+0x1AA`: motion 0x21B's op at frame 7, 0x21C's at 4,
+0x270's at 3, 0x24D's at 141 (and off at 142) and 0x368's at 1 (off at 2)
+all show in the kind the drop reads on exactly that frame. The points are
+that frame's pose: the board's body, hand and foot points at the drop,
+compared without rotation (distances from the body and between pairs) with
+the explorer's pose of Bahn, are off by 0.004 a frame over 93 frames of
+motion 0x129 and by 0.0000 over 29 of 0x13B at the same frame, and by 0.08
+or more a frame earlier or later. `0x500020` counts one a frame.
+
+**What the explorer draws** (`js/fvtrails.js`; `trailScript` in
+`js/vf2fighters.js`, the profile's `rig.trails`; `placeSparks` in
+`js/app.js`). For a Fighting Vipers motion with op 28, the explorer runs
+both rings frame by frame from frame 1 of the pass on screen, on a stand-in
+for the fighter posed with `poseFighter` (no blend or look carried in), with
+the motion's move flags (`moveFlags`), its setup word and the panel's
+mirroring, the display tick as the frame counter. It draws what the frame
+before picked, turned by the explorer camera's heading. The Animation tab's
+"Move trails" field lists the motion's op 28s, switches the trail off with
+the afterimages' switch, and picks the stage whose models the feet take
+(stage 0 by default). Only the fighter's own sparks are drawn: on the board
+the opponent's share the rings, and the opponent in the explorer plays a
+reaction, not a fight. Before this the explorer drew none: on Bahn's 624 it
+now draws 4 sparks on frame 5 (two 0x44E and two 0x44D, both feet) and 12
+on frame 9, gone by frame 17; on Grace's 3, 1 on frame 2 and 10 by frame
+12; on 589, one waist spark from frame 142 (0x3A2) to 157 (0x3AD); on 283,
+the feet's sparks and from frame 18 the floor puff, two frames in four.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named

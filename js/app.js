@@ -50,7 +50,11 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, moveFlags,
+    trailScript,
 } from './vf2fighters.js';
+import {
+    readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
+} from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
@@ -125,6 +129,9 @@ const state = {
     armour: { upper: false, lower: false, streak: false },
     /* The stage whose wind blows on the sway chains (js/osage.js), or none. */
     osageWind: null,
+    /* Fighting Vipers: the stage (0x500064) whose models the move trails
+     * take (js/fvtrails.js). */
+    sparkStage: 0,
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -3854,6 +3861,83 @@ function effectFrames(m) {
     return m.effectCycle;
 }
 
+/*
+ * Fighting Vipers' move trails (js/fvtrails.js). The motion's script op 28 is
+ * run through the board's two rings on a stand-in for the fighter, posed frame
+ * by frame from frame 1 of the pass on screen, so the sparks are what the
+ * board leaves on the motion played from its start. Like the afterimages, the
+ * rings are stepped a frame at a time while the counter moves on by a few, and
+ * run again from frame 1 otherwise. Only the fighter's: on the board the
+ * opponent's sparks share the rings.
+ */
+const SPARK_POOL = 2 * RING_SLOTS;
+
+function placeSparks(m, body) {
+    const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
+    const key = script && `${m.decoded.id}:${state.mirrored}:${state.sparkStage}`;
+    if (!script) { hideSparks(m); return; }
+    if (m.sparks?.key !== key || m.sparks.body !== body) {
+        const tables = readTrailTables(state.rom, state.sparkStage);
+        const geoms = new Map();
+        for (const id of sparkModels(tables)) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        m.sparks = { key, body, script, tables, geoms, run: null };
+    }
+    const S = m.sparks, step = S.run ? m.tick - S.run.done : 0;
+    if (!S.run || step < 0 || step > TRAIL_CATCH_UP) S.run = sparkRun(m, body, S);
+    runTrailsTo(S.run, m.tick);
+    placeSparkMeshes(m, state.showTrails ? sparkDraws(S.run.rings, cameraYaw()) : []);
+}
+
+/* A run started at frame 1 of the pass on screen, on a stand-in with no
+ * blend or look carried in. */
+function sparkRun(m, body, S) {
+    const stand = { ...body }, mirrored = state.mirrored, motion = m.decoded;
+    return createTrailRun({
+        script: S.script, tables: S.tables, frames: motion.frames, flags: moveFlags(state.rom, motion), mirrored,
+        poseAt: (frame) => poseFighter(state.rom, stand, motion, frame, { mirrored }).pose,
+    }, m.tick - (m.frame - 1));
+}
+
+/* The camera's heading as a board angle: (sin, 0, cos) along its view, in the
+ * board frame, which is the rig's with z the other way. */
+function cameraYaw() {
+    const root = state.viewer.root;
+    const d = state.viewer.camera.getWorldDirection(new THREE.Vector3())
+        .transformDirection(root.matrixWorld.clone().invert());
+    return Math.round((Math.atan2(d.x, -d.z) * 0x8000) / Math.PI) & 0xffff;
+}
+
+/* One mesh per ring slot, built in the rig's scene, each swapping geometry for
+ * the model its spark is on. */
+function placeSparkMeshes(m, draws) {
+    const geoms = m.sparks.geoms;
+    if (!geoms.size) return;
+    let pool = m.sparkPool;
+    if (!pool?.length || pool[0].mesh.parent !== state.viewer.root) {
+        const first = geoms.values().next().value;
+        pool = m.sparkPool = Array.from({ length: SPARK_POOL }, () => ({ ...addRigPart(first.decoded, first), model: first.decoded.index }));
+    }
+    pool.forEach((p, i) => {
+        const d = draws[i], g = d && geoms.get(d.model);
+        showPart(p, Boolean(g));
+        if (!g) return;
+        if (p.model !== d.model) {
+            p.model = d.model;
+            p.mesh.geometry = g.mesh;
+            p.mesh.userData.modelIndex = d.model;
+            if (p.lines && g.edges) p.lines.geometry = g.edges;
+        }
+        placePartAt(p, viewerMatrix(d));
+    });
+}
+
+function hideSparks(m) {
+    for (const p of m.sparkPool ?? []) showPart(p, false);
+}
+
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
  * the chest side move with the pose. `holder` keeps the skin and its mesh. */
 function placeSkin(holder, matrices, flash = null) {
@@ -3891,6 +3975,7 @@ function poseBodyRig() {
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
     launchPendingDebris(m, pose.pose);
     placeDebris(m);
+    placeSparks(m, body);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -4447,6 +4532,7 @@ function renderBodyMotionPanel() {
     scrub.disabled = !d;
     $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
     $('#motion-play').disabled = !d;
+    renderSparkPanel();
     updateMotionFrameReadout();
 }
 
@@ -4523,6 +4609,7 @@ function renderMotionPanel() {
     renderMotionMeta();
     renderStringPanel();
     renderTrailPanel();
+    renderSparkPanel();
     renderExhaustPanel();
     updateMotionFrameReadout();
 }
@@ -4674,6 +4761,30 @@ function renderTrailPanel() {
         + `<br>fades through ${models.join(', ') || '—'}`
         + `<br>bone ${t.bone.toFixed(3)}, skeleton type ${t.skeletonType}`
         + `<br><span id="trail-live"></span>`;
+}
+
+/* Fighting Vipers' move trails: what the motion's op 28s ask for, and the
+ * stage whose models they take. */
+const SPARK_KINDS = [[0x20, 'left foot'], [0x10, 'right foot'], [0x80, 'left hand'], [0x40, 'right hand']];
+function sparkKind(k) {
+    const parts = SPARK_KINDS.filter(([bit]) => k & bit).map(([, name]) => name);
+    if (k & 1 && k & 2) parts.push('waist');
+    else if (k & 1 && k & 4) parts.push('floor, two frames in four');
+    return parts.join(' + ') || 'off';
+}
+
+function renderSparkPanel() {
+    const m = state.motion;
+    const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
+    $('#spark-field').hidden = !script;
+    if (!script) return;
+    $('#spark-show').checked = state.showTrails;
+    const sel = $('#spark-stage');
+    const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
+    sel.innerHTML = Array.from({ length: 12 }, (_, n) => `<option value="${n}">${name(n)}</option>`).join('');
+    sel.value = String(state.sparkStage);
+    $('#spark-readout').innerHTML = 'op 28: ' + script.ops
+        .map((o) => `f${o.frame} ${sparkKind(o.kind)}${o.kind & 0xf0 ? `, life ${o.life}` : ''}`).join(' · ');
 }
 
 /* A bouncing chest's spring on this frame. */
@@ -5003,6 +5114,14 @@ function wireOptions() {
     });
     $('#trail-show').addEventListener('change', (e) => {
         state.showTrails = e.target.checked;
+        poseRig();
+    });
+    $('#spark-show').addEventListener('change', (e) => {
+        state.showTrails = e.target.checked;
+        poseRig();
+    });
+    $('#spark-stage').addEventListener('change', (e) => {
+        state.sparkStage = +e.target.value;
         poseRig();
     });
     $('#exhaust-open').addEventListener('change', (e) => {
