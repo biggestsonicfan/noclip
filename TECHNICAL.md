@@ -3241,6 +3241,45 @@ to ±0.7 (`0x23`). The gate holds on frames 1–15 of motions 605–611, 820–8
     (`0x198C0`), which are set only by game-mode code
   - the per-slot culling in `0x19EBC`
 
+#### Virtua Fighter 2's per-frame fighter draw (`0x1D1DC`; read from the ROM)
+
+The caller of `rob_disp` in a fight is `0x1D1DC`. `g13` there is the camera
+task (`[0x500814]`), so its `+0` bits 1 and 2 are "draw player 1 / player 2"
+(set at `0x1D8F4` unless `0x50009C` bit 1 or 2 hides one). Each player is drawn
+twice. The first pass (`0x1DEA8`, `0x1DF0C`) runs with camera `+0xFA` bit 0
+set; the second (`0x1E394`, `0x1E3FC`) runs with it clear. Between them come
+the stage's display lists. What else it draws:
+
+- **The fighters' reflection, `0x20488` (not drawn by the explorer).** On a
+  stage with flag bit 5 (`0x6EEA0`), after the mirror floor (`0x20400`), it
+  pushes a scale of (1, −1, 1) and calls `0x19C94` for each player that is
+  drawn. That routine draws sixteen models from the character record's
+  `+0x34` list (`[+0x190]+0x34`), each on its slot's matrix (command
+  `0x1B803737`, player `+4`, slot × 12). That puts a flipped copy of the
+  fighter under the floor. It is culled by part (`0x2069C`) and gated on
+  player `+0` bit 7, the same gate `rob_disp` uses. The models are a set of
+  their own (Akira's are `0x997`–`0x9A6`; his body is `0x197`–`0x1A6`). Only
+  stage numbers 10 and 11 have the bit (the Mirror stage, Dural's). The
+  Animation tab's stage field reaches both, so every motion played there
+  shows it. Not checked against MAME.
+- Stage pieces, already read for the Stage tab: `0x2173C`/`0x1E52C` (light
+  and floor matrices, no models), `0x1EE34` (fog), `0x20708` (scenery),
+  `0x20400` (mirror floor), `0x20064` and `0x202E8` (the raft), `0x21368`
+  and `0x30500` (by stage flag and kind).
+- `0x61B88`/`0x61AC4`: the floor shadows ("The fighters' floor shadows").
+  With player `+0x2A` set, `0x61AC4` draws one entry of `0x50B100` instead.
+- `0x21864`/`0x21904` (camera `+0` bit 7): 32 models on a 3-unit grid,
+  copied from `0x201EE58` to `0x50B100`. That list is set up when a player's `+0x2A`
+  becomes 1 (`0x53C14`), so it is game mode, like `rob_disp`'s `0x198C0`.
+- `0x56EE0`: model `0x164` at the camera's target, while camera `+0xB0` is 1.
+  Only the `CAMERA_POSITION` debug code (`0x55A18`) sets that.
+- Camera `+0` bit 24 (`0x1E434`): model `0x129` at each player's camera
+  point (`+0x1BC`, `+0x1E4`). Nothing in the program sets that bit with
+  `setbit` or a `0x1000000` constant.
+- `0x6CA84` walks three display tasks; all their handlers are bare `ret`s.
+  `0x21220` is a bare `ret` too.
+- `0x500068` bit 25 sends the whole draw to `0x1E9BC`, the replay.
+
 #### The carried item (FV, `0x1A4B4`; read from the ROM, checked against MAME)
 
 `js/fvitem.js`. Every frame `0x1CB2C` copies an item record into player
