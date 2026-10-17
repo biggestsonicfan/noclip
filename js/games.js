@@ -872,6 +872,11 @@ const fvipers = {
         /* Script op 30's throw spark; js/fvhitspark.js. 0x2DB78's flipbooks
          * for a record with flag bit 8: +0x1E's by age, +0x20's by half. */
         hitSpark: { op: 30, books: [{ at: 0x064212b4 }, { at: 0x064211e0, halved: true }] },
+        /* Each fighter's own light (0x1F1FC); js/fvstrobe.js. +0x720 starts
+         * as the setup's second word (0x1B98C); script ops 25 and 26 set and
+         * clear a bit of it, op 27 sets bit 3 or clears it. While it has
+         * `bits`, or +0x1A4 has bit `flag`, the light strobes. */
+        strobe: { set: 25, clear: 26, bit3: 27, bits: 0x420, flag: 26 },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup

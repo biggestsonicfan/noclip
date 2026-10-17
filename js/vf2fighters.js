@@ -1363,7 +1363,7 @@ function moveSetup(rom, id) {
     const end = flags.ends?.[id];
     const times = setup.times && end !== undefined ? [setup.times[0], setup.times[1], end] : setup.times;
     const ops = readScriptOps(script, r.view, setup.script);
-    return { ...setup, times, ops, word: r.view.getUint32(r.off, true), drop: flags.drop };
+    return { ...setup, times, ops, word: r.view.getUint32(r.off, true), second: r.view.getUint32(r.off + 4, true), drop: flags.drop };
 }
 
 function playMoveFlags(m, frames, bit) {
@@ -1406,6 +1406,33 @@ export function hitSparkScript(rom, id) {
     const m = op && id != null ? moveSetup(rom, id) : null;
     const ops = m?.ops.filter((o) => o.op === op && o.arg).map((o) => ({ frame: o.frame, slot: 1 << o.arg }));
     return ops?.length ? { ops } : null;
+}
+
+/*
+ * Fighting Vipers' +0x720 on frames 1..frames of motion `id` (index =
+ * frame), for the light strobe (js/fvstrobe.js): set_mot_dat copies the
+ * setup's second word (+0x860, 0x1B98C), then script ops 25 (0x1C870) and 26
+ * (0x1C888) set and clear the bit their byte +3 names, and op 27 (0x1C8A0)
+ * sets bit 3 when that byte is 1 and clears it otherwise. Null for a game
+ * without it. What the fight writes to the word (the armour's bit 6, the
+ * landing's bits 2 and 3) is left out.
+ */
+export function lightFlags(rom, id, frames) {
+    const S = rom.game.rig?.strobe;
+    const m = S && id != null ? moveSetup(rom, id) : null;
+    if (!m) return null;
+    const out = new Uint32Array(frames + 1);
+    let w = m.second, k = 0;
+    for (let f = 1; f <= frames; f++) {
+        for (; k < m.ops.length && m.ops[k].frame <= f; k++) {
+            const { op, arg } = m.ops[k];
+            if (op === S.set) w |= 1 << arg;
+            else if (op === S.clear) w &= ~(1 << arg);
+            else if (op === S.bit3) w = arg === 1 ? w | 8 : w & ~8;
+        }
+        out[f] = w >>> 0;
+    }
+    return out;
 }
 
 /** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */

@@ -2813,6 +2813,101 @@ Left out, because the explorer cannot reach them:
 - Op 24, a wall-hit state.
 - The re-anchoring of the place to the fight's history.
 
+#### The light strobe (`+0x720` bits 5 and 10; read from the ROM, checked against MAME)
+
+In some Fighting Vipers motions the light on a fighter flickers: the fighter
+flashes bright, goes dark on the lit side and bright on the other, and back,
+every six frames. Each player is drawn by a light of its own. Before each
+player's `rob_disp` the draw (`0x1FDD0` for P1, `0x1FE44` for P2) sends
+command `0xA0A` with the light vector (`0x50108C`) times that player's scale
+(P1 `0x50109C`, P2 `0x5010A0`), as `0x5010AC` and `0x5010B8`. VF2 has no
+`0xA0A` and no per-player light, so this is Fighting Vipers only.
+
+Each tick `0x1F000` sets the scale:
+
+- First it sets it to `0x50A0E0[fighter]`, which `0x2176C` fills with 1.0
+  for every fighter.
+- Then, at `0x1F1FC` (P1) and `0x1F258` (P2), if the player's `+0x720` has
+  bit 5 or bit 10, or its `+0x1A4` has bit 26, it adds `fround(0.8)` to a
+  phase of the player's own (P1 `0x5010F0`, P2 `0x5010F4`). If the result is
+  above 2.0, the phase becomes -2.0. The scale takes the phase.
+- From 1.0 the scale runs 1.8, -2, -1.2, -0.4, 0.4, 1.2, 2, -2, and so on.
+  Above 1 the lit side is brighter. Below 0 the light comes from the other
+  side, so the shader lights the faces that were dark.
+
+The phase is set to 1.0 only at the fight scene's start (the camera task's
+init, `0x1ED20`, at `0x1ED44`). It steps only on gated frames, and it carries
+on from one motion into the next.
+
+`+0x720` (the same word as `+0x860`) is set by `set_mot_dat` (`0x1B98C`) to
+the setup record's second u32. Script op 25 (`0x1C870`) sets the bit its byte
++3 names, op 26 (`0x1C888`) clears it, and op 27 (`0x1C8A0`) sets bit 3 if
+that byte is 1 and clears it otherwise. Nothing else sets bits 5 or 10. The
+other writers touch bits 6 (the armour), 2 and 3 (landing), or are the
+replay's save and restore.
+
+63 motions have the gate. Examples:
+
+- 551 has bit 5 from its setup, and op 26 on frame 33.
+- 605 to 611 also have `+0x1A4` bit 26 on frames 1 to 25 through 29.
+- 128, 129, 413, 820 to 831 and 864 are gated too.
+- 1017 to 1021 use bit 10.
+
+None of them is a motion the game loops.
+
+**Checked in MAME** (watchpoints on `0x5010A0`, the frame counter `+0x1AA`
+and `+0x720`, in the attract):
+
+- Each tick runs the script, then the light, then the draw. So the gate the
+  script leaves on frame N decides frame N.
+- On the attract's 551, P2's light is 1.8 on frame 1 (the setup's bit 5),
+  steps through frame 32, and is 1.0 on frame 33, where op 26 clears the bit
+  before the light runs.
+- Over a 420-second attract and a second run that forced bit 5 on P1, every
+  one of 1066 gated frames stepped the phase as above, across 551, 605 to 611,
+  659, 691, 981 and others.
+- On the 729 logged frames inside a motion, the explorer's gate agreed with
+  MAME's.
+
+**What the explorer does** (`js/fvstrobe.js`; `lightFlags` in
+`js/vf2fighters.js`; the profile's `rig.strobe`; `strobeFighter` in
+`js/app.js`; the shader's `uLightScale`):
+
+- It follows `+0x720` through the motion's setup word and ops 25 to 27, and
+  `+0x1A4` bit 26 through the motion's flags.
+- It steps the phase from 1.0 on each gated frame, and draws every mesh of the
+  fighter (parts, pads, skin, osage) with the light times the scale. Each mesh
+  sets the shared material's `uLightScale` as it draws and puts back 1 after.
+- The opponent gets its own scale from the motion it plays.
+- In a built string, the phase runs on from the links before.
+- A motion on its own starts from 1.0 on every pass, as a fight would at its
+  start.
+
+Before this every fighter was drawn at scale 1. In Node, on motion 551:
+
+| Frame | Before | Now |
+|------:|-------:|----:|
+| 1     | 1      | 1.8 |
+| 2     | 1      | -2  |
+| 3     | 1      | -1.2|
+| 6     | 1      | 1.2 |
+| 7     | 1      | 2   |
+| 32    | 1      | -2  |
+| 33    | 1      | 1   |
+
+Motion 605 is 0.4 on frame 29 and 2 on 31. VF2 has no such light, so it has
+no case. In headless Chrome, motion 551 frame 2 drawn at -2 differs from the
+same frame at 1 on 1358 pixels (arms and shoulders).
+
+Left out:
+
+- Stages 2 and 9 set some fighters' base scale away from 1.0 (`0x2176C`'s
+  callers).
+- Stages 3 and 4 shade by the fighter's place (`0x21398`, `0x21470`).
+- Op 14's camera shake (`[0x500814]+0xFC`, damped by ×-0.5 each tick).
+  It moves the fight camera, not the fighter.
+- The phase a real fight carries in from motions before the one on screen.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named

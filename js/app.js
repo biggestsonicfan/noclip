@@ -53,6 +53,7 @@ import {
     trailScript, hitSparkScript,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
+import { strobeAt, strobeAfter } from './fvstrobe.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
@@ -3650,6 +3651,7 @@ function poseFighterAndRival(body, m) {
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
+    strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame).scale);
     return mine;
 }
 
@@ -4017,6 +4019,33 @@ function placeSkin(holder, matrices, flash = null) {
     placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
+/*
+ * Fighting Vipers' light strobe (js/fvstrobe.js): each fighter drawn by the
+ * light times a scale of its own, 1 but on the frames a motion strobes it.
+ * The fighters share the scene's material, so each mesh sets the scale as
+ * it draws and puts 1 back after. In a chain the phase runs on from the
+ * links before; a motion alone starts from the fight's 1.0 on every pass.
+ */
+function strobeFighter(holder, scale) {
+    const meshes = [...holder.parts ?? [], ...holder.extras ?? []].flatMap((p) => p.slots.map((x) => x.mesh));
+    if (holder.skinMesh) meshes.push(holder.skinMesh.mesh);
+    for (const p of holder.osageParts ?? []) if (p) meshes.push(p.mesh);
+    for (const mesh of meshes) {
+        if (mesh.userData.lightScale === undefined) {
+            mesh.onBeforeRender = (r, s, c, g, material) => setLightScale(material, mesh.userData.lightScale);
+            mesh.onAfterRender = (r, s, c, g, material) => setLightScale(material, 1);
+        }
+        mesh.userData.lightScale = scale;
+    }
+}
+
+function setLightScale(material, scale) {
+    const u = material.uniforms?.uLightScale;
+    if (!u || u.value === scale) return;
+    u.value = scale;
+    material.uniformsNeedUpdate = true;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
@@ -4035,6 +4064,7 @@ function poseBodyRig() {
     placeDebris(m);
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined).scale);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');

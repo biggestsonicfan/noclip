@@ -309,6 +309,10 @@ const FRAG_SHADER = /* glsl */`
     // the solid branch at the end of main().
     uniform float uSolidRamp;
     uniform vec3 uLight;         // the stage's light vector, world space
+    // A fighter's own scale on it: Fighting Vipers lights each player by the
+    // light times a scale of its own, which a strobe swings from 2 to -2
+    // (js/fvstrobe.js). 1 for everything else; see strobeFighter in js/app.js.
+    uniform float uLightScale;
     // Set for a game whose geometry engine lights by the polygon's plane rather
     // than the ROM normal (GEO mode 2) — see polyLuma.
     uniform float uPlaneNormals;
@@ -433,7 +437,7 @@ const FRAG_SHADER = /* glsl */`
     // transformed points and does normalise it, so it stays unit length here.
     float polyLuma() {
         vec3 n = uPlaneNormals > 0.5 ? normalize(vNormal) : vNormal;
-        float dotl = dot(n, uLight);
+        float dotl = dot(n, uLight) * uLightScale;
         float dotp = dot(normalize(vViewNormal), vFacePt);
         float luminance = (dotl * dotp < 0.0) ? 0.0 : abs(dotl);
         vec2 m = uMaterial[int(vMaterial + 0.5)];
@@ -886,6 +890,7 @@ export function createModelMaterial() {
             uFlatTexel: { value: 0 },
             uSolidRamp: { value: 0 },
             uLight: { value: new THREE.Vector3(0, 1, 0) },
+            uLightScale: { value: 1 },
             uPlaneNormals: { value: 0 },
             uMaterial: { value: Array.from({ length: 32 }, () => new THREE.Vector2(0, 255)) },
             uTransfer: { value: 0 },
