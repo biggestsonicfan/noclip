@@ -98,12 +98,12 @@
 <div id="loader">
   <div class="splash">
     <header class="splash-head">
-      <h1>Sega Model 2 <span>3D Explorer</span></h1>
-      <p class="sub">Fly through the arenas, courses, fighters and monsters of five Model&nbsp;2
+      <h1 data-i18n="splash.title">Sega Model 2 <span>3D Explorer</span></h1>
+      <p class="sub" data-i18n="splash.sub">Fly through the arenas, courses, fighters and monsters of five Model&nbsp;2
          arcade games, built in this tab from your own ROM set.</p>
     </header>
 
-    <section class="showcase" aria-label="What the explorer draws">
+    <section class="showcase" aria-label="What the explorer draws" data-i18n-aria="splash.showcase">
       <div class="reel" id="reel">
         <!-- Two layers: the clip on screen, and the next one loading under it so the
              change is a cross-fade rather than a cut to black. -->
@@ -112,121 +112,121 @@
         <!-- A game with no clips yet still gets its turn on the reel. -->
         <div class="reel-empty" id="reel-empty" hidden>
           <b id="reel-empty-name"></b>
-          <span>No clip of this one yet &mdash; drop <code id="reel-empty-zip"></code> to see it for yourself.</span>
+          <span data-i18n="reel.empty">No clip of this one yet &mdash; drop <code id="reel-empty-zip"></code> to see it for yourself.</span>
         </div>
         <div class="reel-cap">
           <span class="reel-game" id="reel-game"></span>
           <span class="reel-text" id="reel-text"></span>
         </div>
         <div class="reel-dots" id="reel-dots"></div>
-        <button type="button" class="reel-play" id="reel-play" aria-label="Play the clips" hidden>&#9654;</button>
+        <button type="button" class="reel-play" id="reel-play" aria-label="Play the clips" data-i18n-aria="reel.play" hidden>&#9654;</button>
       </div>
 
       <ul class="games" id="games">
         <li class="game" data-game="stf" data-zip="sfight.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Sonic The Fighters</div>
-          <div class="g-meta">Every arena, all 34 fighters and their 518 motions &middot; <code>sfight</code> / <code>schamp</code></div>
+          <div class="g-name" data-i18n="stf.name">Sonic The Fighters</div>
+          <div class="g-meta" data-i18n="stf.meta">Every arena, all 34 fighters and their 518 motions &middot; <code>sfight</code> / <code>schamp</code></div>
           <ol class="clips" hidden>
-            <li data-clip="stf-carpet">The Flying Carpet in <b>ride</b> view: the arena held still while the desert wheels past</li>
-            <li data-clip="stf-canyon">Canyon Cruise, riding the boat down its canyon</li>
-            <li data-clip="stf-noclip"><b>Noclip</b> over Casino Night's wall and down into the ring</li>
-            <li data-clip="stf-giantwing">Out among Giant Wing's clouds</li>
-            <li data-clip="stf-fighter">Sonic mid-move on his own rig, afterimages and all</li>
+            <li data-clip="stf-carpet" data-i18n="stf.clip.carpet">The Flying Carpet in <b>ride</b> view: the arena held still while the desert wheels past</li>
+            <li data-clip="stf-canyon" data-i18n="stf.clip.canyon">Canyon Cruise, riding the boat down its canyon</li>
+            <li data-clip="stf-noclip" data-i18n="stf.clip.noclip"><b>Noclip</b> over Casino Night's wall and down into the ring</li>
+            <li data-clip="stf-giantwing" data-i18n="stf.clip.giantwing">Out among Giant Wing's clouds</li>
+            <li data-clip="stf-fighter" data-i18n="stf.clip.fighter">Sonic mid-move on his own rig, afterimages and all</li>
           </ol>
         </li>
         <li class="game" data-game="hotd" data-zip="hotdo.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">The House of the Dead</div>
-          <div class="g-meta">Eighteen stages and 94 enemy bodies &middot; <code>hotdo</code> / <code>hotd</code></div>
+          <div class="g-name" data-i18n="hotd.name">The House of the Dead</div>
+          <div class="g-meta" data-i18n="hotd.meta">Eighteen stages and 94 enemy bodies &middot; <code>hotdo</code> / <code>hotd</code></div>
           <ol class="clips" hidden>
-            <li data-clip="hotd-mansion">Over Stage&nbsp;1's third set, the mansion's lit rooms</li>
-            <li data-clip="hotd-stage2">Chapter&nbsp;2's sixth set under its band of cloud</li>
-            <li data-clip="hotd-body"><code>BO_tetuman</code>, the zombie with a blade for an arm, on its own rig</li>
+            <li data-clip="hotd-mansion" data-i18n="hotd.clip.mansion">Over Stage&nbsp;1's third set, the mansion's lit rooms</li>
+            <li data-clip="hotd-stage2" data-i18n="hotd.clip.stage2">Chapter&nbsp;2's sixth set under its band of cloud</li>
+            <li data-clip="hotd-body" data-i18n="hotd.clip.body"><code>BO_tetuman</code>, the zombie with a blade for an arm, on its own rig</li>
           </ol>
         </li>
         <li class="game" data-game="hotdp" data-zip="hotdp.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">The House of the Dead <i>prototype</i></div>
-          <div class="g-meta">The Model 2C build the game grew out of &middot; <code>hotdp</code></div>
+          <div class="g-name" data-i18n="hotdp.name">The House of the Dead <i>prototype</i></div>
+          <div class="g-meta" data-i18n="hotdp.meta">The Model 2C build the game grew out of &middot; <code>hotdp</code></div>
           <ol class="clips" hidden>
-            <li data-clip="hotdp-room">Standing in the lit room of Stage&nbsp;1</li>
-            <li data-clip="hotdp-set3">Over Stage&nbsp;1's third set</li>
-            <li data-clip="hotdp-body">A zombie's body playing a motion baked for its joints</li>
+            <li data-clip="hotdp-room" data-i18n="hotdp.clip.room">Standing in the lit room of Stage&nbsp;1</li>
+            <li data-clip="hotdp-set3" data-i18n="hotdp.clip.set3">Over Stage&nbsp;1's third set</li>
+            <li data-clip="hotdp-body" data-i18n="hotdp.clip.body">A zombie's body playing a motion baked for its joints</li>
           </ol>
         </li>
         <li class="game" data-game="daytona" data-zip="daytona.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Daytona USA</div>
-          <div class="g-meta">Its courses, cars and trackside, in eight builds &middot; <code>daytona</code></div>
+          <div class="g-name" data-i18n="daytona.name">Daytona USA</div>
+          <div class="g-meta" data-i18n="daytona.meta">Its courses, cars and trackside, in eight builds &middot; <code>daytona</code></div>
           <ol class="clips" hidden>
-            <li data-clip="daytona-speedway">Three-Seven Speedway, the grid on the line</li>
-            <li data-clip="daytona-canyon">Dinosaur Canyon from over its rock</li>
-            <li data-clip="daytona-seaside">Seaside Street Galaxy out on the water</li>
+            <li data-clip="daytona-speedway" data-i18n="daytona.clip.speedway">Three-Seven Speedway, the grid on the line</li>
+            <li data-clip="daytona-canyon" data-i18n="daytona.clip.canyon">Dinosaur Canyon from over its rock</li>
+            <li data-clip="daytona-seaside" data-i18n="daytona.clip.seaside">Seaside Street Galaxy out on the water</li>
           </ol>
         </li>
         <li class="game" data-game="vcop" data-zip="vcop.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Virtua Cop <i>experimental</i></div>
-          <div class="g-meta">Its three stages and every model &middot; <code>vcop</code></div>
+          <div class="g-name" data-i18n="vcop.name">Virtua Cop <i>experimental</i></div>
+          <div class="g-meta" data-i18n="vcop.meta">Its three stages and every model &middot; <code>vcop</code></div>
           <ol class="clips" hidden>
-            <li data-clip="vcop-warehouse">Riding Stage&nbsp;1's rail in among the containers</li>
-            <li data-clip="vcop-site">Stage&nbsp;2's rail across the building site under its red sky</li>
-            <li data-clip="vcop-tower">Stage&nbsp;3's rail round the foot of the tower</li>
+            <li data-clip="vcop-warehouse" data-i18n="vcop.clip.warehouse">Riding Stage&nbsp;1's rail in among the containers</li>
+            <li data-clip="vcop-site" data-i18n="vcop.clip.site">Stage&nbsp;2's rail across the building site under its red sky</li>
+            <li data-clip="vcop-tower" data-i18n="vcop.clip.tower">Stage&nbsp;3's rail round the foot of the tower</li>
           </ol>
         </li>
         <li class="game" data-game="fvipers" data-zip="fvipers.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Fighting Vipers <i>experimental</i></div>
-          <div class="g-meta">Sixteen arenas, still being read &middot; <code>fvipers</code></div>
+          <div class="g-name" data-i18n="fvipers.name">Fighting Vipers <i>experimental</i></div>
+          <div class="g-meta" data-i18n="fvipers.meta">Sixteen arenas, still being read &middot; <code>fvipers</code></div>
           <ol class="clips" hidden>
-            <li data-clip="fvipers-arena">The first arena's walled yard</li>
-            <li data-clip="fvipers-sunset">The same yard at sunset, as another arena's record draws it</li>
-            <li data-clip="fvipers-ring">A roped ring under a city skyline</li>
+            <li data-clip="fvipers-arena" data-i18n="fvipers.clip.arena">The first arena's walled yard</li>
+            <li data-clip="fvipers-sunset" data-i18n="fvipers.clip.sunset">The same yard at sunset, as another arena's record draws it</li>
+            <li data-clip="fvipers-ring" data-i18n="fvipers.clip.ring">A roped ring under a city skyline</li>
           </ol>
         </li>
         <li class="game" data-game="vf2" data-zip="vf2.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Virtua Fighter 2 <i>experimental</i></div>
-          <div class="g-meta">Twelve stages with their music and stage sounds &middot; <code>vf2</code></div>
+          <div class="g-name" data-i18n="vf2.name">Virtua Fighter 2 <i>experimental</i></div>
+          <div class="g-meta" data-i18n="vf2.meta">Twelve stages with their music and stage sounds &middot; <code>vf2</code></div>
           <ol class="clips" hidden>
-            <li data-clip="vf2-islands">The Islands' ring on its green spit over the sea</li>
-            <li data-clip="vf2-wall">Ban-ri, the ring on the Great Wall</li>
-            <li data-clip="vf2-snow">Yuki-yama's ring cut into the mountain</li>
-            <li data-clip="vf2-fighter">Akira on his own rig</li>
+            <li data-clip="vf2-islands" data-i18n="vf2.clip.islands">The Islands' ring on its green spit over the sea</li>
+            <li data-clip="vf2-wall" data-i18n="vf2.clip.wall">Ban-ri, the ring on the Great Wall</li>
+            <li data-clip="vf2-snow" data-i18n="vf2.clip.snow">Yuki-yama's ring cut into the mountain</li>
+            <li data-clip="vf2-fighter" data-i18n="vf2.clip.fighter">Akira on his own rig</li>
           </ol>
         </li>
         <li class="game" data-game="doa" data-zip="doa.zip" tabindex="0">
           <div class="thumb"></div>
-          <div class="g-name">Dead or Alive <i>experimental</i></div>
-          <div class="g-meta">Twelve stages and every model, on Model 2B and 2A &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code></div>
+          <div class="g-name" data-i18n="doa.name">Dead or Alive <i>experimental</i></div>
+          <div class="g-meta" data-i18n="doa.meta">Twelve stages and every model, on Model 2B and 2A &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code></div>
           <ol class="clips" hidden>
-            <li data-clip="doa-palace">Stage&nbsp;3's walled palace court</li>
-            <li data-clip="doa-sunset">Stage&nbsp;11's ring of rock in the lava</li>
-            <li data-clip="doa-city">Stage&nbsp;10 over the city at night</li>
-            <li data-clip="doa-fighter">Kasumi on her own rig</li>
+            <li data-clip="doa-palace" data-i18n="doa.clip.palace">Stage&nbsp;3's walled palace court</li>
+            <li data-clip="doa-sunset" data-i18n="doa.clip.sunset">Stage&nbsp;11's ring of rock in the lava</li>
+            <li data-clip="doa-city" data-i18n="doa.clip.city">Stage&nbsp;10 over the city at night</li>
+            <li data-clip="doa-fighter" data-i18n="doa.clip.fighter">Kasumi on her own rig</li>
           </ol>
         </li>
       </ul>
     </section>
 
     <section class="load">
-      <h2>Bring your own ROM set</h2>
-      <p class="load-sub">The viewer works out which game a set is from the program ROM inside
+      <h2 data-i18n="load.title">Bring your own ROM set</h2>
+      <p class="load-sub" data-i18n="load.sub">The viewer works out which game a set is from the program ROM inside
          it, so the zip can be called anything.</p>
       <!-- Filled in when the page was opened from a report's link: which build it
            wants, since the link cannot carry the ROM set. See js/viewlink.js. -->
       <p id="loader-link" class="linknote" hidden></p>
 
       <label class="ack"><input type="checkbox" id="loader-ack">
-        <span>I understand that assistive AI was used in the generation of this project.</span></label>
+        <span data-i18n="load.ack">I understand that assistive AI was used in the generation of this project.</span></label>
 
       <label id="loader-drop" class="disabled" for="loader-file">
         <div class="drop-icon" aria-hidden="true">&#8681;</div>
-        <div class="drop-title"><span class="desktop-only">Drop your ROM set here</span><span class="mobile-only">Choose your ROM set</span></div>
-        <p class="drop-sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
-        <span class="drop-btn">Choose files&hellip;</span>
-        <span class="lock-note">Tick the acknowledgement above to enable</span>
+        <div class="drop-title"><span class="desktop-only" data-i18n="drop.desktop">Drop your ROM set here</span><span class="mobile-only" data-i18n="drop.mobile">Choose your ROM set</span></div>
+        <p class="drop-sub" data-i18n="drop.sub">Nothing is uploaded anywhere; the zips are read in this tab.</p>
+        <span class="drop-btn" data-i18n="drop.btn">Choose files&hellip;</span>
+        <span class="lock-note" data-i18n="drop.lock">Tick the acknowledgement above to enable</span>
         <input type="file" id="loader-file" accept=".zip,application/zip" multiple hidden disabled>
       </label>
 
@@ -237,9 +237,9 @@
       <p id="loader-error" class="err" hidden></p>
 
       <details class="romnote">
-        <summary>What each set gives you</summary>
+        <summary data-i18n="romnote.summary">What each set gives you</summary>
         <ul>
-          <li><b>Sonic The Fighters</b> &mdash; the one it goes deepest on. Every arena,
+          <li data-i18n="romnote.stf"><b>Sonic The Fighters</b> &mdash; the one it goes deepest on. Every arena,
               running at the board's 60&nbsp;Hz with the objects its own record asks for, and
               the Flying Carpet and Canyon Cruise's boat flying their courses; all 5103 models;
               and the whole cast of 34 on their own rigs, playing the game's 518 motions with
@@ -249,16 +249,16 @@
               the parent set <b>Sonic Championship</b> (<code>schamp</code>). Drop
               <code>sfight.zip</code> on its own, or <code>schamp.zip</code> on its own, or both
               together if your set is split across the two.</li>
-          <li><b>The House of the Dead</b> (<code>hotdo.zip</code>) &mdash; the finished game:
+          <li data-i18n="romnote.hotd"><b>The House of the Dead</b> (<code>hotdo.zip</code>) &mdash; the finished game:
               its four chapters as eighteen stages, 7477 models under their development names,
               and 94 enemy bodies playing the 674 motions baked for their joint counts.
               Revision A (<code>hotd.zip</code>) is recognised as well, and so is a merged
               archive carrying both &mdash; a set is told apart by the chips inside it, not by
               the name of the zip.</li>
-          <li><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
+          <li data-i18n="romnote.hotdp"><b>The House of the Dead (prototype)</b> (<code>hotdp.zip</code>) &mdash; the Model 2C
               prototype the finished game grew out of, read the same way: its two playable
               stages, its own models and 68 bodies with 507 motions.</li>
-          <li><b>Daytona USA</b> (<code>daytona.zip</code>) &mdash; the only one here on the
+          <li data-i18n="romnote.daytona"><b>Daytona USA</b> (<code>daytona.zip</code>) &mdash; the only one here on the
               original Model 2 board rather than the 2A/2B the rest run on, and the only one
               that shipped in eight builds. All eight are recognised, and a merged archive
               is read as all of them at once: the panel grows a <b>Build</b> picker and
@@ -276,7 +276,7 @@
               them &mdash; and a picker draws a course as a race, in time attack or in the ending.
               A <b>Cabinet</b> switch picks the colour tables the test menu's setting would.
               The cars carry no rig and do not move, so there is no Animation tab.</li>
-          <li><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
+          <li data-i18n="romnote.fvipers"><b>Fighting Vipers</b> (<code>fvipers.zip</code>) &mdash; <b>experimental</b>. Sixteen
               arenas and 5413 table entries come out of it, because this game and Sonic The
               Fighters are built on the same Sega library and the stage records, the model
               table and the texture and colour pipelines all carried across. What is its own
@@ -297,36 +297,36 @@
            game's revisions and hacks as clones of one parent, and a merged set
            is all of them at once, so which one was dropped is a choice. -->
       <div class="field" id="build-field" hidden>
-        <label for="build-select">Build</label>
+        <label for="build-select" data-i18n="f.build">Build</label>
         <select id="build-select"></select>
       </div>
       <nav id="tabs">
-        <button data-tab="stage" class="active">Stages</button>
-        <button data-tab="model">Models</button>
-        <button data-tab="anim">Animation</button>
-        <button data-tab="cell">Cells</button>
+        <button data-i18n="tab.stage" data-tab="stage" class="active">Stages</button>
+        <button data-i18n="tab.model" data-tab="model">Models</button>
+        <button data-i18n="tab.anim" data-tab="anim">Animation</button>
+        <button data-i18n="tab.cell" data-tab="cell">Cells</button>
       </nav>
     </header>
 
     <section class="tabpanel" data-tab="stage">
       <div class="field">
-        <label>Stage</label>
+        <label data-i18n="f.stage">Stage</label>
         <select id="stage-select"></select>
       </div>
       <div id="stage-meta" class="meta"></div>
       <!-- Shown for a game whose sound board the viewer can run: js/sound/. -->
       <div class="field row" id="music-field" hidden>
-        <label class="check" title="Play the stage's own music on the game's own sound board: its 68000 sound driver and the sound chips it plays through, emulated in the page and sent the command the game sends when the round starts. The first time, it reads the sound ROMs (8 to 8.5 MB) out of the zips"><input type="checkbox" id="opt-music"> music</label>
-        <label class="axis grow" title="Volume, against the board's own level">
-          <input type="range" id="music-volume" min="0" max="4" step="0.25" value="2" aria-label="Music volume">
+        <label class="check" title="Play the stage's own music on the game's own sound board: its 68000 sound driver and the sound chips it plays through, emulated in the page and sent the command the game sends when the round starts. The first time, it reads the sound ROMs (8 to 8.5 MB) out of the zips" data-i18n-title="music.title"><input type="checkbox" id="opt-music"> <span data-i18n="music">music</span></label>
+        <label class="axis grow" data-i18n-title="music.volume.title" title="Volume, against the board's own level">
+          <input type="range" id="music-volume" min="0" max="4" step="0.25" value="2" aria-label="Music volume" data-i18n-aria="music.volume">
         </label>
         <span id="music-status" class="dim"></span>
       </div>
       <div class="field row" id="stage-sfx-label" hidden>
-        <label class="check" title="With the music, the stage's own sound effects — a crowd, birds, the sea — sent to the same sound board by the same rules the game's stage-sound task follows: one as the round starts and, on some stages, more at random through the round"><input type="checkbox" id="opt-stage-sfx" checked> stage sounds</label>
+        <label class="check" title="With the music, the stage's own sound effects — a crowd, birds, the sea — sent to the same sound board by the same rules the game's stage-sound task follows: one as the round starts and, on some stages, more at random through the round" data-i18n-title="sfx.title"><input type="checkbox" id="opt-stage-sfx" checked> <span data-i18n="sfx">stage sounds</span></label>
       </div>
       <div class="field" id="music-song-field" hidden>
-        <label for="music-song">Song</label>
+        <label for="music-song" data-i18n="f.song">Song</label>
         <select id="music-song"></select>
       </div>
       <div class="field" id="view-field" hidden>
@@ -334,49 +334,49 @@
         <select id="view-select"></select>
       </div>
       <div class="field" id="mode-field" hidden>
-        <label for="mode-select">Game state</label>
+        <label for="mode-select" data-i18n="f.mode">Game state</label>
         <select id="mode-select"></select>
       </div>
       <!-- Sonic the Fighters only: the view as the game's own camera record, js/skyeye.js. -->
       <div class="field" id="skyeye-field" hidden>
-        <label title="This camera as the game's own camera record, fa_camera: the numbers the debug menu's SKY EYE page flies the board's camera by. m2-hle2's SKY EYE mode takes them from this page's link (the link button, or Copy) and puts the board's camera here, on this stage">Game camera <span class="dim">(SKY EYE)</span></label>
+        <label data-i18n-title="skyeye.title" title="This camera as the game's own camera record, fa_camera: the numbers the debug menu's SKY EYE page flies the board's camera by. m2-hle2's SKY EYE mode takes them from this page's link (the link button, or Copy) and puts the board's camera here, on this stage"><span data-i18n="skyeye">Game camera <span class="dim">(SKY EYE)</span></span></label>
         <pre id="skyeye-readout" class="meta"></pre>
         <div class="row">
-          <button type="button" id="skyeye-copy" title="Copy the stage and the game camera as text, for a bug report or m2-hle2's SKY EYE field">Copy</button>
-          <label class="check" title="See it through the board's lens: camera_init gives the GEO a focal length of 280 on a 384-line picture, a vertical field of view of 68.9 degrees. Use it before laying this view over a picture of the board"><input type="checkbox" id="opt-board-lens"> board lens</label>
+          <button type="button" id="skyeye-copy" title="Copy the stage and the game camera as text, for a bug report or m2-hle2's SKY EYE field" data-i18n-title="skyeye.copy.title" data-i18n="skyeye.copy">Copy</button>
+          <label class="check" title="See it through the board's lens: camera_init gives the GEO a focal length of 280 on a 384-line picture, a vertical field of view of 68.9 degrees. Use it before laying this view over a picture of the board" data-i18n-title="lens.title"><input type="checkbox" id="opt-board-lens"> <span data-i18n="lens">board lens</span></label>
         </div>
       </div>
       <div class="field">
-        <label>Layers</label>
+        <label data-i18n="f.layers">Layers</label>
         <div id="stage-layers" class="layers"></div>
       </div>
       <div class="field" id="extras-field" hidden>
-        <label title="What the stage view leaves out unless asked: effects the board draws by its own clock and camera, and ones a fighter sets off, played by a stand-in">Effects</label>
+        <label title="What the stage view leaves out unless asked: effects the board draws by its own clock and camera, and ones a fighter sets off, played by a stand-in" data-i18n-title="f.effects.title" data-i18n="f.effects">Effects</label>
         <div id="stage-extras" class="layers"></div>
       </div>
       <div class="field">
-        <label>Parts <span id="stage-part-count" class="dim"></span></label>
+        <label><span data-i18n="f.parts">Parts</span> <span id="stage-part-count" class="dim"></span></label>
         <div id="stage-parts" class="partlist"></div>
       </div>
     </section>
 
     <section class="tabpanel" data-tab="model" hidden>
       <div class="field">
-        <input type="search" id="model-search" placeholder="Model index or range (e.g. 500-520)">
+        <input type="search" id="model-search" data-i18n-placeholder="model.search" placeholder="Model index or range (e.g. 500-520)">
       </div>
       <div class="field row">
-        <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
+        <label class="check"><input type="checkbox" id="model-only-mesh" checked> <span data-i18n="model.onlymesh">only models with geometry</span></label>
       </div>
       <!-- Only for a game with no stage table: with no scene to name the
            texture numbers, the set has to be chosen here instead. -->
       <div class="field" id="model-texset-field" hidden>
-        <label>Texture set</label>
+        <label data-i18n="f.texset">Texture set</label>
         <select id="model-texset"></select>
       </div>
       <!-- Likewise for colour: a scene record would name the scene colour block
            and whoever is on screen, and there is no scene record. -->
       <div class="field" id="model-colour-field" hidden>
-        <label>Fighter colours</label>
+        <label data-i18n="f.fightercol">Fighter colours</label>
         <select id="model-fighter"></select>
       </div>
       <div id="model-count" class="dim"></div>
@@ -387,18 +387,18 @@
     <!-- The game's 2D pictures, laid out on the tile chip: js/cells.js. -->
     <section class="tabpanel" data-tab="cell" hidden>
       <div class="field">
-        <input type="search" id="cell-search" placeholder="Cell number, range (e.g. 500-520) or unused">
+        <input type="search" id="cell-search" data-i18n-placeholder="cell.search" placeholder="Cell number, range (e.g. 500-520) or unused">
       </div>
       <div class="field">
-        <label for="cell-cg" title="The CG loaded with the cell: the tile pixels and the colours its entries name. The ones that draw all of it come first">CG</label>
+        <label for="cell-cg" title="The CG loaded with the cell: the tile pixels and the colours its entries name. The ones that draw all of it come first" data-i18n-title="cell.cg.title">CG</label>
         <select id="cell-cg"></select>
       </div>
       <div class="field">
-        <label for="cell-under" title="A CG loaded before the one above, as the game does when a screen needs two: what the second writes goes over the first">Loaded first</label>
+        <label for="cell-under" title="A CG loaded before the one above, as the game does when a screen needs two: what the second writes goes over the first" data-i18n-title="cell.under.title" data-i18n="cell.under">Loaded first</label>
         <select id="cell-under"></select>
       </div>
       <div class="field row">
-        <label class="check" title="Scale the cell to fill the view; off, it is drawn a pixel to a pixel"><input type="checkbox" id="cell-fit" checked> fit to view</label>
+        <label class="check" title="Scale the cell to fill the view; off, it is drawn a pixel to a pixel" data-i18n-title="cell.fit.title"><input type="checkbox" id="cell-fit" checked> <span data-i18n="cell.fit">fit to view</span></label>
       </div>
       <div id="cell-count" class="dim"></div>
       <div id="cell-list" class="modellist"></div>
@@ -407,74 +407,74 @@
 
     <section class="tabpanel" data-tab="anim" hidden>
       <div class="field">
-        <label id="char-label">Fighter</label>
+        <label id="char-label" data-i18n="f.fighter">Fighter</label>
         <select id="char-select"></select>
       </div>
       <div id="char-meta" class="meta"></div>
       <div class="field row">
-        <label class="check"><input type="checkbox" id="char-skel" checked> skeleton</label>
-        <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> hammer squished</label>
-        <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> root travel</label>
-        <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> opponent</label>
-        <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> behind</label>
-        <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> opponent P2</label>
-        <label class="check" id="char-p2-field" hidden><input type="checkbox" id="char-p2"> P2 colours</label>
+        <label class="check"><input type="checkbox" id="char-skel" checked> <span data-i18n="char.skel">skeleton</span></label>
+        <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> <span data-i18n="char.squish">hammer squished</span></label>
+        <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
+        <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
+        <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
+        <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
+        <label class="check" id="char-p2-field" hidden><input type="checkbox" id="char-p2"> <span data-i18n="char.p2">P2 colours</span></label>
       </div>
       <div class="field" id="armour-field" hidden>
-        <label>Armour</label>
+        <label data-i18n="f.armour">Armour</label>
         <div class="row">
-          <label class="check" id="armour-upper-field"><input type="checkbox" id="armour-upper" checked> upper</label>
-          <label class="check" id="armour-lower-field"><input type="checkbox" id="armour-lower" checked> lower</label>
-          <label class="check" id="armour-streak-field" hidden><input type="checkbox" id="armour-streak"> 100-win streak</label>
+          <label class="check" id="armour-upper-field"><input type="checkbox" id="armour-upper" checked> <span data-i18n="armour.upper">upper</span></label>
+          <label class="check" id="armour-lower-field"><input type="checkbox" id="armour-lower" checked> <span data-i18n="armour.lower">lower</span></label>
+          <label class="check" id="armour-streak-field" hidden><input type="checkbox" id="armour-streak"> <span data-i18n="armour.streak">100-win streak</span></label>
         </div>
         <div id="armour-readout" class="mono dim"></div>
       </div>
       <div class="field">
-        <label>Motion</label>
+        <label data-i18n="f.motion">Motion</label>
         <select id="motion-select"></select>
       </div>
       <div id="motion-meta" class="meta"></div>
       <div class="field row">
-        <button id="motion-play" class="btn">Pause</button>
+        <button id="motion-play" class="btn" data-i18n="motion.play">Pause</button>
         <label class="axis grow"><input type="range" id="motion-frame" min="1" max="1" step="1">
           <span id="motion-frame-val" class="axis-val">—</span></label>
       </div>
       <div class="field" id="string-field" hidden>
-        <label>String &mdash; moves one after another</label>
+        <label data-i18n="f.string">String &mdash; moves one after another</label>
         <div id="string-chain" class="chain"></div>
-        <div id="string-next-label" class="dim">then, at the cancel frame:</div>
+        <div id="string-next-label" class="dim" data-i18n="string.next">then, at the cancel frame:</div>
         <div id="string-next" class="chain-next"></div>
         <div class="row">
           <select id="string-add" class="grow"></select>
-          <button id="string-clear" class="btn" type="button">Clear</button>
+          <button id="string-clear" class="btn" type="button" data-i18n="string.clear">Clear</button>
         </div>
-        <label class="check"><input type="checkbox" id="string-ease" checked> ease into each move, as the board does</label>
+        <label class="check"><input type="checkbox" id="string-ease" checked> <span data-i18n="string.ease">ease into each move, as the board does</span></label>
         <div id="string-readout" class="mono dim"></div>
       </div>
       <div class="field" id="tails-field" hidden>
-        <label>Tails' tails</label>
+        <label data-i18n="f.tails">Tails' tails</label>
         <div id="tails-readout" class="mono dim"></div>
       </div>
       <div class="field" id="exhaust-field" hidden>
-        <label>Metal Sonic's jet</label>
-        <label class="check"><input type="checkbox" id="exhaust-open" checked> vent open coming in</label>
+        <label data-i18n="f.exhaust">Metal Sonic's jet</label>
+        <label class="check"><input type="checkbox" id="exhaust-open" checked> <span data-i18n="exhaust.open">vent open coming in</span></label>
         <div id="exhaust-readout" class="mono dim"></div>
       </div>
       <div class="field" id="trail-field" hidden>
-        <label>Afterimages</label>
-        <label class="check"><input type="checkbox" id="trail-show" checked> draw the trail</label>
+        <label data-i18n="f.trail">Afterimages</label>
+        <label class="check"><input type="checkbox" id="trail-show" checked> <span data-i18n="trail.show">draw the trail</span></label>
         <div id="trail-readout" class="mono dim"></div>
       </div>
       <div class="field" id="osage-field" hidden>
-        <label>Sway chains &mdash; pigtails, tails, feathers</label>
-        <label id="osage-wind-field" hidden>wind <select id="osage-wind"></select></label>
+        <label data-i18n="f.osage">Sway chains &mdash; pigtails, tails, feathers</label>
+        <label id="osage-wind-field" hidden><span data-i18n="osage.wind">wind</span> <select id="osage-wind"></select></label>
         <div id="osage-readout" class="mono dim"></div>
       </div>
       <div class="field">
-        <label>Skeleton slots</label>
+        <label data-i18n="f.slots">Skeleton slots</label>
         <div id="slot-list" class="jointlist"></div>
       </div>
-      <div class="note" id="anim-note-bodies" hidden>
+      <div class="note" id="anim-note-bodies" data-i18n="note.bodies" hidden>
         A body is a tree of parts from <code>0x94E20</code>, each a model hung
         off its parent and turned by one joint's three angles. A motion is
         those angles baked for every frame, with the root's position in front,
@@ -483,7 +483,7 @@
         draws a motion on the spot and moves the enemy along its path
         separately; <em>root travel</em> shows that path.
       </div>
-      <div class="note" id="anim-note-vf2" hidden>
+      <div class="note" id="anim-note-vf2" data-i18n="note.vf2" hidden>
         A fighter is the record at <code>0x200620C</code>: sixteen part
         models and the skeleton they hang on. A motion id indexes the table
         at <code>0x2120004</code>, keyframes in the format Sonic The Fighters
@@ -500,7 +500,7 @@
         fight state allows, which the explorer does not track, so with it on,
         a head can turn where the game's doesn't.
       </div>
-      <div class="note" id="anim-note-fv" hidden>
+      <div class="note" id="anim-note-fv" data-i18n="note.fv" hidden>
         A fighter is the record at <code>0x640D2B0</code>: sixteen part
         models and the skeleton they hang on. A motion id indexes the table
         at <code>0x6C00004</code>, keyframes in the format Sonic The Fighters
@@ -512,7 +512,7 @@
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
       </div>
-      <div class="note" id="anim-note-doa" hidden>
+      <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the
         explorer: the attract's fight is set up with the fighter in player
         one's place and the motion started as the player routine starts one
@@ -524,7 +524,7 @@
         The fighter steps as the motion does; the hair swings from the
         frames before.
       </div>
-      <div class="note" id="anim-note">
+      <div class="note" id="anim-note" data-i18n="note.stf">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects
         &times; 3 axes &mdash; of constant, linear or cubic-Hermite keyframes;
@@ -538,70 +538,70 @@
 
     <footer>
       <div class="field">
-        <label>Camera</label>
+        <label data-i18n="f.camera">Camera</label>
         <div class="seg" id="camera-mode">
-          <button data-mode="orbit" class="active">Orbit</button>
-          <button data-mode="fly">Noclip</button>
+          <button data-mode="orbit" class="active" data-i18n="cam.orbit">Orbit</button>
+          <button data-mode="fly" data-i18n="cam.fly">Noclip</button>
         </div>
       </div>
       <div class="field">
-        <label>Shading</label>
+        <label data-i18n="f.shading">Shading</label>
         <select id="shade-mode">
-          <option value="0">Lit palette</option>
-          <option value="1">Flat palette</option>
-          <option value="3">Texture tile id</option>
-          <option value="2">Normals</option>
+          <option value="0" data-i18n="shade.lit">Lit palette</option>
+          <option value="1" data-i18n="shade.flat">Flat palette</option>
+          <option value="3" data-i18n="shade.tile">Texture tile id</option>
+          <option value="2" data-i18n="shade.normals">Normals</option>
         </select>
       </div>
       <div class="field">
-        <label title="sRGB transfer applied to the shaded colour. Off is the verified default — the fill path is already display-referred.">Colour transfer</label>
+        <label title="sRGB transfer applied to the shaded colour. Off is the verified default — the fill path is already display-referred." data-i18n-title="f.transfer.title" data-i18n="f.transfer">Colour transfer</label>
         <select id="transfer-mode">
-          <option value="0">Off &mdash; display-referred</option>
-          <option value="1">Linear &rarr; gamma</option>
-          <option value="2">Gamma &rarr; linear</option>
+          <option value="0" data-i18n="transfer.off">Off &mdash; display-referred</option>
+          <option value="1" data-i18n="transfer.lin">Linear &rarr; gamma</option>
+          <option value="2" data-i18n="transfer.gam">Gamma &rarr; linear</option>
         </select>
       </div>
       <div class="field" id="cabinet-field" hidden>
-        <label title="The test menu's CABINET setting. The game builds its colour table from one of two sets of constants depending on it, so it moves every colour on screen, the sky's among them. MAME runs TWIN.">Cabinet</label>
+        <label title="The test menu's CABINET setting. The game builds its colour table from one of two sets of constants depending on it, so it moves every colour on screen, the sky's among them. MAME runs TWIN." data-i18n-title="f.cabinet.title" data-i18n="f.cabinet">Cabinet</label>
         <select id="cabinet-mode"></select>
       </div>
       <div class="field" id="country-field" hidden>
-        <label title="The test menu's COUNTRY setting. A few of the stage models are chosen by it: Fighting Vipers' signs and the trucks' cabs.">Region</label>
+        <label title="The test menu's COUNTRY setting. A few of the stage models are chosen by it: Fighting Vipers' signs and the trucks' cabs." data-i18n-title="f.region.title" data-i18n="f.region">Region</label>
         <select id="country-mode"></select>
       </div>
       <div class="field row">
-        <label class="check" title="Step the stage's frame tables at the board's 60 Hz: the palms, the carpet, its flames and rope, the fence, the drifting horizon, the palette rows the sea scrolls with and the texture running along Aurora Icefield's curtain &mdash; and fly the two stages that fly: the Flying Carpet round its circle, with the desert and the sphynx head going past it, and Canyon Cruise's boat down its canyon"><input type="checkbox" id="opt-anim" checked> animate</label>
-        <label class="check"><input type="checkbox" id="opt-wire"> wireframe</label>
+        <label class="check" title="Step the stage's frame tables at the board's 60 Hz: the palms, the carpet, its flames and rope, the fence, the drifting horizon, the palette rows the sea scrolls with and the texture running along Aurora Icefield's curtain &mdash; and fly the two stages that fly: the Flying Carpet round its circle, with the desert and the sphynx head going past it, and Canyon Cruise's boat down its canyon" data-i18n-title="opt.anim.title"><input type="checkbox" id="opt-anim" checked> <span data-i18n="opt.anim">animate</span></label>
+        <label class="check"><input type="checkbox" id="opt-wire"> <span data-i18n="opt.wire">wireframe</span></label>
       </div>
       <div class="field row">
-        <label class="check"><input type="checkbox" id="opt-grid"> grid</label>
-        <label class="check" title="Draw each polygon only from the side the board draws it from: the ROM normal against the polygon's own point, unless the polygon is marked two-sided. Off draws every face from both sides, which the board never does"><input type="checkbox" id="opt-cull" checked> backface cull</label>
+        <label class="check"><input type="checkbox" id="opt-grid"> <span data-i18n="opt.grid">grid</span></label>
+        <label class="check" title="Draw each polygon only from the side the board draws it from: the ROM normal against the polygon's own point, unless the polygon is marked two-sided. Off draws every face from both sides, which the board never does" data-i18n-title="opt.cull.title"><input type="checkbox" id="opt-cull" checked> <span data-i18n="opt.cull">backface cull</span></label>
       </div>
       <div class="field row">
-        <label class="check"><input type="checkbox" id="opt-axes"> axes</label>
-        <label class="check" title="Not the board. A transparent texture's holes are cut texel by texel, so a stippled one &mdash; Daytona's tire marks are a third holes &mdash; crawls as the camera moves, on the board as much as here. This averages the holes into an even translucency instead"><input type="checkbox" id="opt-smooth-holes"> smooth holes</label>
-        <label class="check" title="Blend a face's 128x128 detail square into its texture where the camera is close enough to magnify it, as the board does. The House of the Dead, prototype and final, draws its mansion's wallpaper and floor tiles with it; nothing else here uses it. Off shows the texture alone"><input type="checkbox" id="opt-micro" checked> microtextures</label>
+        <label class="check"><input type="checkbox" id="opt-axes"> <span data-i18n="opt.axes">axes</span></label>
+        <label class="check" title="Not the board. A transparent texture's holes are cut texel by texel, so a stippled one &mdash; Daytona's tire marks are a third holes &mdash; crawls as the camera moves, on the board as much as here. This averages the holes into an even translucency instead" data-i18n-title="opt.smooth.title"><input type="checkbox" id="opt-smooth-holes"> <span data-i18n="opt.smooth">smooth holes</span></label>
+        <label class="check" title="Blend a face's 128x128 detail square into its texture where the camera is close enough to magnify it, as the board does. The House of the Dead, prototype and final, draws its mansion's wallpaper and floor tiles with it; nothing else here uses it. Off shows the texture alone" data-i18n-title="opt.micro.title"><input type="checkbox" id="opt-micro" checked> <span data-i18n="opt.micro">microtextures</span></label>
       </div>
       <div class="field row" id="fix-field" hidden>
-        <label class="check" title="Not the ROM as shipped. Apply m2emulator's fixes to Daytona's texture ROM: the flag animation, a tree and the banner pole. Off shows the bytes the game really has"><input type="checkbox" id="opt-fix-errors"> fix errors</label>
+        <label class="check" title="Not the ROM as shipped. Apply m2emulator's fixes to Daytona's texture ROM: the flag animation, a tree and the banner pole. Off shows the bytes the game really has" data-i18n-title="opt.fix.title"><input type="checkbox" id="opt-fix-errors"> <span data-i18n="opt.fix">fix errors</span></label>
       </div>
       <div class="field row" id="ride-field" hidden>
-        <label class="check" title="Show the stage in the board's own frame instead of the world's: the arena stands still and the world wheels past it, which is how the machine draws these two &mdash; its camera rides the carpet. The same stage either way, one rigid transform apart, so nothing moves relative to anything else. Switching it on frames the camera on the arena that has just come to rest, from the angle you were already looking; switching it off puts you back where you were standing. Use it to hold a moving arena still and read it &mdash; the carpet's ripple, say, which a fixed camera cannot chase round a 2048-frame lap"><input type="checkbox" id="opt-ride"> <span id="ride-label">ride the arena</span></label>
+        <label class="check" title="Show the stage in the board's own frame instead of the world's: the arena stands still and the world wheels past it, which is how the machine draws these two &mdash; its camera rides the carpet. The same stage either way, one rigid transform apart, so nothing moves relative to anything else. Switching it on frames the camera on the arena that has just come to rest, from the angle you were already looking; switching it off puts you back where you were standing. Use it to hold a moving arena still and read it &mdash; the carpet's ripple, say, which a fixed camera cannot chase round a 2048-frame lap" data-i18n-title="opt.ride.title"><input type="checkbox" id="opt-ride"> <span id="ride-label">ride the arena</span></label>
       </div>
       <div class="field">
-        <label>Textures</label>
+        <label data-i18n="f.textures">Textures</label>
         <label class="check" id="tex-drop">
           <input type="file" id="tex-file" accept=".bin,.dmp,application/octet-stream" multiple hidden>
-          <span id="tex-status">Load a texture-RAM dump&hellip;</span>
+          <span id="tex-status" data-i18n="tex.status">Load a texture-RAM dump&hellip;</span>
         </label>
         <label class="axis" id="tex-luma-row" hidden>
-          <span title="Debug multiplier on the per-polygon luma the geometry engine computes; 1.00 is the board&apos;s own value">luma</span>
+          <span title="Debug multiplier on the per-polygon luma the geometry engine computes; 1.00 is the board&apos;s own value" data-i18n-title="tex.luma.title" data-i18n="tex.luma">luma</span>
           <input type="range" id="tex-luma" min="0.15" max="1.4" step="0.05" value="1">
           <span class="axis-val" id="tex-luma-val">1.00</span>
         </label>
       </div>
       <div id="stats" class="stats"></div>
-      <div id="layout-switch"><a href="#">Switch to the <span class="desktop-only">phone</span><span class="mobile-only">desktop</span> layout</a></div>
+      <div id="layout-switch"><a href="#" data-i18n="layout.switch">Switch to the <span class="desktop-only">phone</span><span class="mobile-only">desktop</span> layout</a></div>
     </footer>
   </aside>
 
@@ -610,15 +610,15 @@
     <!-- The Cells tab's picture, over the 3D view while that tab is up. -->
     <canvas id="cell-view" hidden></canvas>
     <div id="hud"></div>
-    <div id="fly-hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Wheel</b> or <b>&minus;/=</b> speed &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
+    <div id="fly-hint" data-i18n="fly.hint" hidden><span class="desktop-only">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Q/E</b> down/up &middot; <b>Shift</b> sprint &middot; <b>Wheel</b> or <b>&minus;/=</b> speed &middot; <b>Esc</b> release</span><span class="mobile-only">Drag the view to look &middot; <b>stick</b> to move &middot; <b>&#9650;&#9660;</b> up and down</span></div>
     <!-- The noclip rig on a touchscreen: shown by app.js on the phone site in
          fly mode, wired in js/mobile.js, and standing clear of the sheet by
          the --peek height the sheet publishes. -->
     <div id="touch-fly" hidden>
-      <div id="stick" aria-label="Move"><div class="knob"></div></div>
+      <div id="stick" aria-label="Move" data-i18n-aria="touch.move"><div class="knob"></div></div>
       <div class="vert">
-        <button type="button" data-up="1" aria-label="Up">&#9650;</button>
-        <button type="button" data-up="-1" aria-label="Down">&#9660;</button>
+        <button type="button" data-up="1" aria-label="Up" data-i18n-aria="touch.up">&#9650;</button>
+        <button type="button" data-up="-1" aria-label="Down" data-i18n-aria="touch.down">&#9660;</button>
       </div>
     </div>
   </main>
@@ -630,15 +630,17 @@
      form; the camera saves the view as a PNG, the cube the models in it as a .glb (js/export.js). Outside #app on purpose: a ROM set that will not load is the report
      most worth having, and #app is hidden until one does. See js/report.js. -->
 <div id="tools">
-  <button type="button" id="tool-report" title="Gather what this moment looks like, copy it, and open a new issue">Copy diagnostics and file an issue</button>
+  <button type="button" id="tool-report" title="Gather what this moment looks like, copy it, and open a new issue" data-i18n-title="tool.report.title" data-i18n="tool.report">Copy diagnostics and file an issue</button>
   <!-- Hidden until there is a view to take: app.js shows it once the viewer is up. -->
-  <button type="button" id="tool-shot" title="Save a screenshot of the view" aria-label="Save a screenshot of the view" hidden>
+  <button type="button" id="tool-shot" title="Save a screenshot of the view" aria-label="Save a screenshot of the view" data-i18n-title="tool.shot" data-i18n-aria="tool.shot" hidden>
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M5.6 2a1 1 0 0 0-.86.49L4.03 3.7H2.5A1.5 1.5 0 0 0 1 5.2v7.3A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5V5.2a1.5 1.5 0 0 0-1.5-1.5h-1.53l-.71-1.21A1 1 0 0 0 10.4 2H5.6ZM8 5.5a3.25 3.25 0 1 1 0 6.5 3.25 3.25 0 0 1 0-6.5Zm0 1.4a1.85 1.85 0 1 0 0 3.7 1.85 1.85 0 0 0 0-3.7Z"/></svg>
   </button>
-  <button type="button" id="tool-export" title="Export the models in view, at this frame, as .glb (Blender: File &gt; Import &gt; glTF 2.0)" aria-label="Export the models in view as .glb" hidden>
+  <button type="button" id="tool-export" title="Export the models in view, at this frame, as .glb (Blender: File &gt; Import &gt; glTF 2.0)" aria-label="Export the models in view as .glb" data-i18n-title="tool.export.title" data-i18n-aria="tool.export" hidden>
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 1 2 4.2v7.6L8 15l6-3.2V4.2L8 1Zm0 1.6 4.3 2.3L8 7.2 3.7 4.9 8 2.6ZM3.3 6.1l4 2.2v4.9l-4-2.2V6.1Zm9.4 0v4.9l-4 2.2V8.3l4-2.2Z"/></svg>
   </button>
-  <a id="tool-repo" href="https://github.com/biggestsonicfan/noclip" target="_blank" rel="noopener" title="The repository on GitHub" aria-label="The repository on GitHub">
+  <!-- The page in another language (?lang=, js/lang.js): a link per one it has. -->
+  <span id="tool-lang" hidden></span>
+  <a id="tool-repo" href="https://github.com/biggestsonicfan/noclip" target="_blank" rel="noopener" title="The repository on GitHub" aria-label="The repository on GitHub" data-i18n-title="tool.repo" data-i18n-aria="tool.repo">
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
     <span>GitHub</span>
   </a>
@@ -649,7 +651,10 @@
 <!-- Said when a report's link names a build these zips are not. -->
 <div id="link-note" hidden></div>
 
-<script type="module" src="./js/app.js"></script>
+<!-- The splash first: it brings js/lang.js, which puts the page in its
+     language as soon as that small module is in, without waiting for app.js
+     and three.js. -->
 <script type="module" src="./js/splash.js"></script>
+<script type="module" src="./js/app.js"></script>
 </body>
 </html>
