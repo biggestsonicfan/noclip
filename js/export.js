@@ -600,8 +600,12 @@ export function buildGlb(parts, images) {
         meshes,
         materials,
         textures: images.map((_, i) => ({ source: i, sampler: i ? 1 : 0 })),
+        /* The sheet point-sampled: its cells are a few texels each, and filtered
+         * (Blender mipmaps a linear texture) every triangle's edge took in its
+         * neighbours' colours, a grey seam down each of Sonic's gloves. A
+         * period has only itself to blend with and stays smooth far off. */
         samplers: [
-            { magFilter: 9729, minFilter: 9729, wrapS: 33071, wrapT: 33071 },
+            { magFilter: 9728, minFilter: 9728, wrapS: 33071, wrapT: 33071 },
             { magFilter: 9729, minFilter: 9729, wrapS: 10497, wrapT: 10497 },
         ],
         images: gltfImages,
