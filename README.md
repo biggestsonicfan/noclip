@@ -822,15 +822,13 @@ working checkout is exactly where the zips do sit.
 
 ## Support
 
-noclip is free and stays free, exports included. It exists because of hardware
-and hours: a serial link to the Model 2B board that I reverse engineered and
-built, EPROMs and a ZIF adapter to run test code on real hardware, a twin stick,
-the Dreamcast research, and a lot of AI time. None of that is a plea; it is
-where this is going. If you want to push it further, [support link] funds the
-next goal: *[current milestone]*.
+noclip is free and stays free, exports included. Behind it are hardware and
+hours: a serial link to the Model 2B board that I reverse engineered and built,
+EPROMs and a ZIF adapter to run test code on real hardware, a twin stick, the
+Dreamcast research, and a lot of AI time.
 
-Support buys the research, never the models. The games' art is Sega's, and an
-export is yours for nothing whether you give or not.
+Support, if there is ever a way to give it, will pay for that research, never
+for the models. The games' art is Sega's, and an export is yours for nothing.
 
 ## How it works
 
