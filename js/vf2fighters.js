@@ -85,7 +85,8 @@ import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables } from './fvdebris.js';
 import { commandMotions } from './moves.js';
-import { handModels, handsAt } from './fighterhands.js';
+import { handModels, handsAt, gameLoops } from './fighterhands.js';
+import { setupWord } from './reactions.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -900,6 +901,20 @@ const CROUCH = { 6: 0.97, 8: 0.92, 10: 0.97 };
  * is the fight's (move flags at +0x1A4, +0xC30 and +0x814), as is the blend
  * out toward a stance pose some moves end with; the explorer blends every
  * switch in and none out.
+ *
+ * The first frame is sampled as it will be drawn: 0x28780 mirrors it when
+ * the fighter is mirrored (+0 bit 6, 0x28840), so a mirrored fighter's blend
+ * starts from its own mirrored frame.
+ *
+ * A motion whose setup word has bit 20 turns the fighter round (op 0's tail
+ * at 0x1B444 flips the facing), and one after a motion whose word had bit 6
+ * was played turned; the new motion is drawn in the turned frame. There the
+ * set-up (0x27384-0x27558; FV 0x2A1C4) does not walk the hands, feet and
+ * body back (objects 0-4's steps zeroed, 0x27660; FV 0x2A3FC) but turns the
+ * old points' x and z by the new body's turn less the old one as drawn,
+ * E(new 4) (E(old 4) B(old 4))^-1, before taking the steps. The loop restart
+ * (0x1ABD8) reloads neither word, so each pass of a looping motion turns only
+ * if the motion before its first did with bit 6.
  */
 const blendLength = (frames) => (frames > 16 ? 8 : frames > 8 ? 4 : frames > 4 ? 2 : frames > 2 ? 1 : 0);
 const blendShift = (n) => (n === 8 ? 3 : n === 4 ? 2 : 1);
@@ -922,10 +937,14 @@ function yxzOf(m) {
 }
 
 const tripleAt = (angles, obj) => [0, 1, 2].map((k) => (angles[obj * 3 + k] << 16) >> 16);
+const transpose = (m) => m.map((_, i) => m.map((row) => row[i]));
+const MOVE_TURN = 1 << 20, TURNED_BEFORE = 1 << 6, BODY = 4;
 
-/* Per object, the step that walks from the last pose drawn to the new one. */
-function blendSteps(fromAngles, fromBlend, toAngles, shift) {
+/* Per object, the step that walks from the last pose drawn to the new one;
+ * none for the hands, feet and body (0-4) when the fighter turns. */
+function blendSteps(fromAngles, fromBlend, toAngles, shift, turned = false) {
     return Array.from({ length: 12 }, (_, obj) => {
+        if (turned && obj <= BODY) return [0, 0, 0];
         const was = mul3(eulerOf(tripleAt(fromAngles, obj)), blendOf(fromBlend[obj]));
         const now = eulerOf(tripleAt(toAngles, obj));
         const back = mul3(now.map((_, i) => now.map((row) => row[i])), was);
@@ -937,6 +956,20 @@ function blendSteps(fromAngles, fromBlend, toAngles, shift) {
 function pointSteps(from, to, shift) {
     const rel = (t, i) => t[i] - (i % 3 === 1 ? 0 : t[i % 3]);
     return Array.from(from, (_, i) => (rel(from, i) - rel(to, i)) / (1 << shift));
+}
+
+/* The old points turned into the new body's frame (0x27388): x and z about
+ * the body's, height kept. */
+function turnPoints(from, fromAngles, fromBlend, toAngles) {
+    const was = mul3(eulerOf(tripleAt(fromAngles, BODY)), blendOf(fromBlend[BODY]));
+    const m = mul3(eulerOf(tripleAt(toAngles, BODY)), transpose(was));
+    const out = from.slice();
+    for (let i = 0; i < from.length; i += 3) {
+        const x = from[i] - from[0], z = from[i + 2] - from[2];
+        out[i] = from[0] + m[0][0] * x + m[0][2] * z;
+        out[i + 2] = from[2] + m[2][0] * x + m[2][2] * z;
+    }
+    return out;
 }
 
 /*
@@ -987,7 +1020,7 @@ function liveFor(body) {
     if (!live) {
         live = {
             motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0],
-            spring: null,
+            spring: null, before: 0,
         };
         LIVE.set(body, live);
     }
@@ -997,19 +1030,30 @@ function liveFor(body) {
 /* The blend for this frame, added to the sample's points in place: a new
  * motion takes its steps from the last frame drawn; they run out on the
  * eighth frame or when the motion loops. */
-function startBlend(live, rom, motion) {
+function startBlend(live, rom, motion, mirrored) {
     live.length = motion ? blendLength(motion.frames) : 0;
-    const first = live.last && live.length ? sampleMotion(rom, motion, 1) : null;
-    const shift = blendShift(live.length);
-    live.steps = first && blendSteps(live.last.angles, live.blend, first.angles, shift);
-    live.points = first && pointSteps(live.last.targets, first.targets, shift);
+    const first = live.last && live.length ? sampleFor(rom, motion, 1, mirrored) : null;
+    if (!first) return void (live.steps = live.points = null);
+    const shift = blendShift(live.length), { angles, targets } = live.last;
+    const turned = Boolean(setupWord(rom, motion.id) & MOVE_TURN || live.before & TURNED_BEFORE);
+    const from = turned ? turnPoints(targets, angles, live.blend, first.angles) : targets;
+    live.steps = blendSteps(angles, live.blend, first.angles, shift, turned);
+    live.points = pointSteps(from, first.targets, shift);
 }
 
-function blendFor(live, rom, motion, frame, sample) {
+/* The word +0xC30 holds when `motion` starts: the one before's, kept over a
+ * pass of a motion the game loops. */
+function wordBefore(live, rom, motion) {
+    const again = motion === live.motion && gameLoops(rom, motion.id);
+    return again ? live.before : live.motion ? setupWord(rom, live.motion.id) : 0;
+}
+
+function blendFor(live, rom, motion, frame, sample, mirrored) {
     /* A motion that loops, back to its first frame from its last, blends into
      * itself as into a new one; one cut short and started again does not. */
     if (motion !== live.motion || (frame === 1 && motion && live.frame === motion.frames)) {
-        startBlend(live, rom, motion);
+        if (motion) live.before = wordBefore(live, rom, motion);
+        startBlend(live, rom, motion, mirrored);
     } else if (frame < live.frame) {
         live.steps = live.points = null;
     }
@@ -1369,7 +1413,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = f
     const fresh = motion !== live.motion || frame !== live.frame;
     const fight = {
         held: motion ? heldAngles(rom, motion) : {},
-        blend: blendFor(live, rom, motion, frame, sample),
+        blend: blendFor(live, rom, motion, frame, sample, mirrored),
         look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped, lookLimits(rom, faceTarget))) : live.look),
     };
     live.motion = motion; live.frame = frame;

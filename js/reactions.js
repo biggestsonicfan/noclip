@@ -75,6 +75,17 @@ function setupOps(rom, R, id) {
 }
 
 /**
+ * Motion `id`'s setup word, the u32 at the head of its record: set_mot_dat
+ * keeps it at +0x804 (and the one before at +0xC30, VF2 0x1A240, FV 0x1B8FC)
+ * and starts the move flags (+0x1A4) from it. 0 where there is none.
+ */
+export function setupWord(rom, id) {
+    const R = rom.game.rig?.reactions;
+    const ptr = R && id != null && u32At(rom, R.setups + (id & MOTION_ID) * 4);
+    return (ptr && u32At(rom, ptr)) || 0;
+}
+
+/**
  * How motion `id` hurts: a strike {kind, side, times}, a throw {victim}, or
  * null for a motion that does neither.
  */

@@ -964,9 +964,37 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   and others), blend-in (bit 0) and blend-out (bit 1, `+0x1A4` bit 17 for
   out only). The blend-out starts at frame `len - N` (`+0xBE0`) and fades
   toward one of five stance poses picked by `+0x814` (`0x2776C`, the
-  character's set at `+0xBD8` + `0x1E0`...`0x5A0`). The mirror flags
-  (`+0xC30` bit 6, `+0x1A4` bit 20) zero objects 0-4. The explorer blends
+  character's set at `+0xBD8` + `0x1E0`...`0x5A0`). The explorer blends
   every switch in and none out.
+- **The blend's first frame is drawn as the fighter is.** Set-up samples the
+  new motion's frame 1 into `0x50E000` with `0x28780`, which mirrors it when
+  `+0` bit 6 is set (`0x28840`). The explorer took the residual from the
+  unmirrored frame, so every switch of a mirrored fighter blended from the
+  wrong side: Akira (VF2) looping stance 1285 mirrored was off by 0.34/0.35 at
+  the hands and 0.39 at the feet on each pass's frame 1, Grace (FV) stance
+  224 by 17.5° at the waist, 0.33/0.38 and 0.38. Both are now exact.
+- **A turn-round switch.** Setup-word bit 20 (`+0x1A4`, kept by set_mot_dat;
+  181 VF2 motions, 108 FV, throws among them, each authored facing
+  the other way) turns the fighter round: op 0's tail (`0x1B444`; FV clears
+  it at `0x1C950`) flips the facing (`+0x26`, `+0x61A`) by 0x8000. Set-up is
+  called after `+0x1A4` is stored (`0x1A0C0`, `0x1A0C8`; FV `0x1B7CC`,
+  `0x1B7D4`), and when the new `+0x1A4` has bit 20, or the word before
+  (`+0xC30`, copied at `0x1A240`; FV `0x1B8FC`) has bit 6, it takes the turn
+  path (`0x27384`-`0x27558`; FV `0x2A1C4`-`0x2A2F4`): objects 0-4 get no
+  step (`0x27660`; FV `0x2A3FC`), and each old point's (x, z) about the body
+  is turned by `E(new 4) (E(old 4) B(old 4))^-1`, the new body's angles
+  (`0x50E030`) and the old as last drawn (`+0x140`, written at `0x285D4`;
+  FV `0x2B214`), height kept, before the point steps are taken. The loop
+  restart (`0xFFFF`, `0x1ABD8`) reloads neither word, so a looping motion
+  turns on each pass only if the motion before its first had bit 6. The
+  explorer blended these like any switch, so the body spun half a turn over
+  the blend: Akira from stance 1285 into motion 16 was 157.5° off at the
+  waist on frame 1 (hands 0.85/0.65, feet 0.75), 22.5° less each frame;
+  Grace from stance 224 into 31, 148.7° (0.68/0.56, 0.71). Now the waist is
+  exact and the points start 0.18/0.38, 0.03 and 0.08/0.18, 0.13 out, the
+  arms' own blend. Throw pairs need no change of place: thrower and victim
+  have bit 20 as 0/1, 1/0 or, for back throws, 0/0, which the shared place
+  already gives.
 - **Head** (`0x2922C`). With the face target in the chest frame as (d0, d1,
   d2): a target behind (d1 < 0) is brought to d1 = 0, and the old yaw is kept
   if it already faces that way within half a unit; yaw = -atan2(d1, d0),

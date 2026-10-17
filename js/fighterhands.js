@@ -90,6 +90,11 @@ function handOps(rom, id) {
     return { ops, loops: next === LOOP };
 }
 
+/** Whether the game plays motion `id` over and over (+0x802 0xFFFF). */
+export function gameLoops(rom, id) {
+    return Boolean(rom.game.rig?.reactions && rom.game.rig.script && id != null) && handOps(rom, id).loops;
+}
+
 const s16 = (v) => (v << 16) >> 16;
 
 /* One op on a VF2 hand's six bytes, then the frame's step (0x1B4E8). */
