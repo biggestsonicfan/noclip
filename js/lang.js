@@ -40,13 +40,13 @@ const JA_PAGE = {
     'stf.clip.canyon': 'キャニオンクルーズ、峡谷を下るボートに乗って',
     'stf.clip.noclip': '<b>Noclip</b> でカジノナイトの壁を越え、リングへ降りていく',
     'stf.clip.giantwing': 'ジャイアントウイングの雲の中へ',
-    'stf.clip.fighter': '自分のリグで技の途中のソニック、残像つき',
+    'stf.clip.fighter': '専用リグで技の途中のソニック、残像つき',
     'stf.name': 'ソニック・ザ・ファイターズ',
     'hotd.name': 'ザ・ハウス・オブ・ザ・デッド',
     'hotd.meta': '18ステージと敵のボディ94体 &middot; <code>hotdo</code> / <code>hotd</code>',
     'hotd.clip.mansion': 'ステージ&nbsp;1 の3番目のセット、明かりのついた館の部屋の上',
     'hotd.clip.stage2': 'チャプター&nbsp;2 の6番目のセット、帯状の雲の下',
-    'hotd.clip.body': '腕が刃になったゾンビ <code>BO_tetuman</code>、自分のリグで',
+    'hotd.clip.body': '腕が刃になったゾンビ <code>BO_tetuman</code>、専用リグで',
     'hotdp.name': 'ザ・ハウス・オブ・ザ・デッド <i>プロトタイプ</i>',
     'hotdp.meta': '製品版の元になった Model 2C 版 &middot; <code>hotdp</code>',
     'hotdp.clip.room': 'ステージ&nbsp;1 の明かりのついた部屋に立って',
@@ -72,13 +72,13 @@ const JA_PAGE = {
     'vf2.clip.islands': '海に突き出た緑の岬にあるアイランドのリング',
     'vf2.clip.wall': '万里、万里の長城の上のリング',
     'vf2.clip.snow': '山に切り込まれた雪山のリング',
-    'vf2.clip.fighter': '自分のリグのアキラ',
+    'vf2.clip.fighter': '専用リグのアキラ',
     'doa.name': 'デッド オア アライブ <i>実験的</i>',
     'doa.meta': '12ステージとすべてのモデル、Model 2B と 2A で &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code>',
     'doa.clip.palace': 'ステージ&nbsp;3 の壁に囲まれた宮殿の中庭',
     'doa.clip.sunset': 'ステージ&nbsp;11 の溶岩に囲まれた岩のリング',
     'doa.clip.city': 'ステージ&nbsp;10、夜の街の上',
-    'doa.clip.fighter': '自分のリグのかすみ',
+    'doa.clip.fighter': '専用リグのかすみ',
 
     'load.title': 'あなたの ROM セットを使ってください',
     'load.sub': 'ビューアーは中のプログラム ROM からどのゲームのセットかを判断するので、zip の名前は何でもかまいません。',
@@ -109,7 +109,7 @@ const JA_PAGE = {
     'romnote.daytona': '<b>デイトナUSA</b>（<code>daytona.zip</code>）&mdash; ここで唯一、他のゲームが動く'
         + ' 2A/2B ではなく初代 Model 2 基板のゲームで、唯一8つのビルドで出荷されました。8つすべてを認識し、'
         + 'マージ済みアーカイブは一度に全部として読みます。パネルに<b>ビルド</b>の選択が現れ、切り替えは'
-        + '一瞬です。違うのは2つだけです &mdash; 1993年のデラックス版はテーブルが2822項目、それ以降の'
+        + '一瞬です。中身が異なるのは2種類だけです &mdash; 1993年のデラックス版はテーブルが2822項目、それ以降の'
         + 'ビルドはすべて3190項目で、7つとも1バイト違わず同じテーブルです。カラーリングの入ったストックカーの'
         + 'グリッド、コースのトラック区間と沿道の風景が、コース自身のバンクのテクスチャで、ゲームが起動時に'
         + '計算するカラーテーブルを通して描かれます。コースも出てきます。それぞれ128単位のブロックの'
@@ -129,7 +129,7 @@ const JA_PAGE = {
 
     'tab.stage': 'ステージ',
     'tab.model': 'モデル',
-    'tab.anim': 'アニメ',
+    'tab.anim': 'アニメーション',
     'tab.cell': 'セル',
     'f.build': 'ビルド',
     'f.stage': 'ステージ',
@@ -157,7 +157,7 @@ const JA_PAGE = {
         + '与えます。このビューを基板の画像に重ねる前に使ってください',
     'f.layers': 'レイヤー',
     'f.effects': 'エフェクト',
-    'f.effects.title': 'ステージビューが求められない限り省くもの。基板が自分の時計とカメラで描くエフェクトと、'
+    'f.effects.title': '指定しない限りステージビューが省くもの。基板が自分の時計とカメラで描くエフェクトと、'
         + 'ファイターが起こすもの（代役が演じます）',
     'f.parts': 'パーツ',
 
@@ -209,9 +209,9 @@ const JA_PAGE = {
         + 'ソニック・ザ・ファイターズが受け継いだ形式です。ポーズは全員共通の標準リグ'
         + '（<code>0x296A0</code>）で解かれ、パーツは基板が描くようにファイター自身のスケルトンに沿って'
         + '置かれます。<em>対戦相手</em>（初期はオフ）は同じモーションの同じファイターで、ラウンド開始時の'
-        + '位置、ファイターの前に立ちます。<em>背後</em>は代わりにファイターの背中側に立たせます。'
+        + '相手の位置、つまりファイターの前に立ちます。<em>背後</em>は代わりにファイターの背中側に立たせます。'
         + '試合でファイターが振り向いた後の位置です。モーションはどちらかを示さないので、振り向くモーションや'
-        + '背を向けたモーションではそちらが向いています。そのとき両者の頭は毎フレーム相手の頭の方を向きます。'
+        + '背を向けたモーションでは背後に置くのが合っています。そのとき両者の頭は毎フレーム相手の頭の方を向きます。'
         + 'ゲームがそうするのは試合の状態が許すときだけで、エクスプローラーはそれを追っていないので、'
         + 'オンにするとゲームでは向かない場面でも頭が向くことがあります。',
     'note.fv': 'ファイターは <code>0x640D2B0</code> のレコードで、16個のパーツモデルとそれがぶら下がる'
@@ -259,7 +259,7 @@ const JA_PAGE = {
     'opt.anim': 'アニメーション',
     'opt.anim.title': 'ステージのフレームテーブルを基板と同じ 60 Hz で進めます：ヤシの木、カーペットとその'
         + '炎とロープ、フェンス、流れる地平線、海がスクロールするパレットの行、オーロラ・アイスフィールドの'
-        + 'カーテンを流れるテクスチャ &mdash; そして飛ぶ2つのステージを飛ばします：円を描くフライング'
+        + 'カーテンを流れるテクスチャ &mdash; そして空を飛ぶ2つのステージを飛行させます：円を描くフライング'
         + 'カーペット（砂漠とスフィンクスの頭が通り過ぎる）と、峡谷を下るキャニオンクルーズのボート',
     'opt.wire': 'ワイヤーフレーム',
     'opt.grid': 'グリッド',
@@ -323,7 +323,7 @@ const JA_TEXT = {
         'そのチップはこのセットの別の zip にあります — MAME のクローンは自分独自のチップだけを持ち、'
         + '残りは親セットに置いているので、親の zip も一緒にドロップしてください',
     'check that these are the ROM zips of a game the viewer knows: {games}':
-        'ビューアーが知っているゲームの ROM zip か確かめてください：{games}',
+        'ビューアーが対応しているゲームの ROM zip か確かめてください：{games}',
     'Tick the acknowledgement above before loading a ROM set.':
         'ROM セットを読み込む前に、上の確認にチェックを入れてください。',
     'That is not a .zip — drop the ROM set archive.': 'それは .zip ではありません — ROM セットのアーカイブをドロップしてください。',
@@ -337,7 +337,7 @@ const JA_TEXT = {
     'sheets unpacked from ROM (sets {sets})': 'ROM から展開したシート（セット {sets}）',
     'sheets unpacked from ROM (set {set})': 'ROM から展開したシート（セット {set}）',
     'sheets unpacked from ROM (sets {sets}, one per part)': 'ROM から展開したシート（セット {sets}、パーツごとに1つ）',
-    'sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)': 'ROM から展開したシート（{body} のものと、ステージ {stage} のセット）',
+    'sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)': 'ROM から展開したシート（{body} のセットとステージ {stage} のセット）',
     'the model samples no texture': 'このモデルはテクスチャを使いません',
     'decoding sheets…': 'シートをデコード中…',
     'could not read that dump: {err}': 'そのダンプを読み込めませんでした：{err}',
@@ -349,7 +349,7 @@ const JA_TEXT = {
     'texture set': 'テクスチャセット',
     'colour block': 'カラーブロック',
     'brightness': '明るさ',
-    '{n} draws': '{n} 描画',
+    '{n} draws': '描画 {n} 回',
     'Zone': 'ゾーン',
     'Blocks drawn': '描くブロック',
     'ride the arena': 'アリーナに乗る',
@@ -357,7 +357,7 @@ const JA_TEXT = {
     'scrolls {n}f': '{n}f でスクロール',
 
     /* app.js: the model and cell panels */
-    '{shown} shown of {n} table entries': '{n} のテーブル項目のうち {shown} を表示',
+    '{shown} shown of {n} table entries': 'テーブル項目 {n} 個のうち {shown} 個を表示',
     '{shown} shown of {n} cells': '{n} セルのうち {shown} を表示',
     'cell {n} has no tiles': 'セル {n} にはタイルがありません',
     'From the model (auto)': 'モデルから（自動）',
@@ -369,21 +369,21 @@ const JA_TEXT = {
     'Body': 'ボディ',
     'Fighter': 'ファイター',
     'no wind': '風なし',
-    'A string of {n} — built below': '{n} 個のストリング — 下で組み立て',
-    'Pick a move above, then add to it.': '上で技を選び、そこに追加してください。',
+    'A string of {n} — built below': '{n} 技のストリング — 下で組み立て',
+    'Pick a move above, then add to it.': '上で技を選んでから、続く技を追加してください。',
     'then, once free, any move…': '次に、動けるようになったら任意の技…',
     'start with any move…': '任意の技から始める…',
     'Idle': '待機',
     'Its moves, by the input table': '技（入力テーブル順）',
     'The rest of its action table': 'アクションテーブルの残り',
-    'What those hand over to': 'それらから引き継ぐもの',
+    'What those hand over to': 'それらの次につながるもの',
     'Its intro, win and show poses': '登場、勝利、見せポーズ',
     'Every other motion': 'その他すべてのモーション',
 
     /* app.js: the hud, the music, the build */
     'noclip camera': 'noclip カメラ',
     'orbit camera': 'オービットカメラ',
-    'no music of its own': '自分の音楽はありません',
+    'no music of its own': 'このステージ独自の曲はありません',
     'could not start: {err}': '開始できませんでした：{err}',
     '{name} (same colours as {same})': '{name}（{same} と同じ色）',
     'Sega Model 2': 'セガ Model 2',
@@ -395,7 +395,7 @@ const JA_TEXT = {
     'atlas from the dump, colour tables still built from ROM': 'ダンプからのアトラス、カラーテーブルは ROM から作成',
     'sheets unpacked from ROM ({why})': 'ROM から展開したシート（{why}）',
     'stage slot {n}': 'ステージスロット {n}',
-    '{draws} draws · {tris} tris': '{draws} 描画 · {tris} 三角形',
+    '{draws} draws · {tris} tris': '描画 {draws} 回 · 三角形 {tris} 個',
     'ride the carpet': 'カーペットに乗る',
     'ride the boat': 'ボートに乗る',
     'tap a part to identify it': 'パーツをタップして識別',
@@ -408,7 +408,7 @@ const JA_TEXT = {
     'Every other motion for {n} joints': '関節 {n} 個用のその他のモーション',
     'Moves — standing, by the buttons': '技 — 立ち、ボタン順',
     'Moves in other situations': 'その他の状況の技',
-    'Draw this cell': 'このセルを描ける',
+    'Draw this cell': 'このセルを描く CG',
     'Others': 'その他',
 
     /* The stage's layers (stages.js, display.js) */
@@ -430,7 +430,7 @@ const JA_TEXT = {
     /* Effects switches (vf2.js, vf2fx.js) */
     'river shade': '川の日陰',
     'corner objects': 'コーナーのオブジェクト',
-    'corner falls (stand-in)': 'コーナーの転倒（代役）',
+    'corner falls (stand-in)': 'コーナーの物が倒れる（代役）',
     'burst (stand-in)': 'バースト（代役）',
 
 
