@@ -1537,6 +1537,40 @@ record `+0x2C`) for the hit check (`0x2B404`). FV's part-loop table
 Left out: op 14's camera shake (`[0x500814]+0xFC`, the camera, not the
 fighter) and ops 20/21, the command VM's pointer and counter (input).
 
+### The rest of the move script and the setup ops
+
+Every op of the motion's script and setup has now been read for what it
+writes. None of the rest changes a pose, a model or a light on a motion the
+explorer can open. Counted over every motion (VF2 1359, FV 1054):
+
+- Script op 2 (VF2 `0x1ADAC`, 33 motions; FV `0x1C28C`, 4) writes request
+  `0x0D000000` to `+0x198` and 0 to the timer `+0x5DE`. That is the down
+  state (handler `0x157DC`), whose next motion the stick and the timer pick.
+- VF2 op 15 (`0x1B290`, 4) adds one to `+0x69C`, at most 8: a damage scale
+  (`+0x822`) and an AI test (`0x1CE28`). VF2 op 19 (`0x1B368`, 14) sets the
+  timer `+0x5DE`, doubled when `0x500068` has bit 20.
+- Setup ops 3, 9 and 11-14 fill in the hit's data: reach, the launch speed
+  (`+0x5CC`, `+0x81C`), the damage and its scaling by distance (`+0x822`),
+  the knock direction (`+0x844`). The state handlers that read them run on
+  the one hit. Op 10's windows (`+0x838`) and ops 15, 17 and 22 (read later
+  through `calc_mht_adr`, VF2 `0x1AB34`, FV `0x1C0BC`) wait on input or a
+  throw.
+- FV setup op 18 (`+0x864`/`+0x868`/`+0x878`) sets `+0` bit 14 when the
+  opponent is within a range. Op 21 scales the damage by `+0xA20`. Op 23
+  (`+0x87A`) is a late-input window (`0x1D634`). Op 0x13's second motion is
+  taken only once a button has been held `+0x86E` frames (`+0xA1C`,
+  `0x1D4A4`).
+- FV setup op 20 (motion 733 only): at the bit-20 turn the facing is set to
+  `+0x616`, the direction of the opponent, in place of a half turn
+  (`0x1C964`). That depends on where the opponent stands, which is fight
+  state.
+- FV setup op 24 (motion 990, the one 989 throws) moves the catch point in
+  throw kind `0x26` (`0x15C1C`). That handler steers the one thrown toward
+  the thrower by 0.6 of the gap a frame while `+0x1A4` bit 1 is up. Kind
+  `0x26` is the throw of a fighter in the air (`+0` bit 2), and the gap is
+  wherever the fight left them. Once caught, the pair share one place, as
+  the explorer draws them.
+
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
 Fighting Vipers poses its fighters the way Virtua Fighter 2 does, and the
