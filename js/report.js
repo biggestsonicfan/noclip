@@ -34,6 +34,7 @@
  */
 
 import { viewLink } from './viewlink.js';
+import { t } from './lang.js';
 
 const REPO = 'https://github.com/biggestsonicfan/noclip';
 
@@ -239,7 +240,7 @@ export async function fileIssue(state, button) {
 
     if (button) {
         const was = button.textContent;
-        button.textContent = copied ? 'Copied — paste into the issue' : 'Copy it from the box, then paste';
+        button.textContent = t(copied ? 'Copied — paste into the issue' : 'Copy it from the box, then paste');
         button.classList.add('done');
         setTimeout(() => { button.textContent = was; button.classList.remove('done'); }, 4000);
     }

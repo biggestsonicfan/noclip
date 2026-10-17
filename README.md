@@ -578,6 +578,12 @@ narrow desktop window keeps its sidebar; `?mobile` and `?desktop` on the URL
 force one or the other, and the link at the foot of the panel switches in place
 without dropping the ROM.
 
+The page is in Japanese with `?lang=ja` (or `?lang=jp`, as on the m2-hle2
+arcade site), and in English without it; the link by the GitHub button
+switches. The game's own names — stages, fighters, models, motions — stay as
+the ROM and the reading of it give them. The words are in `js/lang.js`, which
+says how to add a language.
+
 Sonic The Fighters comes in two builds, and the viewer reads both: Sonic The
 Fighters itself (`sfight`, program EPROMs `epr-19001`–`epr-19004`) and the
 export build, Sonic Championship (`schamp`, `epr-19141`–`epr-19144`), MAME's

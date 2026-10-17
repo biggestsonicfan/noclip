@@ -11,6 +11,7 @@
 
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
 import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
+import { t } from './lang.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -162,10 +163,10 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         }
         const dest = new Uint8Array(spec.size);
         for (const [off, loName, loCrc, hiName, hiCrc] of spec.parts) {
-            onProgress(`decompressing ${loName}`, done / totalParts);
+            onProgress(t('decompressing {name}', { name: loName }), done / totalParts);
             const lo = await member(loName, loCrc);
             done++;
-            onProgress(`decompressing ${hiName}`, done / totalParts);
+            onProgress(t('decompressing {name}', { name: hiName }), done / totalParts);
             const hi = await member(hiName, hiCrc);
             done++;
             interleave32(dest, lo, hi, off);
@@ -173,7 +174,7 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
         out[key] = dest;
     }
     out.patched = [];
-    onProgress(`${game.name} ROM set ready`, 1);
+    onProgress(t('{game} ROM set ready', { game: game.name }), 1);
 
     out.warnings = warnings;
     /* A view per region, named for it, so a profile that adds one — Fighting
