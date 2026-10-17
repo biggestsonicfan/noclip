@@ -918,6 +918,11 @@ const fvipers = {
             gates: 0x06442ba8, round: 0x60b98,
             lamps: { stages: 0x5fa6c, at: 0x60620, heights: 0x06ce35a4 },
         },
+        /* The wall shadows (js/fvwallshadow.js): rob_kabe_kage_disp
+         * (0x76944) under stage flag bit 31, the tables by +0x1B0, each
+         * slot's height (0x6443EDC) over the stage's top (0x6CE35A4,
+         * 0x248FC). */
+        wallShadow: { tables: 0x06442c68, count: 26, heights: 0x06443edc, tops: 0x06ce35a4, gates: 0x06442ba8 },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup

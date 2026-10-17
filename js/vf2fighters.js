@@ -645,6 +645,16 @@ export function fighterDebrisTables(rom) {
     return D ? readDebrisTables(rom, D, dataAt) : null;
 }
 
+/** The slots a break of the halves `which` leaves broken, as +0x1F48's
+ * bits; 0 for a fighter with no armour. */
+export function brokenSlots(body, which) {
+    let mask = 0;
+    (body.armour?.slots ?? []).forEach((x, s) => {
+        if (x.length > 0 && (s < LOWER_FIRST ? which.upper : which.lower)) mask |= 1 << s;
+    });
+    return mask;
+}
+
 /** Which halves of a fighter have a slot that breaks: damage_unit breaks one
  * half at a time, so each is a switch of its own. */
 export function armourHalves(body) {

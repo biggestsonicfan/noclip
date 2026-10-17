@@ -1744,6 +1744,89 @@ Left out:
 - FV's debris and object shadows (`0x608B8`, `0x609B0`);
 - stages whose light turns take the record's start (the round's first frame).
 
+### Fighting Vipers' wall shadows (`js/fvwallshadow.js`)
+
+On Bay Side (stage 5) FV also lays each fighter's shadow on the ring's walls:
+`rob_kabe_kage_disp` (`0x76944`), which `camera_control` calls for each player
+just before `rob_disp`. It runs on a stage whose flags u32
+`[0x6442BA8 + 12·stage]` have bit 31; with bit 7 it also needs the fight's
+event bits (`0x574004` & 15) clear. Stage 5's flags are `0x8000028F`.
+
+`rob_kabe_set_matrix` (`0x76A98`) builds two walls from slot 0's point x, z
+(`+0x1F4`), the ring D (`0x50A00C`, 5; record `+4` with flag bit 5) and the
+light's angle a, which is the camera's yaw (`+0x26`; record `+8` with bit 4),
+with 0x4000/0xC000 nudged by one. No wall is built while |x| or |z| ≥ D.
+
+- The z wall is at Zw = ±D, negative when a's bits 15 and 14 differ:
+  - `inner[6]` = T(−x cos(−a) + z sin(−a), 0, 0)·Ry(−a);
+  - `inner[7]` = T(X0, −0.08, Zw)·S(1.7·kz, 1.7, 0), with
+    X0 = x − zs·tan a·(D − zs·z) and kz = min(1/cos a, 3).
+- The x wall is at Xw = ±D, negative when bit 15 is clear:
+  - `inner[4]` = T(0, 0, −x sin b − z cos b)·Ry(b), with b = 0xC000 − a;
+  - `inner[5]` = T(Xw, −0.08, Z0)·S(0, 1.7, 1.7·kx), with
+    Z0 = z − xs·cot a·(D − xs·x) and kx = min(1/sin(a + 0x8000), 3).
+- A cosine (sine) of 0 builds no z (x) wall. The 1.7 comes from
+  `0x50A3D0`, set at boot (`0x7690`).
+
+`0x77AF8` draws the z wall, then the x wall, each on the fighter's 15
+entries of 28 bytes (slot, six models). The tables are
+u32 `[0x6442C68 + 4·+0x1B0]`. For each entry, p = upper·lower·slot matrix:
+
+- An entry is skipped when p.y is above the stage's top (f32
+  `[0x6CE35A4 + 4·stage]`, 3.1 on Bay Side) plus the slot's own (f32
+  `0x6443EDC`; slot 2 −0.1, the rest 0).
+- The z wall takes only a p within D + 0.1 of the ring's middle on both axes.
+  The x wall takes only the slots the z wall did not.
+- p is stored at `0x50F600` by slot. A wall draws nothing while the camera
+  (`+0x18`/`+0x20`) is beyond it.
+- The model is chosen in this order:
+  - slot 9 with p.y ≤ 0.2: `+0x18`;
+  - slots 15/12: 0xBB8/0xBB9, unless move flag 14 or 4 is set;
+  - a broken slot (`+0x1F48`): `+0x10`;
+  - otherwise `+4`, or with the item in hand (`+0` bit 27) `+8`, mirrored
+    too (`+0` bit 6) `+0xC`.
+- The carried item, while it isn't in hand, goes on the first wall that
+  takes its matrix (the ring entry `rob_disp` left the frame before), as entry
+  `[+0x788]`'s `+0x14`, if that wall drew its slot.
+
+`0x7860C` then lays model 0xAB6, a flat strip, under each slot 1..15 lower
+than 0.24 (the feet; `cmpr 0.24, y` / `ble` skips the rest): T(x, 0, z)·Ry(bearing to the stored wall point + 0x8000)·
+S(0.4, 0, 1.15·distance).
+
+The explorer runs all of this on the pose it already has. It uses the explorer
+camera's yaw and place in the board frame as the fight camera's, and runs
+again when the camera moves. Its fighters stand inside the ring and the
+Animation tab has no event bits, so on stage 5 the wall copy shows whenever
+the fighter does. In the game, the camera bits and the event-bit test are
+fight state.
+
+Now, e.g. Grace motion 1 frame 1 on stage 5, camera yaw 0x8000: 15 wall
+draws on the z wall at z = −5 (0xBBC at 0.403, 2.103) and 2 floor streaks
+(the feet). On stage 0 there are none.
+
+Checked against MAME (the shared build, attract Bay Side, frames 16535 to
+16715, both players, 362 passes) with breakpoints after the set-up, on each
+projected point, each draw and each streak:
+
+- The set-up's stored values (X0 `0x50A3EC`, Z0 `0x50A3F4`, kz `0x50A3E8`,
+  kx `0x50A3F0`) agree to 1.3e-3 relative at most, the worst near a = 0x4000,
+  where X0 runs into the hundreds. Both walls' sides agree in every pass.
+- Every projected point of 317 passes agrees to 1e-4. In the other 45 the
+  logged slot points (`+0x1F4`) lag the matrices the coprocessor projected
+  (by up to 0.106), as in the floor shadows' frame 4200; in 27 of them every
+  slot is off by the same height, and the stored set-up still agrees.
+- Which slots each wall takes and draws, and the model of all 5044 draws
+  (0xBB8/0xBB9 included), match in every pass. The streaks' slots match in
+  every pass, and their length matches 1.15 × the logged distance to 4e-7.
+- Not covered by the window: the camera beyond a wall (every wall drew), the
+  item draw, broken or mirrored models, the item in hand, and the streak's
+  angle (the breakpoint read it after it was overwritten).
+
+Left out:
+
+- the event bits (`0x574004`) and the fight camera, which are fight state;
+- a fighter thrown outside the ring, which the explorer never poses.
+
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
 Fighting Vipers poses its fighters the way Virtua Fighter 2 does, and the

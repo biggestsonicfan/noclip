@@ -50,11 +50,12 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript,
+    trailScript, hitSparkScript, brokenSlots,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
-import { readCarried, carriedDraws } from './fvitem.js';
+import { readCarried, carriedDraws, itemHeld, wallItem } from './fvitem.js';
+import { readWallShadows, wallShadowModels, wallSetting, wallShadowDraws } from './fvwallshadow.js';
 import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
 import { reflectionModels, stageReflects, reflectionDraws } from './vf2reflection.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
@@ -3662,6 +3663,7 @@ function poseFighterAndRival(body, m) {
     placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
     placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
+    placeWallShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame, mirrored && Boolean(own.thrown), (p) => placedPose(at, p));
     placeReflection(m.rival, m.rival.body, placedPose(at, theirs.pose));
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
@@ -4077,6 +4079,80 @@ function placeShadows(holder, body, pose, motion, frame) {
     placeEffectPool(holder, 'shadowPool', SHADOW_POOL, kit.geoms, draws);
 }
 
+/*
+ * Fighting Vipers' shadows on Bay Side's walls (js/fvwallshadow.js), on the
+ * fighter and on the opponent, each from the motion it plays: lit from the
+ * explorer camera's yaw, as the board lights them from the fight camera's.
+ * `pose` is in the fighter's board frame, the opponent's placed where it
+ * stands (`toBoard`, for its item's pose a frame back). The camera moves
+ * without a new frame, so the draw is kept and run again when it does
+ * (followWallShadows).
+ */
+const WALL_SHADOW_POOL = 15 * 2 + 1 + 15;
+
+function placeWallShadows(holder, body, pose, motion, frame, mirrored, toBoard = (p) => p) {
+    const kit = wallShadowKit(holder);
+    if (!kit) return;
+    const setting = wallSetting(state.rom, kit.walls, state.sparkStage, state.rom.game.rig.shadow?.ring ?? 5);
+    const run = () => {
+        const draws = setting && motion ? wallShadowDraws(kit.walls, body.index, pose, setting, cameraYawAndEye(), {
+            flags: moveFlags(state.rom, motion)?.[frame] ?? 0,
+            broken: brokenSlots(body, state.armour),
+            held: itemHeld(state.rom, motion, frame),
+            mirrored,
+        }, wallItemOf(holder, body, motion, frame, mirrored, toBoard)) : [];
+        placeEffectPool(holder, 'wallShadowPool', WALL_SHADOW_POOL, kit.geoms, draws);
+    };
+    run();
+    holder.wallShadowRun = setting ? run : null;
+}
+
+/* The carried item's matrix a frame back, for the walls; none for a fighter
+ * with no item. */
+function wallItemOf(holder, body, motion, frame, mirrored, toBoard) {
+    const kit = carriedKit(holder, body);
+    if (!kit) return null;
+    const poseAt = (f) => toBoard(poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose);
+    return wallItem(state.rom, kit.carried, motion, frame, { poseAt, mirrored });
+}
+
+/* The explorer camera in the rig's board frame: its yaw as a 16-bit word
+ * (Ry of it turns +z along the view laid flat, as 0x4800909 by the fight
+ * camera's +0x26 does) and its place. */
+function cameraYawAndEye() {
+    const r = cameraTurn(null, true);
+    const eye = state.viewer.camera.getWorldPosition(new THREE.Vector3()).applyMatrix4(state.viewer.root.matrixWorld.clone().invert());
+    return { yaw: Math.floor(Math.atan2(-r[6], r[8]) * 32768 / Math.PI) & 0xffff, eye: [eye.x, eye.y, -eye.z] };
+}
+
+/* Run the wall shadows again when the camera has moved since they were
+ * placed (the viewer's beforeDraw). */
+let wallCameraKey = '';
+function followWallShadows(camera) {
+    const m = state.motion;
+    /* Only a pool still in the scene: another tab's scene has none. */
+    const runs = [m, m?.rival].filter((h) => h?.wallShadowRun && h.wallShadowPool?.[0]?.mesh.parent === state.viewer.root).map((h) => h.wallShadowRun);
+    if (!runs.length) return;
+    const key = camera.matrixWorld.elements.join(',');
+    if (key === wallCameraKey) return;
+    wallCameraKey = key;
+    for (const run of runs) run();
+}
+
+/* The wall tables and their models, read once per ROM; none in a game
+ * without them. */
+function wallShadowKit(holder) {
+    if (holder.wallShadow?.rom !== state.rom) {
+        const walls = readWallShadows(state.rom), geoms = new Map();
+        for (const id of walls ? wallShadowModels(walls) : []) {
+            const d = id > 0 && getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.wallShadow = { rom: state.rom, walls, geoms };
+    }
+    return holder.wallShadow.walls ? holder.wallShadow : null;
+}
+
 /* The tables and their models, read once per ROM; none in a game without
  * them. */
 function shadowKit(holder) {
@@ -4216,6 +4292,7 @@ function poseBodyRig() {
     placeBursts(m, pose.pose, m.decoded, m.frame);
     placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
+    placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeReflection(m, body, pose.pose);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
     strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
@@ -6030,7 +6107,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.viewer.beforeDraw = rankFaceLayers;
+    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); };
     $('#tool-shot').hidden = false;
     $('#tool-export').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);

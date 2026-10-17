@@ -113,3 +113,30 @@ export function carriedDraws(rom, carried, motion, frame, { pose, poseAt, mirror
     }
     return draws;
 }
+
+/** Whether the item is in hand (+0 bit 27) on `frame` of `motion`. */
+export function itemHeld(rom, motion, frame) {
+    if (motion?.id == null) return false;
+    const last = Math.min(frame, motion.frames ?? frame);
+    return last >= 1 && carriedStates(rom, motion.id, last)[last] !== 0;
+}
+
+/*
+ * The item's matrix as the wall shadows (js/fvwallshadow.js) read it on
+ * `frame`: { slot, r, t }, the newest ring entry, which rob_disp wrote the
+ * frame before, with the slot of this frame's record; null while the item is
+ * in hand, on a frame with no item, or on frame 1 of a motion played cold,
+ * whose ring is still empty.
+ */
+export function wallItem(rom, carried, motion, frame, { poseAt, mirrored }) {
+    if (motion?.id == null) return null;
+    const last = Math.min(frame, motion.frames ?? frame);
+    if (last < 2) return null;
+    const items = carriedStates(rom, motion.id, last);
+    const rec = itemRecord(rom, carried, items[last], mirrored);
+    if (!rec?.first.model || items[last]) return null;
+    const before = itemRecord(rom, carried, items[last - 1], mirrored);
+    if (!before?.first.model) return null;
+    const p = placeHalf(poseAt(last - 1), items[last - 1] ? before.second : before.first);
+    return p && { slot: rec.first.slot, ...p };
+}
