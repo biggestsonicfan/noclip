@@ -1340,8 +1340,8 @@ Left out, all of them fight state:
   it swaps the head model (`+0x48`) to 0xAD2, or 0xAC5 for record 16.
 - The second model `+0x75C` (Kage 0x260, Pai 0xD77). `0x193CC` draws it on
   the floor matrix `0x501960` on stages with `0x6EEA0` bit 5, while the head
-  is inside the ring. It is the piece's floor shadow, and the explorer draws
-  no fighter shadows.
+  is inside the ring. It is the piece's own floor shadow, apart from the
+  fighters' ("The fighters' shadows").
 
 Fighting Vipers has no counterpart. Its slot 2 case (`0x1A12C`) draws only
 Picky's hair, and its fighter load copies no such struct.
@@ -1672,6 +1672,76 @@ explorer can open. Counted over every motion (VF2 1359, FV 1054):
   `0x26` is the throw of a fighter in the air (`+0` bit 2), and the gap is
   wherever the fight left them. Once caught, the pair share one place, as
   the explorer draws them.
+
+### The fighters' shadows (`js/fightershadow.js`)
+
+Both games lay a flat model under each part of a fighter, slid along the
+stage's light onto the floor. Each frame the game sends the coprocessor the
+light's elevation a0 and azimuth a1 (VF2 `0x61684`, FV `0x5FA7C`,
+`Fn_kage_mat`), and it builds three matrices, with r = a1 ^ 0x8000 and g the
+ground's height (`0x50A010`):
+
+- `inner[0]` = Ry(r) S(1, 0, 1) Rx(a0 − 0x4000) Ry(−r), the flattening;
+- `inner[1]` = Ry(r) S(1, 1, 1/sin a0) Ry(−r), for parts over the ring;
+- `inner[2]`, the same moved by Ry(r)·(0, g, −g cot a0), for parts below it.
+
+`Fn_kage_flag` (VF2 `0x61A14`, FV `0x6027C`) slides one test ball per slot
+along the light onto y = 0 (by kx = −sin(a1 + 0x8000) cot a0, kz =
+cos(a1 + 0x8000) cot a0) and sorts the slots into two masks: near if the
+ball is at or above the floor and not past the ring less 0.3, else far if
+not inside the ring plus 0.2; bit 0 takes bit 9's answer. The draw (VF2
+`0x61BA0`, FV `0x60640`) walks the fighter's table, 15 entries of 24 bytes
+(slot, model, flags, offset), and for each slot in a mask draws the model
+on inner[0] · the slot's matrix, moved by the offset when flag bit 2 is
+set, one axis laid flat, then inner[1] (near) or inner[2] (far).
+
+| | VF2 | FV |
+|---|---|---|
+| tables | `0x61CFC`, by `+0x1B1` mod 13 | u32 `[0x60BC8 + 4·+0x1B0]`, 26 (player 2's look 13 on) |
+| test ball | the middle of the slot's list (`0x2007BEE`) | the first; the boot (`0x1950`) copies them to `0x506000`/`0x506200`; slot 0 has no list and uses slot 9's |
+| light | stage record `0x6EE38` + 256·stage, `+0x70`/`+0x72` | VECTER_X/Y, record `0x6CE1048` + 256·stage, `+0x08`/`+0x0A` (`0x5FA08`) |
+| ring | 8 by default (`0x50A00C`) | 5 (`0xB658`) |
+| ground | −0.5 | by stage, f32 `0x6CE3564` (`0x248FC`): −0.2, 0.3, 0, −0.01, … |
+| laid flat | bit 0 the x, else the z | bit 1 the z, else bit 0 the x, else neither (`kage_poly`) |
+
+FV adds, all read from its own tables:
+
+- The stage flags u32 `[0x6442BA8 + 12·stage]`: bit 8 takes the mirror
+  path and draws no shadows; bit 31 waits on the fight's event bits
+  (`0x574004` & 15), clear at every round's start, so Bay Side (stage 5)
+  draws none.
+- A round test on the stages whose byte `[0x60B98 + stage]` is set (0 and
+  4): the distance is 0.70710677 · hypot.
+- Slot 9 is skipped while the move flags (`+0x1A4`) have bits 14 and 16
+  (`0x60690`).
+- The Factory (stage 1, `[0x5FA6C + stage]`) is lit by four lamps
+  (`0x60468`) at (±1, 0), (0, ±1) × the ring (`0x60620`). The one nearest
+  slot 0 (`+0x1F4`) in plan wins, the last on a tie; a1 = 0x8000 − its
+  bearing, a0 = atan2(h, max(ring + 1 − d, 0)) with h = f32
+  `[0x6CE35A4 + 4·stage]`. Its margins are 0.2 wider, and only the near
+  draw is made: the far one waits on `+0xA29`, fight state.
+
+Checked against MAME by dumping the coprocessor's display list and fitting
+each slot's matrix from the part draws (camera = the stage floor model's
+matrix): VF2 attract frame 4900, 4.2e-7 at most; FV attract frames 3600
+(Factory, lamps, player 2's slot 9 skipped), 4800, 5400, 6000 and 6600
+(a part-mask frame), 29 to 30 shadows each, 2.4e-5 at most. A control with
+a1 one step of 0x100 off misses by 3.5. FV frame 4200 misses by 1.7e-3:
+player 2 is in the air at the wall, where `+0x1F4` lags slot 0 by 0.025.
+
+Before, the explorer drew no fighter shadows in either game. Now, e.g.:
+VF2 Akira 1285 frame 1 on stage 1, 15 shadows (0x15B at 1.867, 0, 0.287);
+FV Grace 3 frame 1 on stage 0, light 0xD000/0xF400, ground −0.2, 15 shadows
+(0xE8 at 0.554, 0, 0.315).
+
+Left out:
+
+- the masks are refreshed only on alternate frames per player
+  (`[0x500020]` parity); the explorer refreshes every frame;
+- FV's `name_char_kage_disp` (`+0x2A`) and the extra entry at table + 360,
+  both fight state;
+- FV's debris and object shadows (`0x608B8`, `0x609B0`);
+- stages whose light turns take the record's start (the round's first frame).
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 

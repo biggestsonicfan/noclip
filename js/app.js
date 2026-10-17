@@ -53,6 +53,7 @@ import {
     trailScript, hitSparkScript,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
+import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
@@ -3655,6 +3656,7 @@ function poseFighterAndRival(body, m) {
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
+    placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
@@ -3987,6 +3989,38 @@ function hitSparkKit(holder) {
     return holder.hitSpark.spark ? holder.hitSpark : null;
 }
 
+/*
+ * The fighters' floor shadows (js/fightershadow.js), each under the light of
+ * the stage the panel names. `pose` is in the fighter's board frame, the
+ * opponent's too: the light is the stage's, not the figure's own.
+ */
+const SHADOW_POOL = 15 * 2;
+
+function placeShadows(holder, body, pose, motion, frame) {
+    const kit = shadowKit(holder);
+    if (!kit) return;
+    const S = kit.shadows;
+    const setting = shadowSetting(state.rom, S, state.sparkStage, pose[0].t);
+    const index = S.spec.by === 'record' ? body.index : body.char ?? body.index;
+    const flags = moveFlags(state.rom, motion)?.[frame] ?? 0;
+    const draws = setting ? shadowDraws(S, index, pose, setting, flags) : [];
+    placeEffectPool(holder, 'shadowPool', SHADOW_POOL, kit.geoms, draws);
+}
+
+/* The tables and their models, read once per ROM; none in a game without
+ * them. */
+function shadowKit(holder) {
+    if (holder.shadow?.rom !== state.rom) {
+        const shadows = readShadows(state.rom), geoms = new Map();
+        for (const id of shadows ? shadowModels(shadows) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.shadow = { rom: state.rom, shadows, geoms };
+    }
+    return holder.shadow.shadows ? holder.shadow : null;
+}
+
 /* The camera's turn in the board frame of the figure `place` stands (the
  * rig's own without), as the pose keeps a turn (each axis's image in turn): a
  * model turned by it has its +y along the camera's up and its +z along its
@@ -4070,6 +4104,7 @@ function poseBodyRig() {
     placeDebris(m);
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    placeShadows(m, body, pose.pose, m.decoded, m.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
     strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
 
@@ -4872,8 +4907,9 @@ function sparkKind(k) {
 function renderSparkPanel() {
     const m = state.motion;
     const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
-    /* The stage picks the trails' models and, on FV, the fighters' light. */
-    const staged = Boolean(state.rom.game.rig?.strobe || script);
+    /* The stage picks the trails' models, the shadows' light and, on FV, the
+     * fighters' light. */
+    const staged = Boolean(state.rom.game.rig?.strobe || state.rom.game.rig?.shadow || script);
     $('#fight-stage-field').hidden = !staged;
     if (staged) {
         const sel = $('#spark-stage');

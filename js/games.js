@@ -895,6 +895,21 @@ const fvipers = {
                 },
             },
         },
+        /* The floor shadows (js/fightershadow.js): 0x60640's tables by
+         * +0x1B0; the balls the boot (0x1950) copies to 0x506000 and the
+         * coprocessor tests each slot's first of; the light VECTER_X/Y,
+         * copied from the stage record (0x5FA08); the ring 5 (0xB658) and
+         * the ground by stage (0x248FC). The stage flags (0x6442BA8) can
+         * stop them, 0x60B98 makes the test round, and 0x5FA6C lights them
+         * from four lamps 0x60620 at heights 0x6CE35A4 (0x60468). */
+        shadow: {
+            tables: 0x60bc8, count: 26, by: 'record', ring: 5, grounds: 0x06ce3564,
+            leave: { x: 1, z: 2 }, skip: { slot: 9, flags: (1 << 14) | (1 << 16) },
+            balls: { counts: 0x0640e914, lists: 0x0640e89c, inline: 8, points: 0x0640e4fc, first: true },
+            stages: { at: 0x06ce1048, stride: 256, light: 0x08 },
+            gates: 0x06442ba8, round: 0x60b98,
+            lamps: { stages: 0x5fa6c, at: 0x60620, heights: 0x06ce35a4 },
+        },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup
@@ -3278,6 +3293,15 @@ const vf2 = {
     rig: {
         kind: 'vf2',
         standardRig: 0x296a0,
+        /* The floor shadows (js/fightershadow.js): 0x61BA0's tables by
+         * +0x1B1 mod 13, 0x176A0's balls, the light from the stage records'
+         * +0x70 and +0x72 (0xCE1C), the ring's default half-width (0x50A00C)
+         * and the ground (0x50A010, 0x99CC). */
+        shadow: {
+            tables: 0x61cfc, count: 13, ring: 8, ground: -0.5, leave: { x: 1 },
+            balls: { counts: 0x2007c68, lists: 0x2007bee, points: 0x20078a8 },
+            stages: { at: 0x6ee38, stride: 256, light: 0x70 },
+        },
         /* The action table is record +0x14 as in Fighting Vipers:
          * action_init (0x13F1C) puts it at player +0x1A0, and the action
          * code reads it to +0xA6, 84 motion ids, the stance first. */
