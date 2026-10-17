@@ -3250,18 +3250,39 @@ twice. The first pass (`0x1DEA8`, `0x1DF0C`) runs with camera `+0xFA` bit 0
 set; the second (`0x1E394`, `0x1E3FC`) runs with it clear. Between them come
 the stage's display lists. What else it draws:
 
-- **The fighters' reflection, `0x20488` (not drawn by the explorer).** On a
+- **The fighters' reflection, `0x20488` (`js/vf2reflection.js`).** On a
   stage with flag bit 5 (`0x6EEA0`), after the mirror floor (`0x20400`), it
   pushes a scale of (1, −1, 1) and calls `0x19C94` for each player that is
   drawn. That routine draws sixteen models from the character record's
   `+0x34` list (`[+0x190]+0x34`), each on its slot's matrix (command
   `0x1B803737`, player `+4`, slot × 12). That puts a flipped copy of the
-  fighter under the floor. It is culled by part (`0x2069C`) and gated on
-  player `+0` bit 7, the same gate `rob_disp` uses. The models are a set of
-  their own (Akira's are `0x997`–`0x9A6`; his body is `0x197`–`0x1A6`). Only
-  stage numbers 10 and 11 have the bit (the Mirror stage, Dural's). The
-  Animation tab's stage field reaches both, so every motion played there
-  shows it. Not checked against MAME.
+  fighter under the floor. It is gated on player `+0` bit 7, the same gate
+  `rob_disp` uses, so the copy shows whenever the fighter does. The models
+  are a set of their own (Akira's are `0x997`–`0x9A6`; his body is
+  `0x197`–`0x1A6`). Only stage numbers 10 and 11 have the bit (the Mirror
+  stage, Dural's).
+
+  The explorer draws it in the Animation tab when the stage field names
+  stage 10 or 11, for the fighter and the opponent. It uses the pose the
+  fighter already has. The slot matrices `0x19C94` multiplies by are stored
+  in the world frame, under the camera, so the copy is that pose reflected
+  through the floor's plane, y = 0: the y row of each rotation and y of each
+  translation negated (determinant −1; the board cull, by face normal,
+  needs no change). A mirrored fighter needs no case of its own: its pose
+  is already mirrored, and the list is read by slot. The hands are the
+  list's own slot 5 and 8 models, not the hand shapes of script op 18,
+  since `0x19C94` reads only the list. The copy has none of the other
+  models or the flash material `rob_disp` adds.
+
+  `0x19C94` skips a part when `0x2069C` finds it outside the fight
+  camera's view. The Animation tab has only its orbit view and no fight
+  camera, so that test is not modelled: every part is drawn, and no camera
+  clip is made up for it.
+
+  MAME's attract mode never shows it. Over 44,000 frames the demo fights'
+  stage number (`0x500064`) went 1 to 9, back to 0, and round again, with
+  3 between some of them. It never reached 10 or 11. So the reflection is
+  read from the ROM and not checked against MAME.
 - Stage pieces, already read for the Stage tab: `0x2173C`/`0x1E52C` (light
   and floor matrices, no models), `0x1EE34` (fog), `0x20708` (scenery),
   `0x20400` (mirror floor), `0x20064` and `0x202E8` (the raft), `0x21368`

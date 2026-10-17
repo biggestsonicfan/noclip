@@ -56,6 +56,7 @@ import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
 import { readCarried, carriedDraws } from './fvitem.js';
 import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
+import { reflectionModels, stageReflects, reflectionDraws } from './vf2reflection.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
@@ -3661,6 +3662,7 @@ function poseFighterAndRival(body, m) {
     placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
     placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
+    placeReflection(m.rival, m.rival.body, placedPose(at, theirs.pose));
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
@@ -4089,6 +4091,35 @@ function shadowKit(holder) {
     return holder.shadow.shadows ? holder.shadow : null;
 }
 
+/*
+ * VF2's fighters in the Mirror stage's floor (js/vf2reflection.js): the
+ * record's +0x34 models on the pose reflected through y = 0, on a stage the
+ * panel names whose flags have bit 5. `pose` is in the board frame, the
+ * opponent's placed where it stands.
+ */
+const REFLECTION_POOL = 16;
+
+function placeReflection(holder, body, pose) {
+    const kit = reflectionKit(holder, body);
+    if (!kit) return;
+    const draws = stageReflects(state.rom, state.sparkStage) ? reflectionDraws(kit.models, pose) : [];
+    placeEffectPool(holder, 'reflectionPool', REFLECTION_POOL, kit.geoms, draws);
+}
+
+/* The body's sixteen models, read once per record; none in a game without
+ * them. */
+function reflectionKit(holder, body) {
+    if (holder.reflection?.rom !== state.rom || holder.reflection.root !== body.root) {
+        const models = reflectionModels(state.rom, body), geoms = new Map();
+        for (const id of models ?? []) {
+            const d = id > 0 && getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.reflection = { rom: state.rom, root: body.root, models, geoms };
+    }
+    return holder.reflection.models ? holder.reflection : null;
+}
+
 /* The camera's turn in the board frame of the figure `place` stands (the
  * rig's own without), as the pose keeps a turn (each axis's image in turn): a
  * model turned by it has its +y along the camera's up and its +z along its
@@ -4185,6 +4216,7 @@ function poseBodyRig() {
     placeBursts(m, pose.pose, m.decoded, m.frame);
     placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
+    placeReflection(m, body, pose.pose);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
     strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
 
@@ -4987,8 +5019,8 @@ function sparkKind(k) {
 function renderSparkPanel() {
     const m = state.motion;
     const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
-    /* The stage picks the trails' models, the shadows' light and, on FV, the
-     * fighters' light. */
+    /* The stage picks the trails' models, the shadows' light, on FV the
+     * fighters' light and on VF2 the floor's reflection. */
     const staged = Boolean(state.rom.game.rig?.strobe || state.rom.game.rig?.shadow || script);
     $('#fight-stage-field').hidden = !staged;
     if (staged) {

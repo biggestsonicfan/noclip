@@ -3310,6 +3310,9 @@ const vf2 = {
             balls: { counts: 0x2007c68, lists: 0x2007bee, points: 0x20078a8 },
             stages: { at: 0x6ee38, stride: 256, light: 0x70 },
         },
+        /* The fighters in the Mirror stage's floor (js/vf2reflection.js):
+         * 0x20488 under stage flag bit 5, 0x19C94 from record +0x34. */
+        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 } },
         /* The action table is record +0x14 as in Fighting Vipers:
          * action_init (0x13F1C) puts it at player +0x1A0, and the action
          * code reads it to +0xA6, 84 motion ids, the stance first. */
