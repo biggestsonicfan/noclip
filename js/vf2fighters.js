@@ -1554,6 +1554,13 @@ export function flashMaterial(rom, motion, frame) {
     return null;
 }
 
+/** The material rob_disp draws a part model with when it does not flash
+ * (the profile's `recolour`); null for the model's own. */
+export function partMaterial(rom, model) {
+    const R = rom.game.rig?.fighters?.recolour;
+    return R && model >= R.from && model <= R.to ? R.material : null;
+}
+
 const distance = (a, b) => f32(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
 
 /* The chest's model this frame, stepping the spring once when playback has

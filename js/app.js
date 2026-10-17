@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, moveFlags,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
     trailScript, hitSparkScript,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
@@ -979,7 +979,8 @@ function getSwappedModel(key) {
 }
 
 /* A model drawn with another material pointer, `model#material` with the
- * pointer in hex: a Fighting Vipers fighter's hit flash (flashMaterial). */
+ * pointer in hex: a Fighting Vipers fighter's hit flash (flashMaterial) or
+ * a part rob_disp recolours (partMaterial). */
 function getFlashedModel(key) {
     if (state.modelCache.has(key)) return state.modelCache.get(key);
     const [model, matPtr] = key.split('#');
@@ -3616,14 +3617,16 @@ function placeExtras(parts, body, matrices, material = null, flash = null, shown
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
  * the one its spring picked, the hips' (slot 9) and the hands' (5 and 8) the
  * ones their motion picked, all in the flash's material on a frame that has
- * it. A rig whose pose says what each part draws (Dead or Alive's) is taken
- * at its word. */
+ * it, else in the material rob_disp gives the model (partMaterial). A rig
+ * whose pose says what each part draws (Dead or Alive's) is taken at its
+ * word. */
 function bouncedDraws(body, posed, m) {
     const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
     if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
     for (const [slot, model] of posed.hands ?? []) draws[slot] = [model];
-    return m.flash == null ? draws : draws.map((list) => list.map((model) => flashed(model, m.flash)));
+    const material = (model) => m.flash ?? (typeof model === 'number' ? partMaterial(state.rom, model) : null);
+    return draws.map((list) => list.map((model) => flashed(model, material(model))));
 }
 
 /* Pose the fighter, and its opponent when there is one: the pair face each

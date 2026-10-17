@@ -843,6 +843,11 @@ const fvipers = {
              * +0x720, which every draw of the fighter tests for the flash
              * (js/vf2fighters.js, flashMaterial). */
             flash: { setups: 0x06411e94 },
+            /* rob_disp's part loop (0x1A02C) draws a part model from `from`
+             * to `to` with material `material` when it does not flash: Jane
+             * player 2's broken chest and its bounce, which take model
+             * 0x62D's material over their own. */
+            recolour: { from: 0x62e, to: 0x64c, material: 0x68cbc },
             /* Move-script op 18's hand models, 0x640EBF4[record]: four a
              * hand; js/fighterhands.js. */
             hands: { table: 0x0640ebf4 },

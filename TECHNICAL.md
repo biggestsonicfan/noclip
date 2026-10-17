@@ -2758,6 +2758,35 @@ draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
 and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
 flashes.
 
+#### Jane's player 2 broken chest takes another material (read from the ROM; not checked against MAME)
+
+Fighting Vipers only. In `rob_disp`'s part loop the model a slot draws is
+settled first: the part list, then the hands, the chest (`0x31888`) and the
+hips (`0x31ADC`). Then, when that model is from 0x62E to 0x64C (`0x1A02C`),
+the draw goes through `0x5BE4` with `g2 = 0x68CBC`. That replaces the
+model's own material pointer (the second word of its table entry) with
+0x68CBC, the material of model 0x62D. The hit flash and blink still come
+first (`1 << 23`, `0x802000`, as in the section above). Only Jane's player
+2 record (13) has models in that range: its broken chest at rest, 0x63D,
+and its 31 bounce models, 0x62E–0x64C. Their own materials share a colour
+word, `…0085`, in 232 of 424 face records. 0x62D's has `…40B3` there. VF2
+has no such test, and no other draw in Fighting Vipers uses the range.
+
+**What the explorer draws** (`partMaterial` in `js/vf2fighters.js`, the
+profile's `rig.fighters.recolour`). `bouncedDraws` keys every part model in
+the range with that material (`model#68cbc`) on frames without a flash. The
+keys are the same ones the flash uses.
+
+Old code against new, Jane with the player 2 look and the Armour switch
+breaking the upper half, motion 904 frame 1:
+
+- Node: slot 1's 0x63D was drawn in its own material; now it is drawn in
+  0x68CBC.
+- Headless Chrome: the old picture gives her broken top yellow; now it is
+  white.
+
+Any motion shows the change, and so does the opponent in player 2's look.
+
 #### Move trails (script op 28; read from the ROM, checked against MAME)
 
 Many Fighting Vipers moves shed a stippled trail off the feet, the hands or
