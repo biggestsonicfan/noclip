@@ -14,6 +14,8 @@
  * Asked for less motion, the reel shows the poster and waits for a click.
  */
 
+import { t } from './lang.js';
+
 const $ = (q) => document.querySelector(q);
 const DIR = './media/previews/';
 /* How long a game with no clip holds the reel, and one of the others' still
@@ -170,7 +172,7 @@ function renderDots() {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = i === at ? 'on' : '';
-        b.setAttribute('aria-label', `Clip ${i + 1} of ${playlist.length}: ${e.game.name}`);
+        b.setAttribute('aria-label', t('Clip {i} of {n}: {game}', { i: i + 1, n: playlist.length, game: e.game.name }));
         b.addEventListener('click', (ev) => { ev.stopPropagation(); show(i); });
         return b;
     }));
