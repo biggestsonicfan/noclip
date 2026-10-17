@@ -2969,13 +2969,30 @@ motion 551 is 0.92 on frames 0, 33 and 34, where the old code drew 1.0. Frames
 
 Left out:
 
-- Stages 3 and 4 shade by where the fighter stands in the ring. Stage 4
-  (`0x21398`) measures the distance from (-2.75, -4.5), turned by
-  `0x50A022`: the scale is 0 within 1.5, rises from 0 to 1.0 between 1.5
-  and 2.0, and is left alone beyond that. Stage 3 (`0x21470`) is 0 outside z ±~49 (plus
-  `[0x543004]+0x20`). The place is fight state. At the explorer's place, the
-  origin, both leave the scale as it is. `0x214C0` (a further scale by place,
-  into `0x5010E8`) has no caller.
+- Stages 3 and 4 shade by place; no other stage does (the only writers of
+  `0x50109C`/`0x5010A0` are the record table, these two, stage 7's player-2
+  scale from the scene's `+0x313`, and the strobe). Checked in MAME's
+  attract, which fights on both stages:
+  - Stage 4 (`0x21398`): the distance in x/z (coprocessor `0x2B`) from
+    (-2.75, -4.5), turned by `0x50A022`, which turns a step a tick. The
+    scale is 0 within 1.5, rises from 0 to 1.0 between 1.5 and 2.0, and is
+    left alone beyond that. It matched MAME on 896 of 899 samples, the rest
+    one tick out (≤ 0.07). The spot is always 5.27 from the origin, so the
+    explorer's fighter, mirrored or not, and the opponent 2 away never
+    reach it.
+  - Stage 3 (`0x21470`): the scale is 0 while the fighter's z (`+0x1FC`) is
+    *inside* (-47.39, 49.08) plus `[0x543004]+0x20`, and ×1 outside.
+    `[0x543004]` is the stage object at `0x543200`; `+0x20` is its z,
+    which a keyframe path moves (`0x6B168`, then `0x6B248`). At the origin
+    the scale is 0 while that object is near z = 0, for both fighters. The
+    window is 96 wide, so mirroring and the opponent's 2 make no
+    difference. In the attract, MAME showed 0 on attract frames
+    9880–9950 and 38275–38345. Nothing resets the object when the stage
+    starts. On the second visit it still held -1980 from the first, and
+    each pass (about 280 down to -1980) began at a different point, 322
+    and 327 frames into the stage. So the pass is started by the fight,
+    not by the motion's frame or the scene's start, and this stays out.
+  - `0x214C0` (a further scale by place, into `0x5010E8`) has no caller.
 - Op 14's camera shake (`[0x500814]+0xFC`, damped by ×-0.5 each tick).
   It moves the fight camera. The Animation tab has no fight camera, only
   its orbit view, so no motion there can show it.
