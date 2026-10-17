@@ -3660,8 +3660,9 @@ function rivalPlays(m) {
     return { decoded: wait, frame: wait === R.stance ? 1 + ((m.frame - 1) % wait.frames) : 1, flash: null };
 }
 
-/* The stance frame the opponent was on when the move landed, which its
- * hands carry into the reaction (js/fighterhands.js). */
+/* The stance frame the opponent was shown on when the move landed, which its
+ * hands carry into the reaction (js/fighterhands.js). With no stance shown
+ * first, the reaction starts cold. */
 function caughtIn(R) {
     if (!R.stance || R.lands < 2) return null;
     return { motion: R.stance, frame: 1 + ((R.lands - 2) % R.stance.frames), mirrored: false };

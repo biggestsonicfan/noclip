@@ -1265,19 +1265,15 @@ thrower to the one thrown. So:
 - FV's hands start each round as the part list has them, which is shape 0.
 
 What a fighter played before a motion is fight history the explorer cannot
-know. Each fighter's stance (its first action, the motion it stands in
-between moves) shapes both hands from frame 1: every FV stance to shape 0;
-VF2's Jacky, Sarah, Shun, Dural and Lion to 31, Kage's to 3, Akira's to 31
-then 15, Lau's 9 then 3, Jeffry's 3 then 7, Pai's 7 then 0, Wolf's 9 then
-15. So the explorer starts a motion
-where the stance leaves the hands, the stance looped from power on (or the
-round start) until a loop ends where it began, and the stance itself the
-same way. The opponent waits in its stance until the move lands, and its
-reaction starts from the stance frame it was on then, mid-ease if it was.
-VF2 Akira 4 shows the difference from starting on the first shape named:
-its op 18s are at frame 20, so frames 1-19 hold the stance's 15 (it used to
-show 3), and the hands ease to 3 by frame 30. In FV, Grace 302 holds the
-part list's hands (shape 0) to frame 9, where they used to be shape 2 from
+know, so a motion with nothing live before it starts on the game's cold
+hands: VF2 shape 0, FV the part list's. Only a motion on screen carries
+over. The opponent waits in its stance (itself started cold) until the move
+lands, and its reaction starts from the stance frame shown then, mid-ease
+if it was; a reaction with no stance shown first starts cold. VF2 Akira 4
+shows the difference from starting on the first shape named: its op 18s
+are at frame 20, so frames 1-20 hold shape 0 (it used to show 3 from frame
+1), and the hands ease to 2 by frame 30 (one short of 3). In FV, Grace 302
+holds the part list's hands to frame 9, where they used to be shape 2 from
 frame 1.
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)

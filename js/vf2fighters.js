@@ -1348,7 +1348,7 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   player +0xB0C; `mirrored` plays the motion the other way round
  *   (mirrorSample); `handsFrom`, {motion, frame, mirrored}, is what the
  *   fighter played before, whose hands this motion starts with (else the
- *   stance's; js/fighterhands.js).
+ *   game's cold hands; js/fighterhands.js).
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each

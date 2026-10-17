@@ -29,12 +29,12 @@
  * A hand keeps its shape from one motion into the next: only op 18 and VF2's
  * step write it (MAME watchpoints over a 100-second attract run), and a
  * motion's setup leaves it be. VF2 never resets it after power on; FV's round
- * start copies the part list back. Each stance shapes both hands from its
- * frame 1, so the explorer starts a motion where the fighter's stance leaves
- * the hands, and a reaction where the stance was when the move landed. What
- * the fighter really did before is fight history it cannot know.
+ * start copies the part list back. So a motion with nothing live before it
+ * starts cold (VF2 shape 0, FV the part list's); only a motion the explorer
+ * has just shown carries over, as the opponent's stance does into the
+ * reaction when the move lands, mid-ease if it is.
  */
-import { decodeMotion, resolveData } from './motion.js';
+import { resolveData } from './motion.js';
 
 const OP_END = 0, OP_LAST = 8, OP_TABLE = 0x10, OP_HAND = 18;
 const MOTION_ID = 0x1fff;
@@ -165,30 +165,13 @@ const FV = {
     },
 };
 
-const STANCE_LOOPS = 8;
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
-/* The hands as the fighter's stance (its first action, the motion it stands
- * in between moves) leaves them, looped from power on or the round's start
- * until a loop ends where it began. */
-function stanceHands(rom, G, { body, table, H }, mirrored) {
-    let hands = G.powerOn(body);
-    const stance = body.start >= 0 ? decodeMotion(rom, body.start)?.frames : 0;
-    for (let i = 0; stance && i < STANCE_LOOPS; i++) {
-        const { end } = G.run(rom, table, H, body.start, stance, mirrored, hands);
-        if (same(end, hands)) break;
-        hands = end;
-    }
-    return hands;
-}
-
 /* What a motion starts from: the hands motion `from.motion` has on its frame
- * `from.frame`, itself started from the stance; or, without one, the
- * stance's. */
-function startHands(rom, G, ctx, from) {
-    const seed = stanceHands(rom, G, ctx, Boolean(from?.mirrored));
-    if (!from?.motion || !(from.frame > 0)) return seed;
-    return G.run(rom, ctx.table, ctx.H, from.motion.id, Math.min(from.frame, from.motion.frames), Boolean(from.mirrored), seed).end;
+ * `from.frame`, itself started cold; or, without one, the cold hands (VF2's
+ * power on, FV's round start). */
+function startHands(rom, G, { body, table, H }, from) {
+    const cold = G.powerOn(body);
+    if (!from?.motion || !(from.frame > 0)) return cold;
+    return G.run(rom, table, H, from.motion.id, Math.min(from.frame, from.motion.frames), Boolean(from.mirrored), cold).end;
 }
 
 /**
@@ -198,9 +181,9 @@ function startHands(rom, G, ctx, from) {
  *
  * A hand keeps its shape from one motion into the next: nothing but op 18
  * (and VF2's step) writes it, and a motion's setup does not reset it. So the
- * motion starts from `from` ({motion, frame, mirrored}: what the fighter
- * played just before, as a reaction starts from the stance frame it was
- * caught on), or else from the stance's hands.
+ * motion starts from `from` ({motion, frame, mirrored}: the motion on show
+ * just before, as a reaction starts from the stance frame the opponent was
+ * caught on), or else from the game's cold hands.
  */
 export function handModels(rom, body, motion, mirrored = false, from = null) {
     const H = rom.game.rig?.fighters?.hands;
