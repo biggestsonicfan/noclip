@@ -1034,19 +1034,43 @@ op `0x31806363`. Four branches to `0x286A4` skip it:
 - `0x28664`: the fighter's status word `+0 & 0xA00000` is not 0.
 - `0x28678`: the move flags `+0x1A4 & 0x6C111` are not 0.
 
-None of these is in a motion or move record the explorer reads. `0x500034` is
-the round's state, and `+0` is the fighter's status. `+0x1A4` is built while a
-move plays: the move script interpreter at `0x1AD5C` (op table `0x1B910`,
+The first three are not in a motion or move record the explorer reads.
+`0x500034` is the round's state, and `+0` is the fighter's status. The fourth
+is: `+0x1A4` is built while a move plays, from the motion's setup and script
+(see "Which motions leave `+0x1A4` at `0x200`" below, which `moveFlags`
+follows for both games): the move script interpreter at `0x1AD5C` (op table `0x1B910`,
 stepped against the motion frame `+0x1AA`) has ops that set, clear and toggle
 a `+0x1A4` bit named by the op's operand (`0x1AF90`, `0x1AFA8`, `0x1AFC0`).
 Other move code changes bits too (`0x1ACB0`, `0x1B4C8`, `0x18184`), and
 `0x3AC10` restores the word from a RAM snapshot (`0x535000`). Motion 361, for
 one, runs with `+0x1A4 = 0x40061`, so Kage's head keeps the motion's own
-target through it.
+target through it; `moveFlags` gives `0x40061` on all its frames too.
 
-So the explorer does not decide when to look. Its opponent, behind a checkbox
-that is off by default, is looked at on every frame. Where the game keeps the
-motion's own target, that is wrong, by up to 134 degrees in attract mode.
+Fighting Vipers' gate (`0x2B274`-`0x2B310`) is the same with more tests: it
+also skips on `0x50002C` bit 7, on `0x500034` below `0x80` and its own mask
+`0x3B0000`, on `+0` bits 23 and 8, and its move flags mask is `0x6C119`
+(bit 3 added). It sets `+0x7D7` only when it looks (see the Fighting Vipers
+head below).
+
+The explorer takes the move flags' part (`rig.look.gate`, `looksAtOther`):
+on a frame where the motion's flags have a gate bit up, the opponent's head
+is not fed and the head steps toward the motion's own target, at Fighting
+Vipers' own-target speed there. The round and the status it takes as a fight
+under way, the fighter on its feet. Before this it looked at the opponent on
+every frame. Posed in `poseBout` with the opponent ahead, head against the
+same motion posed alone (Node):
+
+| Motion | Frame | Flags | Before | Now |
+|---|---|---|---|---|
+| VF2 Kage 361 (opponent Akira 1) | 9 | `0x40061`, gate closed | 144.805 degrees | 0.000 |
+| FV Grace 19 (opponent Jane 1) | 10 | `0x25`, gate closed (bit 0) | 34.089 degrees | 0.000 |
+| FV Grace 19 | 16 | `0x24`, open | 22.732 degrees | 10.432 |
+
+On FV 19 the gate opens at frame 15, when op 2's third frame drops bit 0,
+and the head starts turning from the motion's own target then, so it is
+further from the opponent than before for some frames (frame 22: 21.358 both
+ways). Residues of 0.01-0.04 degrees on closed frames are float rounding in
+the angle.
 
 **When the chest twists.** The check at `0x29130` reads `+0x1A4`; with a bit
 of 0x16000 set or none of 0x20C, `0x2914C` stores 0 (`stis r11, 0xbe6(g7)` at
@@ -1116,7 +1140,7 @@ board's order at the board's places, each target computed from the explorer's
 own pose of the other fighter. On every frame where the board's `+0xB0C` is
 the other fighter's head, the computed target matches it to 0.00001 (Kage,
 2916-2924). Whether the head looks at the other fighter at all is the fight's
-gate, and the explorer has not got it:
+gate; measured here before the explorer had its move-flag part:
 
 | Face target fed, Kage frame 2940 (motion 361, frame 16) | Head |
 |---|---|
@@ -1140,10 +1164,11 @@ With the board's gate, the head is within 0.008 degrees (Akira's 18 frames
 looking at the other fighter: 0.007), except where a fighter's own blend or
 mirror choice throws the other's target off. Jeffry's 12.6 degrees at 2420 is
 Wolf's mirrored switch, and Akira's 40 degrees at 3630 is Jacky's unblended
-one. Without the gate, `poseBout` looks at the opponent on every frame, and
-in attract mode the head is up to 134 degrees off where the game looks at the
-motion's own target. That is fight state (see When the game looks above), so
-the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
+one. Without the gate, `poseBout` looked at the opponent on every frame, and
+in attract mode the head was up to 134 degrees off where the game looks at the
+motion's own target. It now has the move flags' part of the gate (When the
+game looks, above); the round and status part is fight state, so the
+explorer's opponent is still off by default. Across all sixteen slots, 470 of 539 replayed
 frames match. The misses are the fight's blend choices above.
 
 ### The opponent's reaction (`js/reactions.js`)
@@ -1220,8 +1245,9 @@ mirror; the one thing a side changes is which hand a shape goes to (below).
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
 second frame. The explorer plays the reaction from the first such frame
-(`moveFlags`, where the profile has the flags: Fighting Vipers), else from
-`+0x808`. A throw's motion starts with the throw.
+(`moveFlags`), else from `+0x808`. VF2's strike check (`0x222A8`) has the
+same rule, bit 8 set and bit 1 clear. With VF2's flags stepped too, none of
+its 569 strikes lands on another frame than `+0x808`'s. A throw's motion starts with the throw.
 
 `table[kind]` is forty u32s, five categories of eight. The category is
 attack_hit's callers' `r8`: 0 and 1 the guards, 2 the hit, 3 the counter hit
@@ -1391,6 +1417,7 @@ part out along the fighter's own skeleton at player `+0x8C`.
   clear, `0x2BE0C` steps the head up to `0x2000` a frame in both yaw and
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
+  Its gate on the move flags is `0x6C119`, VF2's `0x6C111` with bit 3.
 
 Record `+0x24` is the midriff and is drawn (below, "The midriff"; VF2's
 `+0x38` is still not). The special parts `rob_disp` (`0x19F10`) swaps in for
@@ -1908,8 +1935,25 @@ the third it re-runs all three every frame. Then the script after the setup
 (`0x1C24C`, op table `0x1D028`, each op a frame word and run once the motion
 frame reaches it) changes the word: op 5 sets, 6 clears and 7 flips the bit
 named by its operand, op 1 flips bit 21, op 13 sets or clears bit 25, op 22
-sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`). All of it
-runs before `rob_disp`, so the chest sees this frame's word.
+sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`), and in the
+same tail (`0x1C9A4`-`0x1C9FC`) bit 5 is set while the setup word (`+0x804`)
+has bit 7, and bit 7, if set, cleared (the place re-anchored). All of it runs
+before `rob_disp`, so the chest sees this frame's word.
+
+VF2 does the same (`set_mot_dat` `0x1A1E4`, setup ops at +8 with lengths at
+`0x1B7F6`, phase step `0x1AC14`, script `0x1AD5C`, tail `0x1B43C`) with three
+differences, in `rig.flags`: the second frame drops bit 28 where Fighting
+Vipers drops 26, script op 13 is bit 27, and `set_mot_dat` gives motion
+`0x12E` a third frame of `0x49` and `0x375` one of 46 whatever the setup says
+(`0x1A49C`, `0x1A4A8`). Left out: more such frames for `0x12D`, `0x2A1`,
+`0x21A`/`0x21B`, `0x220`, `0x2B9`/`0x2BA`, `0x45F` and the ids at `0x1B9A2`,
+and the bits 4 and 24 `0x1AC14` sets for `0x2DE`, `0x8D`, `0x8B`, `0x99`,
+`0x59` and `0x5B`, all only with a setting in backup RAM (`0x599000+0x3351`)
+on. VF2 script op 3 also sets bit 4 through `0x18B14` with the launch; it is
+left out with the launch itself (the motions carry the arc), as what clears
+it again is the landing, fight state. Bit 4 is in the look's gate, so in the
+five motions with op 3 (110, 742, 743, 804, 1194) the explorer's head may
+look at the opponent in the air where the board's does not.
 
 Stepped that way, 86 of the 1054 motions with a setup run at exactly `0x200`
 from their first frame to their last, and no other motion reaches it on any

@@ -75,9 +75,10 @@
  * `rig` names the addresses, and the three things it does its own way: the
  * texture set's field, the crouch table and how far the head steps).
  *
- * Left out: when the fight lets the head look at the other fighter (0x500034,
- * +0 and +0x1A4's move flags), as the explorer's opponent is always looked
- * at; and the chest's twist toward it (+0xBE6, 0x2912C), which is the move's.
+ * Left out: the part of when the fight lets the head look at the other
+ * fighter that is not the motion's move flags (0x500034 and +0), as the
+ * explorer's fight is always under way; and the chest's twist toward it
+ * (+0xBE6, 0x2912C), which is the move's.
  */
 
 import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
@@ -1010,6 +1011,20 @@ function lookLimits(rom, faceTarget) {
     return own && !faceTarget ? { turn: own, pitch: own } : LOOK;
 }
 
+/*
+ * The other fighter's head `other` where the fight writes it over the target
+ * on this frame, else undefined. Of the tests before the store (VF2
+ * 0x28634-0x286A0, FV 0x2B274-0x2B310) the move flags are the ones a motion sets: none of
+ * `rig.look.gate` may be up (the strike, the crouch, the air, the throws).
+ * The rest are the round and the fighter's state, which the explorer has as
+ * a fight under way.
+ */
+function looksAtOther(rom, motion, frame, other) {
+    const gate = rom.game.rig.look?.gate;
+    if (!other || !motion) return undefined;
+    return !gate || !((moveFlags(rom, motion)?.[frame] ?? 0) & gate) ? other : undefined;
+}
+
 /* What each fighter carries from one frame to the next under playback: the
  * last frame's sample, the blend then and its steps, and the head's look. */
 const LIVE = new WeakMap();
@@ -1114,47 +1129,49 @@ const WAIST_SLOT = 0, HEAD_SLOT = 2;
 
 /*
  * The move flags (+0x1A4) on each frame of a motion, as far as the motion
- * itself sets them (TECHNICAL.md, "The per-frame list"). set_mot_dat
- * (0x1B880) takes the setup script's first word (0x6411E94[motion]), clears
- * bit 21 and moves bit 15 to 16 when bit 8 is set too; setup op 2 sets bit 1
- * and gives three frames (+0x808, +0x80A, +0x80C) that 0x1C180 steps
- * through; then the script after the setup (0x1C24C, ops by frame) sets,
- * clears and flips bits, and bit 20 is cleared once it has run (0x1C950).
- * What the fight does to the word besides (a hit, the air, fix_hara's bit 4)
- * is fight state, left out.
+ * itself sets them (TECHNICAL.md, "The per-frame list"). set_mot_dat (FV
+ * 0x1B880, VF2 0x1A1E4) takes the setup script's first word (the profile's
+ * `reactions.setups`), clears bit 21 and moves bit 15 to 16 when bit 8 is set
+ * too; setup op 2 sets bit 1 and gives three frames (+0x808, +0x80A, +0x80C)
+ * that FV 0x1C180 (VF2 0x1AC14) steps through; then the script after the
+ * setup (FV 0x1C24C, VF2 0x1AD5C, ops by frame) sets, clears and flips bits,
+ * and once it has run the frame's tail (FV 0x1C94C, VF2 0x1B43C) clears bit
+ * 20 and moves the setup word's bit 7 into bit 5. The games differ where
+ * `rig.flags` says. What the fight does to the word besides (a hit, the air,
+ * fix_hara's bit 4) is fight state, left out, and so are VF2's frames that a
+ * backup RAM setting moves for a few motions (0x1A448, 0x1A4BC, 0x1A4F4).
  */
-const SETUP_LENGTH_AT = 0x1ce86, SETUP_OPS = 25, SETUP_END = 0, SETUP_LAST = 8;
-const SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TABLE = 16, SETUP_HEAD = 12;
-const SCRIPT_LENGTH = [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4];
-const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT_25 = 13, OP_BIT_6 = 22;
+const SETUP_END = 0, SETUP_LAST = 8, SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TABLE = 16;
+const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT = 13, OP_BIT_6 = 22;
+const WORD_TAIL = 1 << 7, FLAG_TAIL = 1 << 5;
 
 /* The setup ops after the head: op 2's three frames, op 3's +0x850, and
  * where the script starts. */
-function readMoveSetup(rom, dv, at) {
-    const len = (op) => rom.mainCpuView.getUint8(SETUP_LENGTH_AT + op);
+function readMoveSetup(rom, R, dv, at) {
+    const len = (op) => rom.mainCpuView.getUint8(R.lengths + op);
     const out = { times: null, window: 0 };
     for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
         if (op === SETUP_END) return { ...out, script: at };
         if (op === SETUP_LAST) return { ...out, script: at + 1 };
-        if (op >= SETUP_OPS) return null;
+        if (op >= R.ops) return null;
         if (op === SETUP_TIMES) out.times = [1, 3, 5].map((k) => dv.getInt16(at + k, true));
         if (op === SETUP_WINDOW) out.window = dv.getUint16(at + 12, true);
         at += op === SETUP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : len(op);
     }
 }
 
-function readScriptOps(dv, at) {
+function readScriptOps(lengths, dv, at) {
     const ops = [];
-    for (let op = dv.getUint8(at); op !== 0 && op < SCRIPT_LENGTH.length; op = dv.getUint8(at)) {
+    for (let op = dv.getUint8(at); op !== 0 && op < lengths.length; op = dv.getUint8(at)) {
         ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3) });
-        at += SCRIPT_LENGTH[op];
+        at += lengths[op];
     }
     return ops;
 }
 
 /* One frame of 0x1C180's walk through op 2's frames. It enters at the step
  * +0xA00 names and falls through the later ones; past the third it starts
- * again from the first every frame. */
+ * again from the first every frame. The second drops `rig.flags.drop`. */
 function moveTimesStep(m, st, f, w) {
     const [t0, t1, t2] = m.times, raised = (m.word >> 8 & 1) && (m.word >> 15 & 1);
     let at = st.stage === 2 ? 2 : st.stage === 3 ? 3 : 1;
@@ -1166,7 +1183,7 @@ function moveTimesStep(m, st, f, w) {
     if (at === 2) {
         if (f < t1) return w;
         if (w & 0x100) w &= ~0x8000;
-        w = (w & ~0x4010100) | 4; st.stage++;
+        w = (w & ~m.drop) | 4; st.stage++;
     }
     if ((w & 0x1010) === 0x1010 && m.window && f >= m.window) w &= ~1;
     if (f < t2) return w;
@@ -1174,40 +1191,53 @@ function moveTimesStep(m, st, f, w) {
     return w & ~0x1001;
 }
 
-function scriptOp(w, { op, arg }) {
+function scriptOp(w, { op, arg }, bit) {
     if (op === OP_SET) return w | (1 << arg);
     if (op === OP_CLEAR) return w & ~(1 << arg);
     if (op === OP_FLIP) return w ^ (1 << arg);
     if (op === OP_FLIP_21) return w ^ (1 << 21);
-    if (op === OP_BIT_25) return arg ? w & ~(1 << 25) : w | (1 << 25);
+    if (op === OP_BIT) return arg ? w & ~(1 << bit) : w | (1 << bit);
     if (op === OP_BIT_6) return w | (1 << 6);
     return w;
 }
 
+/* The setup and its script for motion `id`: the word, op 2's frames (with
+ * the third set_mot_dat gives some motions outright), +0x850 and the ops. */
+function moveSetup(rom, id) {
+    const { reactions: R, script, flags } = rom.game.rig;
+    const ptr = dataAt(rom, R.setups + id * 4);
+    const r = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
+    const setup = r && r.off + R.head < r.data.length ? readMoveSetup(rom, R, r.view, r.off + R.head) : null;
+    if (!setup) return null;
+    const end = flags.ends?.[id];
+    const times = setup.times && end !== undefined ? [setup.times[0], setup.times[1], end] : setup.times;
+    const ops = readScriptOps(script, r.view, setup.script);
+    return { ...setup, times, ops, word: r.view.getUint32(r.off, true), drop: flags.drop };
+}
+
+function playMoveFlags(m, frames, bit) {
+    const st = { stage: m.times ? 1 : 0 }, out = new Uint32Array(frames + 1);
+    let w = m.word & ~(1 << 21), k = 0;
+    if ((m.word >> 8 & 1) && (m.word >> 15 & 1)) w = (w & ~0x8000) | 0x10000;
+    if (m.times) w |= 2;
+    for (let f = 1; f <= frames; f++) {
+        if (st.stage) w = moveTimesStep(m, st, f, w);
+        for (; k < m.ops.length && m.ops[k].frame <= f; k++) w = scriptOp(w, m.ops[k], bit);
+        if (m.word & WORD_TAIL) w |= FLAG_TAIL;
+        out[f] = (w & ~(1 << 20) & ~WORD_TAIL) >>> 0;
+        w = out[f];
+    }
+    return out;
+}
+
 /** +0x1A4 on frames 1..frames of a motion (index = frame), or null. */
 export function moveFlags(rom, motion) {
-    const at = rom.game.rig?.fighters?.armour?.setups;
-    if (!at || motion?.id == null) return null;
-    const cache = (rom.fvMoveFlags ??= new Map());
+    const rig = rom.game.rig;
+    if (!rig?.flags || !rig.reactions || motion?.id == null) return null;
+    const cache = (rom.moveFlags ??= new Map());
     if (cache.has(motion.id)) return cache.get(motion.id);
-    const ptr = dataAt(rom, at + motion.id * 4);
-    const r = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
-    const setup = r && r.off + SETUP_HEAD < r.data.length ? readMoveSetup(rom, r.view, r.off + SETUP_HEAD) : null;
-    let out = null;
-    if (setup) {
-        const word = r.view.getUint32(r.off, true), m = { ...setup, word };
-        const ops = readScriptOps(r.view, setup.script), st = { stage: setup.times ? 1 : 0 };
-        let w = word & ~(1 << 21), k = 0;
-        if ((word >> 8 & 1) && (word >> 15 & 1)) w = (w & ~0x8000) | 0x10000;
-        if (setup.times) w |= 2;
-        out = new Uint32Array(motion.frames + 1);
-        for (let f = 1; f <= motion.frames; f++) {
-            if (st.stage) w = moveTimesStep(m, st, f, w);
-            for (; k < ops.length && ops[k].frame <= f; k++) w = scriptOp(w, ops[k]);
-            out[f] = (w & ~(1 << 20)) >>> 0;
-            w = out[f];
-        }
-    }
+    const m = moveSetup(rom, motion.id);
+    const out = m && playMoveFlags(m, motion.frames, rig.flags.op13);
     cache.set(motion.id, out);
     return out;
 }
@@ -1404,8 +1434,9 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
-export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false, handsFrom = null, handsPass = 0 } = {}) {
+export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirrored = false, handsFrom = null, handsPass = 0 } = {}) {
     rom.vf2Rig ??= standardRig(rom);
+    const faceTarget = looksAtOther(rom, motion, frame, other);
     const live = liveFor(body);
     const sample = sampleFor(rom, motion, frame, mirrored);
     /* Playback moves on a frame, or starts the next motion or loop at 1. */
@@ -1417,7 +1448,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = f
         look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped, lookLimits(rom, faceTarget))) : live.look),
     };
     live.motion = motion; live.frame = frame;
-    if (faceTarget && motion) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });
+    if (faceTarget) faceTarget.forEach((v, i) => { sample.targets[6 + i] = v; });
     const pose = onOwnSkeleton(buildPose(rom.vf2Rig, sample, { levelFeet: true, fight }), body.offsets);
     const crouch = (rom.game.rig.crouch ?? CROUCH)[body.char ?? body.index];
     if (crouch) for (const s of pose) s.t[1] += sample.targets[1] * (crouch - 1);
@@ -1498,12 +1529,11 @@ function headSeenFrom(other, across) {
  *
  * Checked against MAME's attract mode at the places and facings the board had:
  * the target matches the board's +0xB0C to 0.00001 wherever the fight looks at
- * the other fighter. When it looks is fight state, which this does not have:
- * the store at 0x286A0 is skipped by the round state (0x500034), the
- * fighter's status (+0 & 0xA00000) and the move flags (+0x1A4 & 0x6C111),
- * which the move script sets as the move plays. This looks on every frame, so
- * where the game keeps the motion's own target the head turns where the
- * game's doesn't.
+ * the other fighter. It does not look while the motion's move flags have any
+ * of the profile's `look.gate` up (looksAtOther); then the head follows the
+ * motion's own target. The rest of the gate is the round (0x500034) and the
+ * fighter's status (+0 & 0xA00000), fight state the explorer does not have:
+ * it takes the round as under way and the fighter as on its feet.
  *
  * @param {number[]} [place]  where the second stands, opponentMatrix()'s
  * @returns {Array<{matrices: number[][], origins: number[][]}>} each in its

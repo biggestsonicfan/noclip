@@ -856,7 +856,14 @@ const fvipers = {
          * (table 0x1D028); js/fighterhands.js. */
         script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4],
         crouch: { 9: 1.1, 10: 0.56 },
-        look: { own: 0x2000 },
+        /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
+         * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup
+         * op 2's frames; script op 13 sets or clears bit 25. */
+        flags: { drop: 0x4010100, op13: 25 },
+        /* The head looks at the other fighter only while +0x1A4 has none of
+         * 0x6C119 (0x2B2FC), else it follows the motion's target, stepping
+         * as far again (`own`). */
+        look: { own: 0x2000, gate: 0x6c119 },
         note: 'fv',
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
@@ -3240,6 +3247,12 @@ const vf2 = {
         /* The move script's op lengths, by the handlers 0x1AD5C runs
          * (table 0x1B910); js/fighterhands.js. */
         script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 7, 4, 5, 6],
+        /* The move flags as Fighting Vipers', but 0x1AC14 drops bit 28 where
+         * it drops 26, script op 13 is bit 27 (0x1B23C), and set_mot_dat
+         * gives two motions a third frame of their own (0x1A49C, 0x1A4A8). */
+        flags: { drop: 0x10010100, op13: 27, ends: { 0x12e: 0x49, 0x375: 46 } },
+        /* The look's gate, 0x28668. */
+        look: { gate: 0x6c111 },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
