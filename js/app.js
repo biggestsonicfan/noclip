@@ -3603,8 +3603,8 @@ function rankJoinedParts(parts, { parents, joined }, changed) {
     }
 }
 
-/* A fighter's pads and skirt, or VF2's item (body.extras), each a part of
- * its own whose matrix the pose gives beside the slots'. */
+/* A fighter's pads and skirt, or VF2's item and head piece (body.extras),
+ * each a part of its own whose matrix the pose gives beside the slots'. */
 function extraParts(body) {
     return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
 }

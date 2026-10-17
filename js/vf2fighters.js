@@ -184,7 +184,8 @@ function readFighter(rom, F, record, char) {
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
         armour: F.armour ? readArmour(rom, F.armour, record) : null,
-        extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : F.item ? [itemExtra(F.item)] : [],
+        extras: F.armour ? [...readPads(rom, F.armour, record), ...readSkirt(rom, F.armour, record)] : [
+            ...(F.item ? [itemExtra(F.item)] : []), ...readHeadPiece(rom, F.headPiece, root, record)],
         midriff: F.midriff ? readMidriff(rom, F.midriff, root, record) : null,
         lowHips: F.lowHips ? readLowHips(rom, F.lowHips, root, u32(list + HIPS * 4)) : null,
         offsets,
@@ -606,6 +607,18 @@ const LOW_HIPS_BIT = 1 << 15;
 function lowHipsModel(body, waistY, flags) {
     const L = body.lowHips;
     return waistY < (flags & LOW_HIPS_BIT ? L.bit15 : L.under) ? L.model : body.parts[HIPS].model;
+}
+
+/* VF2's head piece (games.js `headPiece`): an extra on slot 2 when the
+ * record has a model, always shown. The knock-off (0x63028, +0x714) is the
+ * fight's. */
+function readHeadPiece(rom, H, root, record) {
+    if (!H) return [];
+    const u32 = (addr) => { const r = dataAt(rom, addr); return r ? r.view.getUint32(r.off, true) : 0; };
+    const r = dataAt(rom, u32(root + H.at)), model = r ? r.view.getUint32(r.off, true) : 0;
+    if (!model) return [];
+    const offset = [0, 1, 2].map((k) => r.view.getFloat32(r.off + H.offset + 4 * k, true));
+    return [{ slot: HEAD_SLOT, model, offset, turns: H.own[record] ?? H.turns }];
 }
 
 /* A pad or panel's board-frame transform on its slot's. */
@@ -1649,7 +1662,8 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   fighter played before, whose hands this motion starts with (else the
  *   game's cold hands; js/fighterhands.js).
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
- *   `extras` places body.extras (the pads and skirt, VF2's item), one each,
+ *   `extras` places body.extras (the pads and skirt, VF2's item and head
+ *   piece), one each,
  *   and `shown` says whether each is drawn this frame; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,

@@ -3306,6 +3306,13 @@ const vf2 = {
              * slot 9 while the waist (+0x1F8) is under `under`, or `bit15`
              * with move flag 15. Lau's and Shun's differ from slot 9's. */
             lowHips: { at: 0x38, model: 0xc, under: 0.2, bit15: 0.4 },
+            /* Record +0x40: the fighter's load (0x13FF8) copies its model
+             * to +0x704 and its offset (+0x10) to +0x708, and sets +0x700
+             * bit 0 when the model is not 0. rob_disp's slot 2 (0x19298)
+             * then draws it on the head, moved by the offset and turned Z
+             * then X by `turns`, or by `own[+0x1B0]`'s (0x192F8). Kage's
+             * and Pai's. */
+            headPiece: { at: 0x40, offset: 0x10, turns: [[2, 0x4000], [0, 0x4000]], own: { 6: [[2, 0x4000], [0, 0x8000]] } },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at

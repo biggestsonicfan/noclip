@@ -1293,6 +1293,59 @@ those between 0.2 and 0.4 with bit 15) all match the rule. The midriff's
 geometry was not checked against MAME separately; its code is
 instruction for instruction Fighting Vipers' one, which was.
 
+#### Kage's and Pai's head piece (record `+0x40`; read from the ROM, checked against MAME)
+
+VF2 only. The fighter's load (`0x13FF8`) reads the record's pointer `+0x40`
+(a 0x20-byte struct). When its first word is not 0 it copies that model to
+player `+0x704`, words +4, +8 and +0xC to `+0x758`, `+0x75C` and `+0x760`,
+the vector at +0x10 to `+0x708` and the float at +0x1C to `+0x764`, sets
+`+0x700` bit 0 and clears bit 1 and the byte `+0x714`; otherwise it clears
+bit 0. Records with one:
+
+| Record | Who | Model | Offset (`+0x708`) |
+|---|---|---|---|
+| 3 | Kage | 0x988 | (0.0227, 0, −0.176) |
+| 6 | Pai | 0xA7A | (0, 0, −0.2117) |
+| 19 | Pai, player 2 | 0x987 | (0, 0, −0.241) |
+
+Kage's player 2 record (16) has a struct with model 0, so no piece.
+
+rob_disp's part loop sends slot 2 (the head) to `0x19218` after the head's
+own model. While `+0x700` bit 0 is set and `+0x714` is 0 (`0x19298`) it
+translates by `+0x708` (`0x37806F6F`), turns about Z by 0x4000
+(`0x37006E6E`) and about X by 0x4000 (`0x36006C6C`), or by 0x8000 when
+`+0x1B0` is 6 (`0x192F8`; Pai's player 2 look, 19, takes the 0x4000), and
+draws `+0x704` through `0x7C60`. Kage's is the studded band round his hood
+and Pai's the ornament on her bun. Nothing in a motion touches these fields,
+so every motion of either fighter shows it.
+
+**What the explorer draws.** The profile's `rig.fighters.headPiece` gives
+`readHeadPiece` the record field, the offset and the turns. It adds the piece
+to the body's `extras` on slot 2, always shown, placed like the held item.
+Node, old code against new, frame 1: Kage's start motion 990 had no extra
+and now draws 0x988 at (0.301, 1.406, −0.083); Pai 1227 had none and now
+draws 0xA7A at (0.135, 1.467, −0.086). The headless Chrome pictures show the
+band on Kage's hood and the ornament on Pai's bun.
+
+MAME attract mode, a breakpoint on the draw call (`0x193C8`) logging
+`+0x1B0`, the model and `+0x708`, over 240 seconds: 462 draws of 0x988 on
+Kage and 1040 of 0xA7A on Pai, with the offsets above, on their stances and
+moves (Kage's 990 among them).
+
+Left out, all of them fight state:
+
+- The knock-off. Once `+0x700` bit 1 is set, `0x62FB8`, from a hit, steps
+  `+0x714` through 1, 2, 3 as the piece flies (`+0x724`.., `+0x730`..,
+  `+0x73C`..). With bit 3 as well (set at the load for `+0x1B1` = 3, Kage)
+  it swaps the head model (`+0x48`) to 0xAD2, or 0xAC5 for record 16.
+- The second model `+0x75C` (Kage 0x260, Pai 0xD77). `0x193CC` draws it on
+  the floor matrix `0x501960` on stages with `0x6EEA0` bit 5, while the head
+  is inside the ring. It is the piece's floor shadow, and the explorer draws
+  no fighter shadows.
+
+Fighting Vipers has no counterpart. Its slot 2 case (`0x1A12C`) draws only
+Picky's hair, and its fighter load copies no such struct.
+
 ### The opponent's reaction (`js/reactions.js`)
 
 When a move lands, the game picks the motion the one on the end of it plays,
