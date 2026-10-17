@@ -505,6 +505,10 @@ function stageOf(rom, lit, n, segs) {
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
         zones,
         cameras: stageCameras(rail),
+        /* The whole rail, for what rides it: stf-tools' record-previews.mjs
+         * films the loading screen's clip along it. Not `rail`, which is
+         * Fighting Vipers' railing (js/display.js). */
+        railPath: rail,
         views: [['all', 'Every segment at once'], ...zones.map((z, i) => [`zone:${i}`, z.label])],
         view: 'all',
         union: 'all',
