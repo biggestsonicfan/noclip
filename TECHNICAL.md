@@ -959,34 +959,40 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   count. A motion that loops from its last frame back to its first blends
   into itself (16 of 17 loops captured); one cut short and restarted
   doesn't.
-- **Which switches blend in** (`blendsIn` in `js/vf2fighters.js`). Set-up
-  (VF2 `0x27130`, FV `0x29F50`) stores a mode at `+0xBDD`: bit 0 blends in,
-  bit 1 blends out. The first tests are the fight's and stay left out:
-  `0x508008`, `+0` bit 26 clear and `+0xBE4` = 1 give none, as do FV's
-  `+0x720` bit 1. The rest are the motion's, and the explorer now makes them
-  in the game's order:
+- **Which ways a switch blends** (`blendMode` in `js/vf2fighters.js`).
+  Set-up (VF2 `0x27130`, FV `0x29F50`) stores a mode at `+0xBDD`: bit 0
+  blends in, bit 1 blends out. The first tests are the fight's and stay left
+  out: `0x508008`, `+0` bit 26 clear and `+0xBE4` = 1 give none (the intro
+  and win poses are the `+0xBE4` ones: the fight sets it the frame they
+  start), as do FV's `+0x720` bit 1. The rest are the motion's, in the
+  game's order:
+  - FV only: none where the record's u32 +4 (`+0x860`) has bit 2;
   - the new `+0x1A4` (the setup word; set_mot_dat keeps bit 17) with bit 17
     blends out only;
-  - a setup word with bit 18 or 19 (`+0x804`) blends in;
-  - else none if the word before (`+0xC30`) has bits 15 and 6 both, VF2's has
-    bit 23, or the record's stance byte (`+0x814`: VF2 byte +6, FV byte +10)
-    is 4; FV also none where the record's u32 +4 (`+0x860`) has bit 2;
-  - a motion of 2 frames or fewer never blends (`0x271DC`, Blend length);
-  - whatever the mode, the turn set-up after the store (VF2 `0x2756C`, FV
-    `0x2A308`) cancels it, storing 0 again, when the word before and the new
-    `+0x1A4` both have bit 10.
+  - VF2: a setup word (`+0x804`) with bit 18 or 19 blends in only. FV:
+    bit 18 blends both ways, bit 19 in only;
+  - else none if the word before (`+0xC30`) has bits 15 and 6 both, VF2's
+    has bit 23, or the record's stance byte (`+0x814`: VF2 byte +6, FV byte
+    +10) is 4;
+  - a stance byte of 0x7F blends in only; so does a `+0x1A4` with any of
+    `0x6600`, except that FV blends both ways where it has bit 26 first;
+  - the rest blend both ways.
+  Then: a motion of 2 frames or fewer never blends (`0x271DC`, Blend
+  length). One with setup op 2 (`+0xA00`) whose first frame (`+0x808`)
+  comes after the blend-out would start (`len - N`) does not blend out.
+  The carry: a switch after a blend-out that ran to its end (`+0xBE5` bit 1,
+  with the old mode's bit 1) does not blend in (`0x27218`). Last, unless the
+  mode is out only (`0x27240` skips it), the turn set-up (VF2 `0x2756C`, FV
+  `0x2A308`) cancels the blend, storing 0 again, when the word before and
+  the new `+0x1A4` both have bit 10.
   A pass of a motion the game loops runs set-up again (`0x1ABE8`) on `+0x1A4`
   as the last frame left it, so there bits 17 and 10 are that frame's move
-  flags. Checked against every set-up the attract mode ran under the
-  debugger (VF2 and FV, 420 seconds each): VF2 1144 of 1144 and FV 1198 of
-  1198 match, with 199 and 89 decided by the fight's tests, 102 and 117 by
-  the carry below. The no-blends confirmed: stance 4, VF2 74 / FV 98; bit 17,
-  34 / 46; bit 10, 21 / 50; the 0x8040 pair, 19 / 5. Left out: the
-  blend-out (from frame `len - N`, `+0xBE0`, toward one of five stance poses
-  picked by `+0x814`, `0x2776C`, the set at `+0xBD8` + `0x1E0`...`0x5A0`),
-  and with it the carry: a switch after a blend-out that ran to its end
-  (`+0xBE5` bit 1) does not blend in (`0x27218`). The explorer blends none
-  out.
+  flags. Checked against every store to `+0xBDD` in the attract mode, under
+  a MAME watchpoint that logs the inputs as the store runs (VF2 and FV, 420
+  seconds each): all 1153 VF2 and 1317 FV set-ups match, both bits, with 481
+  and 601 blending out, 102 and 123 decided by the carry, 21 and 52 by the
+  cancel and 75 and 96 loop passes. Another 292 and 221 were the fight's
+  tests.
 
   | Switch (unmirrored) | Old code, frame 1 off the motion's own pose | Now |
   |---|---|---|
@@ -996,6 +1002,42 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   | FV Jane 156 → 155 (bit 10) | hands 0.27/0.48, feet 0.04 | 0 |
 
   Of the reactions, 42 of VF2's 63 and 35 of FV's 48 no longer blend in.
+- **The blend-out** (`blendOutFor` in `js/vf2fighters.js`). A motion whose
+  mode has bit 1 eases its last N frames (N its blend length) toward a
+  stance pose. Per frame (VF2 `0x28298`, FV `0x2B004`), past `+0xBE0`
+  (`len - N`) the first such frame calls the set-up (VF2 `0x2776C`, FV
+  `0x2A53C`) and sets `+0xBE5` bit 0; frame `from + k` then adds k angle
+  steps and k point steps, and bit 1 is set at k = N - 1 (the carry above).
+  - The set-up samples the motion's last key (`0x28848`), mirrored when the
+    fighter is.
+  - The stance byte (`+0x814`) picks one of five poses: 0, 0x80, 3, 0x83, 4
+    go to `+0x1E0`, `+0x2D0`, `+0x3C0`, `+0x4B0`, `+0x5A0`; any other byte
+    clears the out bit. The poses are filled when the fighter loads (VF2
+    `0x270D4`, FV `0x29EEC`): the first frame, unmirrored, of action table
+    slots 0, 1, 8, 10, 31 (VF2) or 0, 1, 8, 12, 42 (FV) (`rig.blendOut`).
+  - The stance pose is mirrored when the fighter is mirrored XOR the setup
+    word has bit 21.
+  - Where `+0x1A4` has bit 6 the pose is turned about the body by `+0x812`,
+    and `+0x812` is added to the y angles of objects 2, 3 and 4. `+0x812`
+    starts at 0x8000 for a word with bit 6, else 0; setup ops 5, 6 and 7
+    set it from the int16 at op +8, +3 and +1; it is negated when mirrored
+    (VF2 `0x1A3A4`); script op 22 sets it from op +3 and sets bit 6 (VF2
+    `0x1B3D8`, FV `0x1C7AC`).
+  - Angle step: `yxz(E(last)^T E(stance)) >> shift` per object; point step:
+    `(stance - last) >> shift`, x and z measured from the body.
+  Played alone, 814 of VF2's 1359 motions and 649 of FV's 1054 blend out.
+  Checked against MAME's attract mode (per-frame taps on both players, 420
+  seconds each): the steps of all VF2 97 and FV 80 blend-outs the attract
+  ran match, angles and used points (an unused target holds garbage on the
+  board and is skipped).
+
+  | Motion → next (stance pose) | Old code, last frame off the stance | Now |
+  |---|---|---|
+  | VF2 Akira 71 → 1285 | hands 0.00/0.17 (0.02 more each frame from 13) | 0 |
+  | VF2 Akira 71 → 1285, mirrored | hands 0.17/0.00 | 0 |
+  | FV Grace 217 → 224 | waist 0.3°, hands 0.01/0.15 | waist 0, 0.05 all four (the body's own place offset) |
+
+  Frame 1 of 1285 after 71 no longer blends in (the carry).
 - **The blend's first frame is drawn as the fighter is.** Set-up samples the
   new motion's frame 1 into `0x50E000` with `0x28780`, which mirrors it when
   `+0` bit 6 is set (`0x28840`). The explorer took the residual from the

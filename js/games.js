@@ -864,9 +864,14 @@ const fvipers = {
          * 0x6C119 (0x2B2FC), else it follows the motion's target, stepping
          * as far again (`own`). */
         look: { own: 0x2000, gate: 0x6c119 },
-        /* Where a switch does not blend in (js/vf2fighters.js, blendsIn): the
-         * setup record's byte +10 (+0x814) and u32 +4 (+0x860), 0x29F50. */
-        blendIn: { stance: 10, held: 4 },
+        /* Which ways a switch blends (js/vf2fighters.js, blendMode): the
+         * setup record's byte +10 (+0x814) and u32 +4 (+0x860), 0x29F50;
+         * setup word bit 18 blends both ways, 19 in only, and +0x1A4 bit 26
+         * both ways where 0x6600 would have it in only. */
+        blendIn: { stance: 10, held: 4, both: 1 << 18, inOnly: 1 << 19, flagsBoth: 1 << 26 },
+        /* The five stance poses a blend out goes to, by action table slot
+         * (0x29EEC). */
+        blendOut: [0, 1, 8, 12, 42],
         note: 'fv',
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
@@ -3256,9 +3261,12 @@ const vf2 = {
         flags: { drop: 0x10010100, op13: 27, ends: { 0x12e: 0x49, 0x375: 46 } },
         /* The look's gate, 0x28668. */
         look: { gate: 0x6c111 },
-        /* The same, 0x27130: the record's byte +6 is +0x814, and a word
-         * before with bit 23 does not blend either. */
-        blendIn: { stance: 6, before: 1 << 23 },
+        /* The same, 0x27130: the record's byte +6 is +0x814, a word before
+         * with bit 23 does not blend either, and bits 18 and 19 both blend
+         * in only. */
+        blendIn: { stance: 6, before: 1 << 23, inOnly: 3 << 18 },
+        /* The stance poses, 0x270D4. */
+        blendOut: [0, 1, 8, 10, 31],
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };

@@ -57,8 +57,8 @@
  *     step at player +0xBE8; the draw turns by it times (N - frame). N comes
  *     from the new motion's length, 8 frames for one longer than 16. The hand
  *     and foot targets blend the same way (0x27730), x and z measured from
- *     the body position. A loop blends into itself. Whether a switch blends
- *     at all, and the blend out some moves end with, are the fight's.
+ *     the body position. A loop blends into itself. A motion that blends
+ *     out (blendMode) eases its last N frames toward a stance pose (0x2776C).
  *   - The head (0x2922C) turns toward the face target at most 0x800 a frame
  *     in yaw and 0x400 in pitch, the pitch held to +-0x2000.
  *   - The crouch (0x29414): characters 6 and 10 draw their body at 0.97 of
@@ -898,10 +898,9 @@ const CROUCH = { 6: 0.97, 8: 0.92, 10: 0.97 };
  * How long is the new motion's to say: set-up (0x27130) takes its frame count
  * (+0x800) and blends 8 frames into one longer than 16, 4 into one of 9 to
  * 16, 2 into 5 to 8, 1 into 3 or 4, and none into a shorter one; the step is
- * the residual shifted by 3, 2 or 1 (0x2760C). Whether a switch blends at all
- * is the fight's (move flags at +0x1A4, +0xC30 and +0x814), as is the blend
- * out toward a stance pose some moves end with; the explorer blends every
- * switch in and none out.
+ * the residual shifted by 3, 2 or 1 (0x2760C). Which ways a switch blends
+ * comes from move flags at +0x1A4, +0xC30 and +0x814 (blendMode); the blend
+ * out toward a stance pose is blendOutFor's.
  *
  * The first frame is sampled as it will be drawn: 0x28780 mirrors it when
  * the fighter is mirrored (+0 bit 6, 0x28840), so a mirrored fighter's blend
@@ -1035,7 +1034,7 @@ function liveFor(body) {
     if (!live) {
         live = {
             motion: null, frame: 0, last: null, blend: ZERO_BLEND, steps: null, points: null, length: 0, look: [0, 0],
-            spring: null, before: 0,
+            spring: null, before: 0, mode: 0, out: null, outDone: false,
         };
         LIVE.set(body, live);
     }
@@ -1043,39 +1042,68 @@ function liveFor(body) {
 }
 
 /*
- * Whether the switch into `motion` blends in at all: bit 0 of the mode the
- * blend set-up (VF2 0x27130, FV 0x29F50) stores at +0xBDD. Before the fight's
- * own tests it is the motion's: a new setup word with bit 17 (+0x1A4's, kept
- * by set_mot_dat) blends out only; one with bit 18 or 19 blends in; else the
- * word before (+0xC30) with bits 15 and 6 both, or with `rig.blendIn.before`,
- * or the record's byte at `stance` (+0x814) at 4, does not blend. Fighting
- * Vipers also does not where the record's u32 at `held` (+0x860) has bit 2.
- * Whatever it chose, the turn set-up after it (VF2 0x2756C, FV 0x2A308)
- * cancels the blend when the word before and the new +0x1A4 both have bit 10.
- * A pass of a motion the game loops runs the set-up again (VF2 0x1ABE8) on
- * +0x1A4 as the pass left it, so bit 17 is the last frame's move flag there.
- * The rest is the fight's (TECHNICAL.md, "The fight's blend choices").
+ * Which ways the switch into `motion` blends: the mode the blend set-up (VF2
+ * 0x27130, FV 0x29F50) stores at +0xBDD, bit 0 in (BLEND_IN) and bit 1 out
+ * (BLEND_OUT). Before the fight's own tests it is the motion's, in the game's
+ * order: Fighting Vipers blends neither way where the record's u32 at `held`
+ * (+0x860) has bit 2; a new +0x1A4 (the setup word as set_mot_dat keeps it)
+ * with bit 17 blends out only; a setup word with `rig.blendIn.both` blends
+ * both ways, one with `inOnly` in only; else the word before (+0xC30) with
+ * bits 15 and 6 both, or with `before`, or the record's byte at `stance`
+ * (+0x814) at 4, does not blend; that byte at 0x7F blends in only, as does a
+ * +0x1A4 with any of 0x6600 (unless, in Fighting Vipers, it has bit 26:
+ * both); the rest blend both ways. A motion of 2 frames or fewer does not
+ * blend; one whose first of setup op 2's frames (+0x808) comes after the
+ * blend out would start does not blend out; and the switch after a blend out
+ * that ran to its end (+0xBE5 bit 1, `outDone`) does not blend in. Unless it
+ * is now out only, the turn set-up (VF2 0x2756C, FV 0x2A308) cancels the
+ * blend when the word before and the new +0x1A4 both have bit 10. A pass of a
+ * motion the game loops runs the set-up again (VF2 0x1ABE8) on +0x1A4 as the
+ * pass left it. The rest is the fight's (TECHNICAL.md, "Which switches blend
+ * in").
  */
-const OUT_ONLY = 1 << 17, TURNED = 1 << 10, IN_KEPT = 3 << 18, NO_BLEND_PAIR = 0x8040, NO_BLEND = 4, HELD_NO_BLEND = 1 << 2;
+const BLEND_IN = 1, BLEND_OUT = 2, BLEND_BOTH = 3;
+const OUT_ONLY = 1 << 17, TURNED = 1 << 10, NO_BLEND_PAIR = 0x8040, NO_BLEND = 4, IN_ONLY_STANCE = 0x7f;
+const IN_ONLY_FLAGS = 0x6600, HELD_NO_BLEND = 1 << 2;
 
-function blendsIn(rom, motion, before, again) {
-    const B = rom.game.rig.blendIn;
-    if (!B) return true;
-    const word = setupWord(rom, motion.id);
-    const flags = again ? moveFlags(rom, motion)?.[motion.frames] ?? word : word;
-    if (B.held !== undefined && setupWord(rom, motion.id, B.held) & HELD_NO_BLEND) return false;
-    if (flags & OUT_ONLY || before & flags & TURNED) return false;
-    if (word & IN_KEPT) return true;
-    if (before & (B.before ?? 0) || (before & NO_BLEND_PAIR) === NO_BLEND_PAIR) return false;
-    return (setupWord(rom, motion.id, B.stance) & 0xff) !== NO_BLEND;
+/* The tests after the setup word's: the word before and the stance byte. */
+function stanceMode(rom, motion, before, flags) {
+    const B = rom.game.rig.blendIn, stance = setupWord(rom, motion.id, B.stance) & 0xff;
+    if (before & (B.before ?? 0) || (before & NO_BLEND_PAIR) === NO_BLEND_PAIR || stance === NO_BLEND) return 0;
+    if (stance === IN_ONLY_STANCE) return BLEND_IN;
+    if (flags & (B.flagsBoth ?? 0)) return BLEND_BOTH;
+    return flags & IN_ONLY_FLAGS ? BLEND_IN : BLEND_BOTH;
+}
+
+function motionMode(rom, motion, before, flags) {
+    const B = rom.game.rig.blendIn, word = setupWord(rom, motion.id);
+    if (B.held !== undefined && setupWord(rom, motion.id, B.held) & HELD_NO_BLEND) return 0;
+    if (flags & OUT_ONLY) return BLEND_OUT;
+    if (word & (B.both ?? 0)) return BLEND_BOTH;
+    if (word & B.inOnly) return BLEND_IN;
+    return stanceMode(rom, motion, before, flags);
+}
+
+function blendMode(rom, motion, live, again) {
+    if (!rom.game.rig.blendIn) return BLEND_IN;
+    const before = live.before, length = blendLength(motion.frames);
+    const flags = again ? moveFlags(rom, motion)?.[motion.frames] ?? setupWord(rom, motion.id) : setupWord(rom, motion.id);
+    let mode = length ? motionMode(rom, motion, before, flags) : 0;
+    const first = moveSetup(rom, motion.id)?.times?.[0];
+    if (first !== undefined && first > motion.frames - length) mode &= ~BLEND_OUT;
+    if (live.outDone && live.mode & BLEND_OUT) mode &= ~BLEND_IN;
+    return mode !== BLEND_OUT && before & flags & TURNED ? 0 : mode;
 }
 
 /* The blend for this frame, added to the sample's points in place: a new
  * motion takes its steps from the last frame drawn; they run out on the
  * eighth frame or when the motion loops. */
 function startBlend(live, rom, motion, mirrored, again) {
-    live.length = motion && blendsIn(rom, motion, live.before, again) ? blendLength(motion.frames) : 0;
-    const first = live.last && live.length ? sampleFor(rom, motion, 1, mirrored) : null;
+    live.mode = motion ? blendMode(rom, motion, live, again) : 0;
+    live.outDone = false;
+    live.out = null;
+    live.length = motion ? blendLength(motion.frames) : 0;
+    const first = live.last && live.mode & BLEND_IN ? sampleFor(rom, motion, 1, mirrored) : null;
     if (!first) return void (live.steps = live.points = null);
     const shift = blendShift(live.length), { angles, targets } = live.last;
     const turned = Boolean(setupWord(rom, motion.id) & MOVE_TURN || live.before & TURNED_BEFORE);
@@ -1090,9 +1118,83 @@ function wordBefore(live, rom, motion, again) {
     return again ? live.before : live.motion ? setupWord(rom, live.motion.id) : 0;
 }
 
-function blendFor(live, rom, motion, frame, sample, mirrored) {
-    /* A motion that loops, back to its first frame from its last, blends into
-     * itself as into a new one; one cut short and started again does not. */
+/*
+ * The blend out (VF2 0x2776C, FV 0x2A53C), on the last N frames of a motion
+ * that blends out, N its blend length: on the first of them the board takes
+ * the motion's last frame (0x28848, mirrored as the fighter is) and the stance
+ * pose the record's byte at +0x814 picks, one of five the fighter's action
+ * table gives as it is loaded (VF2 0x270D4, FV 0x29EEC: `rig.blendOut`), each
+ * the first frame of its motion; another byte leaves the motion not blending
+ * out. The stance pose is mirrored when the fighter is or the setup word has
+ * bit 21, but not both. With +0x1A4 bit 6 up (the motion ends turned), the
+ * stance's points are turned about the body by +0x812 and its angle added to
+ * the feet's and body's y (objects 2-4). The steps are the turn from the last
+ * frame to the stance, E(last)^T E(stance) as Y, X and Z (op 0x2A805555), and
+ * the points' (stance - last) with x and z from the body, both shifted as the
+ * blend in's are; frame `from + k` adds k steps, so the last frame is drawn
+ * at the stance. The game sets +0xBE5 bit 1 on the next to last.
+ */
+const STANCE_BYTES = [0, 0x80, 3, 0x83, 4], MOVE_FLIP = 1 << 21, STANCE_TURNS = [2, 3, 4];
+
+/* +0x812 on `frame`: the setup's turn (0x8000 for a word with bit 6), the
+ * other way for a mirrored fighter (0x1A3A4), unless script op 22 has since
+ * set its own (0x1B3D8). */
+function turnAt(rom, motion, frame, mirrored) {
+    const m = moveSetup(rom, motion.id);
+    let turn = m?.turn ?? (setupWord(rom, motion.id) & TURNED_BEFORE ? 0x8000 : 0);
+    if (mirrored) turn = -turn;
+    for (const o of m?.ops ?? []) if (o.op === OP_BIT_6 && o.frame <= frame) turn = o.value;
+    return turn;
+}
+
+function turnStance({ angles, targets, targetUsed }, by) {
+    const a = Uint16Array.from(angles), t = Float32Array.from(targets), m = turn(1, by);
+    for (const obj of STANCE_TURNS) a[obj * 3 + 1] += by;
+    for (let i = 0; i < t.length; i += 3) {
+        const x = t[i] - targets[0], z = t[i + 2] - targets[2];
+        t[i] = m[0][0] * x + m[0][2] * z;
+        t[i + 2] = m[2][0] * x + m[2][2] * z;
+    }
+    return { angles: a, targets: t, targetUsed };
+}
+
+function stancePose(rom, body, motion, from, mirrored) {
+    const slot = STANCE_BYTES.indexOf(setupWord(rom, motion.id, rom.game.rig.blendIn.stance) & 0xff);
+    const id = slot < 0 ? undefined : body.actions?.[rom.game.rig.blendOut[slot]];
+    const stance = id === undefined ? null : decodeMotion(rom, id);
+    if (!stance) return null;
+    const flip = mirrored !== Boolean(setupWord(rom, motion.id) & MOVE_FLIP);
+    const pose = sampleFor(rom, stance, 1, flip);
+    const flags = moveFlags(rom, motion)?.[from + 1] ?? 0;
+    return flags & TURNED_BEFORE ? turnStance(pose, turnAt(rom, motion, from + 1, mirrored)) : pose;
+}
+
+function outSteps(rom, body, motion, from, mirrored) {
+    const to = stancePose(rom, body, motion, from, mirrored);
+    if (!to) return null;
+    const last = sampleFor(rom, motion, motion.frames, mirrored);
+    const shift = blendShift(motion.frames - from);
+    const steps = Array.from({ length: 12 }, (_, obj) => {
+        const back = mul3(transpose(eulerOf(tripleAt(last.angles, obj))), eulerOf(tripleAt(to.angles, obj)));
+        return yxzOf(back).map((v) => v >> shift);
+    });
+    return { steps, points: pointSteps(to.targets, last.targets, shift) };
+}
+
+/* The blend out on `frame`, or null before it starts. */
+function blendOutFor(live, rom, body, motion, frame, sample, mirrored) {
+    const from = motion.frames - live.length, k = frame - from;
+    if (!(live.mode & BLEND_OUT) || k <= 0) return null;
+    live.out ??= outSteps(rom, body, motion, from, mirrored);
+    if (!live.out) return void (live.mode &= ~BLEND_OUT);
+    if (k === live.length - 1) live.outDone = true;
+    live.out.points.forEach((v, i) => { sample.targets[i] += v * k; });
+    return live.out.steps.map((t) => t.map((v) => v * k));
+}
+
+/* A motion that loops, back to its first frame from its last, blends into
+ * itself as into a new one; one cut short and started again does not. */
+function switchBlend(live, rom, motion, frame, mirrored) {
     if (motion !== live.motion || (frame === 1 && motion && live.frame === motion.frames)) {
         const again = Boolean(motion) && motion === live.motion && gameLoops(rom, motion.id);
         if (motion) live.before = wordBefore(live, rom, motion, again);
@@ -1100,12 +1202,17 @@ function blendFor(live, rom, motion, frame, sample, mirrored) {
     } else if (frame < live.frame) {
         live.steps = live.points = null;
     }
+}
+
+function blendFor(live, rom, body, motion, frame, sample, mirrored) {
+    switchBlend(live, rom, motion, frame, mirrored);
     const left = live.length - frame;
     const blending = live.steps && left > 0;
     // The next switch blends out of the targets as drawn, this blend included.
     if (blending) live.points.forEach((v, i) => { sample.targets[i] += v * left; });
+    const out = !blending && motion ? blendOutFor(live, rom, body, motion, frame, sample, mirrored) : null;
     if (motion !== live.motion || frame !== live.frame) live.last = { angles: sample.angles, targets: sample.targets.slice() };
-    return (live.blend = blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND);
+    return (live.blend = out ?? (blending ? live.steps.map((t) => t.map((v) => v * left)) : ZERO_BLEND));
 }
 
 /*
@@ -1173,17 +1280,21 @@ const SETUP_END = 0, SETUP_LAST = 8, SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TA
 const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT = 13, OP_BIT_6 = 22;
 const WORD_TAIL = 1 << 7, FLAG_TAIL = 1 << 5;
 
-/* The setup ops after the head: op 2's three frames, op 3's +0x850, and
- * where the script starts. */
+/* The setup ops after the head: op 2's three frames, op 3's +0x850, the
+ * turn ops 5, 6 and 7 leave at +0x812 (null where none does), and where the
+ * script starts. */
+const SETUP_TURN = { 5: 8, 6: 3, 7: 1 };
+
 function readMoveSetup(rom, R, dv, at) {
     const len = (op) => rom.mainCpuView.getUint8(R.lengths + op);
-    const out = { times: null, window: 0 };
+    const out = { times: null, window: 0, turn: null };
     for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
         if (op === SETUP_END) return { ...out, script: at };
         if (op === SETUP_LAST) return { ...out, script: at + 1 };
         if (op >= R.ops) return null;
         if (op === SETUP_TIMES) out.times = [1, 3, 5].map((k) => dv.getInt16(at + k, true));
         if (op === SETUP_WINDOW) out.window = dv.getUint16(at + 12, true);
+        if (SETUP_TURN[op]) out.turn = dv.getInt16(at + SETUP_TURN[op], true);
         at += op === SETUP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : len(op);
     }
 }
@@ -1191,7 +1302,7 @@ function readMoveSetup(rom, R, dv, at) {
 function readScriptOps(lengths, dv, at) {
     const ops = [];
     for (let op = dv.getUint8(at); op !== 0 && op < lengths.length; op = dv.getUint8(at)) {
-        ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3) });
+        ops.push({ frame: dv.getUint16(at + 1, true), op, arg: dv.getUint8(at + 3), value: dv.getInt16(at + 3, true) });
         at += lengths[op];
     }
     return ops;
@@ -1472,7 +1583,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirro
     const fresh = motion !== live.motion || frame !== live.frame;
     const fight = {
         held: motion ? heldAngles(rom, motion) : {},
-        blend: blendFor(live, rom, motion, frame, sample, mirrored),
+        blend: blendFor(live, rom, body, motion, frame, sample, mirrored),
         look: (local) => (fresh ? (live.look = headStep(live.look, local, !stepped, lookLimits(rom, faceTarget))) : live.look),
     };
     live.motion = motion; live.frame = frame;
