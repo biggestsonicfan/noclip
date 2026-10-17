@@ -5362,6 +5362,40 @@ draws, whose texture `set_tpd_data` slides by the tangent of the camera's
 bearing off the panel's, a parallax. The board never resets `stage_ypos` but at
 `change_scene`; the viewer starts it over with the objects' clock.
 
+In the fight the shaft is a band, not the whole of it (read from the ROM,
+checked against MAME). Stage 6's branch of `ground_upper_disp` (`0x23ACC`)
+takes `tou_disp_all` (`0x23B2C`) unless the game mode is GAME (`0x50002C` =
+`1 << 0x50002A`, bits 8-9: GAME_INT, GAME_DSP) and the sub-mode is FIGHT_INT
+to JUDGE_DSP (`0x500034` = `1 << 0x500030`, `& 0x3F00`). Then `0x23E08`
+draws instead, with no clip tests and without `tou_disp_all`'s
+`0x23784(0x6CE2C40)` call, which the explorer never drew:
+
+- four wall rows (`0x6CE2654`), from the last one at or below
+  `stage_ypos - 14`, searched from entry 1 and at most to entry 27;
+- two pillar rows (`0x6CE3218`), from the first whose `+0x28` is above
+  `stage_ypos - 42`, at most entry 7.
+
+Each row keeps its side test (`tower_check`, `hashira_check2`). `stage_ypos` is
+`0x50A018`, which `0x1EFC0` steps by 0.017 (the same word the shaft is moved
+down by). The round's intro, the replay and the win draw the whole shaft, and
+so does the attract demo, which runs in mode ADV. The explorer treats the fight as
+under way, so `shaftBand` in `js/fvstages.js` hides every row outside the band
+at the viewer's `stage_ypos`. From inside the shaft the camera now sees four
+wall rows and two pillar rows round the arena, not the whole 224-unit tower.
+
+The check:
+
+- MAME (`fvipers`, coined game, `0x500064` forced to 6, 200 s) took
+  `0x23E08` on every FIGHT_DSP and JUDGE frame, and `tou_disp_all` on the
+  others. The starting rows it picked, logged with `stage_ypos` at the draw,
+  match `shaftBand` on all 2487 draws (`stage_ypos` 3.38 to 26.91, wall
+  rows 0-2, pillar rows 0-1). In 240 s of attract on stage 6, every draw
+  was `tou_disp_all`.
+- In the headless explorer on the City Hall Elevator, from frames 397 to 1135,
+  20 of the 132 shaft draws are shown, at the heights the band gives: rows
+  1-3 and pillar rows 0-1, then rows 1-4 and pillar rows 1-2 once
+  `stage_ypos` passes 14.
+
 The stage music is `level_music_list`'s song, and the stage sounds are
 `sound_queue_output`'s: the loop each stage starts with and, on the Airport and
 the UFO Diner, cues on the objects' clock.
@@ -5369,8 +5403,6 @@ the UFO Diner, cues on the objects' clock.
 Left out:
 
 - the per-entry clip tests of the shaft and the panels, which are culls;
-- `tou_disp_easy`, the shaft the board draws instead under a setting not
-  worked out (`dword_50002C` bits 8-9);
 - the Airport jet cue's on-screen test: it plays whether or not the plane is
   in view.
 

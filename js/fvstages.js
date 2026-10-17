@@ -193,8 +193,16 @@ function observationDeck(rom, light) {
  *              models, side k drawn while tower_check has the camera inside
  *              plane k (0x22B24, 8.5 out) and the model is not 0
  *   0x6CE3214  u32 count, then 0x2C bytes each from 0x6CE3218: +0x20 u32
- *              model, +0x24 f32 y, all four sides by hashira_check2 (0x22B64,
- *              the diagonals at 6.72)
+ *              model, +0x24 f32 y, +0x28 f32 the row's key, all four
+ *              sides by hashira_check2 (0x22B64, the diagonals at 6.72)
+ *
+ * That is tou_disp_all, which runs round the fight (the round's intro, the
+ * replay, the win). In the fight itself (0x23ACC: game mode GAME, sub-mode
+ * FIGHT_INT..JUDGE_DSP, 0x500034 & 0x3F00) the board draws 0x23E08 instead,
+ * a band at the ride's height: four wall rows from the last one at or below
+ * stage_ypos - 14 (searched from entry 1, at most to 27), and two pillar
+ * rows from the first whose +0x28 is above stage_ypos - 42 (at most 7).
+ * The explorer treats the fight as under way, so it draws that band.
  *
  * Each entry's own clip-point test is a cull and is left out. And the city:
  * tex_move_poly draws the four panels unk_642065C names for stage 6, 0x24
@@ -219,7 +227,7 @@ function readElevator(rom) {
     });
     const pillars = Array.from({ length: count(PILLARS) }, (_, i) => {
         const e = at(PILLARS + 4 + i * PILLAR_SIZE);
-        return { model: e.u32(0x20), y: e.f32(0x24) };
+        return { model: e.u32(0x20), y: e.f32(0x24), top: e.f32(0x28) };
     });
     const panels = Array.from({ length: PANEL_COUNT }, (_, i) => {
         const e = at(PANELS + i * PANEL_SIZE);
@@ -253,26 +261,42 @@ const down = (f) => ['t', [0, -RISE * (f % ROUND), 0]];
 const side = (k) => ['r', k * 0x4000 * ANGLE_DEG];
 const lift = (y) => ['t', [0, y, 0]];
 
-/* A draw shown while the camera is inside plane k of a set. */
-const sided = (model, layer, ops, planes, k) => ({
+/* A draw shown while the camera is inside plane k of a set and its row is in the band. */
+const sided = (model, layer, ops, planes, k, inBand) => ({
     model, layer, ops: ops(0),
-    live: (f, cam) => ({ model, ops: ops(f), hidden: Boolean(cam) && !inside(planes, k, cam) }),
+    live: (f, cam) => ({ model, ops: ops(f), hidden: !inBand(f) || (Boolean(cam) && !inside(planes, k, cam)) }),
 });
 
-function elevatorDraws({ walls, pillars, panels }) {
+/* 0x23E08's band: the first wall row and the first pillar row it draws at stage_ypos y. */
+const WALL_ROWS = 4, PILLAR_ROWS = 2;
+const stageY = (f) => Math.fround(RISE * (f % ROUND));
+export function shaftBand({ walls, pillars }, y) {
+    const low = Math.fround(y - 14), high = Math.fround(y - 42);
+    let w = 1;
+    while (w <= 27 && w < walls.length && !(walls[w].y > low)) w++;
+    let p = 0;
+    while (p < 7 && p < pillars.length && !(pillars[p].top > high)) p++;
+    return { wall: w - 1, pillar: p };
+}
+
+function elevatorDraws(elevator) {
+    const { walls, pillars, panels } = elevator;
     const out = [];
-    for (const { y, models } of walls) {
+    const band = (f) => shaftBand(elevator, stageY(f));
+    walls.forEach(({ y, models }, i) => {
+        const inBand = (f) => { const b = band(f).wall; return i >= b && i < b + WALL_ROWS; };
         models.forEach((m, k) => {
             const turns = Array.from({ length: k }, () => side(1));
-            if (m) out.push(sided(m, 'upper', (f) => [down(f), lift(y), ...turns], SHAFT_PLANES, k));
+            if (m) out.push(sided(m, 'upper', (f) => [down(f), lift(y), ...turns], SHAFT_PLANES, k, inBand));
         });
-    }
-    for (const { model, y } of pillars) {
+    });
+    pillars.forEach(({ model, y }, i) => {
+        const inBand = (f) => { const b = band(f).pillar; return i >= b && i < b + PILLAR_ROWS; };
         for (let k = 0; k < 4; k++) {
             const turns = Array.from({ length: k }, () => side(1));
-            out.push(sided(model, 'upper', (f) => [down(f), lift(y), ...turns], DIAGONAL_PLANES, k));
+            out.push(sided(model, 'upper', (f) => [down(f), lift(y), ...turns], DIAGONAL_PLANES, k, inBand));
         }
-    }
+    });
     for (const p of panels) {
         out.push({
             model: p.model, layer: 'ground', ops: [], slides: true,
