@@ -26,11 +26,15 @@
  * The two tables are mirror images (every pair checked is), as are the part
  * list's left and right parts.
  *
- * Which shape a hand has when a motion starts is the motion before's, which is
- * fight state; the explorer starts each hand the motion names on the first
- * shape it names, and leaves a hand it never names as the part list has it.
+ * A hand keeps its shape from one motion into the next: only op 18 and VF2's
+ * step write it (MAME watchpoints over a 100-second attract run), and a
+ * motion's setup leaves it be. VF2 never resets it after power on; FV's round
+ * start copies the part list back. Each stance shapes both hands from its
+ * frame 1, so the explorer starts a motion where the fighter's stance leaves
+ * the hands, and a reaction where the stance was when the move landed. What
+ * the fighter really did before is fight history it cannot know.
  */
-import { resolveData } from './motion.js';
+import { decodeMotion, resolveData } from './motion.js';
 
 const OP_END = 0, OP_LAST = 8, OP_TABLE = 0x10, OP_HAND = 18;
 const MOTION_ID = 0x1fff;
@@ -91,45 +95,41 @@ function easeOp(h, { shape, end }, frame) {
     }
 }
 
-/* A VF2 hand as the motion starts: on the first shape it names, if any. */
-function startHand(ops, k) {
-    const first = ops.find((o) => o.hand === k);
-    return first ? { count: 0, now: first.shape << 8, step: 0 } : null;
-}
+const shapeOf = (h) => ((h.now & 0xffff) >> 8) & SHAPE_MASK;
 
-const shapeOf = (h) => (h ? ((h.now & 0xffff) >> 8) & SHAPE_MASK : null);
-
-/* Per frame (index = frame), each hand's shape index, or null if the motion
- * never names that hand. */
-function easedShapes(ops, frames) {
-    const hands = [0, 1].map((k) => startHand(ops, k));
-    const out = [];
+/* VF2: both hands' bytes through frames 1 to `last` of a motion, from
+ * `start`; `shapes[f]` each hand's shape on frame f, `end` the bytes after. */
+function easeRun(ops, last, start) {
+    const hands = start.map((h) => ({ ...h }));
+    const shapes = [];
     let next = 0;
-    for (let f = 1; f <= frames; f++) {
+    for (let f = 1; f <= last; f++) {
         for (; next < ops.length && ops[next].frame <= f; next++) {
             const h = hands[ops[next].hand];
             if (h) easeOp(h, ops[next], f);
         }
         for (const h of hands) {
-            if (h?.count) { h.count--; h.now = s16(h.now + h.step); }
+            if (h.count) { h.count--; h.now = s16(h.now + h.step); }
         }
-        out[f] = hands.map(shapeOf);
+        shapes[f] = hands.map(shapeOf);
     }
-    return out;
+    return { shapes, end: hands };
 }
 
 /* VF2: slot 5 takes hand 1's shape and slot 8 hand 0's, the other way round
- * when mirrored; each from its own table. */
-function vf2Hands(rom, body, H, ops, frames, mirrored) {
-    const table = u32At(rom, body.root + H.at);
-    if (!table) return null;
-    const shapes = easedShapes(ops, frames);
-    return shapes.map((pair) => SLOTS.map((slot) => {
-        const hand = (slot === SLOTS[0]) !== mirrored ? 1 : 0;
-        if (pair[hand] == null) return null;
-        return u32At(rom, table + (slot === SLOTS[0] ? 0 : H.other) + pair[hand] * 4) || null;
-    }));
-}
+ * when mirrored; each from its own table. Power on leaves the bytes 0. */
+const VF2 = {
+    table: (rom, body, H) => u32At(rom, body.root + H.at),
+    powerOn: () => [0, 1].map(() => ({ count: 0, now: 0, step: 0 })),
+    run(rom, table, H, id, last, mirrored, start) {
+        const { shapes, end } = easeRun(handOps(rom, id), last, start);
+        const models = shapes.map((pair) => SLOTS.map((slot, k) => {
+            const hand = (k === 0) !== mirrored ? 1 : 0;
+            return u32At(rom, table + (k === 0 ? 0 : H.other) + pair[hand] * 4) || null;
+        }));
+        return { models, end };
+    },
+};
 
 /* The slot (0 for 5, 1 for 8) and model a FV op writes: the other hand's
  * when mirrored, as 0x1C718 turns it. */
@@ -140,44 +140,78 @@ function fvModel(r, op, mirrored) {
     return { k, model };
 }
 
-/* A FV hand as the motion starts: on the first model it is given, if any. */
-function fvStart(written, k) {
-    return written.find((w) => w.k === k && w.model)?.model ?? null;
+/* FV: each op writes a model to one slot, which keeps it. A round's start
+ * (0x12554) copies the part list to +0x40, so that is what a slot holds
+ * before any op. */
+const FV = {
+    table(rom, body, H) {
+        const table = u32At(rom, H.table + body.index * 4);
+        return (table && dataAt(rom, table)) || null;
+    },
+    powerOn: (body) => SLOTS.map((slot) => body.parts[slot]?.model ?? null),
+    run(rom, r, H, id, last, mirrored, start) {
+        const ops = handOps(rom, id);
+        const written = ops.map((op) => fvModel(r, op, mirrored));
+        const now = [...start], models = [];
+        let next = 0;
+        for (let f = 1; f <= last; f++) {
+            for (; next < ops.length && ops[next].frame <= f; next++) {
+                const { k, model } = written[next];
+                if (k < HANDS && model) now[k] = model;
+            }
+            models[f] = [...now];
+        }
+        return { models, end: now };
+    },
+};
+
+const STANCE_LOOPS = 8;
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/* The hands as the fighter's stance (its first action, the motion it stands
+ * in between moves) leaves them, looped from power on or the round's start
+ * until a loop ends where it began. */
+function stanceHands(rom, G, { body, table, H }, mirrored) {
+    let hands = G.powerOn(body);
+    const stance = body.start >= 0 ? decodeMotion(rom, body.start)?.frames : 0;
+    for (let i = 0; stance && i < STANCE_LOOPS; i++) {
+        const { end } = G.run(rom, table, H, body.start, stance, mirrored, hands);
+        if (same(end, hands)) break;
+        hands = end;
+    }
+    return hands;
 }
 
-/* FV: each op writes a model to one slot, which keeps it. */
-function fvHands(rom, body, H, ops, frames, mirrored) {
-    const table = u32At(rom, H.table + body.index * 4);
-    const r = table && dataAt(rom, table);
-    if (!r) return null;
-    const written = ops.map((op) => fvModel(r, op, mirrored));
-    const now = [0, 1].map((k) => fvStart(written, k));
-    const out = [];
-    let next = 0;
-    for (let f = 1; f <= frames; f++) {
-        for (; next < ops.length && ops[next].frame <= f; next++) {
-            const { k, model } = written[next];
-            if (k < HANDS && model) now[k] = model;
-        }
-        out[f] = [...now];
-    }
-    return out;
+/* What a motion starts from: the hands motion `from.motion` has on its frame
+ * `from.frame`, itself started from the stance; or, without one, the
+ * stance's. */
+function startHands(rom, G, ctx, from) {
+    const seed = stanceHands(rom, G, ctx, Boolean(from?.mirrored));
+    if (!from?.motion || !(from.frame > 0)) return seed;
+    return G.run(rom, ctx.table, ctx.H, from.motion.id, Math.min(from.frame, from.motion.frames), Boolean(from.mirrored), seed).end;
 }
 
 /**
  * The hand models a motion gives slots 5 and 8 on each frame: index = frame,
  * each [slot 5's, slot 8's], null where the part list's stands. Null when
- * the game has no hands (`rig.fighters.hands`) or the motion names none.
+ * the game has no hands (`rig.fighters.hands`) or the fighter no table.
+ *
+ * A hand keeps its shape from one motion into the next: nothing but op 18
+ * (and VF2's step) writes it, and a motion's setup does not reset it. So the
+ * motion starts from `from` ({motion, frame, mirrored}: what the fighter
+ * played just before, as a reaction starts from the stance frame it was
+ * caught on), or else from the stance's hands.
  */
-export function handModels(rom, body, motion, mirrored = false) {
+export function handModels(rom, body, motion, mirrored = false, from = null) {
     const H = rom.game.rig?.fighters?.hands;
     if (!H || motion?.id == null) return null;
     const cache = (rom.fighterHands ??= new Map());
-    const key = `${body.index}:${motion.id}:${mirrored ? 1 : 0}`;
+    const after = from?.motion ? `${from.motion.id}@${from.frame}${from.mirrored ? 'm' : ''}` : '';
+    const key = `${body.index}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
     if (!cache.has(key)) {
-        const ops = handOps(rom, motion.id);
-        const read = H.eased ? vf2Hands : fvHands;
-        cache.set(key, ops.length ? read(rom, body, H, ops, motion.frames, mirrored) : null);
+        const G = H.eased ? VF2 : FV;
+        const table = G.table(rom, body, H);
+        cache.set(key, table ? G.run(rom, table, H, motion.id, motion.frames, mirrored, startHands(rom, G, { body, table, H }, from)).models : null);
     }
     return cache.get(key);
 }

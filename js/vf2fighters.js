@@ -1342,22 +1342,25 @@ function sampleFor(rom, motion, frame, mirrored) {
  * own the head follows the motion's own target; poseBout gives it an opponent
  * to look at. The chest does not twist.
  *
- * @param {{faceTarget?: number[], mirrored?: boolean}} [opts]  `faceTarget`
- *   takes the place of the motion's (float object 2, in the targets' space),
- *   as the fight writes the other fighter's head over it at player +0xB0C;
- *   `mirrored` plays the motion the other way round (mirrorSample).
+ * @param {{faceTarget?: number[], mirrored?: boolean, handsFrom?: object}} [opts]
+ *   `faceTarget` takes the place of the motion's (float object 2, in the
+ *   targets' space), as the fight writes the other fighter's head over it at
+ *   player +0xB0C; `mirrored` plays the motion the other way round
+ *   (mirrorSample); `handsFrom`, {motion, frame, mirrored}, is what the
+ *   fighter played before, whose hands this motion starts with (else the
+ *   stance's; js/fighterhands.js).
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
  *   for a fighter koshi_unit_change names, is the hips' model this frame;
- *   `hands`, [slot, model] for the hands the motion's script shapes
- *   (js/fighterhands.js), which go to the other side when mirrored;
+ *   `hands`, [slot, model] for the hands, as the motion's script shapes
+ *   them (js/fighterhands.js), which go to the other side when mirrored;
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
-export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false } = {}) {
+export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false, handsFrom = null } = {}) {
     rom.vf2Rig ??= standardRig(rom);
     const live = liveFor(body);
     const sample = sampleFor(rom, motion, frame, mirrored);
@@ -1382,7 +1385,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = f
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    const hands = handsAt(handModels(rom, body, motion, mirrored), frame);
+    const hands = handsAt(handModels(rom, body, motion, mirrored, handsFrom), frame);
     return { matrices, origins, extras, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
@@ -1466,6 +1469,6 @@ export function poseBout(rom, [first, second], place = opponentMatrix()) {
     const one = poseFighter(rom, first.body, first.motion, first.frame,
         { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored });
     const two = poseFighter(rom, second.body, second.motion, second.frame,
-        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored });
+        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored, handsFrom: second.handsFrom });
     return [one, two];
 }

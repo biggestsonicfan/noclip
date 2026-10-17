@@ -3631,7 +3631,7 @@ function poseFighterAndRival(body, m) {
      * own bit is fight state, and left clear. */
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame, mirrored },
-        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown) },
+        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown), handsFrom: own.handsFrom },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
@@ -3654,10 +3654,17 @@ function rivalPlays(m) {
     if (R.motion && m.frame >= R.lands) {
         const frame = Math.min(m.frame - R.lands + 1, R.motion.frames);
         const thrown = R.attack.victim != null;
-        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown };
+        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown, handsFrom: caughtIn(R) };
     }
     const wait = R.stance ?? R.motion ?? m.decoded;
     return { decoded: wait, frame: wait === R.stance ? 1 + ((m.frame - 1) % wait.frames) : 1, flash: null };
+}
+
+/* The stance frame the opponent was on when the move landed, which its
+ * hands carry into the reaction (js/fighterhands.js). */
+function caughtIn(R) {
+    if (!R.stance || R.lands < 2) return null;
+    return { motion: R.stance, frame: 1 + ((R.lands - 2) % R.stance.frames), mirrored: false };
 }
 
 /* The reaction to the motion on show, read once per motion and choice. */

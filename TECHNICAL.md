@@ -1246,12 +1246,39 @@ own model. FV keeps the eased picker (`0x1AC80`), but nothing writes the
 `+0x6AC` it reads.
 
 So the mirror moves shapes, not models: each slot keeps its own table, and
-the two tables are mirror images (every pair checked). A hand the motion
-before shaped keeps that shape into the next, which is fight state: the
-explorer starts each hand a motion names on the first shape it names, and
-leaves the others as the part list has them. Most motions shape both hands
-alike; VF2 Akira 3, 5, 25 or FV Grace 579, 776 do not, and show the swap.
-The throws (VF2 15, FV 31 and 33) shape them alike.
+the two tables are mirror images (every pair checked). Most motions shape
+both hands alike; VF2 Akira 3, 5, 25 or FV Grace 579, 776 do not, and show
+the swap. The throws (VF2 15, FV 31 and 33) shape them alike.
+
+A hand keeps its shape from one motion into the next. MAME watchpoints on
+both fighters' hand bytes over a 100-second attract run catch no writer but
+op 18 (VF2 `0x1B32C`-`0x1B360`, FV `0x1C760`) and VF2's step (`0x1B500`,
+`0x1B514`), and FV's round start (`0x12554`, the part list copied to
+`+0x40`; VF2's `0x13F08` copies it too, but never touches `+0x6C4`). A
+motion's setup resets nothing, and the game copies no hand state from the
+thrower to the one thrown. So:
+
+- VF2's hands start at power on as shape 0 (count, step 0) and are never
+  reset after; a step under way carries on into the next motion. Its draw
+  takes slots 5 and 8 from the table whenever `+0x3C` is set, so the part
+  list's hand models never show (Dural has no table and keeps them).
+- FV's hands start each round as the part list has them, which is shape 0.
+
+What a fighter played before a motion is fight history the explorer cannot
+know. Each fighter's stance (its first action, the motion it stands in
+between moves) shapes both hands from frame 1: every FV stance to shape 0;
+VF2's Jacky, Sarah, Shun, Dural and Lion to 31, Kage's to 3, Akira's to 31
+then 15, Lau's 9 then 3, Jeffry's 3 then 7, Pai's 7 then 0, Wolf's 9 then
+15. So the explorer starts a motion
+where the stance leaves the hands, the stance looped from power on (or the
+round start) until a loop ends where it began, and the stance itself the
+same way. The opponent waits in its stance until the move lands, and its
+reaction starts from the stance frame it was on then, mid-ease if it was.
+VF2 Akira 4 shows the difference from starting on the first shape named:
+its op 18s are at frame 20, so frames 1-19 hold the stance's 15 (it used to
+show 3), and the hands ease to 3 by frame 30. In FV, Grace 302 holds the
+part list's hands (shape 0) to frame 9, where they used to be shape 2 from
+frame 1.
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
