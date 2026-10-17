@@ -3616,8 +3616,8 @@ function bouncedDraws(body, posed, m) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
-    const at = opponentMatrix({ behind: state.opponentBehind });
     const own = rivalPlays(m);
+    const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame },
         { body: m.rival.body, motion: own.decoded, frame: own.frame },
@@ -3635,13 +3635,15 @@ function poseFighterAndRival(body, m) {
 /* What the opponent plays on the fighter's frame: the fighter's motion, or
  * the reaction the panel asks for (js/reactions.js), which waits in the
  * opponent's stance until the move lands, then plays from its frame 1 and
- * holds its last. A throw's starts with the throw. */
+ * holds its last. A throw's starts with the throw, on the thrower's own
+ * place and facing (opponentMatrix's `thrown`). */
 function rivalPlays(m) {
     const R = rivalReaction(m);
     if (!R) return { decoded: m.decoded, frame: m.frame, flash: m.flash };
     if (R.motion && m.frame >= R.lands) {
         const frame = Math.min(m.frame - R.lands + 1, R.motion.frames);
-        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame) };
+        const thrown = R.attack.victim != null;
+        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown };
     }
     const wait = R.stance ?? R.motion ?? m.decoded;
     return { decoded: wait, frame: wait === R.stance ? 1 + ((m.frame - 1) % wait.frames) : 1, flash: null };
@@ -3673,7 +3675,7 @@ function readReaction(m, reaction) {
 
 function describeReaction(R, reaction) {
     if (!R.attack) return 'This motion neither strikes nor throws: the opponent stands.';
-    if (R.attack.victim != null) return `A throw: the opponent plays motion ${R.id}, the one thrown, with it.`;
+    if (R.attack.victim != null) return `A throw: the opponent plays motion ${R.id}, the one thrown, with it, on the fighter's place.`;
     if (!R.motion) return `Kind ${R.attack.kind} has no ${reaction.label} motion: the opponent stands.`;
     return `Kind ${R.attack.kind} blow: ${reaction.label} motion ${R.id} from the fighter's frame ${R.lands}.`;
 }

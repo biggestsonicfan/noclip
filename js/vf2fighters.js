@@ -1359,8 +1359,19 @@ export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
  */
 export const OPPONENT_DISTANCE = 2;
 
+/*
+ * In a throw the pair share one place and facing: the thrower's action 0x10
+ * (FV 0x1570C, VF2 0x15F48) steps it halfway to the other's place every frame
+ * while move flag 1 is up, then, as the throw's +0x808 frame comes and the
+ * flag drops, copies the other's place (+0x18..+0x20) and facing (+0x26)
+ * outright. Both motions are authored in that frame: the thrown one's root
+ * starts where the throw holds it (FV 31 and 32, VF2 15 and 16).
+ */
+const SHARED_PLACE = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
 /** Where the opponent's parts go: its viewer frame into the fighter's. */
-export function opponentMatrix({ behind = false, distance = OPPONENT_DISTANCE } = {}) {
+export function opponentMatrix({ behind = false, distance = OPPONENT_DISTANCE, thrown = false } = {}) {
+    if (thrown) return SHARED_PLACE;
     return behind
         ? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -distance, 0, 0, 1]
         : [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, distance, 0, 0, 1];

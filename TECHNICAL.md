@@ -1140,7 +1140,19 @@ bit 15 the side it comes from. Op 5, the throw, writes its u16 at `+1` there
 instead, and the throw code (VF2 `0x14570`, FV `0x13054`) finds it again
 through calc_mht_adr and starts it on the one thrown with command `0x11`: the
 throw motion and the thrown one's are neighbours in the table (FV 31 and 32,
-VF2 15 and 16). Fighting Vipers has 394 strikes and 111 throws, Virtua
+VF2 15 and 16). Op 5's float at `+4` (`+0x824`) is the reach the throw catches
+within (`0x16634` compares the gap `+0x5F4` against it), 1.2 to 2.7.
+
+The pair are not left where the throw caught them. The thrower's action
+`0x10` (FV `0x1570C`, VF2 `0x15F48`) steps it halfway to the other's place
+every frame while move flag 1 is up, and once the flag drops at `+0x808` it
+copies the other's place (`+0x18..+0x20`, `ldt`) and facing (`+0x26`). The
+thrown one's action `0x11` (FV `0x157F0`) only starts its motion and stops
+it. So both play on one place and facing, and the motions are made for it:
+the thrown one's root starts where the throw holds it (VF2 16 starts 1.4
+ahead, FV's thrower 31 1.79 ahead of its victim's 0.29). The explorer stands a
+thrown opponent on the fighter's own place and facing (`opponentMatrix`,
+`thrown`). Fighting Vipers has 394 strikes and 111 throws, Virtua
 Fighter 2 569 and 112.
 
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
