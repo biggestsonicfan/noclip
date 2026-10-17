@@ -3604,13 +3604,15 @@ function placeExtras(parts, body, matrices, material = null, flash = null) {
 }
 
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
- * the one its spring picked, and the hips' (slot 9) the one their motion
- * picked, all in the flash's material on a frame that has it. A rig whose
- * pose says what each part draws (Dead or Alive's) is taken at its word. */
+ * the one its spring picked, the hips' (slot 9) and the hands' (5 and 8) the
+ * ones their motion picked, all in the flash's material on a frame that has
+ * it. A rig whose pose says what each part draws (Dead or Alive's) is taken
+ * at its word. */
 function bouncedDraws(body, posed, m) {
     const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
     if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
+    for (const [slot, model] of posed.hands ?? []) draws[slot] = [model];
     return m.flash == null ? draws : draws.map((list) => list.map((model) => flashed(model, m.flash)));
 }
 

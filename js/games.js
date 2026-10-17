@@ -843,12 +843,18 @@ const fvipers = {
              * +0x720, which every draw of the fighter tests for the flash
              * (js/vf2fighters.js, flashMaterial). */
             flash: { setups: 0x06411e94 },
+            /* Move-script op 18's hand models, 0x640EBF4[record]: four a
+             * hand; js/fighterhands.js. */
+            hands: { table: 0x0640ebf4 },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat's setups
          * past their 12-byte head, the lengths at 0x1CE86; op 4 (sub_1BB20)
          * keeps the kind at +7, and the picker (0x26978) reads
          * 0x641F834[kind], 22 kinds. */
         reactions: { setups: 0x06411e94, head: 12, lengths: 0x1ce86, ops: 25, strike: 7, table: 0x0641f834, kinds: 22 },
+        /* The move script's op lengths, by the handlers 0x1C24C runs
+         * (table 0x1D028); js/fighterhands.js. */
+        script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4],
         crouch: { 9: 1.1, 10: 0.56 },
         look: { own: 0x2000 },
         note: 'fv',
@@ -3220,12 +3226,20 @@ const vf2 = {
         /* The action table is record +0x14 as in Fighting Vipers:
          * action_init (0x13F1C) puts it at player +0x1A0, and the action
          * code reads it to +0xA6, 84 motion ids, the stance first. */
-        fighters: { records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES, actions: { at: 0x14, count: 84 } },
+        fighters: {
+            records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES, actions: { at: 0x14, count: 84 },
+            /* The hands' 32 shapes each, record +0x3C: slot 5's at +0,
+             * slot 8's at +0x180 (0x19E34); js/fighterhands.js. */
+            hands: { at: 0x3c, other: 0x180, eased: true },
+        },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at
          * 0x1B7F6 (ops to 0x11); op 4 keeps the kind at +0xA, and the
          * picker (0x230D4) reads 0x201CCFC[kind], 30 kinds. */
         reactions: { setups: 0x0200d34c, head: 8, lengths: 0x1b7f6, ops: 0x12, strike: 0xa, table: 0x0201ccfc, kinds: 30 },
+        /* The move script's op lengths, by the handlers 0x1AD5C runs
+         * (table 0x1B910); js/fighterhands.js. */
+        script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 7, 4, 5, 6],
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };

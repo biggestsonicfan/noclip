@@ -85,6 +85,7 @@ import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables } from './fvdebris.js';
 import { commandMotions } from './moves.js';
+import { handModels, handsAt } from './fighterhands.js';
 
 /* The record's fields. Fighting Vipers keeps the texture set at +0x20 and
  * names its own (`rig.fighters.texSet`). */
@@ -1351,6 +1352,8 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   shoulder pad's (left, right); `hair`, Picky's hair's swing; `chest`,
  *   for a broken chest that bounces, is the model the spring picks; `hips`,
  *   for a fighter koshi_unit_change names, is the hips' model this frame;
+ *   `hands`, [slot, model] for the hands the motion's script shapes
+ *   (js/fighterhands.js), which go to the other side when mirrored;
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
@@ -1379,7 +1382,8 @@ export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = f
     const swung = (body.extras ?? []).map((e) => swungExtra(e, swings, pose, body.offsets, hair));
     const extras = swung.map((e) => viewerMatrix(placeExtra(pose[e.slot], e)));
     const pads = swung.some((e) => e.pad !== undefined) ? PAD_SIDES.map((_, k) => swung.find((e) => e.pad === k)?.swing ?? 0) : null;
-    return { matrices, origins, extras, pose, skirt: swings, pads, hair, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
+    const hands = handsAt(handModels(rom, body, motion, mirrored), frame);
+    return { matrices, origins, extras, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
 }
 
 /*

@@ -1172,8 +1172,22 @@ from a stance has flag 21 up when it catches (FV's seven that set it do
 so from frame 40 on, for after the throw), so it is the thrower's mirror
 alone: the explorer's "mirrored" switch mirrors the fighter, and with it a
 thrown opponent. Any other opponent's bit is fight state, and stays clear.
-Not modelled: a mirrored fighter's held chest, head and pelvis angles, and
-its parts' models, which stay on their own side.
+
+The mirror stops at the sampled frame. The held angles (setup `0x26FAC`
+latches the type-1 float objects into the `0x29724` entries, `+0x140` on)
+are read raw by the aim code at `0x29118`, which has no bit-6 test, so a
+mirrored fighter holds its chest, head and pelvis as the motion gives them,
+as `heldAngles` does. Only the chest twist `+0xBE6` is negated under the
+mirror (`0x29188`, `0x291C4`, `0x29204`), and the explorer has no twist.
+The face target (`+0xB0C`, written at `0x28600`, the opponent's head at
+`0x286A0`) is not mirrored either. The part models keep their slots: each
+pair of left and right parts is a mirror image across the part's own
+sideways axis (x for objects 0, 12 and 15, y for 2, z for the rest), checked
+to 0.001 for Akira, Jacky, Sarah, Kage, Jane, Grace, Honey and Tokio, save
+Jane's forearms (4 and 7, 0.17 and 0.28 apart) and Sarah's and Honey's feet
+(0.03). The swapped, reflected matrices equal the unmirrored ones reflected
+(diag(1, 1, -1)) exactly, so the mirrored fighter is the unmirrored one in a
+mirror; the one thing a side changes is which hand a shape goes to (below).
 
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
@@ -1200,6 +1214,44 @@ is low, and the category 5 entry the pickers index at `0x28`.
 While it waits for the blow, the opponent plays its stance, slot 0 of its
 action table (record `+0x14` in both games: VF2's action_init puts it at
 player `+0x1A0` at `0x13F1C`, 84 ids, as FV's does with 55).
+
+### The hands (`js/fighterhands.js`)
+
+Both games shape a fighter's hands from the move script: op 18 is seven
+bytes, `[18, frame u16, hand, shape, end u16]`, run once the motion frame
+(`+0x1AA`) reaches its frame. The script follows the setup ops (op 0 ends
+the setup on itself, op 8 just past it); its op lengths are `rig.script`
+(VF2 interpreter `0x1AD5C`, table `0x1B910`; FV `0x1C24C`, `0x1D028`).
+Virtua Fighter 2 has op 18 in 390 of 1359 motions (shapes 0, 3, 7, 9, 15,
+23, 31), Fighting Vipers in 383 of 1054 (shapes 0-2).
+
+Virtua Fighter 2 eases (`0x1B2F4`). Each hand has six bytes, `+0x6C4` hand 0
+and `+0x6CA` hand 1: count, target, the shape as 8.8, step. With n = end -
+frame > 0 the op sets n + 1 steps of trunc(((shape << 8) - now) / (n + 1));
+otherwise it sets the shape outright with one step left, keeping the old
+step. `0x1B4E8` then steps every hand with steps left, in the same frame.
+Its `be` at `0x1B500` compares against a literal 0 and never branches, so
+an ease ends short (23 to 31 lands on 30) and an outright set still adds the
+stale step; the explorer does the same. When record `+0x3C` (player
+`+0x67C`, `0x13FF4`) is set, the draw (`0x1907C`) asks `0x19E34` for slots
+5 and 8: slot `r5` (5, or 8 when mirrored) takes hand 1's shape (`+0x6CD`)
+and the other hand 0's (`+0x6C7`), & 31, as an index into its table, slot
+5's at `+0`, slot 8's at `+0x180`.
+
+Fighting Vipers sets the model outright (`0x1C718`): `0x640EBF4[record]`
+holds four s16 models per hand, hand * 4 + shape, and the op writes it over
+the part list's (`+0x40`) slot 5 + 3 * hand, unless it is 0. A mirrored
+fighter's hand is turned first (1 to 0, else 1). Shape 0 is the part list's
+own model. FV keeps the eased picker (`0x1AC80`), but nothing writes the
+`+0x6AC` it reads.
+
+So the mirror moves shapes, not models: each slot keeps its own table, and
+the two tables are mirror images (every pair checked). A hand the motion
+before shaped keeps that shape into the next, which is fight state: the
+explorer starts each hand a motion names on the first shape it names, and
+leaves the others as the part list has them. Most motions shape both hands
+alike; VF2 Akira 3, 5, 25 or FV Grace 579, 776 do not, and show the swap.
+The throws (VF2 15, FV 31 and 33) shape them alike.
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
