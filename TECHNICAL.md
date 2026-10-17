@@ -889,6 +889,7 @@ ring's centre:
   - Headless Chrome, stage slot 11 (Mirror) with the switch on, the camera
     framed from four directions: pitch `0xE000` tilts the bubble's up axis
     19.69°, `0xF7F5` 21.79°, `0x0BE0` 1.04°, level 0°. No page errors.
+  - The lean: MAME's geometrizer matrix for the bubble (the `0x0B` matrix write before its object in buffer RAM) is a turn about view x by pitch − tilt, both looking down (pitch −3.43°, tilt −22.29°: 18.86°) and up (7.88°, −0.49°: 8.37°), and the explorer's view matrix gives the same (18.85° at −3.43°, 8.46° at 7.97°), so `angX` turns the way `0x36006C6C` does.
 - **stone flies**, the stones (`0x311B8`): below.
 
 - The stones (kind 5): `0x31040` draws the u16 at `0x70CBC`, model `0xEE1`,
