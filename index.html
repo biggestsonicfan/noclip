@@ -420,6 +420,14 @@
         <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
         <label class="check" id="char-p2-field" hidden><input type="checkbox" id="char-p2"> <span data-i18n="char.p2">P2 colours</span></label>
       </div>
+      <div class="field" id="char-rival-opts" hidden>
+        <label>Opponent</label>
+        <div class="row">
+          <select id="char-rival-who" title="Who stands opposite"></select>
+          <select id="char-rival-plays" title="What the opponent plays"></select>
+        </div>
+        <div class="meta" id="char-rival-note"></div>
+      </div>
       <div class="field" id="armour-field" hidden>
         <label data-i18n="f.armour">Armour</label>
         <div class="row">
@@ -490,9 +498,11 @@
         kept. The pose is solved on one standard rig for everyone
         (<code>0x296A0</code>) and the parts are then placed along the
         fighter's own skeleton, as the board draws them. The
-        <em>opponent</em> (off by default) is the same fighter on the same
-        motion, standing where a round starts the other, ahead of the
-        fighter. <em>Behind</em> stands it at the fighter's back instead,
+        <em>opponent</em> (off by default) stands where a round starts the
+        other, ahead of the fighter: the same fighter unless picked, playing
+        the same motion, or the hit, counter, guard or knock-down motion the
+        game gives the one the fighter's strike lands on (from the frame it
+        lands), or the thrown one's with a throw. <em>Behind</em> stands it at the fighter's back instead,
         where it is once the fight has turned a fighter round: a motion does
         not say which, so turning motions and back-turned ones want it
         there. Each head then turns
@@ -508,7 +518,8 @@
         everyone (<code>0x2C194</code>), then the parts placed along the
         fighter's own skeleton. The roster ends in Sonic, drawn at 0.56 of
         the motion's height (B.M. at 1.1), two untextured dummies and Jane in
-        other clothes. With the <em>opponent</em> on, each head
+        other clothes. The <em>opponent</em> can play the reaction to the
+        fighter's move, as in Virtua Fighter 2. With it on, each head
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
       </div>

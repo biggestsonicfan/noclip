@@ -50,8 +50,9 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial, moveFlags,
 } from './vf2fighters.js';
+import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
@@ -101,12 +102,17 @@ const state = {
     bodies: null,
     motionRanks: null,
     travel: false,
-    /* Virtua Fighter 2: a second fighter, the same one playing the same
-     * motion, standing where a round starts the other, for the heads to turn
-     * toward. Off unless asked for: the game looks at the other fighter only
-     * when fight state allows (see poseBout), and the explorer looks on every
-     * frame, so with it on a head can turn where the game's doesn't. */
+    /* Virtua Fighter 2 and Fighting Vipers: a second fighter, standing where
+     * a round starts the other, for the heads to turn toward and for the
+     * fighter's moves to land on. Off unless asked for: the game looks at the
+     * other fighter only when fight state allows (see poseBout), and the
+     * explorer looks on every frame, so with it on a head can turn where the
+     * game's doesn't. */
     opponent: false,
+    /* Who it is (a roster index; null for the fighter itself) and what it
+     * plays: a REACTIONS key, 'same' for the fighter's own motion. */
+    opponentChar: null,
+    opponentPlays: 'same',
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
@@ -3421,10 +3427,10 @@ function colourFighter(body) {
     return body.texSet !== undefined ? body.index : first == null ? null : modelFighter(first);
 }
 
-/* The opponent: the same fighter in the look its own P2 switch asks for,
- * wearing the same armour. */
+/* The opponent: the fighter the panel picks (the same one unless asked) in
+ * the look its own P2 switch asks for, wearing the same armour. */
 function rivalOf(main) {
-    const body = state.bodies ? shownBody(state.charIndex, state.opponentP2) : { ...main };
+    const body = state.bodies ? shownBody(state.opponentChar ?? state.charIndex, state.opponentP2) : { ...main };
     return {
         body: body === main ? { ...main } : body,
         parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
@@ -3609,19 +3615,68 @@ function bouncedDraws(body, posed, m) {
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
-    const at = opponentMatrix({ behind: state.opponentBehind });
+    const own = rivalPlays(m);
+    const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     const [mine, theirs] = poseBout(state.rom, [
         { body, motion: m.decoded, frame: m.frame },
-        { body: m.rival.body, motion: m.decoded, frame: m.frame },
+        { body: m.rival.body, motion: own.decoded, frame: own.frame },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
-    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed, null, m.rival.material);
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, { ...m, ...own }), placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
-        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, m.flash);
-    placeSkin(m.rival, placed, m.flash);
-    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place, m.flash);
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, own.flash);
+    placeSkin(m.rival, placed, own.flash);
+    placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     return mine;
+}
+
+/* What the opponent plays on the fighter's frame: the fighter's motion, or
+ * the reaction the panel asks for (js/reactions.js), which waits in the
+ * opponent's stance until the move lands, then plays from its frame 1 and
+ * holds its last. A throw's starts with the throw, on the thrower's own
+ * place and facing (opponentMatrix's `thrown`). */
+function rivalPlays(m) {
+    const R = rivalReaction(m);
+    if (!R) return { decoded: m.decoded, frame: m.frame, flash: m.flash };
+    if (R.motion && m.frame >= R.lands) {
+        const frame = Math.min(m.frame - R.lands + 1, R.motion.frames);
+        const thrown = R.attack.victim != null;
+        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown };
+    }
+    const wait = R.stance ?? R.motion ?? m.decoded;
+    return { decoded: wait, frame: wait === R.stance ? 1 + ((m.frame - 1) % wait.frames) : 1, flash: null };
+}
+
+/* The reaction to the motion on show, read once per motion and choice. */
+function rivalReaction(m) {
+    const reaction = REACTIONS.find((r) => r.key === state.opponentPlays);
+    if (reaction?.category == null || !m.decoded || !state.rom.game.rig?.reactions) return null;
+    const key = `${m.decoded.id}:${reaction.key}:${m.rival.body.index}`;
+    if (m.rival.reactionKey !== key) {
+        m.rival.reactionKey = key;
+        m.rival.reaction = readReaction(m, reaction);
+        $('#char-rival-note').textContent = describeReaction(m.rival.reaction, reaction);
+    }
+    return m.rival.reaction;
+}
+
+function readReaction(m, reaction) {
+    const attack = attackOf(state.rom, m.decoded.id);
+    const id = reactionMotion(state.rom, attack, reaction);
+    return {
+        attack, id,
+        motion: id == null ? null : m.list[id] ?? null,
+        lands: landingFrame(attack, m.decoded.frames, moveFlags(state.rom, m.decoded)),
+        stance: m.list[m.rival.body.start] ?? null,
+    };
+}
+
+function describeReaction(R, reaction) {
+    if (!R.attack) return 'This motion neither strikes nor throws: the opponent stands.';
+    if (R.attack.victim != null) return `A throw: the opponent plays motion ${R.id}, the one thrown, with it, on the fighter's place.`;
+    if (!R.motion) return `Kind ${R.attack.kind} has no ${reaction.label} motion: the opponent stands.`;
+    return `Kind ${R.attack.kind} blow: ${reaction.label} motion ${R.id} from the fighter's frame ${R.lands}.`;
 }
 
 /* A fighter's sway chains, in a game whose profile names its own table
@@ -4059,6 +4114,7 @@ function renderCharacterSelect() {
             sel.appendChild(opt);
         }
         sel.value = String(state.charIndex);
+        renderRivalSelect();
         return;
     }
     /* The second half is the P2 colours switch's. */
@@ -4069,6 +4125,32 @@ function renderCharacterSelect() {
         sel.appendChild(opt);
     }
     sel.value = String(state.charIndex % P2_HALF);
+}
+
+/* The opponent's roster: the fighter itself first, then everyone. A pick
+ * the roster does not have (another game's) goes back to the fighter. */
+function renderRivalSelect() {
+    const sel = $('#char-rival-who');
+    sel.innerHTML = '';
+    sel.appendChild(Object.assign(el('option'), { value: '', textContent: 'the same fighter' }));
+    for (const b of state.bodies) sel.appendChild(Object.assign(el('option'), { value: String(b.index), textContent: b.name }));
+    if (!state.bodies.some((b) => b.index === state.opponentChar)) state.opponentChar = null;
+    sel.value = state.opponentChar == null ? '' : String(state.opponentChar);
+}
+
+/* What the opponent can play: the reactions only where the game's profile
+ * names its tables. */
+function renderRivalPlays() {
+    const sel = $('#char-rival-plays');
+    const reactions = Boolean(state.rom.game.rig?.reactions);
+    sel.innerHTML = '';
+    for (const r of REACTIONS.filter((r) => reactions || r.category == null)) {
+        sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
+    }
+    if (!reactions) state.opponentPlays = 'same';
+    sel.value = state.opponentPlays;
+    sel.hidden = !reactions;
+    $('#char-rival-note').textContent = '';
 }
 
 /* The roster entry for fighter `base` in the look the P2 switch asks for:
@@ -4905,6 +4987,7 @@ function wireOptions() {
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
         $('#char-behind-field').hidden = !state.opponent;
+        $('#char-rival-opts').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
         renderAnimPanel();
@@ -4916,6 +4999,15 @@ function wireOptions() {
     $('#char-rival-p2').addEventListener('change', (e) => {
         state.opponentP2 = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: true });
+    });
+    $('#char-rival-who').addEventListener('change', (e) => {
+        state.opponentChar = e.target.value === '' ? null : +e.target.value;
+        if (state.opponent) rebuildBody({ keepCamera: true });
+    });
+    $('#char-rival-plays').addEventListener('change', (e) => {
+        state.opponentPlays = e.target.value;
+        if (state.opponentPlays === 'same') $('#char-rival-note').textContent = '';
+        poseRig();
     });
     $('#char-p2').addEventListener('change', (e) => {
         state.p2Look = e.target.checked;
@@ -5277,10 +5369,12 @@ function applyGameFeatures() {
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
-    /* The opponent is VF2's alone. */
+    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
     $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-rival-opts').hidden = !rival || !state.opponent;
+    renderRivalPlays();
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;

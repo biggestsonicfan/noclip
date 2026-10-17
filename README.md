@@ -144,7 +144,8 @@ for what each routine draws and what is left out.
 
 The Animation tab poses the fighters: Fighting Vipers' pose and draw routines
 are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
-motions. The stages carry their names, from the sound test's song list, and
+motions, with the same opponent, which can play the game's reaction to the
+fighter's strike or throw. The stages carry their names, from the sound test's song list, and
 play their music and stage sounds on the emulated sound board.
 
 ## Daytona USA
@@ -508,13 +509,38 @@ the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
 crouches as the game crouches it, all checked against the board. An opponent
-(off by default) can stand where a round starts the other fighter: the same
-fighter on the same motion, with each head turning toward the other's on every
-frame. The game turns the head only when fight state allows, which the explorer
+(off by default) can stand where a round starts the other fighter, with each
+head turning toward the other's on every frame. It is the same fighter unless
+the panel picks another, and it plays the fighter's motion or the **reaction**
+the game would give it: the hit, counter hit, guard or knock-down motion the
+fighter's strike calls for, from the frame the strike lands, or the motion of
+the one thrown with a throw ([The opponent's reaction](TECHNICAL.md#the-opponents-reaction-jsreactionsjs)). The game turns the head only when fight state allows, which the explorer
 does not track, so with the opponent on, a head can be wrong. The chest's
 twist toward the opponent is left out: the move record says when it may run,
 but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
 to the face target `+0xB0C`, which the fight writes.
+
+### What each game has
+
+The games share one explorer, but not every feature reaches every game: some
+need a table found in that game's ROM first. Where they stand:
+
+| | Sonic the Fighters | Fighting Vipers | Virtua Fighter 2 | Dead or Alive |
+|---|---|---|---|---|
+| Opponent, picked from the roster | | yes | yes | |
+| Opponent plays the reaction | | yes | yes | |
+| Moves and strings by input | yes | moves | | |
+| Fighter's own motions grouped | yes | yes | yes | |
+| Sway chains | yes | yes | | |
+| Hit flash | | yes | | |
+| Afterimages | yes | | | |
+| Stage sounds | | yes | yes | |
+| Cells tab | yes | | | yes |
+
+The rest are the next ones to do: an opponent for Sonic the Fighters (its
+characters are posed through a rig of their own) and Dead or Alive (whose
+fight code already runs both players), Virtua Fighter 2's sway chains, hit
+flash and moves, and stage sounds for Sonic the Fighters and Dead or Alive.
 
 ## Dead or Alive
 
