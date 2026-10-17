@@ -696,9 +696,10 @@ It wants Chrome or Edge (`$CHROME` names one) and ffmpeg with libx264. The ROM
 set goes to the page through its file input and nowhere else; the script's own
 server refuses a `.zip` like `serve.mjs` does. The clips are pictures of what
 the explorer draws, not the ROM's bytes: nothing in them loads back into it.
-Sonic The Fighters and the House of the Dead prototype have clips so far;
-Daytona USA, the finished House of the Dead and Fighting Vipers have shot tables
-still to be written on a machine with those sets.
+Every game has clips, the experimental ones too. Virtua Cop's ride its rail
+(the script's `rail(n)`, off the stage's `railPath`), since that is where the
+game puts its camera. Re-record them all when the explorer draws something
+differently, so the reel shows what a set turns into today.
 
 ## Reporting something wrong
 
