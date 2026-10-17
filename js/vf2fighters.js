@@ -1289,6 +1289,47 @@ function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh })
     return { chest, hips, spring: live.spring };
 }
 
+/*
+ * A mirrored fighter (player +0 bit 6) plays every motion the other way round.
+ * Once a frame is sampled and its twelve angle objects rounded, the pose code
+ * (VF2 0x28AF4, FV 0x2B778, the same instructions) swaps the left and right
+ * objects and reflects them, each word in the sixty-word frame by index:
+ * angles 13 and 14 negated, 15, 17, 27 and 29 taken from 0x8000; the pairs
+ * 0/3, 1/4, 7/10, 8/11, 21/24, 22/25, 30/33 and 31/34 swapped and negated,
+ * 2/5, 6/9, 23/26 and 32/35 swapped; float objects 12, 13 and 14 have X
+ * negated, 15/16 and 18/19 swap with X negated. Objects 6 and 17 stay.
+ * set_motion (VF2 0x1A1E4, FV 0x1B5A8) flips the bit when the motion before
+ * ends with move flag 21 set or the new one's id has bit 15; 0x184F0 (FV
+ * 0x18F14) keeps +0 bit 10 as bit 6 xor flag 21 every frame, the way the
+ * fighter will stand once its motion ends.
+ */
+const MIRROR_NEGATE = [13, 14], MIRROR_FROM_HALF = [15, 17, 27, 29];
+const MIRROR_SWAP_NEGATE = [[0, 3], [1, 4], [7, 10], [8, 11], [21, 24], [22, 25], [30, 33], [31, 34]];
+const MIRROR_SWAP = [[2, 5], [6, 9], [23, 26], [32, 35]];
+const MIRROR_TARGET_X = [0, 1, 2], MIRROR_TARGET_PAIRS = [[3, 4], [6, 7]];
+const HALF_TURN = 0x8000;
+
+function mirrorSample({ angles, targets, targetUsed }) {
+    const a = Uint16Array.from(angles), t = Float32Array.from(targets), used = Uint8Array.from(targetUsed);
+    for (const i of MIRROR_NEGATE) a[i] = -a[i];
+    for (const i of MIRROR_FROM_HALF) a[i] = HALF_TURN - a[i];
+    for (const [i, j] of MIRROR_SWAP_NEGATE) [a[i], a[j]] = [-a[j], -a[i]];
+    for (const [i, j] of MIRROR_SWAP) [a[i], a[j]] = [a[j], a[i]];
+    for (const j of MIRROR_TARGET_X) t[j * 3] = -t[j * 3];
+    for (const [i, j] of MIRROR_TARGET_PAIRS) {
+        for (let k = 0; k < 3; k++) [t[i * 3 + k], t[j * 3 + k]] = [t[j * 3 + k], t[i * 3 + k]];
+        [t[i * 3], t[j * 3]] = [-t[i * 3], -t[j * 3]];
+        [used[i], used[j]] = [used[j], used[i]];
+    }
+    return { angles: a, targets: t, targetUsed: used };
+}
+
+function sampleFor(rom, motion, frame, mirrored) {
+    if (!motion) return REST;
+    const sample = sampleMotion(rom, motion, frame);
+    return mirrored ? mirrorSample(sample) : sample;
+}
+
 /**
  * Pose a fighter on one frame of a motion, in the viewer's frame. The body
  * position is the motion's, step and all: the hand and foot targets are in the
@@ -1300,9 +1341,10 @@ function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh })
  * own the head follows the motion's own target; poseBout gives it an opponent
  * to look at. The chest does not twist.
  *
- * @param {{faceTarget?: number[]}} [opts]  `faceTarget` takes the place of
- *   the motion's (float object 2, in the targets' space), as the fight writes
- *   the other fighter's head over it at player +0xB0C.
+ * @param {{faceTarget?: number[], mirrored?: boolean}} [opts]  `faceTarget`
+ *   takes the place of the motion's (float object 2, in the targets' space),
+ *   as the fight writes the other fighter's head over it at player +0xB0C;
+ *   `mirrored` plays the motion the other way round (mirrorSample).
  * @returns {{matrices: number[][], origins: number[][], extras: number[][]}}
  *   `extras` places body.extras (the pads and skirt), one each; `skirt`, for
  *   a fighter with one, is each panel's swing this frame, and `pads` each
@@ -1312,10 +1354,10 @@ function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh })
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
-export function poseFighter(rom, body, motion, frame, { faceTarget } = {}) {
+export function poseFighter(rom, body, motion, frame, { faceTarget, mirrored = false } = {}) {
     rom.vf2Rig ??= standardRig(rom);
     const live = liveFor(body);
-    const sample = motion ? sampleMotion(rom, motion, frame) : REST;
+    const sample = sampleFor(rom, motion, frame, mirrored);
     /* Playback moves on a frame, or starts the next motion or loop at 1. */
     const stepped = live.motion !== null && (frame === live.frame + 1 || frame === 1);
     const fresh = motion !== live.motion || frame !== live.frame;
@@ -1418,8 +1460,8 @@ function headSeenFrom(other, across) {
  */
 export function poseBout(rom, [first, second], place = opponentMatrix()) {
     const one = poseFighter(rom, first.body, first.motion, first.frame,
-        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)) });
+        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored });
     const two = poseFighter(rom, second.body, second.motion, second.frame,
-        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)) });
+        { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored });
     return [one, two];
 }

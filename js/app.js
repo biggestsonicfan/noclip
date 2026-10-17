@@ -117,6 +117,9 @@ const state = {
     opponentBehind: false,
     /* The opponent in player 2's look, whatever the fighter wears. */
     opponentP2: false,
+    /* VF2 and FV: the fighter mirrored (player +0 bit 6), as a fight leaves it
+     * after a move that ends with move flag 21; see mirrorSample. */
+    mirrored: false,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
@@ -3615,12 +3618,18 @@ function bouncedDraws(body, posed, m) {
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
+    const mirrored = state.mirrored && state.rom.game.rig?.kind === 'vf2';
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
+    /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
+     * and 0x18C58, FV 0x130D4 and 0x19C70): it stands as the thrower will once
+     * the motion it is in ends. Here that is the stance, which has no flag 21,
+     * so the one thrown is mirrored with the fighter. Otherwise the opponent's
+     * own bit is fight state, and left clear. */
     const [mine, theirs] = poseBout(state.rom, [
-        { body, motion: m.decoded, frame: m.frame },
-        { body: m.rival.body, motion: own.decoded, frame: own.frame },
+        { body, motion: m.decoded, frame: m.frame, mirrored },
+        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown) },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
@@ -4985,6 +4994,10 @@ function wireOptions() {
         state.travel = e.target.checked;
         poseRig();
     });
+    $('#char-mirror').addEventListener('change', (e) => {
+        state.mirrored = e.target.checked;
+        poseRig();
+    });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
         $('#char-behind-field').hidden = !state.opponent;
@@ -5373,6 +5386,7 @@ function applyGameFeatures() {
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
+    $('#char-mirror-field').hidden = !rival;
     $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();

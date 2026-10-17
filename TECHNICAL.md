@@ -1155,6 +1155,26 @@ thrown opponent on the fighter's own place and facing (`opponentMatrix`,
 `thrown`). Fighting Vipers has 394 strikes and 111 throws, Virtua
 Fighter 2 569 and 112.
 
+Sharing a facing is not all: the one thrown takes the thrower's mirror too.
+Player `+0` bit 6 is not a half turn but a mirror: once a frame is sampled,
+the pose code (VF2 `0x28AF4`, FV `0x2B778`, the same instructions) swaps
+the left and right objects and reflects them (`mirrorSample` in
+js/vf2fighters.js has the list). set_motion flips the bit when the motion
+before ends with move flag 21 set (`0x1B65C`) or the new id has bit 15
+(`0x1B66C`), and `0x184F0` (FV `0x18F14`) keeps `+0` bit 10 as bit 6 xor
+flag 21 on every frame: the way the fighter will stand once its motion ends.
+Each throw start writes the one thrown's bit 6 from the thrower's: bit 10
+(VF2 `0x18C58`, FV `0x19C70`), or bit 6 xor flag 21 (VF2 `0x1461C`, FV
+`0x130D4`). The victim command's bit 15 follows the throw id's, so the two
+stay in step through their set_motions, and the thrown one's own flag 21 is
+cleared first. So both are drawn on one facing and the same side. No throw
+from a stance has flag 21 up when it catches (FV's seven that set it do
+so from frame 40 on, for after the throw), so it is the thrower's mirror
+alone: the explorer's "mirrored" switch mirrors the fighter, and with it a
+thrown opponent. Any other opponent's bit is fight state, and stays clear.
+Not modelled: a mirrored fighter's held chest, head and pelvis angles, and
+its parts' models, which stay on their own side.
+
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
 second frame. The explorer plays the reaction from the first such frame

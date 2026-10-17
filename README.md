@@ -529,6 +529,7 @@ need a table found in that game's ROM first. Where they stand:
 |---|---|---|---|---|
 | Opponent, picked from the roster | | yes | yes | |
 | Opponent plays the reaction | | yes | yes | |
+| Mirrored fighter, and the one it throws | | yes | yes | |
 | Moves and strings by input | yes | moves | | |
 | Fighter's own motions grouped | yes | yes | yes | |
 | Sway chains | yes | yes | | |
