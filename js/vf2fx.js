@@ -231,18 +231,25 @@ function burst(rom, ok) {
 
 /*
  * The mirror stage's bubbles (0x30CA4, kind 4): 0x711BC[(c >> 2) & 15], turned
- * to the camera's yaw (and tilted by its pitch over 16, left out here), at a
- * point taken every 64 frames from a fighter's part: (0.15, 0, -0.03) in that
- * part's frame (+0x2C4, set at 0x2EBE8). The stand-in's part is a unit up at
- * the ring's centre.
+ * to the camera's yaw and then about x by its pitch over 16, at a point taken
+ * every 64 frames from a fighter's part: (0.15, 0, -0.03) in that part's frame
+ * (+0x2C4, set at 0x2EBE8). The stand-in's part is a unit up at the ring's
+ * centre.
+ *
+ * The tilt is 0x10000 - ((pitch * 0x4000) >> 18) (0x30DC0..0x30DE4), with the
+ * pitch (0x515424) read by ldos, which zero-extends: so -pitch / 16 while the
+ * camera looks up, and -(0x10000 + pitch) / 16, that less a sixteenth of a
+ * turn, while it looks down, as it mostly does.
  */
 const BUBBLES = { frames: 0x711bc, place: [0.15, 1, -0.03] };
 
+export const bubbleTilt = (pitch) => (0x10000 - ((((pitch & 0xffff) * 0x4000) >>> 18) & 0xffff)) & 0xffff;
+
 function bubbles(rom, ok) {
     const frames = u16s(rom, BUBBLES.frames, 16);
-    const ops = (h) => [at(...BUBBLES.place), angY(h)];
-    return [liveDraw(ok, frames.find(ok) ?? EMPTY, ops(0), (f, cam) => (
-        { model: frames[(f >> 2) & 15], ops: ops(cam.heading) }))];
+    const ops = (h, p) => [at(...BUBBLES.place), angY(h), angX(bubbleTilt(p))];
+    return [liveDraw(ok, frames.find(ok) ?? EMPTY, ops(0, 0), (f, cam) => (
+        { model: frames[(f >> 2) & 15], ops: ops(cam.heading, cam.pitch ?? 0) }))];
 }
 
 /*

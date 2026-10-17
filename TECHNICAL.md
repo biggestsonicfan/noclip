@@ -870,9 +870,25 @@ ring's centre:
   `0x70E3C[n]` (the same list 32 behind) at the fighter's waist (`+0x1F4`)
   less 1.5 in y. The stand-in: every 10 s from 1 s, at the origin.
 - **bubbles**, the mirror stage (`0x30CA4`, kind 4): `0x711BC[(c >> 2) & 15]`
-  turned to the yaw (and tilted by pitch / 16, left out), at a point re-taken
-  every 64 frames from a fighter's part, (0.15, 0, -0.03) in its frame. Not
-  drawn while `0x50004C` is 2. The stand-in's part is at (0, 1, 0).
+  turned to the yaw, then about x by the camera's pitch over 16, at a point
+  re-taken every 64 frames from a fighter's part, (0.15, 0, -0.03) in its
+  frame. Not drawn while `0x50004C` is 2. The stand-in's part is at (0, 1, 0).
+  The turns are the camera record's (`g13` is `0x515400`): `+0x26` by
+  `0x36806D6D` unless 0, then `0x10000 - ((+0x24 × 0x4000) >> 18)` by
+  `0x36006C6C` (`0x30DC0`..`0x30E40`). Both are read by `ldos`, which
+  zero-extends (`ldis` is the signed load), so the tilt is
+  `-((pitch & 0xFFFF) >> 4)`: −pitch/16 while the camera looks up, and that
+  less a sixteenth of a turn while it looks down (pitch negative), which is
+  most of a fight. The explorer takes the pitch from its own camera
+  (`cameraOnCourse`, `asin` of the view's y as a board angle) and draws the
+  same turns (`bubbleTilt`, `js/vf2fx.js`).
+  - MAME, attract with `0x500064` held at 10 once the demo picks its stage,
+    a breakpoint at `0x30E18` logging `0x515424` and the tilt: 2929 draws,
+    pitch −8081 to 2691 (1369 up, 1560 down), every tilt equal to
+    `bubbleTilt`'s (e.g. pitch `0x2E0` → `0xFFD2`, `0xFD91` → `0xF027`).
+  - Headless Chrome, stage slot 11 (Mirror) with the switch on, the camera
+    framed from four directions: pitch `0xE000` tilts the bubble's up axis
+    19.69°, `0xF7F5` 21.79°, `0x0BE0` 1.04°, level 0°. No page errors.
 - **stone flies**, the stones (`0x311B8`): below.
 
 - The stones (kind 5): `0x31040` draws the u16 at `0x70CBC`, model `0xEE1`,

@@ -2059,7 +2059,9 @@ function stepBillboards() {
 /*
  * The camera in the board's frame: where it stands (the decoder's Z negated
  * back) and the heading it faces as a board angle — the one a model turned by
- * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's.
+ * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's —
+ * and its pitch, the board angle up from level (negative looking down), as
+ * VF2's camera keeps it at 0x515424.
  * `view(x, y, z)` puts a board point into the camera's space the way the
  * board's view matrix does: x right, y up, z ahead.
  */
@@ -2079,6 +2081,7 @@ function cameraOnCourse() {
     const ty = Math.tan((camera.fov * Math.PI) / 360);
     return {
         x: LIVE_POS.x, y: LIVE_POS.y, z: -LIVE_POS.z, heading: boardAngle(LIVE_FWD.x, -LIVE_FWD.z),
+        pitch: Math.round((Math.asin(Math.max(-1, Math.min(1, LIVE_FWD.y))) * 65536) / (2 * Math.PI)) & 0xffff,
         /* The screen's edges as x/z and y/z in view space. */
         lens: { x: ty * camera.aspect, y: ty },
         view: (x, y, z) => {
