@@ -2050,7 +2050,30 @@ from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
   `0x8000` for the first slot and `0x4000` for the second, whatever the
   fighter faces, scale 1, model `+0x1E`, then model `+0x18`, which nothing
   sets, so 0; pop.
-- **The fall (`0x2CF24`).** vy −= 0.005222 (`0x3BAB1F2D`), vx and vz × 0.98,
+- **The push out of the bodies (`0x2CEA0`, `epc_oidasi`).** First, every
+  frame, for every piece with a model, flying or resting, unless either
+  player has `+0x7D6` bit 0 (set by the finishing blow, `0x264FC`, cleared by
+  `action_init`, `0x129F8`): TGP op `0x77` (`0x3B807777`) gets the piece's
+  x, y, z and radius (`+0x18`) and returns two sums, and x += 0.16 × the
+  first, z += 0.16 × the second (`0x3E23D70A`); y is left alone. The copro
+  (FV's own program, `0x20936`; cpres1's `0x77` is another routine) tests
+  player 1's 32 body balls (`0x1403E80`, radii `0x30600`) and, only if none
+  touched, player 2's (`0x1407E80`, `0x30700`). A body whose entry 13 is over
+  1.4 (`0x3FB33333`) from the piece is skipped. For each entry with a radius,
+  d = |ball − piece| and s = its radius + the piece's; within d ≤ s it adds
+  (ball − piece) × (1 − q) to the sums, in x and z, with q the copro's d / s:
+  RECIPS s, refined three times as F4 = F11 − s·F4, with F11 the 3.0 the
+  length routine (`0x20281`, an inverse square root) leaves there instead of
+  2.0. So q comes out near 2d / s: a piece inside s/2 of a ball is drawn in
+  towards it, one between s/2 and s pushed out, and none past s is touched.
+  The balls are `calc_unit_mat`'s: `set_coli_ball_data` (`0x18304`) sends
+  each slot's list (the shadows' lists, `0x640E89C`, counts `0x640E914`)
+  through op `0x39`, the ball's point (`0x640E4FC` + 16k) on the slot's
+  matrix, into table entry `0x182E4[k]`; `send_coli_ball_R` (`0x1B90`, at
+  boot) gives entry i the radius of ball `0x292AC[i]`, so each entry holds
+  one ball and its own radius, the same for every character. Entry 13 is
+  ball 3, the hips (slot 9); entries 30 and 31 have radius 0.
+ (`0x3BAB1F2D`), vx and vz × 0.98,
   then the place moves by the speed. At or under the floor (`+0x40`, 0.5
   lower once out of the ring) the bounce is counted, the y step taken back,
   and vy = −vy × (0.2 + 0.2 / weight). Once |vy| ≤ 0.001 the piece rests
@@ -2076,8 +2099,29 @@ The explorer runs the effect as above (`launchEffect`, `stepEffect` and
 one mesh per effect slot swapping through the 54 frames' geometry
 (`placeEffects` in `js/app.js`).
 
-Not followed: the push out of both fighters' bodies (TGP `0x77`
-`Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
+The explorer runs the push before the fall (`pushOut` in `js/fvdebris.js`)
+against the bodies on screen: `readBodyBalls` reads the table once,
+`bodyBallsAt` places it on the fighter's pose as player 1 and on the
+opponent's, when it is shown, as player 2 (`noteDebrisBodies` in
+`js/app.js`), each frame's pose standing in for `calc_unit_mat`'s. The
+arithmetic is the copro's in single precision, RECIPS's seed table and the
+3.0 included; only the square root is taken exactly. The finishing blow
+never lands, so the push never stops. There is none in VF2, which has no
+armour to throw.
+
+Checked in node: a piece of radius 0.1 level with one ball of 0.148 moves
+−0.0027 at d 0.02, −0.0002 at 0.123, +0.020 at 0.2, +0.036 at 0.24 and not
+at all from 0.248 on, and a body 1.5 away is skipped. In headless Chrome
+(the motion held at the break, the push stepped against the same pieces
+with no bodies): Jane, motion 21, upper half, pieces 715 and 714 are moved
+0.003, 0.022 and 0.026 a frame over the first three frames, then never
+again; they land 0.06 and 0.09 further out than without it. Grace, motion
+360, lower half, with the opponent: her four pieces move up to 0.07 a frame
+over frames 1 to 5 and land 0.04 to 0.19 away from where they would have.
+Not checked against MAME, for the same reason as the shadows: attract never
+breaks armour.
+
+Not followed: the removal of a resting bit-3 piece once it
 is off screen (`0x316F0`) and the sound (flag bits 28 to
 31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their

@@ -49,7 +49,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
     trailScript, hitSparkScript, brokenSlots,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
@@ -63,7 +63,7 @@ import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
-import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
+import { createDebrisSim, launchDebris, stepDebris, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3662,9 +3662,10 @@ function poseFighterAndRival(body, m) {
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
     placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
     placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
-    placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
-    placeWallShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame, mirrored && Boolean(own.thrown), (p) => placedPose(at, p));
-    placeReflection(m.rival, m.rival.body, placedPose(at, theirs.pose));
+    m.rivalPose = placedPose(at, theirs.pose);
+    placeShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame);
+    placeWallShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame, mirrored && Boolean(own.thrown), (p) => placedPose(at, p));
+    placeReflection(m.rival, m.rival.body, m.rivalPose);
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
@@ -3784,7 +3785,9 @@ function placeBodyOsage(holder, pose, board, tick, place = null, flash = null) {
  * hit, and they fly on by board frames of their own, whether the motion plays
  * or not, with the flipbook effect a piece can become. A half put back whole
  * takes its pieces and effects back, and another fighter starts with none.
- * Only the fighter's own: the opponent's armour is whole.
+ * Only the fighter's own: the opponent's armour is whole. They are pushed out
+ * of the bodies on screen, the fighter's as player 1's and the opponent's,
+ * when it is shown, as player 2's.
  */
 const DEBRIS_CATCH_UP = 8;
 const HALVES = ['upper', 'lower'];
@@ -3810,6 +3813,8 @@ function syncDebris(m, body) {
         d.halves[half] = thrown.length > 0;
     }
     d.tables = tables;
+    d.balls ??= fighterBodyBalls(state.rom);
+    d.bodies ??= [];
     m.debris = d;
 }
 
@@ -3826,6 +3831,14 @@ function launchPendingDebris(m, pose) {
     d.start ??= performance.now() - (d.sim.frame * 1000) / GAME_HZ;
 }
 
+/* The body balls the pieces are pushed out of next: where the fighter's
+ * pose and the opponent's (m.rivalPose, poseFighterAndRival's) have them. */
+function noteDebrisBodies(m, pose) {
+    const d = m.debris;
+    if (!d?.balls || !pose) return;
+    d.bodies = [pose, m.rival ? m.rivalPose : null].map((p) => p && bodyBallsAt(d.balls, p));
+}
+
 /* Run the pieces on to the frame the clock is at; after a long gap (a held
  * view, another tab) they carry on from where they were. */
 function stepBodyDebris(now) {
@@ -3839,7 +3852,7 @@ function stepBodyDebris(now) {
     }
     const lit = pieceSetting(m);
     for (let i = 0; i < n; i++) {
-        stepDebris(d.sim);
+        stepDebris(d.sim, d.bodies);
         if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
     }
     placeDebris(m);
@@ -4317,6 +4330,7 @@ function poseBodyRig() {
     placeSkin(m, matrices, m.flash);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
     launchPendingDebris(m, pose.pose);
+    noteDebrisBodies(m, pose.pose);
     placeDebris(m);
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');

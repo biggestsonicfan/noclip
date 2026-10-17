@@ -3,8 +3,9 @@
  * A hit that breaks a slot throws that stage's pieces (0x640EDAC's records,
  * readArmourPieces) off it: 0x2D614 gives each a velocity from the hit,
  * 0x2D390 puts it in one of eight shared slots at the broken slot's point, and
- * 0x2CE68 moves it every frame (gravity, a bounce on its floor, the ring's
- * walls, a spin that settles on the record's target angles). 0x2E17C draws it.
+ * 0x2CE68 moves it every frame (out of the fighters' bodies, gravity, a bounce
+ * on its floor, the ring's walls, a spin that settles on the record's target
+ * angles). 0x2E17C draws it.
  * A piece 0x2D390 turns into the flipbook effect instead goes to one of two
  * effect slots (0x2D254), which 0x2D2F4 runs and 0x2E17C draws after them.
  *
@@ -213,13 +214,114 @@ function turn(s) {
     toward(2, false);
 }
 
-/** One board frame of 0x2CE68 for every piece in flight or at rest. The
- * push out of the fighters' bodies (TGP 0x77) is not followed. */
-export function stepDebris(sim) {
+/*
+ * 0x2CEA0 (epc_oidasi), the push out of the fighters' bodies. Every frame,
+ * before the fall, each piece sends TGP op 0x77 (copro 0x20936) its point and
+ * radius; the copro tests it against player 1's 32 body balls, then, if none
+ * touched, player 2's, and 0x2CEA0 adds 0.16 of the two sums it returns to
+ * x and z. The balls are calc_unit_mat's (0x18304 sends each slot's through
+ * op 0x39, the slot's matrix on the ball's point), table entry i holding ball
+ * 0x292AC[i] and its radius (0x1B90). A body further than 1.4 from entry 13
+ * (ball 3, slot 9) is skipped; otherwise each ball within d <= r + radius adds
+ * (ball - piece) * (1 - q), q the copro's d / (r + radius). Its reciprocal
+ * refines RECIPS three times against the 3.0 the length routine (0x20281)
+ * leaves in F11, not 2.0, so q comes out near 2d / (r + radius): a piece
+ * inside half that is drawn in, one beyond it pushed out.
+ */
+const PUSH = fromBits(0x3e23d70a), BODY_NEAR = fromBits(0x3fb33333), BODY_TEST = 13, BODY_BALLS = 32;
+const NEWTON = f(3);
+/* The SHARC's RECIPS seed by the mantissa's top seven bits (MAME's
+ * recips_mantissa_lookup), shifted down 15. */
+const RECIPS = [
+    255, 252, 248, 244, 240, 236, 232, 228, 224, 222, 218, 214, 212, 208, 204, 202, 198, 194, 192, 188, 186, 182, 180, 178,
+    174, 172, 168, 166, 164, 160, 158, 156, 152, 150, 148, 146, 142, 140, 138, 136, 134, 130, 128, 126, 124, 122, 120, 118,
+    116, 114, 112, 110, 108, 106, 104, 102, 100, 98, 96, 94, 92, 90, 88, 86, 84, 82, 80, 80, 78, 76, 74, 72, 70, 70, 68, 66,
+    64, 62, 62, 60, 58, 56, 56, 54, 52, 50, 50, 48, 46, 46, 44, 42, 40, 40, 38, 36, 36, 34, 32, 32, 30, 30, 28, 26, 26, 24,
+    24, 22, 20, 20, 18, 18, 16, 14, 14, 12, 12, 10, 10, 8, 8, 6, 6, 4, 4, 2, 2, 0,
+];
+
+function recips(x) {
+    const b = bitsOf(x), e = -(((b >>> 23) & 0xff) - 127) - 1;
+    if (e > 125 || e < -126) return fromBits(b & 0x80000000);
+    return fromBits((b & 0x80000000) | ((e + 127) << 23) | (RECIPS[(b & 0x7fffff) >> 16] << 15));
+}
+
+/** The body balls by table entry (0x292AC, `order`): each one's slot, point
+ * in that slot's frame and radius, or null for an entry no slot sends. `B` is
+ * the slots' lists (the profile's shadow `balls`). */
+export function readBodyBalls(rom, order, B, dataAt) {
+    const byte = (a) => { const r = dataAt(rom, a); return r.view.getUint8(r.off); };
+    const real = (a) => { const r = dataAt(rom, a); return r.view.getFloat32(r.off, true); };
+    const slotOf = new Map();
+    for (let s = 1; s < 16; s++) {
+        const n = byte(B.counts + s);
+        for (let k = 0; k < n; k++) slotOf.set(byte(B.lists + B.inline * (s - 1) + k) >> 2, s);
+    }
+    return Array.from({ length: BODY_BALLS }, (_, i) => {
+        const k = rom.mainCpuView.getUint8(order + i);
+        if (!slotOf.has(k)) return null;
+        const at = B.points + 16 * k;
+        return { slot: slotOf.get(k), point: [0, 4, 8].map((o) => real(at + o)), radius: f(real(at + 12)) };
+    });
+}
+
+/** Where a fighter's body balls are on `pose` (board frame): { at, radius }
+ * by table entry. */
+export function bodyBallsAt(balls, pose) {
+    return balls.map((b) => {
+        if (!b) return null;
+        const { r, t } = pose[b.slot], [x, y, z] = b.point;
+        return { at: [0, 1, 2].map((i) => f(r[i] * x + r[3 + i] * y + r[6 + i] * z + t[i])), radius: b.radius };
+    });
+}
+
+/* Copro 0x20955 for one body: adds to `sum`, and the last ball's 1 - q (its
+ * bits, as the copro tests them; 0 for none) says whether one touched. */
+function pushFrom(p, radius, balls, sum) {
+    /* 0x2031F's sum; its square root (0x20281, RSQRTS refined) is taken
+     * exactly. */
+    const length = (e) => {
+        const [x, y, z] = [0, 1, 2].map((i) => f(e[i] - p[i]));
+        return f(Math.sqrt(f(f(f(x * x) + f(y * y)) + f(z * z))));
+    };
+    const test = balls[BODY_TEST];
+    if (!test || length(test.at) > BODY_NEAR) return 0;
+    let hit = 0;
+    for (const b of balls) {
+        if (!b || !bitsOf(b.radius)) continue;
+        const d = length(b.at), reach = f(b.radius + radius);
+        if (d > reach) continue;
+        let r = recips(reach), m = reach, q = d;
+        for (let k = 0; k < 3; k++) {
+            m = f(r * m);
+            q = f(q * r);
+            r = f(NEWTON - m);
+        }
+        const k = f(1 - f(q * r));
+        sum[0] = f(sum[0] + f(f(b.at[0] - p[0]) * k));
+        sum[1] = f(sum[1] + f(f(b.at[2] - p[2]) * k));
+        hit = bitsOf(k);
+    }
+    return hit;
+}
+
+function pushOut(s, bodies) {
+    const sum = [0, 0];
+    for (const balls of bodies) if (balls && pushFrom(s.p, s.radius, balls, sum)) break;
+    s.p[0] = f(s.p[0] + f(PUSH * sum[0]));
+    s.p[2] = f(s.p[2] + f(PUSH * sum[1]));
+}
+
+/** One board frame of 0x2CE68 for every piece in flight or at rest.
+ * `bodies` are the fighters' body balls (bodyBallsAt), player 1's first;
+ * the push is skipped once the finishing blow lands (+0x7D6 bit 0), which
+ * the explorer's fight never reaches. */
+export function stepDebris(sim, bodies = []) {
     sim.frame++;
     for (const s of sim.slots) {
         if (!s?.model) continue;
         s.frames++;
+        pushOut(s, bodies);
         fall(s);
         walls(s, sim.centre);
         turn(s);

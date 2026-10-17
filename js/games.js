@@ -831,10 +831,12 @@ const fvipers = {
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
                  * 0x2D254's effect, 54 models a record (+0x1B0). `gates`
                  * are the stage flags 0x76A70 tests for their floor
-                 * shadows (0x78384). */
+                 * shadows (0x78384). `bodies` is the program ROM's order
+                 * of the body balls (0x292AC) the push out of the fighters'
+                 * bodies (0x2CEA0) tests; the balls are the shadows'. */
                 debris: {
                     out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924,
-                    flipbook: 0x06421760, gates: 0x06442ba8,
+                    flipbook: 0x06421760, gates: 0x06442ba8, bodies: 0x000292ac,
                 },
             },
             /* The midriff, record +0x24, and the one a broken chest draws

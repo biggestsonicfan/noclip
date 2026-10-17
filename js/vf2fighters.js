@@ -84,7 +84,7 @@
 import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_COUNT, SLOT_PARENT } from './pose.js';
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
-import { readDebrisTables, debrisShadowsOn } from './fvdebris.js';
+import { readDebrisTables, readBodyBalls, debrisShadowsOn } from './fvdebris.js';
 import { commandMotions } from './moves.js';
 import { handModels, handsAt, itemAt, gameLoops } from './fighterhands.js';
 import { setupWord } from './reactions.js';
@@ -645,6 +645,13 @@ function placeExtra(slot, e) {
 export function fighterDebrisTables(rom) {
     const D = rom.game.rig?.fighters?.armour?.debris;
     return D ? readDebrisTables(rom, D, dataAt) : null;
+}
+
+/** The body balls the pieces are pushed out of (`debris.bodies`), by table
+ * entry; null without them. */
+export function fighterBodyBalls(rom) {
+    const order = rom.game.rig?.fighters?.armour?.debris?.bodies, B = rom.game.rig?.shadow?.balls;
+    return order && B ? readBodyBalls(rom, order, B, dataAt) : null;
 }
 
 /** Whether the stage draws the pieces' floor shadows (0x76A70's test of the
