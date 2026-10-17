@@ -369,7 +369,7 @@ const JA_TEXT = {
     'Body': 'ボディ',
     'Fighter': 'ファイター',
     'no wind': '風なし',
-    'A string of {n} — built below': '{n} 技のストリング — 下で組み立て',
+    'A string of {n} — built below': '技 {n} 個のストリング — 下で組み立て',
     'Pick a move above, then add to it.': '上で技を選んでから、続く技を追加してください。',
     'then, once free, any move…': '次に、動けるようになったら任意の技…',
     'start with any move…': '任意の技から始める…',
