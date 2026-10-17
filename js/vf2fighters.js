@@ -1042,11 +1042,39 @@ function liveFor(body) {
     return live;
 }
 
+/*
+ * Whether the switch into `motion` blends in at all: bit 0 of the mode the
+ * blend set-up (VF2 0x27130, FV 0x29F50) stores at +0xBDD. Before the fight's
+ * own tests it is the motion's: a new setup word with bit 17 (+0x1A4's, kept
+ * by set_mot_dat) blends out only; one with bit 18 or 19 blends in; else the
+ * word before (+0xC30) with bits 15 and 6 both, or with `rig.blendIn.before`,
+ * or the record's byte at `stance` (+0x814) at 4, does not blend. Fighting
+ * Vipers also does not where the record's u32 at `held` (+0x860) has bit 2.
+ * Whatever it chose, the turn set-up after it (VF2 0x2756C, FV 0x2A308)
+ * cancels the blend when the word before and the new +0x1A4 both have bit 10.
+ * A pass of a motion the game loops runs the set-up again (VF2 0x1ABE8) on
+ * +0x1A4 as the pass left it, so bit 17 is the last frame's move flag there.
+ * The rest is the fight's (TECHNICAL.md, "The fight's blend choices").
+ */
+const OUT_ONLY = 1 << 17, TURNED = 1 << 10, IN_KEPT = 3 << 18, NO_BLEND_PAIR = 0x8040, NO_BLEND = 4, HELD_NO_BLEND = 1 << 2;
+
+function blendsIn(rom, motion, before, again) {
+    const B = rom.game.rig.blendIn;
+    if (!B) return true;
+    const word = setupWord(rom, motion.id);
+    const flags = again ? moveFlags(rom, motion)?.[motion.frames] ?? word : word;
+    if (B.held !== undefined && setupWord(rom, motion.id, B.held) & HELD_NO_BLEND) return false;
+    if (flags & OUT_ONLY || before & flags & TURNED) return false;
+    if (word & IN_KEPT) return true;
+    if (before & (B.before ?? 0) || (before & NO_BLEND_PAIR) === NO_BLEND_PAIR) return false;
+    return (setupWord(rom, motion.id, B.stance) & 0xff) !== NO_BLEND;
+}
+
 /* The blend for this frame, added to the sample's points in place: a new
  * motion takes its steps from the last frame drawn; they run out on the
  * eighth frame or when the motion loops. */
-function startBlend(live, rom, motion, mirrored) {
-    live.length = motion ? blendLength(motion.frames) : 0;
+function startBlend(live, rom, motion, mirrored, again) {
+    live.length = motion && blendsIn(rom, motion, live.before, again) ? blendLength(motion.frames) : 0;
     const first = live.last && live.length ? sampleFor(rom, motion, 1, mirrored) : null;
     if (!first) return void (live.steps = live.points = null);
     const shift = blendShift(live.length), { angles, targets } = live.last;
@@ -1058,8 +1086,7 @@ function startBlend(live, rom, motion, mirrored) {
 
 /* The word +0xC30 holds when `motion` starts: the one before's, kept over a
  * pass of a motion the game loops. */
-function wordBefore(live, rom, motion) {
-    const again = motion === live.motion && gameLoops(rom, motion.id);
+function wordBefore(live, rom, motion, again) {
     return again ? live.before : live.motion ? setupWord(rom, live.motion.id) : 0;
 }
 
@@ -1067,8 +1094,9 @@ function blendFor(live, rom, motion, frame, sample, mirrored) {
     /* A motion that loops, back to its first frame from its last, blends into
      * itself as into a new one; one cut short and started again does not. */
     if (motion !== live.motion || (frame === 1 && motion && live.frame === motion.frames)) {
-        if (motion) live.before = wordBefore(live, rom, motion);
-        startBlend(live, rom, motion, mirrored);
+        const again = Boolean(motion) && motion === live.motion && gameLoops(rom, motion.id);
+        if (motion) live.before = wordBefore(live, rom, motion, again);
+        startBlend(live, rom, motion, mirrored, again);
     } else if (frame < live.frame) {
         live.steps = live.points = null;
     }

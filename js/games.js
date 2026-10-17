@@ -864,6 +864,9 @@ const fvipers = {
          * 0x6C119 (0x2B2FC), else it follows the motion's target, stepping
          * as far again (`own`). */
         look: { own: 0x2000, gate: 0x6c119 },
+        /* Where a switch does not blend in (js/vf2fighters.js, blendsIn): the
+         * setup record's byte +10 (+0x814) and u32 +4 (+0x860), 0x29F50. */
+        blendIn: { stance: 10, held: 4 },
         note: 'fv',
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
@@ -3253,6 +3256,9 @@ const vf2 = {
         flags: { drop: 0x10010100, op13: 27, ends: { 0x12e: 0x49, 0x375: 46 } },
         /* The look's gate, 0x28668. */
         look: { gate: 0x6c111 },
+        /* The same, 0x27130: the record's byte +6 is +0x814, and a word
+         * before with bit 23 does not blend either. */
+        blendIn: { stance: 6, before: 1 << 23 },
     },
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
