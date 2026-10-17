@@ -1078,7 +1078,7 @@ const WAIST_SLOT = 0, HEAD_SLOT = 2;
  * What the fight does to the word besides (a hit, the air, fix_hara's bit 4)
  * is fight state, left out.
  */
-const SETUP_LENGTH = 0x1ce86, SETUP_OPS = 25, SETUP_END = 0, SETUP_LAST = 8;
+const SETUP_LENGTH_AT = 0x1ce86, SETUP_OPS = 25, SETUP_END = 0, SETUP_LAST = 8;
 const SETUP_TIMES = 2, SETUP_WINDOW = 3, SETUP_TABLE = 16, SETUP_HEAD = 12;
 const SCRIPT_LENGTH = [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4];
 const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT_25 = 13, OP_BIT_6 = 22;
@@ -1086,7 +1086,7 @@ const OP_FLIP_21 = 1, OP_SET = 5, OP_CLEAR = 6, OP_FLIP = 7, OP_BIT_25 = 13, OP_
 /* The setup ops after the head: op 2's three frames, op 3's +0x850, and
  * where the script starts. */
 function readMoveSetup(rom, dv, at) {
-    const len = (op) => rom.mainCpuView.getUint8(SETUP_LENGTH + op);
+    const len = (op) => rom.mainCpuView.getUint8(SETUP_LENGTH_AT + op);
     const out = { times: null, window: 0 };
     for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
         if (op === SETUP_END) return { ...out, script: at };
