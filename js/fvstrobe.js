@@ -6,9 +6,11 @@
  * Each frame 0x1F000 gives each player a light of its own: the light vector
  * (0x50108C) times a scale (P1 0x50109C, P2 0x5010A0), which the draw sends
  * to the geometrizer (command 0xA0A, 0x1FDD0 and 0x1FE44) before that
- * player's rob_disp. The scale is 0x50A0E0[fighter], 1.0 for every fighter
- * (0x2176C). Then (0x1F1FC, 0x1F258) while the player's +0x720 has bit 5 or
- * bit 10, or its +0x1A4 has bit 26, the scale is instead a phase of its own
+ * player's rob_disp. The scale is 0x50A0E0[fighter], which the scene's start
+ * (0x21614) fills with 1.0 (0x2176C) and then, on stages 2 and 9 only, lowers
+ * for some records (0x21794): stageFighterLight. Then (0x1F1FC, 0x1F258)
+ * while the player's +0x720 has bit 5 or bit 10, or its +0x1A4 has bit 26,
+ * the scale is instead a phase of its own
  * (P1 0x5010F0, P2 0x5010F4) stepped by 0.8 a frame, back to -2.0 once it
  * passes 2.0: 1.8, -2, -1.2, -0.4, 0.4, 1.2, 2, -2, ... The light swings
  * from twice as strong to the other side and back every six frames. The
@@ -50,16 +52,27 @@ function strobeGate(rom, motion) {
     return gate;
 }
 
+/** Record `record`'s light scale on stage `stage` (0x500064), 1.0 but where
+ * 0x21794 sets one. */
+export function stageFighterLight(rom, stage, record) {
+    const bits = rom.game.rig?.strobe?.stages?.[stage]?.[record];
+    if (bits == null) return 1;
+    const v = new DataView(new ArrayBuffer(4));
+    v.setUint32(0, bits);
+    return v.getFloat32(0);
+}
+
 /**
  * The light's scale on `frame` of `motion`, and the phase it leaves, with
  * the phase `from` as the motion starts (1.0, the fight's start, by default).
- * A frame with the gate shut is drawn at 1.0 and leaves the phase alone.
+ * A frame with the gate shut is drawn at `base`, the stage's scale
+ * (stageFighterLight), and leaves the phase alone.
  */
-export function strobeAt(rom, motion, frame, from = START) {
+export function strobeAt(rom, motion, frame, from = START, base = 1) {
     const gate = strobeGate(rom, motion);
-    let phase = from, scale = 1;
+    let phase = from, scale = base;
     for (let f = 1; gate && f <= Math.min(frame, motion.frames); f++) {
-        if (!gate[f]) { scale = 1; continue; }
+        if (!gate[f]) { scale = base; continue; }
         phase = scale = stepPhase(phase);
     }
     return { scale, phase };

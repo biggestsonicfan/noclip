@@ -2933,13 +2933,56 @@ Motion 605 is 0.4 on frame 29 and 2 on 31. VF2 has no such light, so it has
 no case. In headless Chrome, motion 551 frame 2 drawn at -2 differs from the
 same frame at 1 on 1358 pixels (arms and shoulders).
 
+##### The stage's base scale (stages 2 and 9)
+
+A frame with the gate shut is not always drawn at 1.0. The fight's scene
+start (`0x101B4` stores the stage, then `0x21614`) calls `0x21794`. That
+fills `0x50A0E0[0..25]` with 1.0 (`0x2176C`), then on stage 2 or 9 lowers
+some records' entries. `0x1F040` and `0x1F05C` read the entry for each
+player's `+0x1B0`, the record number (13 and up are player 2's look), every
+tick. Only the stage and the record decide it, so there is no fight-state
+test:
+
+| stage | record (`+0x1B0`)            | scale |
+|-------|------------------------------|-------|
+| 2     | 17 Bahn (P2)                 | 0.56  |
+| 2     | 18 Picky (P2)                | 0.47  |
+| 9     | 1 Grace, 2 Honey             | 0.54  |
+| 9     | 4 Bahn                       | 0.92  |
+| 9     | 6 Raxel                      | 0.87  |
+| 9     | 8 Mahler                     | 0.51  |
+| 9     | 14 Grace (P2), 15 Honey (P2) | 0.54  |
+| 9     | 17 Bahn (P2)                 | 0.53  |
+| 9     | 18 Picky (P2)                | 0.66  |
+| 9     | 19 Raxel (P2)                | 0.57  |
+| 9     | 21 Mahler (P2)               | 0.51  |
+
+The game's `rig.strobe.stages` holds these as the board's single-precision
+bits. `stageFighterLight` reads them, and `strobeAt` draws a shut frame at
+that scale instead of 1.0; a strobing frame is still the phase. The Animation
+tab's stage pick (`state.sparkStage`, the trails' `0x500064`) is now shown on
+every FV motion, and it sets both the trails and this light. It is drawn for
+the fighter and for the opponent, each by its own record. On stage 9, Bahn's
+motion 551 is 0.92 on frames 0, 33 and 34, where the old code drew 1.0. Frames
+1 to 32 strobe as before. On stages 0, 1, 3–8 and 10–11 every record stays at
+1.0, so nothing changes there. VF2 has no such light, so it has no case.
+
 Left out:
 
-- Stages 2 and 9 set some fighters' base scale away from 1.0 (`0x2176C`'s
-  callers).
-- Stages 3 and 4 shade by the fighter's place (`0x21398`, `0x21470`).
+- Stages 3 and 4 shade by where the fighter stands in the ring. Stage 4
+  (`0x21398`) measures the distance from (-2.75, -4.5), turned by
+  `0x50A022`: the scale is 0 within 1.5, rises from 0 to 1.0 between 1.5
+  and 2.0, and is left alone beyond that. Stage 3 (`0x21470`) is 0 outside z ±~49 (plus
+  `[0x543004]+0x20`). The place is fight state. At the explorer's place, the
+  origin, both leave the scale as it is. `0x214C0` (a further scale by place,
+  into `0x5010E8`) has no caller.
 - Op 14's camera shake (`[0x500814]+0xFC`, damped by ×-0.5 each tick).
-  It moves the fight camera, not the fighter.
+  It moves the fight camera. The Animation tab has no fight camera, only
+  its orbit view, so no motion there can show it.
+- Stage 2's `0x21884` and stages 5 and 7's writes to `0x501022`, and
+  stage 7's player-2 scale from the scene's `+0x313`. These come from
+  scene state that the explorer does not have, and `0x501022` is not this
+  scale.
 - The phase a real fight carries in from motions before the one on screen.
 
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)

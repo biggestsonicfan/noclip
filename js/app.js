@@ -53,7 +53,7 @@ import {
     trailScript, hitSparkScript,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
-import { strobeAt, strobeAfter } from './fvstrobe.js';
+import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
@@ -3651,7 +3651,8 @@ function poseFighterAndRival(body, m) {
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
-    strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame).scale);
+    const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
+    strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
 }
 
@@ -4021,7 +4022,8 @@ function placeSkin(holder, matrices, flash = null) {
 
 /*
  * Fighting Vipers' light strobe (js/fvstrobe.js): each fighter drawn by the
- * light times a scale of its own, 1 but on the frames a motion strobes it.
+ * light times a scale of its own: its stage's (stageFighterLight), but on the
+ * frames a motion strobes it.
  * The fighters share the scene's material, so each mesh sets the scale as
  * it draws and puts 1 back after. In a chain the phase runs on from the
  * links before; a motion alone starts from the fight's 1.0 on every pass.
@@ -4064,7 +4066,8 @@ function poseBodyRig() {
     placeDebris(m);
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
-    strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined).scale);
+    const base = stageFighterLight(state.rom, state.sparkStage, body.index);
+    strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -4865,13 +4868,18 @@ function sparkKind(k) {
 function renderSparkPanel() {
     const m = state.motion;
     const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
+    /* The stage picks the trails' models and, on FV, the fighters' light. */
+    const staged = Boolean(state.rom.game.rig?.strobe || script);
+    $('#fight-stage-field').hidden = !staged;
+    if (staged) {
+        const sel = $('#spark-stage');
+        const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
+        sel.innerHTML = Array.from({ length: 12 }, (_, n) => `<option value="${n}">${name(n)}</option>`).join('');
+        sel.value = String(state.sparkStage);
+    }
     $('#spark-field').hidden = !script;
     if (!script) return;
     $('#spark-show').checked = state.showTrails;
-    const sel = $('#spark-stage');
-    const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
-    sel.innerHTML = Array.from({ length: 12 }, (_, n) => `<option value="${n}">${name(n)}</option>`).join('');
-    sel.value = String(state.sparkStage);
     $('#spark-readout').innerHTML = 'op 28: ' + script.ops
         .map((o) => `f${o.frame} ${sparkKind(o.kind)}${o.kind & 0xf0 ? `, life ${o.life}` : ''}`).join(' · ');
 }

@@ -876,7 +876,20 @@ const fvipers = {
          * as the setup's second word (0x1B98C); script ops 25 and 26 set and
          * clear a bit of it, op 27 sets bit 3 or clears it. While it has
          * `bits`, or +0x1A4 has bit `flag`, the light strobes. */
-        strobe: { set: 25, clear: 26, bit3: 27, bits: 0x420, flag: 26 },
+        strobe: {
+            set: 25, clear: 26, bit3: 27, bits: 0x420, flag: 26,
+            /* The scale by record (+0x1B0) where it is not 1.0, by stage
+             * (0x500064), as the scene's start (0x21614, 0x21794) writes
+             * 0x50A0E0, in the board's single-precision bits. */
+            stages: {
+                2: { 17: 0x3f0f5c29, 18: 0x3ef0a3d7 },
+                9: {
+                    1: 0x3f0a3d71, 2: 0x3f0a3d71, 4: 0x3f6b851f, 6: 0x3f5eb852, 8: 0x3f028f5c,
+                    14: 0x3f0a3d71, 15: 0x3f0a3d71, 17: 0x3f07ae14, 18: 0x3f28f5c3, 19: 0x3f11eb85,
+                    21: 0x3f028f5c,
+                },
+            },
+        },
         crouch: { 9: 1.1, 10: 0.56 },
         /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
          * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup
