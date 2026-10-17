@@ -2990,8 +2990,8 @@ Left out:
     9880–9950 and 38275–38345. Nothing resets the object when the stage
     starts. On the second visit it still held -1980 from the first, and
     each pass (about 280 down to -1980) began at a different point, 322
-    and 327 frames into the stage. So the pass is started by the fight,
-    not by the motion's frame or the scene's start, and this stays out.
+    and 327 frames into the stage. What starts it was not traced. It is
+    neither the scene's start nor the motion's frame, so this stays out.
   - `0x214C0` (a further scale by place, into `0x5010E8`) has no caller.
 - Op 14's camera shake (`[0x500814]+0xFC`, damped by ×-0.5 each tick).
   It moves the fight camera. The Animation tab has no fight camera, only
