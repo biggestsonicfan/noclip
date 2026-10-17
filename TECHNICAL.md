@@ -3203,6 +3203,43 @@ Left out:
   scale.
 - The phase a real fight carries in from motions before the one on screen.
 
+#### The burst (FV, `0x21E40`; read from the ROM, checked against MAME)
+
+`js/fvburst.js`. After both fighters' `rob_disp` (`0x19F10`), FV's draw
+calls `0x21E40` once for P1 (`0x500804`) and once for P2 (`0x500808`).
+Its gate is `+0x720` bit 10 or `+0x1A4` bit 26, and both are words of the
+motion itself (the light word and the move flags). While the gate is set, it
+pushes and translates to `+0x1F4` (slot 0's point). If the motion frame
+`+0x1AA` is ≤ 15, it then turns by the camera's yaw alone (`0x4800909`,
+`g13+0x26`), scales by 0.5 on every axis and draws the model that the u16
+table `0x6CE35E4` names for that frame: `38 37 36 35 34 33 32 31 30 2F 28
+27 26 25 24 23` (frame 0 is never drawn, because frames start at 1). The models are flat
+light-streak starbursts facing -z, and they shrink from ±4.9 (`0x37` at 0.5)
+to ±0.7 (`0x23`). The gate holds on frames 1–15 of motions 605–611, 820–831,
+864 and 1006 (bit 26), and of 1017–1021 (bit 10).
+
+- Node, old code against new: the old code drew nothing. With the new code,
+  605 draws `0x37` on frame 1, `0x33` on 5 and `0x23` on 15, and nothing on 16.
+  1017 draws `0x35` on 3 and `0x28` on 10. 551 and 3 draw nothing. Headless
+  Chrome shows the same models in the pool, and no page errors.
+- MAME attract, with a breakpoint on P1's draw (`0x21EE4`) and `+0x1AA`
+  read at that point: 84 draws in 607, 608, 611 and 864. All 84 used
+  `table[+0x1AA]`, at the translate `+0x1F4`. A poll after each frame
+  predicted 83 of them and missed none. The one it did not predict was
+  a tick where the poll was out of step.
+- The yaw is the explorer's view yaw (`cameraTurn(place, true)`). The
+  Animation tab has no fight camera.
+- VF2 has no counterpart. Its `rob_disp` (`0x18EF8`) has nothing more the
+  explorer can show. What is left there:
+  - the replay ring (`0x548000`, ruled out)
+  - the foot table (`0x19D28`, ruled out)
+  - `0x19E6C`, which has no caller
+  - the `+0x75C` head-piece shadow (stage flag `0x6EEA0` bit 5) and the
+    knocked-off head piece (`0x62FAC`)
+  - `+0` bit 25's debug ball (`0x19790`) and the `+0x2A` name characters
+    (`0x198C0`), which are set only by game-mode code
+  - the per-slot culling in `0x19EBC`
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named

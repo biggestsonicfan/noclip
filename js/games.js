@@ -877,6 +877,10 @@ const fvipers = {
         /* Script op 30's throw spark; js/fvhitspark.js. 0x2DB78's flipbooks
          * for a record with flag bit 8: +0x1E's by age, +0x20's by half. */
         hitSpark: { op: 30, books: [{ at: 0x064212b4 }, { at: 0x064211e0, halved: true }] },
+        /* 0x21E40's burst; js/fvburst.js. Frames 0..15 of the u16 table
+         * name the models, drawn at 0.5 while +0x720 has `lightBit` or
+         * +0x1A4 has bit `flag`. */
+        burst: { table: 0x06ce35e4, last: 15, scale: 0.5, lightBit: 10, flag: 26 },
         /* Each fighter's own light (0x1F1FC); js/fvstrobe.js. +0x720 starts
          * as the setup's second word (0x1B98C); script ops 25 and 26 set and
          * clear a bit of it, op 27 sets bit 3 or clears it. While it has

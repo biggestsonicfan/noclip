@@ -53,6 +53,7 @@ import {
     trailScript, hitSparkScript,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
+import { readBurst, burstModels, burstDraws } from './fvburst.js';
 import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose } from './fightershadow.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
@@ -3656,6 +3657,7 @@ function poseFighterAndRival(body, m) {
     placeSkin(m.rival, placed, own.flash);
     placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
     placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
+    placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
     placeShadows(m.rival, m.rival.body, placedPose(at, theirs.pose), own.decoded, own.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
@@ -3990,6 +3992,34 @@ function hitSparkKit(holder) {
 }
 
 /*
+ * Fighting Vipers' burst (js/fvburst.js), on the fighter and on the opponent,
+ * each from the motion it plays and the pose it has this frame, turned by the
+ * explorer camera's yaw. `place` puts the opponent's where it stands.
+ */
+const BURST_POOL = 1;
+
+function placeBursts(holder, pose, motion, frame, place = null) {
+    const kit = burstKit(holder);
+    if (!kit) return;
+    const draws = motion ? burstDraws(state.rom, kit.burst, motion, frame, { pose, turn: cameraTurn(place, true) }) : [];
+    if (draws.length || holder.burstPool) placeEffectPool(holder, 'burstPool', BURST_POOL, kit.geoms, draws, place);
+}
+
+/* The burst's table and its models, read once per ROM; none in a game
+ * without it. */
+function burstKit(holder) {
+    if (holder.burst?.rom !== state.rom) {
+        const burst = readBurst(state.rom), geoms = new Map();
+        for (const id of burst ? burstModels(burst) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.burst = { rom: state.rom, burst, geoms };
+    }
+    return holder.burst.burst ? holder.burst : null;
+}
+
+/*
  * The fighters' floor shadows (js/fightershadow.js), each under the light of
  * the stage the panel names. `pose` is in the fighter's board frame, the
  * opponent's too: the light is the stage's, not the figure's own.
@@ -4025,16 +4055,26 @@ function shadowKit(holder) {
  * rig's own without), as the pose keeps a turn (each axis's image in turn): a
  * model turned by it has its +y along the camera's up and its +z along its
  * view, as 0x2DDE8's turn by the camera's three angles leaves it. */
-function cameraTurn(place = null) {
+function cameraTurn(place = null, yawOnly = false) {
     const into = state.viewer.root.matrixWorld.clone();
     if (place) into.multiply(place);
     into.invert();
     const cam = state.viewer.camera;
     const v = cam.getWorldDirection(new THREE.Vector3()).transformDirection(into);
     const u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.getWorldQuaternion(new THREE.Quaternion())).transformDirection(into);
-    const z = new THREE.Vector3(v.x, v.y, -v.z), y = new THREE.Vector3(u.x, u.y, -u.z);
+    let z = new THREE.Vector3(v.x, v.y, -v.z), y = new THREE.Vector3(u.x, u.y, -u.z);
+    if (yawOnly) [y, z] = yawTurn(y, z);
     const x = new THREE.Vector3().crossVectors(y, z);
     return [x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z];
+}
+
+/* The yaw alone of a turn whose y and z images are `y` and `z` (0x4800909
+ * by the camera's +0x26): y stays up and z is the view laid flat, or the up
+ * laid flat when the camera looks straight down. */
+function yawTurn(y, z) {
+    const flat = new THREE.Vector3(z.x, 0, z.z);
+    if (flat.lengthSq() < 1e-8) flat.set(y.x, 0, y.z);
+    return [new THREE.Vector3(0, 1, 0), flat.normalize()];
 }
 
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
@@ -4104,6 +4144,7 @@ function poseBodyRig() {
     placeDebris(m);
     placeSparks(m, body);
     placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    placeBursts(m, pose.pose, m.decoded, m.frame);
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
     strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
