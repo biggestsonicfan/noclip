@@ -765,10 +765,32 @@ The board has no RGB textures to hand over (a face names a 4-bit tile, a luma
 band, a material slot and a palette row, and the fill path turns those into a
 colour with the light in it), so the export runs the fill shader once more into
 a texture sheet: each face gets a cell of its own, drawn flat at a pixel to a
-texel, with this frame's palette and light, and its UVs point at that cell. The
-material is unlit, so what Blender shows is what the view showed, lighting
-included. A half-transparent (checker) face comes out at half alpha. The sky
-panorama and the scroll layers are not models and are not in it.
+texel, with this frame's palette and light, and its UVs point at that cell. A
+face that repeats its tile (grass, water, a wall's bricks) is baked as one
+period of it, an image of its own that Blender repeats, so it keeps every texel
+however large the face is. The material is unlit, so what Blender shows is what
+the view showed, lighting included. A cut-out face is alpha-clipped and a
+half-transparent (checker) one comes out at half alpha. A face the board draws
+from one side only is one-sided in Blender too (backface culling), and every
+face is wound and has its normal toward the side the board shows. A face laid
+on another in the same plane (a decal, a shoe's strap) is lifted a hair off it,
+toward the camera, in the order the view drew them. The sky panorama and the
+scroll layers are not models and are not in it.
+
+To see the colours the explorer shows in Blender:
+
+- set **Render > Color Management > View Transform** to **Standard**: the
+  default, AgX, shifts every colour (blue goes toward green);
+- in Solid mode pick **Flat** lighting and **Texture** colour; in Material
+  Preview or EEVEE the material is already unlit;
+- Cycles ignores backface culling, so the hidden sides of one-sided faces show
+  there: use EEVEE or Material Preview to see what the board shows;
+- if a decal flickers far off, raise the camera's **Clip Start**.
+
+What the board's painter's sort decides does not carry over: a face it draws
+over one that is in front of it (a South Island pillar's yellow top) is behind
+it in Blender, and two half-transparent faces in one plane (the sea's two
+layers) both show, where the board shows the top one.
 
 ### The game's own camera (Sonic the Fighters)
 
