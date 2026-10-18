@@ -13,7 +13,8 @@
  *   Fighting Vipers.
  * - 'model1', the board the original Model 2 kept from Model 1: a 68000, two
  *   MultiPCM sample chips and a YM3438. model1.wasm is MAME's own chips on
- *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA.
+ *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA and
+ *   Virtua Cop.
  *
  * A game whose driver names its own boot commands (Dead or Alive's) gives them
  * as `boot` and `stop` for the Model 2 board too, and `warmup`, the seconds
@@ -75,13 +76,14 @@ export function stageMusic(rom, slot, pick = -1) {
         const index = slot & spec.music.slotMask;
         return { code: songAt(rom, index), index };
     }
+    /* `songs` are the stages a game starts somewhere other than its table
+     * (Dead or Alive's boss fight), or every stage of a game that picks its
+     * song in code rather than from a table (Virtua Cop); `none` the code a
+     * table holds for a stage with no song, if not 0. */
+    const own = spec?.songs?.[slot];
+    if (own !== undefined) return { code: own, index: slot & 0xF };
     const at = spec?.stageMusic;
     if (at === undefined) return { code: 0, index: -1 };
-    /* `songs` are the stages a game starts somewhere other than its table
-     * (Dead or Alive's boss fight); `none` the code a table holds for a stage
-     * with no song, if not 0. */
-    const own = spec.songs?.[slot];
-    if (own !== undefined) return { code: own, index: slot & 0xF };
     /* The program ROM's for every game but Virtua Fighter 2 and Fighting
      * Vipers, whose tables are in the data ROM. */
     const view = rom[`${spec.stageMusicRegion ?? 'mainCpu'}View`];

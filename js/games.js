@@ -3069,6 +3069,39 @@ const daytonagtx = daytonaBuild({
  *             0x4D1 and `lda 0x28693F0[g0*16]` past it, the second table
  *             starting where the first stops counting (`past`), up to 0x4E2.
  */
+
+/*
+ * Virtua Cop's sound board is Daytona's (js/sound/sound.js, board 'model1')
+ * with its own driver (epr-17170/17171) and samples. The first sample pair is
+ * 1 MB a chip, each at the start of its 2 MB half as MAME loads them.
+ *
+ * There is no song table: the play mode's stage start (0xA464, sub-state 6 of
+ * the table at 0xA6F0) tests the stage byte 0x50F2A8 and sends a constant —
+ * 0xAE1F06 for stage 1, 0xAE1F0C for 2, 0xAE1F07 for 3 — each followed by
+ * 0xBE2101, 0xBE2102 or 0xBE2103. Channel 0x1F is the music; 0xAE1F00 stops
+ * it. `stop` is what the boot (0xA6C) sends: that, then 0x2BB20's run, which
+ * stops channels 0x21 and 0x22 and keys off the rest. MAME, coined and
+ * pinned to each stage, sent exactly these at the stage start (frame 1311).
+ */
+const VCOP_SOUND_STOP = [
+    0xAE, 0x1F, 0x00,
+    0xAE, 0x21, 0x2F, 0xAE, 0x21, 0x30, 0xAE, 0x21, 0x31,
+    0xAE, 0x22, 0x2F, 0xAE, 0x22, 0x30, 0xAE, 0x22, 0x31, 0xAE, 0x22, 0x32,
+    0x8E, 0x2E, 0x60, 0x8E, 0x2F, 0x60,
+];
+const VCOP_SOUND = {
+    board: 'model1',
+    program: [['epr-17170.7', 0x06a38ae2], ['epr-17171.8', 0xb5e436f8]],
+    samples: [
+        ['mpr-17172.32', 0xab22cac3], ['mpr-17173.33', 0x3cb4005c],
+        ['mpr-17174.4', 0xa50369cc], ['mpr-17175.5', 0x9136d43c],
+    ],
+    boot: VCOP_SOUND_STOP,
+    stop: VCOP_SOUND_STOP,
+    songs: [0xAE1F06, 0xAE1F0C, 0xAE1F07],
+    after: { song: { 0: [0xBE, 0x21, 0x01], 1: [0xBE, 0x21, 0x02], 2: [0xBE, 0x21, 0x03] } },
+};
+
 const vcop = {
     ...daytonaBuild({
         id: 'vcop',
@@ -3090,7 +3123,7 @@ const vcop = {
          * (js/vcop.js, railLight). */
         light: [0.140028, -0.700140, 0.700140],
         courses: {},
-        sound: null,
+        sound: VCOP_SOUND,
     }),
     /* Straight after the table, the boot (0x38B58) stores these by hand: the
      * drums' teal over the table's red, and a duller tan. */

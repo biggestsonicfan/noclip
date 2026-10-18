@@ -456,6 +456,11 @@ Breakables stand whole; the glints on car glass, which follow the camera, are
 left out. The boot sets ten palette entries by hand after loading the table —
 the drums' teal among them — and the explorer does the same.
 
+The stages have their music: tick **music** on the Stages tab and each stage
+plays the song the game starts it with, on the game's own sound board, the same
+board as Daytona USA's, with Virtua Cop's driver and samples. See [Virtua Cop's
+music](TECHNICAL.md#virtua-cops-music).
+
 Not read yet: the enemies (they come from another system than the objects), the
 models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
 effects), and the light, which is still Daytona USA's.

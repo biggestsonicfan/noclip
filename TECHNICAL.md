@@ -7534,3 +7534,28 @@ four-song tables follow the same pick later in a race (data `0x280EEB8` and
 
 The 1993 build has its own sound program (`epr-16489`/`16490`), which the
 dumps this was worked out on do not carry, so it has no music switch.
+
+### Virtua Cop's music
+
+Virtua Cop is on the same board as Daytona, with its own driver (`epr-17170`/
+`17171`) and four sample chips (`mpr-17172` to `17175`). The first pair is
+1 MB a chip, and MAME loads each at the start of its 2 MB half, which is where
+the page puts every chip anyway.
+
+It has no song table. The play mode's stage start (0xA464, sub-state 6 of the
+table at 0xA6F0) tests the stage byte `0x50F2A8` and sends a constant:
+`0xAE1F06` for stage 1, `0xAE1F0C` for stage 2, `0xAE1F07` for stage 3, each
+followed by `0xBE2101`, `0xBE2102` or `0xBE2103`. Channel 0x1F is the music,
+and `0xAE1F00` stops it. To stop a song the page sends what the boot (0xA6C)
+sends: that, then the run at 0x2BB20, which stops channels 0x21 and 0x22 and
+keys off the rest. The same bytes open the board. A game spec's `songs` gives
+each stage its code when there is no table to read it from.
+
+**Graded against MAME.** MAME (`vcop`, the shared build) was coined and held
+to each stage with a breakpoint on the stage start that sets `0x50F2A8`.
+Before the song it sent only `0xAE1F00`, and at the stage start (frame 1311)
+exactly the bytes above. Every byte it wrote to the UART was then replayed
+at the same times through `model1` natively. Over stage 1's song the loudness
+envelope follows MAME's at a correlation of 0.963 in 50 ms windows and 0.997
+in quarter-second ones, at no offset and the same level to within 1%. In the
+page, all three stages play at an RMS of about 2,700–5,500.
