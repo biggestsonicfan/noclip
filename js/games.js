@@ -1870,6 +1870,9 @@ const hotdo = {
         /* Room 4's walls and shutters, types 97 to 101 on one handler; the
          * first turns 0x80 a frame (see spawnProps in js/placements.js). */
         room4: { handler: 0x3e510, first: 97, spin: 0x80 },
+        /* The glass cases and the roof pieces, types 30, 31 and 86, which
+         * stand as props until they break (see spawnProps). */
+        cases: { handler: 0x3b050 },
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2318,6 +2321,7 @@ const hotd = {
         /* Room 4's handler moved with the rest, and this build's program
          * chips are not to hand to read where to, so it is left out. */
         room4: null,
+        cases: null,
     },
     rig: {
         bodies: {

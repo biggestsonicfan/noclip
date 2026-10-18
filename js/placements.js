@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but one, which is read below.
+ * all but two, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -145,6 +145,20 @@ function walkScript(rom, at, visit) {
  * section 4 spawns them, and so does the attract demo, where MAME draws all
  * five at their records for 1448 frames, 97 turning 0x80 a frame, and the
  * flag never set.
+ *
+ * Types 30, 31 and 86 are the glass cases (PN_case00a) and the roof pieces
+ * (PN_s3_rf_kop01a), on the handler 0x3B050 in the first revision. It closes
+ * as a prop does (0x3ED60) and draws through 0x413B0 with the model and scale
+ * the spawn gave it (0x417F0: +0x54 and +0x94 from the type's entry), so
+ * until it breaks it is a prop. It breaks once its event flag is up: 31 on
+ * flag 5, 30 on 6, and 86 on 0x50 to 0x54 by its x, bit for bit (505, 515,
+ * 532, 549, 557.9). Then it opens the shards (0x3F210) and takes the type's
+ * second model (PN_case01a, _02a, PN_s3_rf_kop_dam01a) for good. No script
+ * sets 5 or 6 (an object does, 0x90848, after flag 4 from play). Chapter 3's
+ * scripts spawn the five roof pieces in zone 14 and set 0x52 to 0x54 later
+ * in the same zone (op 88, 0x67830), two scripts and some frames on; 0x50
+ * and 0x51 only the player's shots set. The explorer runs no clock inside a
+ * zone, so all seven stand as spawned, and the break is left out.
  *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
@@ -177,7 +191,8 @@ function spawnProps(rom, at, set, out) {
         if (!(type > 0 && type < O.count)) continue;
         const handler = dv.getUint32(O.handlers + type * 4, true);
         const room4 = O.room4 && handler === O.room4.handler;
-        if (handler !== O.prop && !room4) continue;
+        const cases = O.cases && handler === O.cases.handler;
+        if (handler !== O.prop && !room4 && !cases) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at

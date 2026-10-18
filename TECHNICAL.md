@@ -5862,9 +5862,9 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for one handler.
+The others are left out rather than guessed at, but for two handlers.
 
-That one is room 4's walls and shutters: types 97 to 101 (models
+The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
 the first revision (`hotdo`). Its init clears the byte 0x53E871. Its task closes
 as a prop's does (0x3ED60), switches on `type - 97`, and draws through 0x413B0,
@@ -5889,6 +5889,28 @@ types): all five drawn 1448 frames each at their records' places and turns,
 97's yaw stepping 0x80 a frame from 0x80, and flag 0x70 never set. Revision A
 moved the handler, and its program chips are not to hand, so its profile leaves
 these out. The prototype's table stops at 77 types and has no such handler.
+
+The second is the glass cases and the roof pieces: types 30 and 31 (both
+`PN_case00a`, 0x13CD) and 86 (`PN_s3_rf_kop01a`, 0x1922, scale 0.7) share the
+handler 0x3B050. Its task closes as a prop's does (0x3ED60) and draws through
+0x413B0 with the model and scale 0x417F0 gave them, so standing they are props.
+Each watches an event flag: 31 flag 5, 30 flag 6, and 86 one of 0x50 to 0x54,
+picked by its x (505, 515, 532, 549, 557.9). Once its flag is set it throws
+shards (0x3F210) and draws its second model: 30 `PN_case01a` (0x13CE), 31
+`PN_case02a` (0x13CF), 86 `PN_s3_rf_kop_dam01a` (0x1923). Flags 5 and 6 are set
+by an object (0x90848), never by a script. Chapter 3 spawns the roof pieces in
+zone 14, and script op 88 sets 0x52 to 0x54 later in that zone; 0x50 and 0x51
+come only from shots. The explorer runs no clock inside a zone, so all seven
+stand as they are spawned and the break is left out. The cases are chapter 2's
+section 5 and 6 records 0xEF000 and 0xEF030 (Stage 2 · set 7); the roof pieces
+are chapter 3's section 3 and 4 records 0xF9A80 to 0xF9B40 (Stage 3 · set 9).
+Checked in MAME (`hotdo`, the attract demo's scene table at 0xAB0D0 pointed at
+each scene, a breakpoint on 0x413B0 for these types): both cases drawn 1000
+frames each at (902.5, -5.2, 435.2) and (902.5, -5.2, 461.2), turns 0 and
+0xC000; all five roof pieces drawn at their records' places, turn 0, scale 0.7,
+for 31800 frames into section 5 with their flags clear, so the demo never breaks
+them. Revision A's profile leaves them out, as it does room 4's; the prototype
+has no such handler.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard
