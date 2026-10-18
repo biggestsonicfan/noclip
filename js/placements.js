@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but two, which are read below.
+ * all but four, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -162,6 +162,24 @@ function walkScript(rom, at, visit) {
  * and 0x51 only the player's shots set. The explorer runs no clock inside a
  * zone, so all seven stand as spawned, and the break is left out.
  *
+ * Types 104 and 108 are props that step their model, on handlers of their
+ * own in the first revision, 0x3E8B0 and 0x3E8F0. Each closes as a prop does
+ * (0x3ED60), adds one to +0x54 every frame, and draws through 0x413B0:
+ *
+ *     ld   (g6), g5            ; the model at +0x54
+ *     mov  g5, 0, g4
+ *     lda  0x1(g5), g5         ; one on
+ *     lda  0x185b, g7
+ *     cmpible g4, g7, ...      ; kept while the old one was 0x185B or below,
+ *     subo 2, g7, g5           ; else back to 0x1859
+ *
+ * so 104 loops PN_kakaaa01a to 04a (0x1859 to 0x185C), four frames, and 108
+ * (0x1114, then back to 0x10E4) loops PN_pushukeke00a to 49a, fifty. 104
+ * starts from the type's own model, which 0x417F0 gave it; 108 gets the
+ * number 0x33B00 returns, rem 49, added on at spawn (0x38AE4), which the
+ * explorer has not got, so it starts from the type's model too. Nothing else
+ * stops them; the explorer steps them on its frame while animate is ticked.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -194,7 +212,8 @@ function spawnProps(rom, at, set, out) {
         const handler = dv.getUint32(O.handlers + type * 4, true);
         const room4 = O.room4 && handler === O.room4.handler;
         const cases = O.cases && handler === O.cases.handler;
-        if (handler !== O.prop && !room4 && !cases) continue;
+        const cycle = O.cycles?.find((c) => c.handler === handler);
+        if (handler !== O.prop && !room4 && !cases && !cycle) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
@@ -221,6 +240,10 @@ function spawnProps(rom, at, set, out) {
                 dv.getUint32(rec + 28, true) & 0xffff],
             /* Room 4's first piece turns on its own (see above). */
             ...(room4 && type === O.room4.first ? { spin: O.room4.spin } : {}),
+            /* And these two step their model (see above). */
+            ...(cycle && cycle.last >= model ? {
+                cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),
+            } : {}),
         });
     }
 }
@@ -809,6 +832,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
     const objects = (stage.objects ?? [])
         .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).map((o) => ({
         model: o.model,
+        /* A prop that steps its model a frame (types 104 and 108). */
+        ...(o.cycle ? { anim: { frames: o.cycle, shift: 0, phase: 0 } } : {}),
         /* Virtua Cop's clouds are objects of the sky's (js/vcop.js). */
         layer: o.layer ?? 'objects',
         set: o.set,

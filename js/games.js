@@ -1873,6 +1873,10 @@ const hotdo = {
         /* The glass cases and the roof pieces, types 30, 31 and 86, which
          * stand as props until they break (see spawnProps). */
         cases: { handler: 0x3b050 },
+        /* Two props that step their model a frame (see spawnProps): type 104
+         * PN_kakaaa01a to 04a, and type 108 PN_pushukeke00a to 49a, each
+         * back to its type's model past `last`. */
+        cycles: [{ handler: 0x3e8b0, last: 0x185c }, { handler: 0x3e8f0, last: 0x1115 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2322,6 +2326,7 @@ const hotd = {
          * chips are not to hand to read where to, so it is left out. */
         room4: null,
         cases: null,
+        cycles: null,
     },
     rig: {
         bodies: {

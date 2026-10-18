@@ -692,7 +692,8 @@ The props the scripts spawn stand in their rooms on the **objects** layer. In
 `hotdo` that includes chapter 4's gate (room 4's walls and shutters), standing
 as it does before the player opens it, its top piece turning as the board turns
 it. Chapter 2's two glass cases and chapter 3's five roof pieces stand there
-too, whole. Opening the gate and breaking the cases and pieces wait on flags that
+too, whole. Chapter 4's steam vents and floor flames are props that loop
+their models, and they loop here while animate is ticked. Opening the gate and breaking the cases and pieces wait on flags that
 shots or the zone's own clock set, so those are left out.
 
 The finished game's stages have their music too: tick **music** on the Stages

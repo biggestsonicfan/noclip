@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for two handlers.
+The others are left out rather than guessed at, but for four handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -5916,6 +5916,30 @@ frames each at (902.5, -5.2, 435.2) and (902.5, -5.2, 461.2), turns 0 and
 for 31800 frames into section 5 with their flags clear, so the demo never breaks
 them. Revision A's profile leaves them out, as it does room 4's; the prototype
 has no such handler.
+
+The third and fourth are two props that animate: type 104 on 0x3E8B0 and type
+108 on 0x3E8F0. Each closes as a prop's does (0x3ED60), adds one to the model
+at +0x54 and draws through 0x413B0. 104 goes back to 0x1859 once the model it
+stepped from is past 0x185B, so it loops `PN_kakaaa01a` to `04a` (0x1859 to
+0x185C), four frames; 108 goes back to 0x10E4 past 0x1114, so it loops
+`PN_pushukeke00a` to `49a` (0x10E4 to 0x1115), fifty. Nothing stops them,
+so the explorer steps them a model a frame while animate is ticked. Chapter 4's
+section 0, script 1 spawns two 108s (records 0xFBF80 and 0xFBFB0, Stage 4 ·
+set 4: steam rising from a vent), and sections 2 and 3, script 2 spawn five
+104s (0xFCB00 to 0xFCBC0, Stage 4 · set 9: flames standing on the floor's
+lit pads). Checked in MAME (`hotdo`, the attract scene table pointed at chapter
+4's sections 0 and 2, a breakpoint on 0x413B0 for these types): the two 108s
+drawn at (-1.5, 18, -15) and (-1, 24, 74) and the five 104s at x -126, y 0, z
+1461.4 to 1866.0, all turned 0 at scale 1, as the explorer has them. Every
+draw is the model before it plus one, wrapping where the handlers say, over
+1619 draws of each 108 and 1062 of each 104; the five 104s keep in step.
+The 108s do not start together: after 0x417F0, the spawn's per-type cases
+(0x38A1C) give type 0x6C the number 0x33B00 returns, rem 49 (0x38AE4), added to
+its model, so each steam starts somewhere in its loop. In MAME both spawns write
+0x10E4 and the store at 0x38AF8 then makes one 0x10E4 and the other 0x110E; another run gave
+them 8 apart. Type 0x68 has no case there, so the five 104s all start from
+0x1859, as drawn. The explorer has no such number to take, so it starts both
+108s from the type's model, in step.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard
