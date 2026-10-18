@@ -462,7 +462,7 @@ board as Daytona USA's, with Virtua Cop's driver and samples. See [Virtua Cop's
 music](TECHNICAL.md#virtua-cops-music).
 
 The light is the game's own: each stage's light table, by how far along the
-rail the eye is, and out of play the boot's fixed light.
+rail the eye is, and out of play the fixed light 0x1E1C8 sets.
 
 Not read yet: the enemies (they come from another system than the objects) and the
 models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
