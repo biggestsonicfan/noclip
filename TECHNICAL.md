@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for five handlers.
+The others are left out rather than guessed at, but for six handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -5957,6 +5957,24 @@ on 0x413B0 for type 69): each drawn at its record's place, (18, -23, -576),
 177 frames, every draw the model before it plus one and wrapping at 0xA22, until
 the clock passed 99, 268 and 1048 and the task closed. The board's first draw
 is 0xA07, the handler having stepped once; the explorer's is the type's model.
+
+The sixth is type 96 on 0x3E4A0, `PN_koba01a` (0x15C2), a fan. It closes as a
+prop's does (0x3ED60) and draws through 0x413B0 with the type's model, but
+first turns its third angle: +0x34 += +0x31C. While the zone's clock (0x51E51C)
+is short of 1440 it sets +0x31C to 0x800; after that, an object standing past
+x 500 takes 4 off it a frame until it stops, and one short of 500 keeps
+turning. The spawn's per-type cases (0x38A1C) have none for it. Chapter 3's
+section 1, script 8 spawns two (records 0xF7000 and 0xF7030, Stage 3 · set 8),
+at x 443.7 and 545.7, the second a turn of 0x2000 on. The explorer runs no
+clock inside a zone, so both turn 0x800 a frame while animate is ticked, as
+they do from their spawn; the second's slowing down is left out. Checked in
+MAME (`hotdo`): the attract demo's path through that section never runs
+script 8, so with the scene table pointed at chapter 3's section 1 and the
+section's script 1 read as script 8 (0xF5BC4), a breakpoint on 0x413B0 for type
+96 showed both at (443.7, -240.7, 850) and (545.7, -240.7, 850), scale 1, the
+third angle 0x2000 apart and 0x800 more on every one of 1226 draws, the clock
+going from 731 to 870. The board's first draw is the record's turn plus 0x800,
+the handler having turned once; the explorer's is the record's turn.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

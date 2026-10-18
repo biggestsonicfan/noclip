@@ -694,9 +694,10 @@ as it does before the player opens it, its top piece turning as the board turns
 it. Chapter 2's two glass cases and chapter 3's five roof pieces stand there
 too, whole. Chapter 4's steam vents and floor flames are props that loop
 their models, and so are chapter 1's three `PN_powa` props; they loop here
-while animate is ticked. Opening the gate, breaking the cases and pieces, and
-closing the `PN_powa` props wait on flags that shots set or on the zone's own
-clock, so those are left out.
+while animate is ticked. Chapter 3's two fans spin while animate is ticked,
+as they do once spawned. Opening the gate, breaking the cases and pieces,
+closing the `PN_powa` props and slowing the second fan wait on flags that
+shots set or on the zone's own clock, so those are left out.
 
 The finished game's stages have their music too: tick **music** on the Stages
 tab and each chapter plays the song its own scripts start, on the game's Model 2

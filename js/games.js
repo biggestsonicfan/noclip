@@ -1878,6 +1878,10 @@ const hotdo = {
          * 69 PN_powa00a to 29a, each back to its type's model past `last`. */
         cycles: [{ handler: 0x3e8b0, last: 0x185c }, { handler: 0x3e8f0, last: 0x1115 },
             { handler: 0x3d860, last: 0xa22 }],
+        /* Type 96, PN_koba01a, which turns its third angle (+0x34) 0x800 a
+         * frame on 0x3E4A0 while the zone's clock is short of 1440 (see
+         * spawnProps). */
+        spinners: [{ handler: 0x3e4a0, axis: 2, rate: 0x800 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same

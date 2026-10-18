@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but five, which are read below.
+ * all but six, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -187,6 +187,12 @@ function walkScript(rom, at, visit) {
  * sections that spawn one. The explorer runs no clock inside a zone, so the
  * three stand and loop as spawned.
  *
+ * Type 96, a fan (PN_koba01a), turns its third angle (+0x34) on 0x3E4A0 by
+ * +0x31C a frame, which is 0x800 while the zone's clock is short of 1440; past
+ * it, a fan beyond x 500 slows by 4 a frame to a stop. Chapter 3's two stand
+ * either side of 500 (Stage 3 set 8), and the explorer, with no clock inside a
+ * zone, turns both 0x800 a frame as they do from their spawn.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -220,7 +226,8 @@ function spawnProps(rom, at, set, out) {
         const room4 = O.room4 && handler === O.room4.handler;
         const cases = O.cases && handler === O.cases.handler;
         const cycle = O.cycles?.find((c) => c.handler === handler);
-        if (handler !== O.prop && !room4 && !cases && !cycle) continue;
+        const spinner = O.spinners?.find((c) => c.handler === handler);
+        if (handler !== O.prop && !room4 && !cases && !cycle && !spinner) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
@@ -247,6 +254,8 @@ function spawnProps(rom, at, set, out) {
                 dv.getUint32(rec + 28, true) & 0xffff],
             /* Room 4's first piece turns on its own (see above). */
             ...(room4 && type === O.room4.first ? { spin: O.room4.spin } : {}),
+            /* And type 96 turns its third (see above). */
+            ...(spinner ? { spin: spinner.rate, spinAxis: spinner.axis } : {}),
             /* And these two step their model (see above). */
             ...(cycle && cycle.last >= model ? {
                 cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),
@@ -427,12 +436,14 @@ function propTurn([x, y, z]) {
     return out;
 }
 
-/* Where a prop stands, turned, and its size; `spin` more of the second turn
- * (+0x30), which is the yaw. */
+/* Where a prop stands, turned, and its size; `spin` more of the turn its
+ * `spinAxis` names, the second (+0x30, the yaw) unless it says otherwise. */
 function propOps(o, spin = 0) {
-    const [x, y, z] = o.turn;
+    const turn = [...o.turn];
+    const axis = o.spinAxis ?? 1;
+    turn[axis] = (turn[axis] + spin) & 0xffff;
     return [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
-        ...propTurn([x, (y + spin) & 0xffff, z]),
+        ...propTurn(turn),
         ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
 }
 
