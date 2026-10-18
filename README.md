@@ -465,8 +465,10 @@ and its colours, as the stage start lays them down ([`js/vcopsky.js`](js/vcopsky
 The objects layer holds what stands in a stage besides its pieces — cars, vans,
 drums, crates, glass — from a second per-segment table, each object built from
 its type's parts at their offsets, and objects that ride on others under them.
-Breakables stand whole; the glints on car glass, which follow the camera, are
-left out. The boot sets ten palette entries by hand after loading the table —
+Breakables stand whole. The cars' windows reflect the sky, and the reflection
+slides as the camera turns: each window's routine slides its texture points by
+the camera's yaw and pitch every frame, and the explorer slides them by its own
+camera, as the routine would (checked against the points MAME uploads). The boot sets ten palette entries by hand after loading the table —
 the drums' teal among them — and the explorer does the same.
 
 The stages have their music: tick **music** on the Stages tab and each stage
