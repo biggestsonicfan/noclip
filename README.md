@@ -551,7 +551,7 @@ need a table found in that game's ROM first. Where they stand:
 | Hand shapes from the move script | | yes | yes | |
 | Moves and strings by input | yes | moves | moves | |
 | Fighter's own motions grouped | yes | yes | yes | |
-| Sway chains | yes | yes | | |
+| Sway chains | yes | yes | yes | |
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
 | Stage sounds | | yes | yes | |
@@ -559,8 +559,9 @@ need a table found in that game's ROM first. Where they stand:
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
-fight code already runs both players), Virtua Fighter 2's sway chains and hit
-flash, and stage sounds for Sonic the Fighters and Dead or Alive.
+fight code already runs both players), and stage sounds for Sonic the Fighters
+and Dead or Alive. Virtua Fighter 2 has no hit flash to show: every fighter
+draw goes through `0x7C60` with the colour left as it is.
 
 ## Dead or Alive
 

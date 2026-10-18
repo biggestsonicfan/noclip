@@ -6415,6 +6415,52 @@ stage blows only in modes 16 and 17, from the side `0x500065` names, and never
 on Grace. The explorer leaves that case out. The Animation tab's sway panel has
 a wind picker for the five stages.
 
+#### Virtua Fighter 2
+
+VF2 has the same chains a game earlier. Its handler table at `0x64524` (MATRIX
+`0x64864`, COLI `0x64E5C`, ETC `0x65318`, TSUKENE `0x64CA0`, OSAGE `0x651BC`)
+writes the same records, and the size table at `0x640C0` is FV's. `0x65384`
+sends the stream as command `0x4A` and reads it back through `0x653D4`. On
+Model 2A the coprocessor is the TGP, and the game uploads its program. There
+`0x4A` jumps to `0xCFA`, which runs the record table at `0xD08`, and the
+segment's keep-out at `0xDF2`-`0xEAE` is `keepOut` in `js/osage.js` branch for
+branch.
+
+The table at `0x658A4` has 26 records, like FV's: the 13 characters and their
+P2 looks. Dural, Mue and Kojacky have none. Akira has his headband tails and
+belt, Jacky fifteen strands of hair, Sarah her ponytail and earrings, Pai her
+braid. Lion has his straps and hair. Shun has the gourd on his belt (bone 9)
+and his hair. Gravity is `0x3B32674F`, `0.0027222`. The wind is FV's code on
+`0x654E0`'s entries:
+
+| stage | angle | entry |
+|-------|-------|-------|
+| 0 | `0x8000` | 1 |
+| 1 | `0xF000` | 0 |
+| 5 | `0xC000` | 1 |
+| 8 | `0x7000` | 0 |
+| 14 | `0xF000` | 0 |
+
+The explorer leaves out:
+
+- Game modes `0xE`/`0xF` (`0x50002B`) swap in the table at `0x696D4` for the
+  player `0x50004C` doesn't name.
+- A Lau-against-Lau fight in mode 2 picks from `0x697E8`.
+- The replay draws the segment's `+0x20` model.
+- A per-player switch, bit 1 or 2 of the word `0x500814` points at, hides every
+  chain (`0x64348`). With Shun's gourd in hand (`+0` bit 27, script op 17), it
+  instead draws only his first chain, the gourd's (`0x65458` stops at the
+  record `0x69520`).
+
+The TGP was graded in MAME (`vf2`, 60 s of attract). Every `0x4A` command's
+stream was taken in bufferram as the i960 issued it and after the readback,
+and the TGP's own copy of each COLI was taken at `0xD27`. Then `runCoprocessor`
+ran each stream: 43,136 segments over Akira, Sarah, Kage, Lau, Jeffry, Pai,
+Wolf, Shun and Lion. The worst point was 2.0e-6 (Shun), and under 2e-7 for the
+rest. The TGP's COLI copy is needed because the bufferram copy is not final when
+the command is sent. Pai's sphere centre (word 5) still read 0 there, while the
+TGP read 0.2409. With the bufferram limits the same check is off by up to 0.08.
+
 ### Tails' tails
 
 Tails' two tails are not on the sixteen-slot skeleton, and they are not a sway

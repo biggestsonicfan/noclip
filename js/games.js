@@ -3393,6 +3393,29 @@ const vf2 = {
      * this game's own; js/vf2fighters.js. `standardRig` is the table every
      * fighter is solved on, `fighters` the roster's records. */
     motionTable: { list: 0x2120004, count: 1360 },
+    /*
+     * The sway chains (js/osage.js): Fighting Vipers' code a game earlier,
+     * the same records, and the coprocessor's Fn_osage (0x4A, TGP 0xCFA)
+     * the same keep-out to the float. The definitions by record,
+     * `0x658A4[+0x1B0*4]`, 26 of them; Dural, Mue and Kojacky have none,
+     * nor do their 2P looks. Gravity 0x3B32674F. The wind is 0x654E0's two
+     * entries a record, by 0x500064 as Fighting Vipers' is. Left out: the
+     * tables the game modes 0xE/0xF and a Lau-against-Lau fight switch to
+     * (0x696D4, 0x697E8), and the per-player switch at *0x500814 under
+     * which only Shun's first chain draws, and only with the gourd in hand
+     * (0x64348, 0x65458).
+     */
+    osage: {
+        table: 0x000658a4, count: 26, gravity: 0.002722222125157714, head: 2,
+        wind: {
+            table: 0x000654e0,
+            stages: {
+                0: { angle: 0x8000, entry: 1 }, 1: { angle: 0xf000, entry: 0 },
+                5: { angle: 0xc000, entry: 1 }, 8: { angle: 0x7000, entry: 0 },
+                14: { angle: 0xf000, entry: 0 },
+            },
+        },
+    },
     rig: {
         kind: 'vf2',
         standardRig: 0x296a0,
