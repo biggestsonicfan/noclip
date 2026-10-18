@@ -1867,6 +1867,9 @@ const hotdo = {
         table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
         prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
         scale: 0x28,
+        /* Room 4's walls and shutters, types 97 to 101 on one handler; the
+         * first turns 0x80 a frame (see spawnProps in js/placements.js). */
+        room4: { handler: 0x3e510, first: 97, spin: 0x80 },
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2312,6 +2315,9 @@ const hotd = {
         ...hotdo.objects,
         table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160,
         classes: 0xafde0, generic: 0x39930,
+        /* Room 4's handler moved with the rest, and this build's program
+         * chips are not to hand to read where to, so it is left out. */
+        room4: null,
     },
     rig: {
         bodies: {

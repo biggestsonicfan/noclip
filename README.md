@@ -688,6 +688,11 @@ mansion's front with its doors shut, nearer, and open), and each zone lists
 one of them. "Every zone at once" draws all the zones together, versions and
 all, so they overlap where they share a spot.
 
+The props the scripts spawn stand in their rooms on the **objects** layer. In
+`hotdo` that includes chapter 4's gate (room 4's walls and shutters), standing
+as it does before the player opens it, its top piece turning as the board turns
+it. Opening it waits on a flag the player's shots set, so that is left out.
+
 The finished game's stages have their music too: tick **music** on the Stages
 tab and each chapter plays the song its own scripts start, on the game's Model 2
 sound board with its driver and samples. See [The House of the Dead's

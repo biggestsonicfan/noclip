@@ -5860,11 +5860,35 @@ is a null pointer.
 
 Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
-stands and does nothing else. The rest are their own things: type 97 is a
-distance trigger against a global, drawing nothing, and 98 to 102 switch on
-`type - 98` into four behaviours whose models are room 4's walls and shutters.
-Only the types on the shared handler are stood up, and only for records of the
-generic class. The others are left out rather than guessed at.
+stands and does nothing else. The rest are their own things, and only the types
+on the shared handler are stood up, and only for records of the generic class.
+The others are left out rather than guessed at, but for one handler.
+
+That one is room 4's walls and shutters: types 97 to 101 (models
+`PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
+the first revision (`hotdo`). Its init clears the byte 0x53E871. Its task closes
+as a prop's does (0x3ED60), switches on `type - 97`, and draws through 0x413B0,
+the prop's own draw command for command: place +0x20, turns +0x2C, +0x30 and
++0x34, scale +0x94, model +0x54. Before the draw:
+
+| type | model | what it does |
+|---|---|---|
+| 97 | `PN_r4_04_00a` | +0x30 (the yaw) += 0x80 every frame; once 0x53E871 is set, y drops 0.4 a frame to 54 |
+| 98 | `PN_r4_04_01a` | once 0x53E871 is set, z rises 0.25 a frame to 2077.6 |
+| 99 | `PN_r4_04_01b` | once 0x53E871 is set, z falls 0.25 a frame to 1977.6 |
+| 100 | `PN_r4_04_02a` | while 0x53E871 is clear and event flag 0x70 (0x51E330) is set, yaw += 0x50 a frame; past 0x9FFF it sets 0x53E871 |
+| 101 | `PN_r4_04_02b` | while 0x53E871 is clear and flag 0x70 is set, yaw -= 0x50 a frame |
+
+Flag 0x70 is one byte of the event flags at 0x51E2C0, which objects set when
+the player sets them off (0x48AC); no script sets it. So the explorer stands
+the five where they are spawned, and turns 97 0x80 a frame while animate is
+ticked; the gate opening after the flag is left out. Chapter 4's section 4,
+script 1 spawns them (records 0xFD8D0 to 0xFD990), and so does the attract
+demo's. Checked in MAME (`hotdo`, attract, a breakpoint on 0x413B0 for these
+types): all five drawn 1448 frames each at their records' places and turns,
+97's yaw stepping 0x80 a frame from 0x80, and flag 0x70 never set. Revision A
+moved the handler, and its program chips are not to hand, so its profile leaves
+these out. The prototype's table stops at 77 types and has no such handler.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

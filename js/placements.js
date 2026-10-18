@@ -120,12 +120,31 @@ function walkScript(rom, at, visit) {
  * Only the types the game treats as an ordinary standing object are put up.
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
- * does nothing else. The rest have handlers of their own and are not props at
- * all: type 97 is a distance trigger that draws nothing, 98 to 102 switch on
- * `type - 98` into four behaviours of their own, and their models are room 4's
- * walls and shutters, which is what filled the first chapter's courtyard with
- * PN_r4_04 pieces when every type was stood up. What those handlers do has not
- * been read, so nothing is guessed at: they are left out.
+ * does nothing else. The rest have handlers of their own and are left out,
+ * all but one, which is read below.
+ *
+ * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
+ * share one handler, 0x3E510 in the first revision. Its init clears the byte
+ * 0x53E871; its task closes as a prop does (0x3ED60) and then switches on
+ * `type - 97` and draws through 0x413B0, which is the prop's draw command for
+ * command: the place at +0x20, the three turns at +0x2C, +0x30 and +0x34, the
+ * scale at +0x94, the model at +0x54. Before the draw:
+ *
+ *     97   +0x30 += 0x80 every frame; once 0x53E871 is set, y drops 0.4 a
+ *          frame down to 54
+ *     98   once 0x53E871 is set, z rises 0.25 a frame up to 2077.6
+ *     99   once 0x53E871 is set, z falls 0.25 a frame down to 1977.6
+ *     100  while 0x53E871 is clear and event flag 0x70 (0x51E330) is set,
+ *          +0x30 += 0x50 a frame; past 0x9FFF it sets 0x53E871
+ *     101  while 0x53E871 is clear and flag 0x70 is set, +0x30 -= 0x50
+ *
+ * Flag 0x70 is one of the event flags at 0x51E2C0, which objects set when
+ * the player sets them off (0x48AC). No script sets it, so the explorer has
+ * nothing that would, and the five stand as spawned, with 97 turning on its
+ * own every frame. Everything after the flag is left out. Chapter 4's
+ * section 4 spawns them, and so does the attract demo, where MAME draws all
+ * five at their records for 1448 frames, 97 turning 0x80 a frame, and the
+ * flag never set.
  *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
@@ -156,7 +175,9 @@ function spawnProps(rom, at, set, out) {
         if (dv.getUint32(O.classes + cls * 4, true) !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
-        if (dv.getUint32(O.handlers + type * 4, true) !== O.prop) continue;
+        const handler = dv.getUint32(O.handlers + type * 4, true);
+        const room4 = O.room4 && handler === O.room4.handler;
+        if (handler !== O.prop && !room4) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
@@ -181,6 +202,8 @@ function spawnProps(rom, at, set, out) {
             turn: [dv.getUint32(rec + 20, true) & 0xffff,
                 dv.getUint32(rec + 24, true) & 0xffff,
                 dv.getUint32(rec + 28, true) & 0xffff],
+            /* Room 4's first piece turns on its own (see above). */
+            ...(room4 && type === O.room4.first ? { spin: O.room4.spin } : {}),
         });
     }
 }
@@ -355,6 +378,15 @@ function propTurn([x, y, z]) {
     if (x) out.push(['rx', deg(x)]);
     if (z) out.push(['rz', -deg(z)]);
     return out;
+}
+
+/* Where a prop stands, turned, and its size; `spin` more of the second turn
+ * (+0x30), which is the yaw. */
+function propOps(o, spin = 0) {
+    const [x, y, z] = o.turn;
+    return [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
+        ...propTurn([x, (y + spin) & 0xffff, z]),
+        ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
 }
 
 /* A -1-terminated list of pointers, as the section and script tables are. */
@@ -765,9 +797,7 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         set: o.set,
         /* One that carries its own transform keeps it: a part of one of
          * Virtua Cop's objects, under its parents' (js/vcop.js). */
-        ops: o.ops ?? [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
-            ...propTurn(o.turn),
-            ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])],
+        ops: o.ops ?? (o.spin ? (frame) => propOps(o, frame * o.spin) : propOps(o)),
         /* And its own texture points, where it has them: a car window's,
          * slid live by the camera. */
         ...(o.points ? { points: o.points } : {}),
