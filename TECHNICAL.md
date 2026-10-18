@@ -7647,3 +7647,26 @@ within 3.3% of its level. The driver listens from reset, so the spec has no
 `warmup`. Chapters 3 and 4 are read from the scripts but were not played in
 MAME. In the page, every stage of the four chapters plays at an RMS of about
 200–1,400.
+
+**The prototype's own.** `hotdp` has a sound program of its own
+(`sndpgm0.31`) and four 2 MB sample chips (`sound1.32`–`sound4.35`), on the same
+board. Its i960 side is the finished game's at other addresses: 0x11160 queues a
+word (while the mode word `0x51F218` is 4, or flag `0x51E49C` is set), 0x11210
+writes one to the UART at once, and the boot (0x10FDC) sends `A0 00 01`. The
+stage scripts' op 90 is entry 90 of the table at 0x94550 (0x51260) and queues
+the word after it, so the same walk reads the songs: chapter 1 `A0 10 01`,
+chapter 2 `A0 10 02`. The scripts also start `A0 10 04` and `A0 10 05`, in
+sections no stage opens with. Every scene change MAME showed in play queues `A0
+00 02` and then the effect `A0 13 56` (0xAF00); `A0 00 02` is the stop. (0x1B50C
+and 0x51590 send `A0 00 03` before it, but MAME never reached them in play.)
+
+Graded the same way as the finished game. MAME (`hotdp`) was coined, and a tap
+logged every UART byte for 100 s: the title `A0 10 00` at 15.8 s, then chapter 1's
+`A0 10 01` at 54.0 s as its first section starts. Those bytes were replayed at
+the same times through the board natively (m2-hle2 `f797c4b`, the build of
+`board.wasm`). Over the title (16–34 s) the loudness envelope follows MAME's at
+0.994 in 50 ms windows and 0.999 in quarter-second ones. Over chapter 1's song
+(54.5–76 s) it follows at 0.994 and 0.998. Both are within 3% of MAME's level.
+Chapter 2's song is read from the scripts and was not played in MAME. In the
+page, the four Stage 1 entries play `A0 10 01` and the four Stage 2 entries play
+`A0 10 02`, at an RMS of about 270–1,000.

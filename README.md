@@ -673,8 +673,9 @@ all, so they overlap where they share a spot.
 The finished game's stages have their music too: tick **music** on the Stages
 tab and each chapter plays the song its own scripts start, on the game's Model 2
 sound board with its driver and samples. See [The House of the Dead's
-music](TECHNICAL.md#the-house-of-the-deads-music). The prototype has no music
-yet.
+music](TECHNICAL.md#the-house-of-the-deads-music). The prototype (`hotdp`) plays
+its own: its own sound program and samples, and the songs its own scripts start
+for its two chapters.
 
 A merged archive carrying the parent and its clones together works too, and
 loads as the parent: the chips at the top level are the parent's, and the ones

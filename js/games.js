@@ -1260,6 +1260,29 @@ const hotdp = {
         sweep: { chapter: 0, section: 7, script: 2, after: 170, spare: 7 },
     },
     /*
+     * The prototype's own sound program and samples: a driver of its own
+     * (`sndpgm0.31`) and four 2 MB sample chips, on the same Model 2 board.
+     * The i960 side is the finished game's, at other addresses: 0x11160 queues
+     * a word (while the mode word 0x51F218 is 4 or flag 0x51E49C is set),
+     * 0x11210 writes it to the UART at once, and the stage scripts' opcode 90
+     * (0x51260, entry 90 of the table at 0x94550) queues the word after it.
+     * So js/placements.js reads the songs as it does for the finished game:
+     * 0xA01001 for chapter 1, 0xA01002 for chapter 2.
+     *
+     * The boot (0x10FDC) sends A00001. Every scene change MAME showed in play
+     * queues A00002 and then the effect A01356 (0xAF00), so A00002 is the stop.
+     * (0x1B50C and 0x51590 send A00003 before it; MAME never reached them.)
+     * MAME, a coined game: the title A01000 after the coin, chapter 1's A01001
+     * as its first section starts, 54 s in.
+     */
+    sound: {
+        program: ['sndpgm0.31', 0x30accd2e],
+        samples: [['sound1.32', 0xe0a8dd56], ['sound2.33', 0xa517834f],
+            ['sound3.34', 0xf0c529bb], ['sound4.35', 0x3ad48d53]],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x02],
+    },
+    /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
      * them in the same plane, and a depth buffer cannot tell which of two equal
      * depths to keep — js/layers.js ranks them the way the board's polygon sort
