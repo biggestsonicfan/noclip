@@ -1879,11 +1879,13 @@ const hotdo = {
         /* Type 84, PN_niku_001, which stands as a prop on 0x3DE20 until bit 1
          * or 2 of its flags (+0x58) is set (see spawnProps). */
         meat: { handler: 0x3de20 },
-        /* Three props that step their model a frame (see spawnProps): type
-         * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a and type
-         * 69 PN_powa00a to 29a, each back to its type's model past `last`. */
+        /* Four props that step their model a frame (see spawnProps): type
+         * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a, type 69
+         * PN_powa00a to 29a and type 93 PN_eneene00a to 34a, each back to its
+         * type's model past `last`. 93 shares 0x3E180 with 87, 88 and 95,
+         * which do other things, so only it is taken. */
         cycles: [{ handler: 0x3e8b0, last: 0x185c }, { handler: 0x3e8f0, last: 0x1115 },
-            { handler: 0x3d860, last: 0xa22 }],
+            { handler: 0x3d860, last: 0xa22 }, { handler: 0x3e180, last: 0xd7a, types: [93] }],
         /* Type 96, PN_koba01a, which turns its third angle (+0x34) 0x800 a
          * frame on 0x3E4A0 while the zone's clock is short of 1440 (see
          * spawnProps). */

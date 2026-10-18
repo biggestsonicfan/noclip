@@ -204,6 +204,13 @@ function walkScript(rom, at, visit) {
  * frame and stands at 001 again. What sets those bits is not traced; MAME's
  * attract demo never does, so chapter 2's two (Stage 2 set 5) stand at 001.
  *
+ * Type 93 (PN_eneene00a) is one of four on 0x3E180; the others, 87, 88 and
+ * 95, do other things and are left out. It closes as a prop does (0x3ED60),
+ * steps +0x54 back to 0xD58 once the model it stepped from is past 0xD79, so
+ * PN_eneene00a to 34a, thirty-five, and draws through 0x413B0. It also closes
+ * once the zone's clock (0x51E51C) reaches 430, which the explorer, with no
+ * clock inside a zone, leaves out: chapter 4's one (Stage 4 set 4) loops.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -238,7 +245,7 @@ function spawnProps(rom, at, set, out) {
         const cases = O.cases && handler === O.cases.handler;
         const clocked = O.clocked && handler === O.clocked.handler;
         const meat = O.meat && handler === O.meat.handler;
-        const cycle = O.cycles?.find((c) => c.handler === handler);
+        const cycle = O.cycles?.find((c) => c.handler === handler && (!c.types || c.types.includes(type)));
         const spinner = O.spinners?.find((c) => c.handler === handler);
         if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);

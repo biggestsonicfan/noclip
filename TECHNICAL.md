@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for eight handlers.
+The others are left out rather than guessed at, but for nine handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6002,6 +6002,21 @@ the attract scene table pointed at chapter 2's section 12, a breakpoint on
 0x413B0 for type 84): both drawn 2128 times as 0x11B1 at (338.5, -95.3, 69) and (332.5, -91.3,
 61), turns 0xB000 and 0xD000, scale 1, the flags word 0x1401 throughout, until
 both closed as props do at clock 750.
+
+The ninth is type 93 on 0x3E180, `PN_eneene00a` (0xD58). The handler is shared
+with types 87, 88 and 95, which do other things and stay out. For 93 it closes
+as a prop's does (0x3ED60), and closes (0x150D0) once the zone's clock
+(0x51E51C) reaches 430; then it steps +0x54 back to 0xD58 once the model it
+stepped from is past 0xD79, so it loops `PN_eneene00a` to `34a` (0xD58 to
+0xD7A), thirty-five frames, and draws through 0x413B0. Chapter 4's record
+0xFC010 spawns one, Stage 4 · set 4. The explorer runs no clock inside a zone,
+so it loops as spawned while animate is ticked, and the close is left out.
+Checked in MAME (`hotdo`, the attract scene table pointed at chapter 4's
+section 0, a breakpoint on 0x413B0 for type 93): drawn 2075 times at (0, 18.9,
+0.5), turn 0, scale 1, every draw the model before it plus one and wrapping at
+0xD7A, the clock going from 197 to 429, and closed as the clock reached 430.
+The board's first draw is 0xD59, the handler having stepped once; the
+explorer's is the type's model.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

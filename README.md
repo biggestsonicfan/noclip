@@ -693,14 +693,14 @@ The props the scripts spawn stand in their rooms on the **objects** layer. In
 as it does before the player opens it, its top piece turning as the board turns
 it. Chapter 2's two glass cases and chapter 3's five roof pieces stand there
 too, whole. Chapter 4's steam vents and floor flames are props that loop
-their models, and so are chapter 1's three `PN_powa` props; they loop here
-while animate is ticked. Chapter 3's two fans spin while animate is ticked,
-as they do once spawned, and chapter 2's breaking wall stands whole, and two
-hanging bodies (`PN_niku_001`) beside it hang still. Opening the gate, breaking the
-cases, pieces and wall, closing the `PN_powa` props and slowing the second fan
-wait on flags that shots set or on the zone's own clock, so those are left
-out, and so is the bodies' animation, which waits on two bits of their own
-flags.
+their models, and so are chapter 1's three `PN_powa` props and chapter 4's
+`PN_eneene` prop; they loop here while animate is ticked. Chapter 3's two
+fans spin while animate is ticked, as they do once spawned, and chapter 2's
+breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
+hang still. Opening the gate, breaking the cases, pieces and wall, closing the
+`PN_powa` and `PN_eneene` props and slowing the second fan wait on flags that
+shots set or on the zone's own clock, so those are left out, and so is the
+bodies' animation, which waits on two bits of their own flags.
 
 The finished game's stages have their music too: tick **music** on the Stages
 tab and each chapter plays the song its own scripts start, on the game's Model 2
