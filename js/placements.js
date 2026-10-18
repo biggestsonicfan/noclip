@@ -768,8 +768,10 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         ops: o.ops ?? [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
             ...propTurn(o.turn),
             ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])],
-        /* And its own texture points, where it has them: a car window's. */
+        /* And its own texture points, where it has them: a car window's,
+         * slid live by the camera. */
         ...(o.points ? { points: o.points } : {}),
+        ...(o.live ? { live: o.live, slides: true } : {}),
         /* Out of the face layering: Virtua Cop's enemies' joints. */
         ...(o.layered === false ? { layered: false } : {}),
     }));
