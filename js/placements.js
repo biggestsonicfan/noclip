@@ -47,6 +47,12 @@ const OP_CAMERA = 60;
  * 1 drifts the dome and 2 holds it still. */
 const OP_SKY = 70;
 const OP_SKY_ON = 71;
+/* 90 queues its word for the sound board (0x67860 in the finished game: the
+ * word after the opcode, to the send queue at 0x154D0). Most are effects; the
+ * ones on channel 0x10, 0xA010xx, are the music, and a chapter's scripts start
+ * its song with one. */
+const OP_SOUND = 90;
+const isSong = (code) => (code >>> 8) === 0xa010;
 const ONE_WORD = new Set([16, 34, 83]);
 const TWO_WORDS = new Set([13, 14, 15, 20, 32, 33, 40, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79,
     80, 81, 82, 84, 85, 88, 89, 90, 91]);
@@ -484,7 +490,7 @@ function skyDraws(rom, sky) {
 /* A stage entry in the shape the viewer's stage list takes. The set is the
  * atlas, the palette and the colour tables at once — sub_2B720 loads all three
  * from the one number. */
-function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, zones = [], meta, mixedSets = false }) {
+function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, zones = [], song, meta, mixedSets = false }) {
     stages.push({
         slot: stages.length,
         placements: true,
@@ -496,6 +502,8 @@ function placementStage(stages, lit, chapter, { name, set, draws, objects = [], 
         objects,
         sky,
         zones,
+        /* The music the scripts have started by then (js/app.js plays it). */
+        song,
         /* The view the stage opens in: its first zone, or every placement
          * where it has no zones to choose between. See zoneViews. */
         views: [...zones.map((z, i) => [`zone:${i}`, z.label]),
@@ -547,6 +555,11 @@ export function readPlacementStages(rom) {
          * machine: a set's sky is what is standing when its first zone is made
          * current, and whatever its own sections then ask for. */
         const sky = { index: 0, on: 0, spin: false };
+        /* The song, much the same way: what is playing when a set's first zone
+         * is made current, or else the first one started while it is up — the
+         * first section of a chapter makes its zone current and then starts
+         * the chapter's song. */
+        let song = 0;
         /* The props the chapter's scripts spawn, each under the set that was
          * loaded when its list ran — the same rule the zones are grouped by. */
         const props = new Map();
@@ -555,6 +568,12 @@ export function readPlacementStages(rom) {
             for (const script of pointerList(rom, section)) {
                 walkScript(rom, script, (op, p) => {
                     if (op === OP_LOAD_SET) set = dv.getUint32(p + 4, true);
+                    if (op === OP_SOUND && isSong(dv.getUint32(p + 4, true))) {
+                        song = dv.getUint32(p + 4, true);
+                        const g = groups.get(set);
+                        if (g && !g.song) g.song = song;
+                        return;
+                    }
                     if (op === OP_SKY || op === OP_SKY_ON) {
                         if (op === OP_SKY) sky.index = rom.maincpu[p + 4];
                         else { sky.on = rom.maincpu[p + 4]; sky.spin = sky.spin || sky.on === 1; }
@@ -572,6 +591,7 @@ export function readPlacementStages(rom) {
                         groups.set(set, {
                             zones: new Set(), sections: new Set(), zoneSections: new Map(),
                             sky: { index: sky.index, on: sky.on !== 0, spin: sky.on === 1 },
+                            song,
                         });
                     }
                     const g = groups.get(set);
@@ -646,6 +666,7 @@ export function readPlacementStages(rom) {
                 draws,
                 objects,
                 sky,
+                song: g.song,
                 zones: zoneViews(g.zones, zoneOrder, g.zoneSections, set),
                 meta: [
                     ['texture set', set],
@@ -689,6 +710,7 @@ export function readPlacementStages(rom) {
                 /* The sky of the set that draws most of the chapter, since that
                  * is the set this stage is framed as. */
                 sky: skyDraws(rom, groups.get(widest.set)?.sky),
+                song: groups.get(widest.set)?.song,
                 objects: [...props.values()],
                 /* Each zone under the set loaded when it is first made
                  * current, which is the set its pieces are drawn under. */

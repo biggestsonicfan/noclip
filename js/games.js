@@ -1848,6 +1848,27 @@ const hotdo = {
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
+    /*
+     * The sound board is the Model 2 board, its UART at 0x01C80000 on the 2C
+     * (sends queued at 0x154D0 or 0x15540, sent at once by 0x15590). The
+     * samples are two 4 MB chips where the fighting games have four of 2 MB.
+     *
+     * There is no song table: a chapter's stage scripts start its music with
+     * opcode 90, which queues the word after it (js/placements.js), and the
+     * explorer plays the song the scripts have started when each stage's
+     * first zone is made current — 0xA01001 for chapter 1, 0xA01002 for 2.
+     * The boot (0x15344) sends A00001; every scene change (0xD144, 0x15CE0)
+     * clears the queue and sends A00002 and BE5000, which is the stop.
+     * MAME, a coined game: the title A01000 after the coin, chapter 1's
+     * A01001 as its first section starts.
+     */
+    sound: {
+        program: ['epr-19720.31', 0xb367d21d],
+        samples: [['mpr-19721.32', 0xf5d8fa9a], ['mpr-19722.34', 0xa56fa539]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x02, 0xBE, 0x50, 0x00],
+    },
     depth: { recede: 0, nearMin: 0.02, layers: true },
     scenes: null,
     /*

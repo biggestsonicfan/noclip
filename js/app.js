@@ -5834,9 +5834,11 @@ function playStageMusic() {
     /* A stage list that is not one entry per stage number says which number
      * the sound tables know it by (js/vf2.js). */
     const slot = stage?.soundSlot ?? stage?.slot;
-    const { code, index } = stage
-        ? stageMusic(state.rom, slot, +$('#music-song').value)
-        : { code: 0, index: -1 };
+    /* A stage whose song the scripts start rather than a table (House of the
+     * Dead's, js/placements.js) carries it. */
+    const { code, index } = !stage ? { code: 0, index: -1 }
+        : stage.song !== undefined ? { code: stage.song, index: -1 }
+        : stageMusic(state.rom, slot, +$('#music-song').value);
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
     if (code === state.music.playing) return;

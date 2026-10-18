@@ -660,6 +660,12 @@ mansion's front with its doors shut, nearer, and open), and each zone lists
 one of them. "Every zone at once" draws all the zones together, versions and
 all, so they overlap where they share a spot.
 
+The finished game's stages have their music too: tick **music** on the Stages
+tab and each chapter plays the song its own scripts start, on the game's Model 2
+sound board with its driver and samples. See [The House of the Dead's
+music](TECHNICAL.md#the-house-of-the-deads-music). The prototype has no music
+yet.
+
 A merged archive carrying the parent and its clones together works too, and
 loads as the parent: the chips at the top level are the parent's, and the ones
 in a directory are a clone's, which is how MAME writes them.

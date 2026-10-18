@@ -7458,7 +7458,10 @@ pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
 pointing at it). The wasm is committed because the site has no build step; a
 change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
-build is from `c4ed74f`.
+build is from `c4ed74f`; the current one is from `f797c4b`, which has the
+68000 fix The House of the Dead's driver needs (below). The build stubs out
+`clock_gettime`: the board times its own work for m2-hle2's status display,
+which a page never reads, and libc's clock would have the module import WASI.
 
 ### Virtua Fighter 2's stage sounds (`js/sound/ambience.js`)
 
@@ -7559,3 +7562,47 @@ at the same times through `model1` natively. Over stage 1's song the loudness
 envelope follows MAME's at a correlation of 0.963 in 50 ms windows and 0.997
 in quarter-second ones, at no offset and the same level to within 1%. In the
 page, all three stages play at an RMS of about 2,700–5,500.
+
+### The House of the Dead's music
+
+The finished House of the Dead (`hotd`, `hotdo`) is a Model 2C game on the
+Model 2 board, the SCSP board the fighting games use, with its own driver
+(`epr-19720`) and two sample chips of 4 MB each (`mpr-19721`, `mpr-19722`).
+A game spec's `sampleChip` gives that spacing; the default is 2 MB.
+
+The i960 sends through a queue: 0x154D0 adds a command (only while the mode
+byte `0x51EE14` is 4 or 5, or flag `0x51F341` is set), 0x15540 drains it, and
+0x15590 writes the UART. The boot (0x15344) sends `A0 00 01`. Every scene change
+(0xD144, 0x15CE0) clears the queue (0x15630) and then sends `A0 00 02`, `BE 50
+00`, which is what the page sends to stop a song.
+
+There is no song table. The stage scripts at 0xE0000 start the music
+themselves. Op 90 (its handler is 0x67860, entry 90 of the table at 0xC6500)
+puts the word after the opcode in the queue. Most of these words are sound
+effects. Those on channel 0x10, `A0 10 xx`, are the music; the `A0 11 xx`
+ones are jingles (`A0 11 02` on a death). The sound test's list at 0xA8CD4
+holds `A0 10 00` (the title) to `A0 10 0E`, and these jingles.
+`readPlacementStages` keeps the song the walk has started when a set's first
+zone is made current. If none has started yet, it keeps the first song started
+while that set is up: a chapter's first section makes its zone current before
+it starts the song. The "all placements" entry takes the song of its widest
+set. That gives chapter 1 `A0 10 01`, chapter 2 `A0 10 02`, chapter 3
+`A0 10 08` and chapter 4 `A0 10 0E`.
+
+**A 68000 bug, fixed in m2-hle2.** The first native runs were silent or
+clipped. m2-hle2's 68000 decoded `and.l Dn,<ea>` in group C as `exg`, and this
+driver is the first to use that instruction. m2-hle2 fixed it in `e3205e3`;
+`board.wasm` is now built from `f797c4b`, which includes it. The other games
+play as they did before (checked in the page on Sonic The Fighters, Fighting
+Vipers, Virtua Fighter 2 and Dead or Alive).
+
+**Graded against MAME.** MAME (`hotdo`) was coined into chapter 1 with a Lua
+tap logging every UART byte at its emulated time. Those bytes were then
+replayed at the same times through the board natively. Over chapter 1's song
+(35–59 s), the loudness envelope follows MAME's at a correlation of 0.993 in
+50 ms windows and 0.996 in quarter-second ones, at no offset and within 1% of
+its level. Over the title song (15–33 s) the correlations are 0.998 and 0.999,
+within 3.3% of its level. The driver listens from reset, so the spec has no
+`warmup`. Chapters 3 and 4 are read from the scripts but were not played in
+MAME. In the page, every stage of the four chapters plays at an RMS of about
+200–1,400.
