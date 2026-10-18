@@ -1876,6 +1876,9 @@ const hotdo = {
         /* Type 77, PN_r2_05_kabe01a, which stands as a prop on 0x3D930 until
          * the zone's clock passes 458 (see spawnProps). */
         clocked: { handler: 0x3d930 },
+        /* Type 84, PN_niku_001, which stands as a prop on 0x3DE20 until bit 1
+         * or 2 of its flags (+0x58) is set (see spawnProps). */
+        meat: { handler: 0x3de20 },
         /* Three props that step their model a frame (see spawnProps): type
          * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a and type
          * 69 PN_powa00a to 29a, each back to its type's model past `last`. */
@@ -2335,6 +2338,7 @@ const hotd = {
         room4: null,
         cases: null,
         clocked: null,
+        meat: null,
         cycles: null,
     },
     rig: {

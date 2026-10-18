@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for seven handlers.
+The others are left out rather than guessed at, but for eight handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -5988,6 +5988,20 @@ table pointed at chapter 2's section 12, a breakpoint on 0x413B0 for type 77):
 drawn 1389 times at (405.7, -82.2, 33.7), turn 0, scale 1, as 0x1236, until
 the clock reached 459; then 0x1237 with twelve pieces (0x122A to 0x1235) flying
 from it, which closed at 701, and the wall itself at 724.
+
+The eighth is type 84 on 0x3DE20, `PN_niku_001` (0x11B1), a body hanging on a
+rope. It closes as a prop's does (0x3ED60) and draws through 0x413B0 with the
+type's model. Once bit 1 or 2 of its flags word (+0x58) is set while it shows
+0x11B1, it queues the type's sound (0x154D0), calls 0x429A0 and takes 0x11B2;
+from there it steps a model a frame through `PN_niku_120` (0x1228) and then
+stands at 0x11B1 again. What sets those bits is not traced, and MAME's attract
+demo never sets them, so it stands at 0x11B1 and the animation is left out.
+Chapter 2's section 12, script 3 (0xF1A6C), the one after the wall's, spawns
+two, records 0xF2980 and 0xF29B0 (Stage 2 · set 5). Checked in MAME (`hotdo`,
+the attract scene table pointed at chapter 2's section 12, a breakpoint on
+0x413B0 for type 84): both drawn 2128 times as 0x11B1 at (338.5, -95.3, 69) and (332.5, -91.3,
+61), turns 0xB000 and 0xD000, scale 1, the flags word 0x1401 throughout, until
+both closed as props do at clock 750.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

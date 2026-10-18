@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but seven, which are read below.
+ * all but eight, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -198,6 +198,12 @@ function walkScript(rom, at, visit) {
  * (PN_r2_05_kabe_dam01a and its pieces, 0x39E10), and past 723 it closes.
  * Chapter 2's one (Stage 2 set 5) stands whole here, as it does until then.
  *
+ * Type 84 (PN_niku_001) closes as a prop does (0x3ED60) and draws on 0x3DE20
+ * through 0x413B0. Once bit 1 or 2 of its flags (+0x58) is set, it queues the
+ * type's sound and calls 0x429A0, then steps PN_niku_002 to 120 a model a
+ * frame and stands at 001 again. What sets those bits is not traced; MAME's
+ * attract demo never does, so chapter 2's two (Stage 2 set 5) stand at 001.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -231,9 +237,10 @@ function spawnProps(rom, at, set, out) {
         const room4 = O.room4 && handler === O.room4.handler;
         const cases = O.cases && handler === O.cases.handler;
         const clocked = O.clocked && handler === O.clocked.handler;
+        const meat = O.meat && handler === O.meat.handler;
         const cycle = O.cycles?.find((c) => c.handler === handler);
         const spinner = O.spinners?.find((c) => c.handler === handler);
-        if (handler !== O.prop && !room4 && !cases && !clocked && !cycle && !spinner) continue;
+        if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
