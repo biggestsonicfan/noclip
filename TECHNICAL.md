@@ -7531,9 +7531,21 @@ What goes with a song is what the game sends with it: `0xB70700` after the
 third (the routine's `cmpi r3, 2`), and `0xBE1700`, `0xBE1900` after every one
 (the race's scene set-up, 0x23E74). To stop a song the page sends what
 `sound_refresh` does, `0xF8F8FF`, and then the settings the boot path sends
-after it (the run at 0x19958); the same bytes open the board. Two more
-four-song tables follow the same pick later in a race (data `0x280EEB8` and
-`0x2810D58` in Revision A); they are not offered here.
+after it (the run at 0x19958); the same bytes open the board.
+
+Two more four-song tables are read with the same pick, `0x501A98` (data
+`0x280EEB8`: `0xAE1006`, `0xAE100A`, `0xAE1003`, `0xAE1011`; data `0x2810D58`:
+`0xAE100C`, `0xAE100D`, `0xAE100B`, `0xAE1012`, in Revision A), but only after
+the race is won. The game's state byte `0x5010A4` (dispatch table 0x1994, with
+`0x501090 = 1 << state`) goes from the race, 22, to 23 only when the car
+finishes (0x4234, after the time is shown). State 23 starts the task at 0x23D80,
+which sends the first table's song. Then come 24 and 27, and 27's step into 28
+(0x4C50) starts the task at 0x245A4, which sends the second table's song and
+`0xAE211C` while `0x501090` still has bit 27 set. State 28 runs for 1600 frames
+and then goes to 25. A race that runs out of time goes 22, 25, 26, 29, 30 and
+never reaches these states. MAME (`daytona`, coined, no input, 240 s) confirms it:
+the only songs sent are `0xAE1007` for the race and `0xAE1002` after time runs out (state 26).
+The explorer has no race to finish, so these songs are not offered.
 
 The 1993 build has its own sound program (`epr-16489`/`16490`), which the
 dumps this was worked out on do not carry, so it has no music switch.
