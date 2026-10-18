@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but four, which are read below.
+ * all but five, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -179,6 +179,13 @@ function walkScript(rom, at, visit) {
  * number 0x33B00 returns, rem 49, added on at spawn (0x38AE4), which the
  * explorer has not got, so it starts from the type's model too. Nothing else
  * stops them; the explorer steps them on its frame while animate is ticked.
+ *
+ * Type 69 steps its model the same way on 0x3D860, back to 0xA06 past 0xA22:
+ * PN_powa00a to 29a, twenty-nine. It does not close as a prop does. It closes
+ * once the zone's clock (0x51E51C) passes +0x30C, which the spawn sets by
+ * section (0x38A7C): 99 in section 3, 268 in 9, 1048 in 11 and 12, the three
+ * sections that spawn one. The explorer runs no clock inside a zone, so the
+ * three stand and loop as spawned.
  *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.

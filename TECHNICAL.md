@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for four handlers.
+The others are left out rather than guessed at, but for five handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -5940,6 +5940,23 @@ its model, so each steam starts somewhere in its loop. In MAME both spawns write
 them 8 apart. Type 0x68 has no case there, so the five 104s all start from
 0x1859, as drawn. The explorer has no such number to take, so it starts both
 108s from the type's model, in step.
+
+The fifth is type 69 on 0x3D860, which steps +0x54 the same way, back to 0xA06
+once the model it stepped from is past 0xA21: it loops `PN_powa00a` to `29a`
+(0xA06 to 0xA22), twenty-nine frames, and draws through 0x413B0. It does not
+close as a prop does. It closes (0x150D0) once the zone's clock at 0x51E51C
+passes the float at +0x30C, which the spawn's per-type cases set by section
+(0x38A7C): 99 in section 3, 268 in 9, 1048 in 11 and 12. Those are the sections
+that spawn one: chapter 1's section 3, script 5 (record 0xE1750), section 9,
+script 7 (0xE69E0) and the script sections 11 and 12 share (0xE7FD0), all in
+Stage 1 · set 1. The explorer runs no clock inside a zone, so the three stand
+and loop as spawned, while animate is ticked. Checked in MAME (`hotdo`, the
+attract scene table pointed at chapter 1's sections 3, 9 and 11, a breakpoint
+on 0x413B0 for type 69): each drawn at its record's place, (18, -23, -576),
+(-126.6, -73, -91.7) and (-343, -76.5, 537), turn 0, scale 1, for 68, 503 and
+177 frames, every draw the model before it plus one and wrapping at 0xA22, until
+the clock passed 99, 268 and 1048 and the task closed. The board's first draw
+is 0xA07, the handler having stepped once; the explorer's is the type's model.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard
