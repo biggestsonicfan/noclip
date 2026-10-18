@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but six, which are read below.
+ * all but seven, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -193,6 +193,11 @@ function walkScript(rom, at, visit) {
  * either side of 500 (Stage 3 set 8), and the explorer, with no clock inside a
  * zone, turns both 0x800 a frame as they do from their spawn.
  *
+ * Type 77, a wall (PN_r2_05_kabe01a), draws on 0x3D930 as a prop does, but
+ * does not close as one: past 458 on the zone's clock it breaks
+ * (PN_r2_05_kabe_dam01a and its pieces, 0x39E10), and past 723 it closes.
+ * Chapter 2's one (Stage 2 set 5) stands whole here, as it does until then.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -225,9 +230,10 @@ function spawnProps(rom, at, set, out) {
         const handler = dv.getUint32(O.handlers + type * 4, true);
         const room4 = O.room4 && handler === O.room4.handler;
         const cases = O.cases && handler === O.cases.handler;
+        const clocked = O.clocked && handler === O.clocked.handler;
         const cycle = O.cycles?.find((c) => c.handler === handler);
         const spinner = O.spinners?.find((c) => c.handler === handler);
-        if (handler !== O.prop && !room4 && !cases && !cycle && !spinner) continue;
+        if (handler !== O.prop && !room4 && !cases && !clocked && !cycle && !spinner) continue;
         const model = dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at

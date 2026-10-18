@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for six handlers.
+The others are left out rather than guessed at, but for seven handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -5975,6 +5975,19 @@ section's script 1 read as script 8 (0xF5BC4), a breakpoint on 0x413B0 for type
 third angle 0x2000 apart and 0x800 more on every one of 1226 draws, the clock
 going from 731 to 870. The board's first draw is the record's turn plus 0x800,
 the handler having turned once; the explorer's is the record's turn.
+
+The seventh is type 77 on 0x3D930, `PN_r2_05_kabe01a` (0x1236), a wall. It
+does not close as a prop does. It draws through 0x413B0 with the type's model,
+and only the zone's clock (0x51E51C) changes it: once the clock passes 458 a
+model still 0x1236 becomes `PN_r2_05_kabe_dam01a` (0x1237) and 0x39E10 throws
+its pieces, and once the clock passes 723 it closes (0x150D0). Chapter 2's
+section 12, script 2 (0xF19A8) spawns one, record 0xF27A0, Stage 2 · set 5.
+The explorer runs no clock inside a zone, so it stands whole as spawned; the
+break and the close are left out. Checked in MAME (`hotdo`, the attract scene
+table pointed at chapter 2's section 12, a breakpoint on 0x413B0 for type 77):
+drawn 1389 times at (405.7, -82.2, 33.7), turn 0, scale 1, as 0x1236, until
+the clock reached 459; then 0x1237 with twelve pieces (0x122A to 0x1235) flying
+from it, which closed at 701, and the wall itself at 724.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

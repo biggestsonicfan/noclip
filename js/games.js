@@ -1873,6 +1873,9 @@ const hotdo = {
         /* The glass cases and the roof pieces, types 30, 31 and 86, which
          * stand as props until they break (see spawnProps). */
         cases: { handler: 0x3b050 },
+        /* Type 77, PN_r2_05_kabe01a, which stands as a prop on 0x3D930 until
+         * the zone's clock passes 458 (see spawnProps). */
+        clocked: { handler: 0x3d930 },
         /* Three props that step their model a frame (see spawnProps): type
          * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a and type
          * 69 PN_powa00a to 29a, each back to its type's model past `last`. */
@@ -2331,6 +2334,7 @@ const hotd = {
          * chips are not to hand to read where to, so it is left out. */
         room4: null,
         cases: null,
+        clocked: null,
         cycles: null,
     },
     rig: {
