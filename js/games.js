@@ -3413,6 +3413,12 @@ const vf2 = {
          * code reads it to +0xA6, 84 motion ids, the stance first. */
         fighters: {
             records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES, actions: { at: 0x14, count: 84 },
+            /* The input programs by +0x1B1 (`ld 0x1D1FC[r15*4]` at 0x1BBD4;
+             * the handlers at 0x1D250). Fighting Vipers' opcodes, to 0x33:
+             * 0x32 and 0x33 jump to their u32 while bit 6 of the settings'
+             * byte `[0x50016C]+0x3351` is set and clear, else step 5. MAME's
+             * vf2 has it clear, so 0x33 is the one that jumps. */
+            commands: { table: 0x0001d1fc, isa: { ops: 0x34, jumps: { 0x32: false, 0x33: true }, length: 5 } },
             /* The hands' 32 shapes each, record +0x3C: slot 5's at +0,
              * slot 8's at +0x180 (0x19E34); js/fighterhands.js. */
             hands: { at: 0x3c, other: 0x180, eased: true },

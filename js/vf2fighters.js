@@ -738,8 +738,8 @@ export function readFighterMotions(rom) {
 }
 
 /*
- * A fighter's own motions, where the game names them (`rig.fighters.actions`,
- * both games', and `commands`, Fighting Vipers'). Record +0x14 is the action table,
+ * A fighter's own motions, where the game names them (`rig.fighters.actions`
+ * and `commands`, both games'). Record +0x14 is the action table,
  * action_init's `ld 0x14(g5)` to player +0x1A0, which the action code reads as
  * `ldos n(g6)`: 55 motion ids, the stance first (set_mot_dat, 0x1B5B0, plays
  * slot 0 as a round starts, 0x12AB8, and as a move winds back to neutral). The
@@ -833,7 +833,7 @@ function handedOver(rom, H, ids) {
 function readCommands(rom, C, char) {
     const at = C.table + char * 4;
     if (at + 4 > rom.maincpu.length) return [];
-    return commandMotions(rom, rom.mainCpuView.getUint32(at, true)).map((id) => id & MOTION_ID);
+    return commandMotions(rom, rom.mainCpuView.getUint32(at, true), C.isa).map((id) => id & MOTION_ID);
 }
 
 /*
@@ -875,8 +875,7 @@ function scriptRows(rom, at, size, frame) {
 /**
  * The stance, then the fighter's moves, then the rest of its action table,
  * what those hand over to, its round and attract poses, then every other
- * motion. Virtua Fighter 2 has no input tables, so its fighters' own are the
- * action table's; any motion still plays on any fighter.
+ * motion. Any motion still plays on any fighter.
  */
 export function fighterMotionList(rom, body, motions) {
     const fits = motions.filter(Boolean);

@@ -103,8 +103,9 @@ const baseIndex = (charIndex) => (charIndex >= MIRROR_BASE ? charIndex - MIRROR_
  * under the cursor holds forward, back or neither, which is recorded as a test
  * of that one sample.
  */
-function readTable(m, dv, start) {
+function readTable(m, dv, start, isa = null) {
     const out = [];
+    const ops = isa?.ops ?? OP_LENGTH.length;
     const u8 = (a) => m[a], u16 = (a) => dv.getUint16(a, true), u32 = (a) => dv.getUint32(a, true);
     const inRom = (a) => a > 0 && a + 16 < m.length;
     for (let h = start; inRom(h) && m[h] === HEADER; h += HEADER_LENGTH) {
@@ -119,7 +120,7 @@ function readTable(m, dv, start) {
                 if (seen.has(here)) break;
                 seen.add(here);
                 const op = u8(a);
-                if (op >= OP_LENGTH.length) break;
+                if (op >= ops) break;
                 if (op === OP_EXACT_NEW || op === OP_EXACT || op === OP_SUBSET) {
                     let mask = u8(a + 1);
                     if (u8(a + 2) & 1) mask |= FWD;
@@ -150,6 +151,12 @@ function readTable(m, dv, start) {
                     stack.push({ a: u32(a + 1), dirs, guards, follow, wait, depth: depth + 1 });
                 } else if (op === OP_JUMP || op === OP_NATIVE_JUMP) {
                     a = u32(a + 1);
+                    continue;
+                } else if (isa?.jumps?.[op] !== undefined) {
+                    /* A jump on the operator's setting; `jumps` says whether
+                     * it is taken as the machine is set by default. */
+                    if (isa.jumps[op]) { a = u32(a + 1); continue; }
+                    a += isa.length;
                     continue;
                 } else if (op === OP_BRANCH) {
                     const ways = [[1, { op, mask: FWD, here: true }],
@@ -307,13 +314,13 @@ function shortName(name) {
  *   " , ") and the CPU table's name where one lands on it.
  */
 /* The table at `root` and every follow-up table its entries reach, by address. */
-function readTables(m, dv, root) {
+function readTables(m, dv, root, isa = null) {
     const tables = new Map();
     const todo = [root];
     while (todo.length) {
         const a = todo.pop();
         if (tables.has(a) || !a || a >= m.length) continue;
-        const es = readTable(m, dv, a);
+        const es = readTable(m, dv, a, isa);
         tables.set(a, es);
         for (const e of es) if (e.follow && !tables.has(e.follow)) todo.push(e.follow);
     }
@@ -324,14 +331,16 @@ function readTables(m, dv, root) {
  * Every motion an input program commits to, in any situation, in the order
  * the tables are walked: the root's entries first, then the follow-ups'.
  * Fighting Vipers' matcher is this one at other addresses, with the same
- * opcodes and lengths, so this needs only the program's address.
+ * opcodes and lengths, so this needs only the program's address. Virtua
+ * Fighter 2's stops at op `0x33`, and its last two are jumps on a setting
+ * the others do not test: `isa` (`{ops, jumps, length}`) says so.
  * @returns {number[]} the commits' low sixteen bits, each once
  */
-export function commandMotions(rom, root) {
+export function commandMotions(rom, root, isa = null) {
     const m = rom.maincpu;
     if (!root || root >= m.length || m[root] !== HEADER) return [];
     const out = new Set();
-    for (const es of readTables(m, rom.mainCpuView, root).values()) for (const e of es) out.add(e.motion);
+    for (const es of readTables(m, rom.mainCpuView, root, isa).values()) for (const e of es) out.add(e.motion);
     return [...out];
 }
 

@@ -520,7 +520,9 @@ each on its own texture sets, with a **P2 colours** switch for the look player
 2 wears when both pick the same fighter (Akira's white gi among them) — and
 every one of the
 1359 motions in the game's table plays on any of them
-([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+([`js/vf2fighters.js`](js/vf2fighters.js)). Each fighter's list opens on its
+moves, the motions its own input program can start, as Fighting Vipers' does
+([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
@@ -547,7 +549,7 @@ need a table found in that game's ROM first. Where they stand:
 | Opponent plays the reaction | | yes | yes | |
 | Mirrored fighter, and the one it throws | | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
-| Moves and strings by input | yes | moves | | |
+| Moves and strings by input | yes | moves | moves | |
 | Fighter's own motions grouped | yes | yes | yes | |
 | Sway chains | yes | yes | | |
 | Hit flash | | yes | | |
@@ -557,8 +559,8 @@ need a table found in that game's ROM first. Where they stand:
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
-fight code already runs both players), Virtua Fighter 2's sway chains, hit
-flash and moves, and stage sounds for Sonic the Fighters and Dead or Alive.
+fight code already runs both players), Virtua Fighter 2's sway chains and hit
+flash, and stage sounds for Sonic the Fighters and Dead or Alive.
 
 ## Dead or Alive
 

@@ -1925,6 +1925,18 @@ its moves, then the rest of what it plays, then every other motion.
   FV's 59 handlers, so the same walk lists every motion a commit names (Jane
   79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
   are listed by number only.
+- **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
+  `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
+  and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
+  jumps to its u32 while bit 6 of the settings byte `[0x50016C]+0x3351`
+  (`0x59C351`) is set (`0x32`) or clear (`0x33`), else steps 5. MAME's `vf2`
+  has that byte 0 all through attract, so the walk takes `0x33`'s jump and
+  steps over `0x32` (`commands.isa` in `js/games.js`). Two more roots
+  (`0x3927D`, `0x392B9`) are read instead while the matcher's `r10` has bit 25
+  or 26 set; they are fight state and not listed. Akira lists 69 moves, Jacky
+  78, Shun 76. Checked against MAME: 200 s of `vf2` attract with the commits
+  (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
+  Shun, Jacky and Akira, all 43 in that fighter's list.
 - **Hand-overs**: set-up op 1 of a motion's `mot_list` record
   (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
   `0x13`'s two write the motion that plays as this one runs out, `+0x802` and
