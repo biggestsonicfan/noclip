@@ -139,9 +139,11 @@ function walkScript(rom, at, visit) {
  *     101  while 0x53E871 is clear and flag 0x70 is set, +0x30 -= 0x50
  *
  * Flag 0x70 is one of the event flags at 0x51E2C0, which objects set when
- * the player sets them off (0x48AC). No script sets it, so the explorer has
- * nothing that would, and the five stand as spawned, with 97 turning on its
- * own every frame. Everything after the flag is left out. Chapter 4's
+ * the player sets them off (0x48AC). Op 88 sets it at 0xFD1BC, in the very
+ * script that spawns the five, but some 0x5AA camera frames into zone 8,
+ * after the op 83 and 84 waits; the explorer runs no clock inside a zone.
+ * (0xF94BC sets it too, in chapter 3, which spawns none of them.) So the
+ * five stand as spawned, with 97 turning on its own every frame. Everything after the flag is left out. Chapter 4's
  * section 4 spawns them, and so does the attract demo, where MAME draws all
  * five at their records for 1448 frames, 97 turning 0x80 a frame, and the
  * flag never set.

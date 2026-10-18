@@ -5880,9 +5880,14 @@ the prop's own draw command for command: place +0x20, turns +0x2C, +0x30 and
 | 101 | `PN_r4_04_02b` | while 0x53E871 is clear and flag 0x70 is set, yaw -= 0x50 a frame |
 
 Flag 0x70 is one byte of the event flags at 0x51E2C0, which objects set when
-the player sets them off (0x48AC); no script sets it. So the explorer stands
-the five where they are spawned, and turns 97 0x80 a frame while animate is
-ticked; the gate opening after the flag is left out. Chapter 4's section 4,
+the player sets them off (0x48AC), and two scripts set it with op 88 (0x67830).
+The one at 0xFD1BC is the script that spawns the five, chapter 4's section 4,
+script 1, which the walk reaches: but it comes some 0x5AA camera frames into
+zone 8, after the op 83 and op 84 waits, and the explorer runs no clock inside a
+zone. The one at 0xF94BC is in chapter 3 (section 3, script 11, and section 4,
+script 8), which spawns none of the five. So the explorer stands the five where
+they are spawned, and turns 97 0x80 a frame while animate is ticked; the gate
+opening after the flag is left out. Chapter 4's section 4,
 script 1 spawns them (records 0xFD8D0 to 0xFD990), and so does the attract
 demo's. Checked in MAME (`hotdo`, attract, a breakpoint on 0x413B0 for these
 types): all five drawn 1448 frames each at their records' places and turns,
