@@ -174,7 +174,8 @@ course plays the song its race starts with, on Daytona's own sound board — the
 68000 driver, two MultiPCMs and a YM3438, emulated in the page. The game lets
 the player pick the song by holding a VR button as the race starts, and a
 fourth song is only reachable that way; the **Song** list under the switch is
-the same choice. Every build but the 1993 one has it. See [Daytona USA's
+the same choice. Every build has it; the 1993 one plays on its own sound
+program, which its `daytona93.zip` carries. See [Daytona USA's
 music](TECHNICAL.md#daytona-usas-music-the-model-1-sound-board).
 
 The **Cells** tab is here too, in every build: the title, the course and car
@@ -642,8 +643,8 @@ For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version
-wants `daytona93.zip` for the ten chips it has of its own and `daytona.zip` for
-the rest, which MAME keeps in the parent. Member names are matched by checksum
+wants `daytona93.zip` for the ten chips it has of its own (twelve, with its
+sound program, which the music needs) and `daytona.zip` for the rest, which MAME keeps in the parent. Member names are matched by checksum
 where the label does not match, so a set spelling those chips the way an older
 MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for `.ic23` — loads just the
 same.

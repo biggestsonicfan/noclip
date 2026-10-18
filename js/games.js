@@ -2477,14 +2477,15 @@ const DAYTONA_CABINET = 1;
  * The sound board, the one the original Model 2 kept from Model 1: a 68000
  * (the program pair, word-swapped as MAME loads it), two MultiPCMs with a
  * pair of sample ROMs each, and a YM3438 — js/sound/sound.js, board 'model1'.
- * Every build but the 1993 one carries these same chips.
+ * Every build carries these same chips but the 1993 one, which has a sound
+ * program of its own.
  *
  * `music` is how start_setting (0x3BF0 in the Saturn-ads build) picks the
  * race's song: `ld 0x28050F0[r3*4], g0` and on to the UART, with r3 the
  * course — unless a VR button is held as the race starts, which picks
  * the song itself: VR1 the first, VR3 the second, VR2 the third, VR4 the
  * fourth, which no course has of its own. The table is at data 0x8050F0 in
- * every build here but the 1993 one, and says 0xAE1007, 0xAE1009, 0xAE1004,
+ * every build here but the 1993 one (program ROM 0x231E70), and says 0xAE1007, 0xAE1009, 0xAE1004,
  * 0xAE100E in all of them.
  *
  * What goes with it, as the game sends it: `boot` is sound_refresh's
@@ -2969,10 +2970,15 @@ const daytona93 = daytonaBuild({
     },
     objects: DAYTONA_OBJECTS_93,
     area: { heading: 0x17658, clip: 0x17150, order: 0x17104 },
-    /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
-     * was worked out on do not carry; its song table is in the program ROM,
-     * at 0x231E70. */
-    sound: null,
+    /* Its own sound program, on the same samples. The song table is in the
+     * program ROM (0x231E70, read at 0x30C8) and holds the same four songs;
+     * the pick, the VR buttons and 0xB70700 after the third are Revision A's,
+     * and so is the boot run (graded in MAME, byte for byte). */
+    sound: {
+        ...DAYTONA_SOUND,
+        program: [['epr-16489.7', 0xc20e543e], ['epr-16490.8', 0xc24edaab]],
+        music: { ...DAYTONA_SOUND.music, region: 'mainCpu', table: 0x31e70 },
+    },
 });
 
 /* What the Revision A program and every build made from it share: the data

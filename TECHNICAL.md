@@ -7547,8 +7547,20 @@ never reaches these states. MAME (`daytona`, coined, no input, 240 s) confirms i
 the only songs sent are `0xAE1007` for the race and `0xAE1002` after time runs out (state 26).
 The explorer has no race to finish, so these songs are not offered.
 
-The 1993 build has its own sound program (`epr-16489`/`16490`), which the
-dumps this was worked out on do not carry, so it has no music switch.
+The 1993 build has its own sound program (`epr-16489`/`16490`) on the same
+four sample chips. Its race start (0x3008) is Revision A's: the same pick by
+course or held VR button (stored at `0x501A94`), the same table, read at
+0x30C8 from program ROM `0x231E70`, and `0xB70700` after the third song unless
+Start is held (the raw input word `0x53E120`, bit 4). It sends `0xBE1A10`
+just before the song, as Revision A does elsewhere in its race set-up (0x3804).
+The boot run is byte for byte the one above: MAME (`daytona93`, 120 s of
+attract) sent exactly those bytes, then `0xAE1008` and `0xBE1700`, `0xBE1900`.
+So the page plays it the same way with the build's own program. Played through
+`model1` natively from the same bytes, the four songs follow Revision A's
+program's loudness envelopes at 0.98 to 1.00 (quarter-second windows), at
+about half the level: that is how this program mixes them. A `daytona93.zip`
+without the two chips loads as before; switching the music on says which chip
+is missing.
 
 ### Virtua Cop's music
 
