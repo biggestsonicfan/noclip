@@ -70,7 +70,7 @@ import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet, bestTextureCombo, bankTextureSet, programTextureSets, fighterSetList } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
-import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
+import { SoundBoard, commandBytes, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
 import { StageSounds } from './sound/ambience.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -3858,7 +3858,16 @@ function stepBodyDebris(now) {
         stepDebris(d.sim, d.bodies);
         if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
     }
+    sendDebrisCues(d.sim);
     placeDebris(m);
+}
+
+/* The pieces' landing sounds (0x2D218), sent to the sound board the music
+ * runs on, as 0x41EA4 queues them for it. */
+function sendDebrisCues(sim) {
+    const board = state.music.on && state.music.board?.node ? state.music.board : null;
+    for (const code of sim.cues) board?.send(commandBytes(code));
+    sim.cues.length = 0;
 }
 
 /* The light the pieces' shadows are slid along on the panel's stage; null

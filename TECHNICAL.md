@@ -2139,12 +2139,41 @@ Not checked against MAME, for the same reason as the shadows: attract never
 breaks armour.
 
 Not followed: the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`) and the sound (flag bits 28 to
-31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
+is off screen (`0x316F0`). The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
 throws its pieces and effects from the pose on screen at that moment, making
 it whole again takes them back, and another fighter starts with none.
+
+**The landing sound (`0x2D218`; read from the ROM, checked against MAME).**
+On each floor hit `0x2CF24` adds one to the piece's counter (`+0x3C`, zeroed
+at the launch, `0x2D49C`), and while it is 1 or 2 (`0x2CFC0`, `cmpobl 2`)
+calls `0x2D218`. That takes the highest of the flag word's bits 28 to 31
+(`+0x24`, the record's `+0x1C`; `scanbit`) and sends one of four codes
+through `0x41EA4`, the queue the stage sounds go on: `0xAE1146` for bit 28,
+`0xAE1115` for 29, `0xAE1128` for 30 and `0xAE111F` for 31. So a piece sounds
+on its first two touches of the floor and is quiet after, however long it
+skids. Every record with a model has exactly one of the bits: 28 (Jane 2,
+Grace 4, Honey 17, Picky 2, Sanman 2), 29 (most of the rest) or 31 (Jane 1,
+Bahn 3, Picky 1, Raxel 2, Sanman 2, Mahler and B.M. 6 each); none has 30.
+`0x2D254`, the flipbook effect, calls `0x2D214`, the bare `ret` before it,
+not `0x2D218`, so the effect makes no sound. `fall` (`js/fvdebris.js`) puts
+the code on the simulation's `cues` on those two hits, and `sendDebrisCues`
+(`js/app.js`) sends them to the sound board when the music is on.
+
+- Headless Chrome, a stand-in sound board, both halves broken while the
+  stance plays: Jane sends `0xAE1146` four times (two pieces, bit 28),
+  Grace `0xAE1115` eight times (four), Honey `0xAE1146` six times, Bahn
+  `0xAE1115` four times and `0xAE111F` twice (the bit-31 piece), Mahler
+  `0xAE111F` ten times (five). Two a piece, though some pieces touch the
+  floor more than 200 times. No page errors.
+- MAME (`fvipers`, coined game, the player standing still, breakpoints on
+  the floor hit `0x2CFB4`, the call `0x2D23C` and the launch `0x2D414`):
+  35 pieces thrown in 29,000 frames on stage 0, 1454 floor hits.
+  The call came on exactly the hits that took the counter to 1 or 2, 54
+  of them, and never on the other 1400; each sent its piece's code, `0xAE1115`
+  for bit 29 (42) and `0xAE1146` for bit 28 (12). A piece that skidded on
+  the floor for 600 frames sounded on its first two only.
 
 **Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
 and 360, each half broken while the motion plays, and Jane with it held):

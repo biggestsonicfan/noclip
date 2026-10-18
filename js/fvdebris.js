@@ -56,6 +56,11 @@ const EFFECT_FRAMES = 54, EFFECT_SPEED = [fromBits(0x3e4ccccd), fromBits(0x3c23d
  * 11 in flight, 12 and 14 spin about X and Z, 19 out of the ring. */
 const FLAG = { one: 1 << 1, three: 1 << 3, rest: 1 << 7, live: 1 << 11, spinX: 1 << 12, spinZ: 1 << 14, out: 1 << 19 };
 
+/* 0x2D218's sounds, picked by the highest of flag bits 28-31 (scanbit), for
+ * the first two floor hits (0x2CFC4). Every record with a model has one bit:
+ * 28, 29 or 31. */
+const LAND_SOUNDS = [0xae1146, 0xae1115, 0xae1128, 0xae111f];
+
 /** 0x2D614's tables and 0x2D390's spins, from the profile's `debris`. */
 export function readDebrisTables(rom, D, dataAt) {
     const list = (addr, n, read) => {
@@ -77,6 +82,7 @@ export function createDebrisSim(centre, flipbook = null) {
     return {
         slots: Array.from({ length: DEBRIS_SLOTS }, () => null),
         effects: Array.from({ length: EFFECT_SLOTS }, () => null), flipbook, frame: 0, centre,
+        cues: [],
     };
 }
 
@@ -151,8 +157,9 @@ function stepEffect(sim, k) {
 }
 
 /* 0x2CF24's fall and bounce. The resting piece's on-screen test (0x316F0,
- * which removes it when it leaves the picture) is not followed. */
-function fall(s) {
+ * which removes it when it leaves the picture) is not followed. The first two
+ * floor hits queue the piece's sound (0x2D218) on `cues`. */
+function fall(s, cues) {
     const { p, v } = s;
     if (s.flags & FLAG.rest) return;
     v[1] = f(v[1] - GRAVITY);
@@ -162,6 +169,8 @@ function fall(s) {
     const floor = s.flags & FLAG.out ? f(s.floor + OUT_DROP) : s.floor;
     if (p[1] > floor) return;
     s.bounces++;
+    const bits = s.flags >>> 28;
+    if (s.bounces <= 2 && bits) cues.push(LAND_SOUNDS[31 - Math.clz32(bits)]);
     p[1] = f(p[1] - v[1]);
     v[1] = -f(v[1] * f(BOUNCE + f(BOUNCE / s.weight)));
     if (Math.abs(v[1]) > STILL) {
@@ -322,7 +331,7 @@ export function stepDebris(sim, bodies = []) {
         if (!s?.model) continue;
         s.frames++;
         pushOut(s, bodies);
-        fall(s);
+        fall(s, sim.cues);
         walls(s, sim.centre);
         turn(s);
     }
