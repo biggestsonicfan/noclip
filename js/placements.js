@@ -211,6 +211,17 @@ function walkScript(rom, at, visit) {
  * once the zone's clock (0x51E51C) reaches 430, which the explorer, with no
  * clock inside a zone, leaves out: chapter 4's one (Stage 4 set 4) loops.
  *
+ * Type 122 is not a prop but an item's spawner: its handler, 0x3C5A0, is
+ * the routine a shot prop calls to drop a life (0x3A700), and it opens an
+ * item task on 0x3C310 with PN_item_life (0x312) at +0x54, scale 2.2, the
+ * spawner's x and z, its y less the type's floor offset plus 2, and of its
+ * angles only +0x30. In chapter 4 (0x51F351 = 3) it keeps that yaw and
+ * closes its own task, so each spawns one item; elsewhere it would turn the
+ * item to the camera. The item closes as a prop does (0x3ED60) and draws
+ * every frame until a shot sets bit 28 of +0x58; then it blinks and closes
+ * 120 frames on, which the explorer, with no shots, leaves out. Chapter 4's
+ * four (Stage 4 set 9) stand here.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -247,8 +258,9 @@ function spawnProps(rom, at, set, out) {
         const meat = O.meat && handler === O.meat.handler;
         const cycle = O.cycles?.find((c) => c.handler === handler && (!c.types || c.types.includes(type)));
         const spinner = O.spinners?.find((c) => c.handler === handler);
-        if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner) continue;
-        const model = dv.getUint32(O.table + type * O.stride + O.model, true);
+        const item = O.items?.find((c) => c.handler === handler);
+        if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item) continue;
+        const model = item ? item.model : dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
          * +0x28 into the task and hands it to the draw on all three axes --
@@ -256,7 +268,7 @@ function spawnProps(rom, at, set, out) {
          * command. Fifty of the seventy-three types are 1.0, which is why only
          * the ones that are not showed up: the vases at 0.5 and 1.4, the moon
          * at 0.25, the pile of bones at 1.5. */
-        const scale = O.scale === undefined ? 1
+        const scale = item ? item.scale : O.scale === undefined ? 1
             : dv.getFloat32(O.table + type * O.stride + O.scale, true);
         /* The three words after the position are the angles, copied straight
          * across to the task: `ld 0x14(r9), g4 / st g4, 0x2C(r8)` and the two
@@ -267,11 +279,12 @@ function spawnProps(rom, at, set, out) {
             model,
             set,
             scale: scale > 0 ? scale : 1,
-            pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true),
+            pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true) + (item?.lift ?? 0),
                 dv.getFloat32(rec + 16, true)],
-            turn: [dv.getUint32(rec + 20, true) & 0xffff,
+            /* An item keeps only the record's yaw (see above). */
+            turn: [item ? 0 : dv.getUint32(rec + 20, true) & 0xffff,
                 dv.getUint32(rec + 24, true) & 0xffff,
-                dv.getUint32(rec + 28, true) & 0xffff],
+                item ? 0 : dv.getUint32(rec + 28, true) & 0xffff],
             /* Room 4's first piece turns on its own (see above). */
             ...(room4 && type === O.room4.first ? { spin: O.room4.spin } : {}),
             /* And type 96 turns its third (see above). */

@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for nine handlers.
+The others are left out rather than guessed at, but for ten handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6017,6 +6017,25 @@ section 0, a breakpoint on 0x413B0 for type 93): drawn 2075 times at (0, 18.9,
 0xD7A, the clock going from 197 to 429, and closed as the clock reached 430.
 The board's first draw is 0xD59, the handler having stepped once; the
 explorer's is the type's model.
+
+The tenth is type 122 on 0x3C5A0, whose own entry in the object table is
+empty (`PN_space`, scale 0). It is the routine a shot prop calls to drop a
+life (0x3A700), run as a task: it opens an item on 0x3C310 with
+`PN_item_life` (0x312) at +0x54, scale 2.2, the spawner's x and z, its y
+less the type's floor offset plus 2, and of its angles only +0x30. Outside
+chapter 4 it then turns the item to face the camera; in chapter 4 (0x51F351
+= 3) it keeps the record's yaw and closes its own task, so each record drops
+one item. The item closes as a prop's does (0x3ED60) and draws every frame
+until a shot sets bit 28 of +0x58; then it blinks and closes 120 frames on,
+which the explorer, with no shots, leaves out. Chapter 4's records 0xFCD00,
+0xFCD90, 0xFCE80 and 0xFCEB0 stand four, Stage 4 · set 9. Checked in MAME
+(`hotdo`, the attract scene table pointed at chapter 4's section 3, a
+breakpoint on the item's draw at 0x3C570): drawn at (-163, 2, 1574.3) and
+(-162.6, 2, 1550.5) turned 0x4000, (-84.2, 2, 1457.8) and (-91.7, 2,
+1451.3) turned 0xC000, scale 2.2, 580 frames each until they closed with
+the props at clock 580; the attract player shot the first, which blinked
+and closed at 253. Types 123 and 124 drop other things on 0x3C9D0 and
+0x3CBE0 and stay out.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

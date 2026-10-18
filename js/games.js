@@ -1890,6 +1890,10 @@ const hotdo = {
          * frame on 0x3E4A0 while the zone's clock is short of 1440 (see
          * spawnProps). */
         spinners: [{ handler: 0x3e4a0, axis: 2, rate: 0x800 }],
+        /* Type 122, whose handler 0x3C5A0 drops one PN_item_life in chapter
+         * 4 and closes (see spawnProps); its own entry in the table is
+         * empty, so the model, scale and lift are the handler's. */
+        items: [{ handler: 0x3c5a0, model: 0x312, scale: 2.2, lift: 2 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2342,6 +2346,7 @@ const hotd = {
         clocked: null,
         meat: null,
         cycles: null,
+        items: null,
     },
     rig: {
         bodies: {
