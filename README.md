@@ -377,20 +377,32 @@ of the window also stops on its ellipse, as it does on the board.
 flag `gear_select` sets when a button is held at the transmission select,
 which `entry_car_event_open` reads to enter no rival cars — time attack. So a
 picker on the Stages panel draws a course as a race, in attract mode (which
-differs only in the windmill: in a race it shows on a stretch of road, in
-attract mode while its block is in view), in time attack — six more flocks of
+differs in the windmill: in a race it shows on a stretch of road, in attract
+mode while its block is in view; and in the windows below, which hold still),
+in time attack — six more flocks of
 gulls that grow as the race goes on, a third group over the first, and the rank
 board showing your own number — or in the ending, with the third group of gulls
 and the horses' curtain call.
 
+**Windows.** The grandstand's glass and the covered walkway's each carry 64
+frames of reflected sky, and the board picks one every frame by where the car
+stands, so the reflection slides as you drive past. The grandstand's frame is
+the heading from a point behind it to the car (TGP function 0x0F); the
+walkway's is how high a point 220 up stands from the car, by its distance
+across the ground (functions 0x43 and 0x0A). In the explorer the camera is the
+car. In attract mode the board's car stays at (0, 0), so the frame holds:
+27 on the grandstand, 57 on the walkway. Checked in MAME, with the car's place
+swapped for random ones as the board read it: the grandstand matched on all
+156 frames drawn, the walkway on 119 of 121, and the two misses sit within
+0.006 of a frame's edge, the TGP's own arctangent. The walkway's routine has a
+second point, which it takes when a flag bit no MAME run set is on; that case is
+left out.
+
 What is left out: the cones stand where they are placed and are not knocked
 flying, stood on the road the course draws rather than on the collision
 polygons the board asks the TGP about, which are in its own ROM and not read;
-the Jeffry statue's turn, which the board saves for a player who stops beside
-it and presses the view button; and the reflections in the grandstand's glass
-and the covered walkway's — 64 frames of sky each, picked by where the car
-stands — which show their first, since the TGP functions that choose one are
-not ported.
+and the Jeffry statue's turn, which the board saves for a player who stops
+beside it and presses the view button.
 
 ### The sky
 

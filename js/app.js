@@ -1802,7 +1802,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
      * start, so swapping a frame in is a pointer assignment. */
     const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
         typeof entry.ops === 'function';
-    const geom = entry.anim ? frameGeometry(entry.model) : null;
+    const geom = entry.anim || entry.live ? frameGeometry(entry.model) : null;
     const { mesh, lines } = addModelToScene(d, {
         layer: entry.layer, matrix, geom, backdrop: entry.backdrop, shellFirst,
         zWindow: entry.window, underlay: entry.underlay,

@@ -2809,7 +2809,7 @@ const DAYTONA_KINDS_A = {
     0x20948: 'crowd', 0x20a54: 'world', 0x20b08: 'rank', 0x20d34: 'windmill',
     0x20e54: 'jeffry', 0x210a0: 'checkpoint', 0x211fc: 'flags', 0x212a4: 'light',
     0x212e4: 'none', 0x21618: 'runs', 0x21664: 'pylon', 0x21698: 'pylon',
-    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'window', 0x21ef8: 'window',
+    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'standWindow', 0x21ef8: 'arcadeWindow',
     0x22018: 'world', 0x22080: 'flock', 0x22314: 'birds', 0x224f8: 'bigBird',
     0x22608: 'horse', 0x22a20: 'curtainCall',
 };
@@ -2821,6 +2821,9 @@ const DAYTONA_OBJECTS_A = {
     birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
     crowds: [{ list: 0x236e38, count: 12, shown: { road: [0x2f8, 0x33e] } }],
     pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+    /* The point each window's reflection is taken against: the lda in its
+     * display routine (Rev A 0x21e88, 0x21f58) — see `window` in js/daytona.js. */
+    windows: { 0x21e40: 0x235bb4, 0x21ef8: 0x222000 },
     shown: { 0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x22018: { road: [0x208, 0x240] } },
 };
 const DAYTONA_KINDS_SE = {
@@ -2829,7 +2832,7 @@ const DAYTONA_KINDS_SE = {
     0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
     0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
     0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
-    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'standWindow', 0x21fc4: 'arcadeWindow',
     0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
     0x226d4: 'horse', 0x22aec: 'curtainCall',
 };
@@ -2847,6 +2850,7 @@ const DAYTONA_OBJECTS_SE = {
         { list: 0x237b24, count: 12, shown: { road: [0x2f8, 0x33e] } },
     ],
     pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+    windows: { 0x21f0c: 0x236880, 0x21fc4: 0x2220cc },
 };
 /* The Saturn advertisements set: the Special Edition's routines at the same
  * places, its tables 0x510 on and its pylons' models 0x400 back. */
@@ -2861,6 +2865,7 @@ const DAYTONA_OBJECTS_S = {
         { list: 0x238034, count: 12, shown: { road: [0x2f8, 0x33e] } },
     ],
     pylons: { 0x21730: 0x28508e0, 0x21764: 0x28508f0, 0x21798: 0x2850900, 0x217cc: 0x28508d0 },
+    windows: { 0x21f0c: 0x236d90, 0x21fc4: 0x2220cc },
 };
 
 /*
@@ -2882,7 +2887,7 @@ const DAYTONA_OBJECTS_93 = {
         0x2214c: 'checkpointAt', 0x22264: 'jeffry', 0x22594: 'checkpointAt', 0x22678: 'checkpointAt',
         0x2275c: 'checkpointAt', 0x22840: 'checkpointAt', 0x22c48: 'flags', 0x22cf0: 'light',
         0x22d30: 'none', 0x2302c: 'runs', 0x23078: 'pylon', 0x230ac: 'pylon',
-        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'window', 0x23bc0: 'window',
+        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'standWindow', 0x23bc0: 'arcadeWindow',
         0x23ce0: 'world', 0x23d48: 'flock', 0x2430c: 'birds', 0x24730: 'bigBird',
         0x24854: 'horse', 0x24cd0: 'curtainCall',
     },
@@ -2905,6 +2910,7 @@ const DAYTONA_OBJECTS_93 = {
     rankBoard: 0x238dc0, rankCars: 0x238dfc,
     windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
     birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
+    windows: { 0x23b08: 0x2388f8, 0x23bc0: 0x223cc8 },
     crowds: [{
         /* The plaza's, while the crowd's own block is near. */
         shown: 'near',
