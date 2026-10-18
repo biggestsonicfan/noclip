@@ -7563,6 +7563,47 @@ envelope follows MAME's at a correlation of 0.963 in 50 ms windows and 0.997
 in quarter-second ones, at no offset and the same level to within 1%. In the
 page, all three stages play at an RMS of about 2,700–5,500.
 
+### Virtua Cop's enemies
+
+The enemies are not objects. `0x2864860[stage]` lists a stage's sections,
+each the rail counts its waves start at (ending at -1). 0x141D0 starts the
+next wave when the rail's count (`0x50F490`) reaches it. A wave's enemies are
+the 0x2C-byte records at `0x282C2D0[stage][section][wave]`, ending at a zero
+first byte: kind (+0, 4 is a wait with no one in it), position (+4), turn
+about Y in tenths of a degree (+0x10), body (+0x13, `0x281EDF0`), script
+(+0x14, `0x2820D40`), the object it stands on (+0x18, -1 none) and its group
+(+0x1E). 0x13A90 puts each in one of nine slots at `0x50F510`, 0x9F4 bytes
+each.
+
+The explorer does not copy any of this. For each record it runs the game's own
+code in `doaMachine` (`js/doa.js`): the boot's pose copy (0x23090), the spawn,
+then the enemy task 0x14AD0 once. The task reads the script's first step
+(0x14118), plays the motion (0x1EAD0), builds a matrix per joint (0x1F258)
+and draws a model on each (0x21A70), with shadow 0xAC under it (0x21C10). The
+copro calls it makes are recorded as the draws. Two things the interpreters
+lacked were added: the i960's `cpysre` (0x6E2), and Virtua Cop's copro
+command 0x03, a divide, passed in as an extra command so Dead or Alive's
+table is unchanged. All of a stage's enemies take about a second, so they are
+built the first time a stage's objects are asked for.
+
+The joints are left out of the stage's face layering (`layered: false`, see
+`js/layers.js`). Enemies of different waves stand on the same spots, and
+pairing all their faces turned a stage switch into minutes. The shadow lies
+on the ground and stays in.
+
+Waves whose first record has bit 0x20 go to 0x708C0 instead; stage 2's last
+section has one, and it is left out. So are the 22 records standing on an
+object: they move in the object's frame, on its own clock. Everything after
+the first frame goes by the clock and the player's shots, which the explorer
+does not have.
+
+**Graded against MAME.** MAME (`vcop`, the shared build) was coined, with a
+Lua tap dumping each new slot. Stage 1's first record, and the first record
+of the fourth table entry, which MAME played next, both match the explorer's
+run to 7.6e-6 over all sixteen joint matrices, on the first frame. The later dumps in that run were taken after the slot had already
+played tens of frames, so they were not compared. All the drawn models are
+ROM models below 0x4D2; none is built in RAM.
+
 ### The House of the Dead's music
 
 The finished House of the Dead (`hotd`, `hotdo`) is a Model 2C game on the

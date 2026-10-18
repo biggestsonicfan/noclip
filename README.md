@@ -464,9 +464,14 @@ music](TECHNICAL.md#virtua-cops-music).
 The light is the game's own: each stage's light table, by how far along the
 rail the eye is, and out of play the fixed light 0x1E1C8 sets.
 
-Not read yet: the enemies (they come from another system than the objects) and the
-models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
-effects).
+The enemies stand where each wave puts them, on the **fighters** layer, in the
+pose of the first frame the board draws them: the explorer runs the game's own
+spawn and enemy task for each one, and the joints match MAME's to 1e-5. Each
+comes up with the segment its wave starts on. Enemies standing on a moving
+object are left out. See [Virtua Cop's enemies](TECHNICAL.md#virtua-cops-enemies).
+
+Not read yet: the models the game builds in RAM at run time (entries 0x4D2 on:
+shadows and a few effects). The enemies draw none of them.
 
 ## Virtua Fighter 2
 

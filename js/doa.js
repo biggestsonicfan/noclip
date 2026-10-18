@@ -142,7 +142,9 @@ const COPRO = {
 const INT_ARGS = new Set([0x14, 0x15, 0x16, 0x1b, 0x1c, 0x1d, 0x1e]);
 
 class Copro {
-    constructor(log) {
+    /* `extra`: commands another game's copro program has beyond these. */
+    constructor(log, extra = {}) {
+        this.table = { ...COPRO, ...extra };
         this.m = IDENTITY;
         this.stack = [];
         this.pending = null;
@@ -176,16 +178,15 @@ class Copro {
     }
 
     maybeRun() {
-        const spec = COPRO[this.pending];
+        const spec = this.table[this.pending];
         if (!spec) {
             this.log.add(`copro 0x${this.pending.toString(16)}`);
             this.pending = null;
             return;
         }
         if (this.args.length < spec[0]) return;
-        const cmd = this.pending;
         this.pending = null;
-        COPRO[cmd][1](this, this.args);
+        spec[1](this, this.args);
     }
 
     read() { return this.outQ.length ? this.outQ.shift() : 0; }
@@ -418,14 +419,14 @@ export function boardToOps(m) {
  *        tick: the stage task's own count-up, run after each pass
  * @returns {{draws: {model:number, m:number[]}[], unknown: string[], done: boolean}}
  */
-export function doaMachine(rom) {
+export function doaMachine(rom, { copro: extra } = {}) {
     const ram = new Uint8Array(RAM_SIZE);
     const unknown = new Set();
-    const copro = new Copro(unknown);
+    const copro = new Copro(unknown, extra);
     const models = modelTracker(rom.game.modelTable, rom.mainDataView);
     const geo = new Geo(copro, models);
     const cpu = new I960(makeBus(rom, ram, copro, geo, models));
-    return { ram, rv: new DataView(ram.buffer), R: rom.game.doa.ram, unknown, copro, geo, cpu };
+    return { ram, rv: new DataView(ram.buffer), R: rom.game.doa?.ram, unknown, copro, geo, cpu };
 }
 
 export function runStageRoutine(rom, entry, opts = {}) {

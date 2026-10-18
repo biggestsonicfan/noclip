@@ -32,6 +32,7 @@
  * hands it to the bank switch at 0x6FE0, which indexes the bank table with it.
  */
 
+import { doaMachine, boardToOps } from './doa.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { gameLighting } from './stages.js';
 import { buildVcopSky } from './vcopsky.js';
@@ -343,6 +344,121 @@ function stageClouds(rom, n, set, segments) {
     return out;
 }
 
+/* ---- the enemies -------------------------------------------------------------
+ *
+ * They are not objects: a stage's shoot-outs come in waves. `0x2864860[stage]`
+ * lists its sections, each the rail counts its waves come at (to a -1), and
+ * 0x141D0 starts wave w of section c, the one at 0x50F2AC and 0x50F2B0, when
+ * the rail's count (0x50F490) reaches its count. Its enemies are the 0x2C-byte
+ * records at `0x282C2D0[stage][c][w]`, to a zero first byte, and 0x13A90 puts
+ * each in a free one of nine slots (0x50F510, 0x9F4 bytes each):
+ *
+ *     +0x00  u8    kind          4: a wait (0x50F2BC frames), no one in it
+ *     +0x04  f32   x, y, z
+ *     +0x10  s16   turn about Y, a tenth of a degree to the unit
+ *     +0x13  u8    body          0x281EDF0[body]: joints, spheres, models
+ *     +0x14  u8    script        0x2820D40[script]: what the enemy does
+ *     +0x18  s32   object it stands on, -1 none (0x55991C + 0x1214 each)
+ *     +0x1E  u8    group         the order they come in within the wave
+ *
+ * A wave whose first record has bit 0x20 is 0x708C0's instead (stage 2's
+ * last section has one), and is left out. The script's first step (0x14118:
+ * the action, the motion, a mirror flag, a turn) picks the motion, 0x1EAD0
+ * plays it from the poses 0x23090 copies from 0x2470000 at boot, 0x1F258 turns the joints'
+ * angles into a matrix per joint, and 0x21A70 draws a model on each, with
+ * the shadow (0xAC) under it from 0x21C10. All of that is the enemy's task,
+ * 0x14AD0, and the explorer runs it: the spawn, then the task once, which is
+ * the first frame the board draws the enemy (the slot's sixteen matrices
+ * match MAME's on that frame to 1e-5). The rest of its moves go by the clock
+ * and the player's shots, which the explorer has not got.
+ *
+ * An enemy on an object (22 records in all) stands in the object's frame,
+ * which moves with the object's own clock; those are left out too. Each
+ * enemy comes up with the segment its wave's count is on.
+ */
+const WAVE_COUNTS = 0x2864860;
+const WAVE_RECORDS = 0x282c2d0;
+const ENEMY_BYTES = 0x2c;
+const WAIT = 4;
+const OTHER_WAVE = 0x20;
+const RAM_BASE = 0x500000;
+const ENEMY_SLOTS = 0x50f510;
+const ENEMY_SLOT = 0x9f4;
+const STAGE_NOW = 0x50f2a8;
+const POSE_COPY = 0x23090;
+const SPAWN = 0x13a90;
+const ENEMY_TASK = 0x14ad0;
+const MAX_WAVES = 64;
+const MAX_ENEMIES = 32;
+const ENEMY_SHADOW = 0xac;
+/* TGP function 3, which the board's program has and Dead or Alive's has not:
+ * a divide (the enemy's screen point, x times the focal length over z, for
+ * the shot test). */
+const VCOP_COPRO = { 0x03: [2, (cp, [a, b]) => cp.out([a / b])] };
+
+function dataU8(rom, addr) {
+    const off = addr - MAIN_DATA_BASE;
+    return off < 0 || off >= rom.mainData.length ? 0 : rom.mainData[off];
+}
+
+/* The stage's waves: the rail count each comes at, and its enemies' records. */
+function stageWaves(rom, n) {
+    const counts = dataU32(rom, WAVE_COUNTS + n * 4);
+    const records = dataU32(rom, WAVE_RECORDS + n * 4);
+    const waves = [];
+    for (let c = 0; counts && records; c++) {
+        const list = dataU32(rom, counts + c * 4);
+        const lists = dataU32(rom, records + c * 4);
+        if (!list || !lists) break;
+        for (let w = 0; w < MAX_WAVES; w++) {
+            const count = dataU32(rom, list + w * 4);
+            const at = dataU32(rom, lists + w * 4);
+            if (count === null || count === END || !at) break;
+            const recs = [];
+            for (let k = 0; k < MAX_ENEMIES && dataU8(rom, at + k * ENEMY_BYTES); k++) recs.push(at + k * ENEMY_BYTES);
+            if (dataU8(rom, at) & OTHER_WAVE) continue;
+            waves.push({ count, records: recs.filter((r) => dataU8(rom, r) !== WAIT && (dataU32(rom, r + 0x18) | 0) === -1) });
+        }
+    }
+    return waves;
+}
+
+/* Every enemy of the stage on the frame it comes in, as the board draws it. */
+function stageEnemies(rom, n, set, rail) {
+    const machine = doaMachine(rom, { copro: VCOP_COPRO });
+    const { cpu, ram, rv, copro, geo } = machine;
+    cpu.call(POSE_COPY);
+    const boot = ram.slice();
+    const count = rom.game.modelTable.count;
+    const out = [];
+    for (const wave of stageWaves(rom, n)) {
+        const zone = rail ? rail.starts.findLastIndex((c) => c <= wave.count) : 0;
+        for (const rec of wave.records) {
+            ram.set(boot);
+            rv.setUint32(STAGE_NOW - RAM_BASE, n, true);
+            Object.assign(copro, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], stack: [], outQ: [], pending: null });
+            cpu.call(SPAWN, [rec]);
+            const slot = cpu.reg(16) | 0;
+            if (slot < 0 || slot > 8) continue;
+            geo.draws = [];
+            if (!cpu.call(ENEMY_TASK, [ENEMY_SLOTS + slot * ENEMY_SLOT], { maxSteps: 5_000_000 })) continue;
+            for (const d of geo.draws) {
+                if (d.model >= count || !d.m || d.m.some((v) => !Number.isFinite(v))) continue;
+                /* `layered: false`: the joints stay out of the stage's face
+                 * layering (js/layers.js). Enemies of different waves stand on
+                 * the same spots, and pairing all their faces took minutes.
+                 * The shadow lies on the ground, so it stays in. */
+                out.push({
+                    model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer: 'fighters',
+                    ops: boardToOps(d.m), zones: new Set([Math.max(zone, 0)]),
+                    ...(d.model !== ENEMY_SHADOW && { layered: false }),
+                });
+            }
+        }
+    }
+    return out;
+}
+
 /* ---- the rail ----------------------------------------------------------------
  *
  * Where the camera stands. The stage start (0xC474) takes the stage's 24-byte
@@ -491,6 +607,8 @@ function stageOf(rom, lit, n, segs) {
     const objects = stageObjects(rom, n, set, segs.length, rail);
     const clouds = stageClouds(rom, n, set, segs.length);
     const zones = segs.map((recs, s) => ({ zone: s, set, label: `segment ${s + 1} · ${recs.length} pieces` }));
+    const waves = stageWaves(rom, n);
+    let enemies = null;
     return {
         slot: n,
         placements: true,
@@ -499,7 +617,12 @@ function stageOf(rom, lit, n, segs) {
         name: STAGE_NAMES[n] ?? `Stage ${n + 1}`,
         chapter: n,
         draws,
-        objects: [...clouds, ...objects],
+        /* The enemies take the game's own code a second or so a stage, so
+         * they are run when the stage is first drawn. */
+        get objects() {
+            enemies ??= stageEnemies(rom, n, set, rail);
+            return [...clouds, ...objects, ...enemies];
+        },
         sky: null,
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
@@ -518,7 +641,8 @@ function stageOf(rom, lit, n, segs) {
         colorCycles: [],
         flags: 0,
         floorSize: 0,
-        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length], ['object parts', objects.length]],
+        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length], ['object parts', objects.length],
+            ['waves', waves.length], ['enemies', waves.reduce((k, w) => k + w.records.length, 0)]],
     };
 }
 
