@@ -2138,8 +2138,7 @@ over frames 1 to 5 and land 0.04 to 0.19 away from where they would have.
 Not checked against MAME, for the same reason as the shadows: attract never
 breaks armour.
 
-Not followed: the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`). The pieces are the fighter's
+The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
 throws its pieces and effects from the pose on screen at that moment, making
@@ -2174,6 +2173,53 @@ the code on the simulation's `cues` on those two hits, and `sendDebrisCues`
   of them, and never on the other 1400; each sent its piece's code, `0xAE1115`
   for bit 29 (42) and `0xAE1146` for bit 28 (12). A piece that skidded on
   the floor for 600 frames sounded on its first two only.
+
+**Off screen, a resting piece is gone (`0x316F0`; read from the ROM,
+checked against MAME).** `0x2CF24` skips the fall for a piece at rest (flag
+bit 7). If its flags also have bit 3, and the finishing blow's
+`mod_fa_effect + 0xA74` is clear (the explorer never reaches it), it stores
+the piece's point at `0x50A2AC` and its radius (`+0x18`, the one the walls and
+the body push use) at `0x50A2FC` and calls `0x316F0`. That sends the point
+through TGP `0x14802929` with the camera matrix current, puts x, y and the
+radius on the screen at the focal `0x501084` (480) over z, and sets one bit of
+`0x50A300` for each of four points strictly inside 496 by 384 about the
+centre: the radius above the point and below it (if x is inside) and left and
+right of it (if y is inside). A z with its sign bit set leaves all four
+clear. With none set, `0x2D100` clears the piece's model (`+0x22`) and flags
+(`+0x24`): the slot is free again (`0x2D390` takes the first with flags 0),
+and the piece is never drawn again, even with the camera back on it. A piece
+in flight, or one at rest without bit 3, is never tested. Most records have
+bits 3 and 1 (bit 3 alone is the flipbook effect). Of the records with a
+model: 7 of Jane's 8, 14 of Grace's 16, 16 of Honey's 17, all but one to
+four of everyone's.
+
+The board asks its fight camera; the Animation tab has none, so
+`stepBodyDebris` (`js/app.js`) asks the explorer's own screen, as the
+Airport planes' test does: `cameraOnCourse().view` puts the piece's point
+into the camera's space (one rigid transform, so the radius needs no scale)
+and `pieceOnScreen` (`js/fvdebris.js`) runs the four tests against the
+window's edges. `fall` returns false for a piece it removes and
+`stepDebris` frees its slot. So turn the view off a piece at rest and it is
+gone. There is none in VF2, which has no armour.
+
+- MAME (`fvipers`, coined game, the player standing still; breakpoints at
+  `0x31740` for the view point, `0x2CF5C` for the result and `0x2D100` for
+  the removal): 41 pieces thrown in 34,000 frames on stage 0,
+  1972 tests of resting pieces, 7 off screen and 7 removals, each right
+  after its failed test, all resting pieces with bit 3 (one of them out of
+  the ring, bit 19). The camera matrix is rigid: in 394 pairs of pieces
+  tested on one frame, the distance between them in view space is the one
+  in the world to 1.3 × 10⁻⁶.
+- Node: `pieceOnScreen`, given each MAME test's view point, radius and the
+  focal's edges (248/480, 192/480), gives the board's answer on every one.
+  Against a single-precision port of `0x31740`..`0x31884`, it differs on 1
+  of 2,000,000 random points, a rounding at an edge.
+- Headless Chrome, both halves broken with the view on the fighter, then
+  turned away: the pieces still flying when it turns away all stay; once
+  at rest, Jane loses both of hers, Grace 2 of 4, Bahn 2 of 3 and Mahler 1
+  of 5, exactly the resting ones with bit 3 (Honey's two with bit 3 were
+  still bouncing). They are still gone when the
+  view comes back. With the view kept on them none goes. No page errors.
 
 **Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
 and 360, each half broken while the motion plays, and Jane with it held):

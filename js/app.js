@@ -63,7 +63,7 @@ import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
-import { createDebrisSim, launchDebris, stepDebris, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
+import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3790,7 +3790,8 @@ function placeBodyOsage(holder, pose, board, tick, place = null, flash = null) {
  * takes its pieces and effects back, and another fighter starts with none.
  * Only the fighter's own: the opponent's armour is whole. They are pushed out
  * of the bodies on screen, the fighter's as player 1's and the opponent's,
- * when it is shown, as player 2's.
+ * when it is shown, as player 2's. A resting piece that leaves the explorer's
+ * screen is gone, as one that leaves the board's is (0x316F0).
  */
 const DEBRIS_CATCH_UP = 8;
 const HALVES = ['upper', 'lower'];
@@ -3854,8 +3855,11 @@ function stepBodyDebris(now) {
         n = DEBRIS_CATCH_UP;
     }
     const lit = pieceSetting(m);
+    /* 0x316F0 asks the board's screen; here it is the explorer's. */
+    const cam = cameraOnCourse();
+    const onScreen = (s) => pieceOnScreen(cam.view(...s.p), s.radius, cam.lens);
     for (let i = 0; i < n; i++) {
-        stepDebris(d.sim, d.bodies);
+        stepDebris(d.sim, d.bodies, onScreen);
         if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
     }
     sendDebrisCues(d.sim);

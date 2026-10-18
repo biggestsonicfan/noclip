@@ -156,18 +156,38 @@ function stepEffect(sim, k) {
     for (let i = 0; i < 3; i++) e.p[i] = f(e.p[i] + e.v[i]);
 }
 
-/* 0x2CF24's fall and bounce. The resting piece's on-screen test (0x316F0,
- * which removes it when it leaves the picture) is not followed. The first two
- * floor hits queue the piece's sound (0x2D218) on `cues`. */
-function fall(s, cues) {
+/*
+ * 0x316F0, the resting piece's on-screen test: the piece's point goes to view
+ * space (TGP 0x29) and onto the screen at the focal (0x501084), 496 by 384
+ * about its centre, and its radius (+0x18) with it. It is on screen if any of
+ * four points is strictly inside: the radius above and below the point, or
+ * left and right of it. Behind the eye (z's sign bit) nothing is. `v` is the
+ * view-space point (x right, y up, z ahead), `lens` the screen's edges as x/z
+ * and y/z.
+ */
+export function pieceOnScreen(v, radius, lens) {
+    if (!(v.z > 0)) return false;
+    const ex = lens.x * v.z, ey = lens.y * v.z;
+    const inX = (x) => x > -ex && x < ex, inY = (y) => y > -ey && y < ey;
+    return (inX(v.x) && (inY(v.y - radius) || inY(v.y + radius)))
+        || (inY(v.y) && (inX(v.x - radius) || inX(v.x + radius)));
+}
+
+/* 0x2CF24's fall and bounce. A resting piece with flag bit 3 is asked
+ * 0x316F0's test each frame (unless the finishing blow's +0xA74 is set, which
+ * the explorer never reaches), and off screen it is removed (0x2D100: its
+ * model and flags cleared, so its slot is free); `onScreen` asks it, and with
+ * none every piece stays. The first two floor hits queue the piece's sound
+ * (0x2D218) on `cues`. Returns false for a piece removed. */
+function fall(s, cues, onScreen) {
     const { p, v } = s;
-    if (s.flags & FLAG.rest) return;
+    if (s.flags & FLAG.rest) return !(s.flags & FLAG.three) || !onScreen || onScreen(s);
     v[1] = f(v[1] - GRAVITY);
     v[0] = f(v[0] * DRAG);
     v[2] = f(v[2] * DRAG);
     for (let k = 0; k < 3; k++) p[k] = f(p[k] + v[k]);
     const floor = s.flags & FLAG.out ? f(s.floor + OUT_DROP) : s.floor;
-    if (p[1] > floor) return;
+    if (p[1] > floor) return true;
     s.bounces++;
     const bits = s.flags >>> 28;
     if (s.bounces <= 2 && bits) cues.push(LAND_SOUNDS[31 - Math.clz32(bits)]);
@@ -176,10 +196,11 @@ function fall(s, cues) {
     if (Math.abs(v[1]) > STILL) {
         v[0] = f(v[0] * SKID);
         v[2] = f(v[2] * SKID);
-        return;
+        return true;
     }
     s.flags |= FLAG.rest;
     v.fill(0);
+    return true;
 }
 
 /* The ring's walls, the board's x then z (the frame's z then x), about the
@@ -324,17 +345,18 @@ function pushOut(s, bodies) {
 /** One board frame of 0x2CE68 for every piece in flight or at rest.
  * `bodies` are the fighters' body balls (bodyBallsAt), player 1's first;
  * the push is skipped once the finishing blow lands (+0x7D6 bit 0), which
- * the explorer's fight never reaches. */
-export function stepDebris(sim, bodies = []) {
+ * the explorer's fight never reaches. `onScreen(s)` is 0x316F0's test for a
+ * resting piece (pieceOnScreen, on the explorer's own screen). */
+export function stepDebris(sim, bodies = [], onScreen = null) {
     sim.frame++;
-    for (const s of sim.slots) {
-        if (!s?.model) continue;
+    sim.slots.forEach((s, k) => {
+        if (!s?.model) return;
         s.frames++;
         pushOut(s, bodies);
-        fall(s, sim.cues);
+        if (!fall(s, sim.cues, onScreen)) { sim.slots[k] = null; return; }
         walls(s, sim.centre);
         turn(s);
-    }
+    });
     for (let k = 0; k < EFFECT_SLOTS; k++) stepEffect(sim, k);
 }
 
