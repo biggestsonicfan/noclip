@@ -470,8 +470,10 @@ spawn and enemy task for each one, and the joints match MAME's to 1e-5. Each
 comes up with the segment its wave starts on. Enemies standing on a moving
 object are left out. See [Virtua Cop's enemies](TECHNICAL.md#virtua-cops-enemies).
 
-Not read yet: the models the game builds in RAM at run time (entries 0x4D2 on:
-shadows and a few effects). The enemies draw none of them.
+The game builds no models in RAM. Entries 0x4D2 on (crate shadows, the WHARF
+sign, the stage 3 panels) are ROM meshes in a second table at 0x8693F0, and the
+explorer draws them. In MAME, on all three stages, every object the board draws
+points at polygon ROM, and the game never writes polygons into RAM.
 
 ## Virtua Fighter 2
 
