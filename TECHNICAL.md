@@ -5400,11 +5400,39 @@ The stage music is `level_music_list`'s song, and the stage sounds are
 `sound_queue_output`'s: the loop each stage starts with and, on the Airport and
 the UFO Diner, cues on the objects' clock.
 
+The Airport's jet is set by the planes' routine, behind its screen test, so it
+goes off only if a plane is on the screen on that frame. `0x6B7BC` projects
+four points round the plane, ANDs their outcodes into `r3`, and at `0x6BAE0`
+branches to its end (`0x6C194`) if they are all off one side; only past that
+does it read the objects' clock (`[0x500870]+6`) and, on 448 (`7 << 6`), set
+bit 15 of the sound flags at `[0x50085C]` (`0x6BAF8`), which `sqo_airport`
+turns into `0xAE1159`. Both planes run the routine, so either one on the
+screen sets it; with both off there is no jet that round. The explorer
+already has that test (`planeOnScreen`, the one that hides the planes, their
+shadows and the arena decal), so the decal's draw carries `jetCue`, and the
+stage sounds ask it (`jetShown` in `js/app.js`) on frame 448 with the camera
+as it stands, before sending the cue (`FV_SCREEN_CUES`,
+`js/sound/ambience.js`).
+
+The check:
+
+- MAME (`fvipers`, coined game, `0x500064` set to 3 at `change_scene`'s read
+  of it, `0x21750`, so the fight's objects are the Airport's; the clock put
+  back from 470 to 380 so 448 comes round again under a later fight
+  camera), 36 passes of 448: `0x6BAF8` was reached by exactly the planes
+  whose test passed (`r3` = 0). Both planes on the screen 3 times, only the
+  taxiing one (type 0) 18, only the one taking off (type 1) 6, and neither 9
+  times (`r3` 1, 2, 5 or `0x1F`), with no jet set.
+- Headless explorer on the Airport, camera at the arena turned eight ways at
+  clock 448: two planes carry the gate; turned five and six eighths round
+  neither is on the screen, and the others show one or both. With a stand-in
+  sound board, facing away sends only the stage loop (`0xAE115A`) through
+  frame 481; facing the planes sends the loop and `0xAE1159` at 448 (seen on
+  the first timer tick after it, 453). No page errors.
+
 Left out:
 
-- the per-entry clip tests of the shaft and the panels, which are culls;
-- the Airport jet cue's on-screen test: it plays whether or not the plane is
-  in view.
+- the per-entry clip tests of the shaft and the panels, which are culls.
 
 ### Character rigs (`js/characters.js`, `js/pose.js`)
 

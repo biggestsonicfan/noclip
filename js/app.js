@@ -5840,7 +5840,17 @@ function playStageSounds(slot) {
     if (!state.rom.game.sound?.ambience || !$('#opt-stage-sfx').checked || slot == null) return;
     if (state.music.sfx?.board !== state.music.board) state.music.sfx = new StageSounds(state.rom, state.music.board);
     /* Fighting Vipers' cues go off on the stage objects' clock. */
-    state.music.sfx.start(slot, () => Math.max(0, state.anim.frame) % FV_ROUND);
+    state.music.sfx.start(slot, () => Math.max(0, state.anim.frame) % FV_ROUND, jetShown);
+}
+
+/* Whether an Airport plane is on the screen at the objects' clock `f`: the
+ * routine's screen test, which the jet cue sits behind, asked of the draw that
+ * carries it (`jetCue`, js/fvobjects.js) with the camera as it stands. */
+function jetShown(f) {
+    const now = Math.max(0, state.anim.frame);
+    const frame = now - (now % FV_ROUND) + f;
+    return (state.anim.entries ?? []).some(({ entry }) =>
+        entry.jetCue && entry.live && !entry.live(frame, liveCamera(now)).hidden);
 }
 
 async function setMusic(on) {

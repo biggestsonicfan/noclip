@@ -337,6 +337,12 @@ function ufoDsp({ push }) {
  * 496 by 384 window — nothing is drawn. That takes the shadow and the decal
  * with it, which is the part that shows. Here it is the viewer's screen, and
  * the points turn by the yaw alone.
+ *
+ * The jet sound is set inside that test too: on clock 448 the routine sets bit
+ * 15 of the sound flags at [0x50085C] (0x6BAE4-0x6BB08), after the branch that
+ * skips an off-screen plane. So the cue goes off only if a plane is on screen
+ * on that frame. The decal's gate is that test alone, so it carries `jetCue`,
+ * which the stage sounds ask (js/sound/ambience.js).
  */
 const PLANE_PARKED = 0xe51, PLANE_FLYING = 0x2a4, PLANE_FAR = 0xe52;
 const PLANE_MAIN_GEAR = 0x1b7, PLANE_NOSE_GEAR = 0x1b6;
@@ -394,7 +400,7 @@ function planeDsp({ object, push }) {
         const p = v(f);
         return [at(p[0], 0, p[2]), angY(Math.round(p[4]))];
     }, alive, { planeBias: PLANE_SHADOW_BIAS });
-    push(PLANE_GROUND, [scale(RING_OUT / 6, 1, RING_OUT / 6)], alive, { planeBias: PLANE_DECAL_BIAS });
+    push(PLANE_GROUND, [scale(RING_OUT / 6, 1, RING_OUT / 6)], alive, { planeBias: PLANE_DECAL_BIAS, jetCue: true });
 }
 
 /* sub_6C198: four of the Airport's models, at the identity. */
