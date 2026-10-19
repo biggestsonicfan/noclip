@@ -121,7 +121,8 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but those on fourteen handlers, which are read below.
+ * all but those on fourteen handlers, which are read below, and one class that
+ * stands a row of props (see standRow).
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -301,7 +302,11 @@ function spawnProps(rom, at, set, out, section) {
          */
         const cls = dv.getUint32(rec, true);
         if (!inRom(rom, O.classes + cls * 4)) continue;
-        if (dv.getUint32(O.classes + cls * 4, true) !== O.generic) continue;
+        const opens = dv.getUint32(O.classes + cls * 4, true);
+        /* A class that stands a row of props of its own (see standRow). */
+        const row = O.rows?.find((r) => r.init === opens);
+        if (row) { standRow(rom, rec, row, set, out); continue; }
+        if (opens !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
         const handler = dv.getUint32(O.handlers + type * 4, true);
@@ -368,6 +373,43 @@ function spawnProps(rom, at, set, out, section) {
         });
         const o = out.get(rec);
         if (o.swim) o.ops = (frame) => propOps({ ...o, ...o.swim(frame) });
+    }
+}
+
+/*
+ * A spawn class that stands a row of props rather than one: its task opens
+ * `count` tasks on the plain prop handler, gives each the type, the place and
+ * a model of its own, and closes. Chapter 2's class 131 (0x39B50 in the first
+ * revision):
+ *
+ *     lda  0x3A210, g0         ; the prop handler
+ *     call _TaskOpen
+ *     stos r7, 0xCC(r4)        ; type 51
+ *     call 0x417F0             ; the type's model and scale; +0x2EC the script
+ *     ld   0xAFBB0[i*4], g6    ; z: the table's float, less 14, plus 249.749
+ *     lda  0x149C[i*2], g5     ; model 0x149C + 2i, PN_kenita00a to 07a
+ *     st   g5, 0x54(r4)
+ *     ldos 0x70(r6), g4        ; the spawner's life and window, copied
+ *     ...                      ; x 1210.341, y -59.011
+ *
+ * for i 0 to 7, then closes its own task. The record's own place and turns
+ * are not read, so the eight stand at the routine's places, unturned, and
+ * close as the record's own prop would.
+ */
+function standRow(rom, rec, row, set, out) {
+    const O = rom.game.objects;
+    const dv = rom.mainCpuView;
+    if (out.has(`${rec}:0`)) return;
+    if (dv.getUint32(O.handlers + row.type * 4, true) !== O.prop) return;
+    const scale = dv.getFloat32(O.table + row.type * O.stride + O.scale, true);
+    for (let i = 0; i < row.count; i++) {
+        const model = row.model + i * row.step;
+        if (model >= rom.game.modelTable.count) continue;
+        const z = Math.fround(Math.fround(dv.getFloat32(row.z + i * 4, true) - row.less) + row.plus);
+        out.set(`${rec}:${i}`, {
+            rec, type: row.type, model, set, scale: scale > 0 ? scale : 1,
+            pos: [row.x, row.y, z], turn: [0, 0, 0],
+        });
     }
 }
 
@@ -512,7 +554,7 @@ function propZones(rom, chapter, sections, props) {
         for (let q = p + 4; inRom(rom, q); q += 4) {
             const rec = dv.getUint32(q, true);
             if (rec === END) break;
-            const prop = props.get(rec);
+            const prop = props.get(rec) ?? props.get(`${rec}:0`);
             if (!prop) continue;
             if (!out.has(rec)) out.set(rec, new Set());
             const row = form.window != null ? rom.maincpu[rec + form.window] : 0;
@@ -841,7 +883,7 @@ export function readPlacementStages(rom) {
 
         /* And which zones each prop is drawn in, for the zone picker. */
         const lives = propZones(rom, chapter, sections, props);
-        if (lives) for (const [rec, o] of props) o.zones = lives.get(rec) ?? new Set();
+        if (lives) for (const [rec, o] of props) o.zones = lives.get(o.rec ?? rec) ?? new Set();
 
         /* Which zones list each placement, over every zone the chapter reaches. */
         const zonesOf = new Map();

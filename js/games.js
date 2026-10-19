@@ -1926,6 +1926,12 @@ const hotdo = {
         items: [{ handler: 0x3c5a0, model: 0x312, scale: 2.2, lift: 2 },
             { handler: 0x3c9d0, model: 0x3b5, scale: 1.4, y: 0.22, tip: 0x4000, yaw: 0,
                 spin: 0x1000 }],
+        /* Class 131's task, 0x39B50, which stands eight type-51 props in a
+         * row, PN_kenita00a to 07a (see standRow in js/placements.js). x and
+         * y are its immediates 0x44974AEA and 0xC26C0B43; z is the float at
+         * 0xAFBB0 + 4i, less 14 (0x41600000), plus 0x4379BFBE. */
+        rows: [{ init: 0x39b50, type: 51, model: 0x149c, step: 2, count: 8,
+            x: 1210.341064453125, y: -59.0109977722168, z: 0xafbb0, less: 14, plus: 249.74899291992188 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2380,6 +2386,7 @@ const hotd = {
         plain: null,
         cycles: null,
         items: null,
+        rows: null,
     },
     rig: {
         bodies: {

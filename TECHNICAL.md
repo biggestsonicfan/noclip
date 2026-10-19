@@ -6282,6 +6282,25 @@ ticked. Checked in MAME (`hotdo`, the attract scene table pointed at chapter
 place the explorer's to the bit, every model the same, and every angle within
 2 of 0x10000. The board's first draw has angles 0, and so has the explorer's.
 
+One spawn class stands props of its own. A record's first word picks the task
+the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
+is not the generic object: it opens eight tasks on the shared prop handler
+0x3A210, gives each type 51 and runs 0x417F0 on it (so the type's scale, 1,
+and +0x2EC the script index), then sets model 0x149C + 2i, `PN_kenita00a` to
+`07a`, x 1210.341 and y -59.011 (its immediates 0x44974AEA and 0xC26C0B43), and
+z the float at 0xAFBB0 + 4i less 14 plus 249.749, and copies its own +0x70
+(the life) and +0x64 (the window) to each. Then it closes its own task. The
+record's place and turns are not read, so the eight stand in a row, unturned,
+and close as a prop on that record would. Chapter 2's section 9 spawns the
+only one, record 0xF0570, in spawn list 0xF00B4. Stage 2 · set 7
+goes from 9 props to 17; `hotdo` set props go from 210 to 218. The explorer
+stands them in `standRow` (`js/placements.js`, the profile's `rows`). The
+handler's shot and break are left out, as for every prop. Checked in MAME
+(`hotdo`, the attract scene table pointed at chapter 2's section 9, a
+breakpoint in 0x3A210 for type 51): the init ran once with life 3 and no
+window, and all eight were drawn 342 times each, every model and place the
+explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
+
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard
 and 43 in the mansion; the prototype, whose table is the same one 78 types long,
