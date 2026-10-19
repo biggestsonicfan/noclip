@@ -151,7 +151,10 @@ that does them, read from its input program the way Sonic the Fighters' are
 a fighter standing in front of its opponent does not reach that way say what
 they need. They play one at a time: a string is listed by the motion its last
 press plays, and the strings themselves are not played yet. The game's names
-for its moves are not found, so they go by number. The stages carry their names, from the sound test's song list, and
+for its moves are not found, so they go by number. With the **Armour** switch's
+upper half broken, a helmet that comes off stays off: the face a move changes
+to is the bare-headed one the game's table gives (Bahn, Picky, Mahler and five
+others). The stages carry their names, from the sound test's song list, and
 play their music and stage sounds on the emulated sound board.
 
 The **Cells** tab has the game's 2D pictures, from the same two tables the stage

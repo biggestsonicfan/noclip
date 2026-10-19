@@ -191,10 +191,11 @@ const FV = {
     },
 };
 
-/* Fighting Vipers' face: op 16 writes slot 2 (0x2DDB0) with the first of
- * 0x640D31C[op][record]'s two models; the second, for a broken helmet
- * (+0x1F48 bit 2), only a hit's armour break selects, so it is not read.
- * Before any op the slot keeps the round start's (null: the part list's). */
+/* Fighting Vipers' face: op 16 writes slot 2 (0x2DDB0) with one of
+ * 0x640D31C[op][record]'s two models: the second once the helmet is off
+ * (+0x1F48 bit 2, the armour switch's broken head: armouredFighter's
+ * `helmetOff`), else the first. Before any op the slot keeps the round
+ * start's (null: the part list's). */
 const FV_FACE = {
     powerOn: () => ({ model: null }),
     run(ctx, ops, last, start) {
@@ -204,7 +205,7 @@ const FV_FACE = {
             for (; next < ops.length && ops[next].frame <= f; next++) {
                 const pair = u32At(ctx.rom, u32At(ctx.rom, ctx.F.table + ops[next].arg * 4) + ctx.body.index * 4);
                 const r = pair && dataAt(ctx.rom, pair);
-                if (r) now.model = r.view.getInt16(r.off, true);
+                if (r) now.model = r.view.getInt16(r.off + (ctx.body.helmetOff ? 2 : 0), true);
             }
             models[f] = now.model;
         }
@@ -357,7 +358,7 @@ function passAt(ctx, list, motion, mirrored, pass) {
 }
 
 const handsKey = (body, motion, mirrored, after) =>
-    `${body.index}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
+    `${body.index}${body.helmetOff ? 'h' : ''}:${motion.id}:${mirrored ? 1 : 0}:${after}`;
 
 /* What a motion starts from: the hands and face motion `from.motion` has on
  * its frame `from.frame` of its pass `from.pass`, itself started cold; or,

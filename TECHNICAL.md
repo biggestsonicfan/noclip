@@ -1577,13 +1577,25 @@ alongside 5 and 8. The face carries from one motion into the next, and over
 a loop's passes, the same way the hands do.
 
 - **Fighting Vipers** (`0x2DDB0`) writes the model outright:
-  `0x640D31C[op][record]` points at two s16 models. The explorer reads the
-  first. The game takes the second once the helmet is off (`+0x1F48`
-  bit 2), and only a hit's armour break (`0x2D588`) sets that bit. No
-  motion does, so the broken-helmet column is not read, for the same reason
-  the armour break is left out above: it is fight state. With the
-  explorer's armour switch on, op 16 still draws the first column. Before
-  any op the slot holds the round start's model, the part list's. Nothing else
+  `0x640D31C[op][record]` points at two s16 models. The game takes the
+  second once the helmet is off (`+0x1F48` bit 2: `bbc 2` on `ldos
+  0x1F48(g7)`, then `ldis (g0)[r4*2]`) and the first otherwise. Only a hit's
+  armour break (`0x2D588`) sets that bit, and the explorer's Armour switch is
+  that break: with the upper half broken, a fighter whose slot 2 has a break
+  entry has the bit (`helmetOff` from `armouredFighter`, the same test as
+  Picky's hair), and op 16 reads the second column. Eight fighters differ
+  there. In rows 0-6 and 9: Grace 194/192, Honey 2553/2551, Bahn 687/31,
+  Picky 895/892, Raxel 1536/699, Sanman 1062/1059, Mahler 1497/3887, B.M.
+  3589/3588; row 8 is each one's next model (Honey's 2552, Picky's 893,
+  Raxel's 700, Sanman's 1060). Before, the stance's frame-1 op put Bahn's,
+  Mahler's and B.M.'s helmets back on over the broken head. Jane, Tokio and
+  Sonic break no helmet and keep the first column. Checked in MAME
+  (`fvipers`, attract, 150 s, bit 2 ORed into `+0x1F48` at `0x2DDB0`, the
+  store logged at `0x2DDD8`): 240 stores, each the second column of the
+  fighter's row, Grace 192, Honey 2551/2552, Bahn 31, Picky 892, Raxel 699,
+  Sanman 1059, Tokio 3017, Jane 488/489. Mahler and B.M. did not come up in
+  attract. Before any op the slot holds the round start's model, the part
+  list's. Nothing else
   writes `+0x48` but replay save and restore (`0x3C5E8`, `0x3C94C`). The
   per-frame part refresh skips slot 2, and the face step (`0x4AF18`) works out
   a model but never stores it. Op 16 is in 285 motions. Every stance
