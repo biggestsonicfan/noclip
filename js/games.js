@@ -4340,12 +4340,180 @@ const doaae = relocateDoa(doaa, {
     program: DOAAE_PROGRAM,
 });
 
+/* ---- Dynamite Cop / Dynamite Deka 2 (Pinboard #1286) --------------------- */
+
+/* Bank k of each copy is set k's. The table holds two copies of 25 banks;
+ * the second copy's enemy banks name their texture records 4MB lower in the
+ * texture ROMs. */
+const DYNAMCOP_BANK_SETS = [...Array(25).keys(), ...Array(25).keys()];
+
+/*
+ * AM1's 1998 game, on all three boards: the 2A export and Japanese builds, the
+ * same two on 2B, and the US build on 2C. The data, polygon and texture ROMs
+ * are one set of chips for all five, and so is the program's upper pair; only
+ * the lower pair differs, and it is what tells the builds apart. The 2B and 2C
+ * zips name it `progrom0.15` and `progrom1.16`, so it is found by checksum.
+ *
+ * Read off a running board (MAME, the shared build, with Lua dumps of palette,
+ * colorxlat, luma and texture RAM at three attract scenes) and the program's
+ * set loaders: boot is 0x7D450, a stage 0x7D3F0 or 0x7D490, an enemy set
+ * 0x7D420 or 0x7D4D0, all handed the set number. Every table they read is a
+ * pointer array indexed by it. js/dynamcop.js has the scene this makes.
+ *
+ * The addresses are the 2A export build's. The other builds' were found by
+ * searching each program for the same table bytes. The 2B and 2C programs
+ * keep the same tables in another order.
+ */
+const DYNAMCOP_DATA = {
+    mainData: {
+        size: 0x2000000,
+        parts: [
+            [0x0000000, 'mpr-20797.10', 0x87bab1e4, 'mpr-20798.11', 0x40dd752b],
+            [0x0800000, 'mpr-20795.8', 0x0ef85e12, 'mpr-20796.9', 0x870139cb],
+            [0x1000000, 'mpr-20793.6', 0x42ea08f8, 'mpr-20794.7', 0x8e5cd1db],
+            [0x1800000, 'mpr-20791.4', 0x4883d0df, 'mpr-20792.5', 0x47becfa2],
+        ],
+    },
+    polygons: {
+        size: 0x2000000,
+        parts: [
+            [0x0000000, 'mpr-20799.16', 0x424571bf, 'mpr-20803.20', 0x61a8ad52],
+            [0x0800000, 'mpr-20800.17', 0x3c2ee808, 'mpr-20804.21', 0x03b35cb8],
+            [0x1000000, 'mpr-20801.18', 0xc6914173, 'mpr-20805.22', 0xf6605ede],
+            [0x1800000, 'mpr-20802.19', 0xd11b5267, 'mpr-20806.23', 0x0c942073],
+        ],
+    },
+    textures: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-20809.25', 0x3b7b4622, 'mpr-20807.24', 0x1241e0f2],
+            [0x800000, 'mpr-20810.27', 0x838a10a7, 'mpr-20808.26', 0x706bd495],
+        ],
+    },
+};
+
+/* The program's own tables, per build. */
+const DYNAMCOP_AT = {
+    dynamcop: {
+        tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
+        flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
+        materials: 0x6ecc0, missions: 0xe9a70,
+    },
+};
+DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
+    missions: 0xe9a60,
+};
+DYNAMCOP_AT.dynamcopb = {
+    tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
+    flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
+    materials: 0x17c40, missions: 0xf9370,
+};
+DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
+    missions: 0xf9360,
+};
+DYNAMCOP_AT.dynamcopc = {
+    tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
+    flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
+    materials: 0x6f3b0, missions: 0xfa190,
+};
+
+function dynamcopBuild({ id, name, low, high }) {
+    const A = DYNAMCOP_AT[id];
+    return {
+        id, name,
+        identify: [low[1], low[3]],
+        identifyCrc: [low[2], low[4]],
+        regions: {
+            maincpu: { size: 0x200000, parts: [low, high] },
+            ...DYNAMCOP_DATA,
+        },
+        /* Set 5's stage bank is 0x06755500, through XTRA_DATA. */
+        xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+        /*
+         * 19432 entries at data 0xD40000, HOTD's 16-byte layout and mesh
+         * pointers. Fifty empty entries split it into 51 banks. There is no
+         * name table. The texture blocks follow it at 0xD8BE80.
+         */
+        modelTable: { offset: 0xd40000, count: 19432, stride: 16 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        paletteOffset: null,
+        /* js/dynamcop.js dynamcopPalette: `tables` is a count-prefixed table
+         * per set, `top` one per stage written down from the top, `extra` one
+         * more boot writes in two runs. */
+        palette: { layout: 'dynamcop', tables: A.tables, top: A.top, extra: A.extra, sets: 25 },
+        texture: {
+            /* `bankTable[set]` is a data address: boot's packed (byte pair
+             * encoding, laid out by `bootRects`), the others raw halfwords.
+             * `patchTable[stage]` is eight 64x64 blocks for sheet 0. */
+            raw: { layout: 'dynamcop', bankTable: A.banks, bootRects: A.rects, patchTable: A.patches },
+            sets: 25,
+            residentSet: null,
+            bankSets: DYNAMCOP_BANK_SETS,
+        },
+        /*
+         * The HOTD curve with other weights (`weights`: 0.7, then 0.85), and
+         * fifteen ramps over the odd rows 1..29 with no gain: the first eleven
+         * from boot's list, the last four from the stage's (`shared`). Luma RAM
+         * is 0x7F80 bytes of the program ROM (0x70EB0 copies it). Both match
+         * MAME's RAM exactly in all three scenes, but for row 17, which the
+         * game animates.
+         */
+        colors: {
+            luma: { source: 'maincpu', data: A.luma, bytes: 0x7f80 },
+            curve: { weights: A.weights, sets: { ptrs: A.ramps, rows: 15, row0: 1, step: 2, gain: null, shared: 11 } },
+            solid: true,
+        },
+        /* Boot uploads 31 material slots from `materials` (0x6EE74, the same
+         * call as The House of the Dead's), and the table is HOTD's but for
+         * slots 4 and 13. The light and plane normals are carried over from
+         * HOTD, not read from this program. */
+        lighting: {
+            vecter: [0xe000, 0xc000],
+            materials: { at: A.materials, count: 31 },
+            planeNormals: true,
+        },
+        /* js/dynamcop.js readDynamcopStages: `missions` is the table 0x2B960
+         * reads, three pointers a mission to runs of area descriptors. */
+        stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
+    };
+}
+
+const DYNAMCOP_HIGH = [0x100000, 'epr-20932.14', 0x618a68bf, 'epr-20933.15', 0x13abe49c];
+const dynamcop = dynamcopBuild({
+    id: 'dynamcop', name: 'Dynamite Cop (Export, Model 2A)',
+    low: [0x000000, 'epr-20930.12', 0xb8fc8ff7, 'epr-20931.13', 0x89d13f88],
+    high: DYNAMCOP_HIGH,
+});
+const dyndeka2 = dynamcopBuild({
+    id: 'dyndeka2', name: 'Dynamite Deka 2 (Japan, Model 2A)',
+    low: [0x000000, 'epr-20922.12', 0x0a8b5604, 'epr-20923.13', 0x83be73d4],
+    high: [0x100000, 'epr-20924.14', 0x618a68bf, 'epr-20925.15', 0x13abe49c],
+});
+const dynamcopb = dynamcopBuild({
+    id: 'dynamcopb', name: 'Dynamite Cop (Export, Model 2B)',
+    low: [0x000000, 'epr-20944.15', 0x29b142f2, 'epr-20945.16', 0xc495912e],
+    high: [0x100000, 'epr-20942.13', 0x618a68bf, 'epr-20943.14', 0x13abe49c],
+});
+const dyndeka2b = dynamcopBuild({
+    id: 'dyndeka2b', name: 'Dynamite Deka 2 (Japan, Model 2B)',
+    low: [0x000000, 'epr-20936.15', 0x23ef98f2, 'epr-20937.16', 0x25a14e00],
+    high: [0x100000, 'epr-20934.13', 0x618a68bf, 'epr-20935.14', 0x13abe49c],
+});
+const dynamcopc = dynamcopBuild({
+    id: 'dynamcopc', name: 'Dynamite Cop (USA, Model 2C)',
+    low: [0x000000, 'epr-20952.15', 0xec8bc896, 'epr-20953.16', 0xa8276ffd],
+    high: [0x100000, 'epr-20950.13', 0x618a68bf, 'epr-20951.14', 0x13abe49c],
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
-    doa, doab, doaa, doaab, doaae];
+    doa, doab, doaa, doaab, doaae,
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

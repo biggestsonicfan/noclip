@@ -30,6 +30,7 @@
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
+import { dynamcopScene } from './dynamcop.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -395,6 +396,8 @@ function sendFighterColors(dv, put, rgb, C, fighters, palette) {
  * @returns {Uint8Array} CXLAT_BYTES, laid out like a dump of 0x01810000
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
+    /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
+    if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
@@ -494,13 +497,16 @@ function buildCurveColorxlat(rom, colorSet) {
     const f = Math.fround;
     const cap = (v) => Math.min(Math.trunc(v), 255);
     /* ½√v + ½v²: the square root and its half in single, the square in double,
-     * the sum rounded back to single. */
-    const curve = (v) => f(f(f(Math.sqrt(v)) * 0.5) + (0.5 * v) * v);
+     * the sum rounded back to single. Dynamite Cop weighs it a√v + (1-a)v²,
+     * with a read from its program ROM: 0.85 for the rows, 0.7 for the luma. */
+    const weight = (k) => (C.curve.weights ? f(cv.getFloat32(C.curve.weights + k * 4, true)) : 0.5);
+    const [aRow, aLuma] = [weight(1), weight(0)];
+    const curve = (v, a) => f(f(f(Math.sqrt(v)) * a) + (v * (1 - a)) * v);
 
     for (let row = 0; row < 32; row++) {
-        const y = curve(f(((row << 3) + (row >> 2)) / 255));
+        const y = curve(f(((row << 3) + (row >> 2)) / 255), aRow);
         for (let luma = 0; luma < 64; luma++) {
-            const v = cap(f(curve(f(y * f(luma / 63))) * 255));
+            const v = cap(f(curve(f(y * f(luma / 63)), aLuma) * 255));
             for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
         }
         const flat = cap(f(y * 255));
@@ -509,12 +515,15 @@ function buildCurveColorxlat(rom, colorSet) {
         }
     }
 
-    const { ptrs, rows, row0, step, gain } = C.curve.sets;
+    const { ptrs, rows, row0, step, gain, shared = 0 } = C.curve.sets;
     const table = colorSet >= 0 ? cv.getUint32(ptrs + colorSet * 4, true) : 0;
+    /* Dynamite Cop takes its first `shared` ramps from set 0's list, which boot
+     * loads (0x70810), and the rest from the stage's (0x70CA0); it has no gain. */
+    const boot = shared ? cv.getUint32(ptrs, true) : 0;
     if (table && table + rows * 4 <= rom.maincpu.length) {
-        const g = f(cv.getFloat32(gain, true));
+        const g = gain ? f(cv.getFloat32(gain, true)) : 1;
         for (let r = 0; r < rows; r++) {
-            const src = cv.getUint32(table + r * 4, true);
+            const src = cv.getUint32((r < shared ? boot : table) + r * 4, true);
             if (!src || src + 64 * 3 > rom.maincpu.length) continue;
             for (let luma = 0; luma < 64; luma++) {
                 for (let ch = 0; ch < 3; ch++) {

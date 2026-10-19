@@ -4240,6 +4240,130 @@ those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
 
+### Dynamite Cop (`js/dynamcop.js`)
+
+All five builds share the data, polygon and texture chips and the program's
+upper pair. Only the lower pair differs, so that is what `identifyCrc`
+checks. The 2B and 2C zips call it `progrom0.15` and `progrom1.16`. The
+tables below were read off the 2A export build (`dynamcop`) first: MAME, the
+shared build, with Lua dumps of palette, colorxlat, luma and texture RAM at
+three attract scenes, and the program's set loaders. The other builds'
+addresses were found by searching each program for the same table bytes.
+The 2B and 2C programs keep the same tables in another order.
+
+| table | dynamcop | dyndeka2 | dynamcopb | dyndeka2b | dynamcopc |
+|---|---|---|---|---|---|
+| bank table | 0x429D0 | 0x429D0 | 0x10D30 | 0x10D30 | 0x42FC0 |
+| palette tables | 0x42840 | 0x42840 | 0x10BA0 | 0x10BA0 | 0x42E30 |
+| palette top | 0x428E0 | 0x428E0 | 0x10C40 | 0x10C40 | 0x42ED0 |
+| palette extra | 0x42920 | 0x42920 | 0x10C80 | 0x10C80 | 0x42F10 |
+| ramps | 0x42930 | 0x42930 | 0x10C90 | 0x10C90 | 0x42F20 |
+| luma (0x7F80 bytes) | 0x36B40 | 0x36B40 | 0x4EA0 | 0x4EA0 | 0x37130 |
+| curve weights | 0x70270 | 0x70260 | 0x191E0 | 0x191D0 | 0x70A20 |
+| boot rectangles | 0xE4390 | 0xE4380 | 0xFA5B0 | 0xFA5A0 | 0xF4AB0 |
+| stage blocks | 0xE4440 | 0xE4430 | 0xD5CA0 | 0xD5C90 | 0xF4B60 |
+| enemy flags | 0x756B0 | 0x756A0 | 0x62330 | 0x62320 | 0x75EF0 |
+| materials (31 x 8) | 0x6ECC0 | 0x6ECB0 | 0x17C40 | 0x17C30 | 0x6F3B0 |
+| missions | 0xE9A70 | 0xE9A60 | 0xF9370 | 0xF9360 | 0xFA190 |
+
+The function addresses below are the 2A export build's.
+
+**Sets.** The game numbers 25 sets. Set 0 is boot, sets 1-13 are stages and
+14-24 are enemy sets (enemy n is set 14 + n). Boot loads with 0x7D450, a
+stage with 0x7D3F0 or 0x7D490, an enemy set with 0x7D420 or 0x7D4D0. Each
+loader is handed the set number and every table it reads is a pointer array
+indexed by it. RAM 0x543024 holds the loaded stage, 0x543028 and 0x54302C the
+two enemy sets. The two enemy sets always have opposite flags in the enemy
+flag table, and the flag picks which half of texture RAM and of the palette
+each one takes. So a scene is a stage and an enemy pair, and the explorer
+turns a set number into one (`dynamcopScene`). A stage is shown with enemy 0
+and its partner; an enemy set with stage 1.
+
+**Models.** The model table is at data 0xD40000 (i960 0x2D40000): 19432
+entries of 16 bytes, The House of the Dead's layout. Fifty empty entries
+split it into 51 banks: two copies of 25, one bank per set. Copy 1's banks
+start at 0, 4000, 4370, 4419, 4853, 5264, 5335, 5621, 5908, 5971, 6184, 6333,
+6436, 6984 (sets 0-13) and 7072, 7192, 7525, 7630, 7769, 7901, 8489, 8777,
+8860, 9116, 9702 (sets 14-24). Copy 2 starts at 9716. Its enemy banks name
+their texture records 4 MB lower in the texture ROMs than copy 1's. The
+explorer draws copy 2's banks under the same sets as copy 1's, which is not
+checked: what loads copy 2 was not found.
+
+**Texture RAM** (`buildDynamcopTexram`). `bankTable[set]` is a data address.
+XTRA_DATA (0x06000000) is data from 0x1000000 on, so set 5's bank at
+0x06755500 is data 0x1755500. Boot's bank (0x978C0) is packed with Gage's
+byte pair encoding and laid out by the boot rectangles (24 bytes each:
+sheet, word offset, x0, y0, x1, y1; -1 ends it). A stage bank (0x6F9E0) is
+0xAAA00 raw bytes: full size onto sheet 1 and its mips dealt between the two
+sheets. An enemy bank (0x6F8D0) is 0x55500 bytes into the mip rectangles the
+stage leaves free. 0x6FF60 copies the rectangles and 0x6F9A0 clears the far
+sheet's mip corner. 0x97D10 then puts the stage's eight 64x64 blocks from
+the stage block table onto sheet 0, as in The House of the Dead. Against
+MAME's texture RAM in three attract scenes, sheet 1 matches exactly. Sheet 0
+matches outside the eight block places, which on the board still hold the
+blocks of every stage played before.
+
+**Palette** (`dynamcopPalette` in `js/dynamcop.js`). Each table is a count
+and that many BGR555 colours. In the order boot and the loaders write them:
+the boot table up from 0, `top[0]` down from 1023, `extra` (its first 50 down
+from 983, the rest down from 873), the stage's table up from 400, its `top`
+down from 933, and each enemy's table up from 550 (flag 0) or 600 (flag 1).
+Against MAME's palette RAM, the entries that differ are 446-484, 583-587 and
+637-643, which hold colours of sets loaded earlier in the attract that the
+current set's shorter tables do not overwrite, and 684, 925 and 1013-1023,
+which the game changes while it runs.
+
+**Colours.** Luma RAM is 0x7F80 bytes of the program ROM, copied by 0x70EB0.
+The colour curve is The House of the Dead's with other weights (0.7, then
+0.85) and fifteen ramps over the odd rows 1-29, with no gain: the first
+eleven from boot's list, the last four from the stage's. Both match MAME's
+RAM in all three scenes but for row 17, which the game animates.
+
+**Lighting.** Boot uploads 31 material slots of 8 bytes from the material
+table with 0x6EE74, the same call as The House of the Dead's. The table is
+HOTD's but for slots 4 and 13, and the first 248 bytes are the same in all
+five builds. The light vector and the plane normals are HOTD's, not read
+from this program.
+
+**Stages** (`readDynamcopStages`). The game builds its display list in
+buffer RAM at 0x900000: per object a matrix, `00800101` and the model table
+entry. Breakpoints on that showed the scenery comes from object records, not
+from walking the banks. 0x2B960 (and 0x2B9F0) starts an area. The mission
+table is twelve pointers, three per value of 0x51F4A0 (0-3), picked by
+0x51F49C (0-2): `missions + 12 * [0x51F4A0] + 4 * [0x51F49C]`. Each
+points at a run of area descriptors, 40 bytes each, and the area number is
+0x51F4A4. Word +0x10 of a descriptor is its object list, 32-byte records:
+
+| offset | | |
+|---|---|---|
+| +0x00 | byte | stored to the object's +0x50 |
+| +0x02 | s16 | model, an index into the whole table |
+| +0x04 | 3 floats | x, y, z |
+| +0x10 | s16 | yaw, 0x4000 a quarter turn |
+| +0x14 | u32 | type; the list ends at the first 0 after the first record |
+
+The first record sets the area up (0x1D970, by its type). The others are
+spawned through 0x1D9A0[type]. Type 2 (0x1F0D0, task 0x1DFD0) is the room:
+its model goes to the object's +0x4C and its position to +0x30-0x38. The
+other types were not traced one by one. They are props, the sea and sky
+(model 4334, turned four ways, and 4367 at y -19, the sea's plane) and the
+things cut scenes move. The explorer draws type 2 as scenery and the rest as
+objects, each where its record puts it and turned by its yaw.
+
+The runs have no count. A run ends where the next one starts, and the last
+ends at the mission table; a descriptor whose list is outside 0x1D0000-
+0x200000 is past the end. That gives 424 areas, 280 different lists, and 279
+with something in them: the runs share many lists.
+Each area is one room in its own frame, round the origin. The explorer lists
+each list once, under the first entry that reaches it, named "Course m-v,
+area a" after its place in the table (what the two indices mean in the game
+was not worked out). An area is drawn under the set most of its models'
+banks belong to (boot's models do not count); a model from an enemy bank is
+drawn under its own set. In the attract, 0x51F4A0, 0x51F49C and 0x51F4A4 are
+0, 0 and 28 at frame 2700, and "Course 1-1, area 28" in the explorer is the
+cabin MAME shows then: the double doors, bed, desk and wall lamp, in the
+same colours.
+
 ### Fighting Vipers' cells (`js/cells.js`)
 
 Sonic The Fighters' two tables a year earlier, at the addresses the stage sky
