@@ -5930,7 +5930,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for eleven handlers.
+The others are left out rather than guessed at, but for twelve handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6152,6 +6152,22 @@ board's first draw is 0x1000 on, the coin having turned once; the explorer's is
 depth. The explorer's depth buffer hides that part (see `ZSORT_RECEDE` in
 `js/viewer.js`). Type 124 on 0x3CBE0 opens a type-91 object on 0x41A60 and
 stays out.
+
+The twelfth is type 121 on 0x3EB30, `PN_kikai_b` (0x15BE), scale 1. Its
+init closes the task at once if its event flag is already up: 0x56
+(0x51E316), or 0x55 (0x51E315) when bit 5 of +0x58 is set, where 0x55 at 1
+drops a life (0x3C5A0) first. A camera window (+0x64 not 0) skips the test.
+Then it closes as a prop does (0x3ED60) and draws through 0x413B0 until a shot
+sets bit 1 or 2 of +0x58, when it breaks and sets its flag (0x55 to 1 with bit
+5, else 0x56 to 1). Only this handler and the life item (0x3C3D4, 0x55 to 2)
+write those two flags; no script does. Chapter 3's section 0 spawns two in
+script 8 (0xF59E0, 0xF5A40) with window row 0x1F of 0xAE830, `0x159, 0xFFFF`,
+which closes them at 0x159 on the zone's clock, and two in script 10 (0xF5A10,
+0xF5A70) at the same places, yaw 0x3000 and scale: the same two machines,
+handed to objects that know whether the first were shot. The explorer stands
+one at each place, (227.9, -24.7, 131) and (231.7, -24.7, 137.5), Stage 3 ·
+set 8, which goes from 43 props to 45; `hotdo` set props go from 205 to 207.
+The shot and the life are left out. Read from the ROM, not checked in MAME.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

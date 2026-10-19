@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but eight, which are read below.
+ * all but those on twelve handlers, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -239,6 +239,18 @@ function walkScript(rom, at, visit) {
  * turns its yaw 0x1000 a frame until a shot sets bit 28 of +0x58 (left out).
  * Chapter 4's five (Stage 4 set 9) spin here while animate is ticked.
  *
+ * Type 121 (PN_kikai_b) closes as a prop does (0x3ED60) and draws on 0x3EB30
+ * through 0x413B0 until a shot sets bit 1 or 2 of +0x58; then it breaks, and
+ * sets event flag 0x56, or 0x55 with a life (0x3C5A0) if bit 5 is set. Its
+ * init closes it at once if that flag is already up (0x55 at 1 drops the life
+ * first), unless it has a camera window (+0x64). Only 0x3EB30 and the life
+ * item (0x3C3D4) write 0x55 and 0x56; no script does. Chapter 3's section 0
+ * spawns two in script 8 (0xF59E0, 0xF5A40), with window row 0x1F, which
+ * closes them at 0x159 on the zone's clock, and two more in script 10
+ * (0xF5A10, 0xF5A70) at the same places, turns and scale: the same machines,
+ * taken over by objects that know whether the first were shot. So one stands
+ * at each place (Stage 3 set 8), and the shot is left out.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -279,6 +291,9 @@ function spawnProps(rom, at, set, out, section) {
         const plain = O.plain?.find((c) => c.handler === handler && c.types.includes(type));
         if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item
             && !plain) continue;
+        if (plain?.onePerPlace && [...out.values()].some((o) => o.type === type
+            && o.pos[0] === dv.getFloat32(rec + 8, true) && o.pos[1] === dv.getFloat32(rec + 12, true)
+            && o.pos[2] === dv.getFloat32(rec + 16, true))) continue;
         const model = item ? item.model : plain?.sections?.[section]
             ?? dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
