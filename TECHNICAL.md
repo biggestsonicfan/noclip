@@ -6544,10 +6544,31 @@ stand in zones 28-29 and 31. The explorer stands both in `standGroup`
 props to 78 in `hotdo` and from 65 to 80 in `hotdp`; Stage 2 · set 5 from 20 to
 32 and from 13 to 25. Read from the ROM, not checked in MAME.
 
+Class 0x94 stands models of its own at places of its own. Its routine, 0x38F50
+(`hotdo`; 0x2F3B0 in the prototype), opens four tasks on 0x3C240 (0x32110) from
+the 28-byte entries at 0xAEA30 (0x85B00), then closes itself. Each child runs
+0x417F0 for the record's type, then overwrites the model with the entry's +0x00,
+which is a model, not a type. It copies the spawner's +0x70, sets scale 1.0 and
+takes +0x04/+0x08/+0x0C as its place and +0x10/+0x14/+0x18 as its turns. The
+record's own place and turns are not read. The handler closes as a prop does.
+Before the draw it works on the model it holds: `PN_haguuu` and `PN_haguuu01a`
+(0x8C6, 0x8C7) add 0x80 to the third turn every frame, `PN_haguuu02a` (0x8C8)
+takes 0x80 off it, and any other model steps one, going back to `PN_hagumizu00a`
+(0x8A8) once it is past 0x8C4, so the water's 30 frames loop. The prototype does
+the same with its own models (0x83E-0x840; 0x820-0x83D). The one record of the
+class, 0xE7030 (0xE6660), is chapter 1's section 10 (Stage 1 · set 1): three
+gears and the running water, at the same places in both builds, with all turns
+0. The first gear's turn is also stored for another object at 0x53E4C0. Around
+the water's draw, a block of 32 words at 0x7A0 is rescaled by 0xC8/256 and sent
+to the coprocessor. The explorer follows neither. The explorer stands the four
+in `standFixed` (`js/placements.js`, the profile's `fixed`), the gears as `spin`
+and the water as a `cycle`. Revision A is not covered: its profile has no
+groups either. Read from the ROM, not checked in MAME.
+
 They come out as their own layer, so they can be switched off and so the camera
-frames the room rather than them. The first chapter stands 34 in the courtyard
+frames the room rather than them. The first chapter stands 38 in the courtyard
 and 78 in the mansion (44 before class 0x8A's furniture, 63 before class 0x93's
-table); the prototype, whose table is the same one 78 types long, stands 34
+table); the prototype, whose table is the same one 78 types long, stands 38
 and 80 (46, 65).
 
 The prototype's table was found by its own shape and then held against the

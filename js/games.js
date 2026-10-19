@@ -1305,6 +1305,12 @@ const hotdp = {
          * chapter 1 (see standGroup in js/placements.js). */
         groups: [{ init: 0x2fa20, chapters: [{ at: 0x85e10, count: 15, window: 26, keep: [3, 4] },
             { at: 0x866f0, count: 12 }] }],
+        /* Class 0x94's task, 0x2F3B0, which stands four models at the places
+         * of 0x85B00 on 0x32110: three gears turning their third angle and
+         * the water looping 0x820 to 0x83D (see standFixed in
+         * js/placements.js). */
+        fixed: [{ init: 0x2f3b0, at: 0x85b00, count: 4, first: 0x820, last: 0x83d,
+            spins: { 0x83e: 0x80, 0x83f: 0x80, 0x840: -0x80 } }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
@@ -1982,6 +1988,12 @@ const hotdo = {
          * in js/placements.js). */
         groups: [{ init: 0x394b0, at: 0xaed40, count: 15, marked: 28 },
             { init: 0x395b0, at: 0xaf620, count: 12 }],
+        /* Class 0x94's task, 0x38F50, which stands four models at the places
+         * of 0xAEA30 on 0x3C240: PN_haguuu, 01a and 02a turning their third
+         * angle and PN_hagumizu00a to 29a looping (see standFixed in
+         * js/placements.js). */
+        fixed: [{ init: 0x38f50, at: 0xaea30, count: 4, first: 0x8a8, last: 0x8c5,
+            spins: { 0x8c6: 0x80, 0x8c7: 0x80, 0x8c8: -0x80 } }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same

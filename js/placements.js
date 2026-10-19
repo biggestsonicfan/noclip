@@ -347,6 +347,9 @@ function spawnProps(rom, at, set, out, section, chapter) {
         /* And the two that stand a group about their own place. */
         const group = O.groups?.find((r) => r.init === opens);
         if (group) { standGroup(rom, rec, group, set, out, chapter); continue; }
+        /* And one that stands models of its own at places of its own. */
+        const fixed = O.fixed?.find((r) => r.init === opens);
+        if (fixed) { standFixed(rom, rec, fixed, set, out); continue; }
         if (opens !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
@@ -574,6 +577,53 @@ function standGroup(rom, rec, group, set, out, chapter) {
             turn: turn.map((v) => v & 0xffff),
             /* A window row of its own, in place of the record's. */
             ...(window != null ? { window } : {}),
+        });
+    }
+}
+
+/*
+ * A spawn class that stands models of its own at places of its own: class
+ * 0x94 (0x38F50 in the first revision, 0x2F3B0 in the prototype). Its routine
+ * opens four tasks, on 0x3C240 (the prototype's 0x32110), and for each
+ *
+ *     call 0x417F0             ; the record's type's model and scale, then
+ *     ld   0xAEA30[i*28], g4   ; +0x00 a model, not a type: it replaces them
+ *     st   g4, 0x54(r4)
+ *     ldos 0x70(r6), g4        ; the spawner's life and window, copied
+ *     st   1.0, 0x94(r4)       ; scale 1
+ *     ld   0xAEA34[i*28], g6   ; +0x04, +0x08, +0x0C the place, to +0x20..
+ *     ld   0xAEA40[i*28], g4   ; +0x10, +0x14, +0x18 the turns, to +0x2C..
+ *
+ * for i 0 to 3, then closes its own task. The record's own place and turns
+ * are not read. The task closes as a prop does and, before it draws, works on
+ * the model it holds: PN_haguuu and PN_haguuu01a (0x8C6, 0x8C7) add 0x80 to
+ * the third turn (+0x34) every frame and PN_haguuu02a (0x8C8) takes 0x80 off
+ * it; any other model steps one, back to PN_hagumizu00a (0x8A8) once the one
+ * it stepped from is past 0x8C4, so 00a to 29a loop. The prototype's are the
+ * same at its own models (0x83E, 0x83F, 0x840; 0x820 to 0x83D). The first
+ * gear's turn is also stored for another object (0x53E4C0), and around the
+ * water's draw the routine rescales a block of 32 words at 0x7A0 by 0xC8/256
+ * and sends it to the coprocessor; neither is followed here. Chapter 1's
+ * section 10 spawns the one record of the class, 0xE7030 (the prototype's
+ * 0xE6660), in Stage 1 set 1.
+ */
+function standFixed(rom, rec, fixed, set, out) {
+    const dv = rom.mainCpuView;
+    if (out.has(`${rec}:0`)) return;
+    for (let i = 0; i < fixed.count; i++) {
+        const at = fixed.at + i * 28;
+        if (!inRom(rom, at, 28)) break;
+        const model = dv.getUint32(at, true);
+        if (!model || model >= rom.game.modelTable.count) continue;
+        const spin = fixed.spins[model];
+        out.set(`${rec}:${i}`, {
+            rec, type: rom.maincpu[rec + rom.game.objects.type], model, set, scale: 1,
+            pos: [4, 8, 12].map((o) => dv.getFloat32(at + o, true)),
+            turn: [16, 20, 24].map((o) => dv.getUint32(at + o, true) & 0xffff),
+            ...(spin ? { spin, spinAxis: 2 } : {}),
+            ...(!spin && model <= fixed.last ? {
+                cycle: Array.from({ length: fixed.last - fixed.first + 1 }, (_, k) => fixed.first + k),
+            } : {}),
         });
     }
 }
