@@ -420,7 +420,7 @@ const JA_TEXT = {
     /* Its record, views and states (stages.js, placements.js, vcop.js, vf2.js, doa.js, daytona.js) */
     'stage': 'ステージ', 'course': 'コース', 'blocks': 'ブロック', 'never in view': '一度も見えない',
     'sections': 'セクション', 'zones': 'ゾーン', 'placements': '配置', 'props': '小物',
-    'in no reached zone': '到達するゾーン外', 'segments': 'セグメント', 'pieces': 'ピース',
+    'in no reached zone': '到達するゾーン外', 'segments': 'セグメント', 'low detail': '低詳細度', 'pieces': 'ピース',
     'object parts': 'オブジェクトのパーツ', 'flags': 'フラグ', 'routine': 'ルーチン', 'unread': '未解読',
     'Everything': 'すべて',
     'Every segment at once': 'すべてのセグメントを一度に',

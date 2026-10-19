@@ -603,3 +603,85 @@ export function readCourseStages(rom) {
     }
     return stages;
 }
+
+/* ---- Sega Rally Championship's courses ------------------------------------ */
+
+/* In the order the course records are: the same order the texture banks take
+ * (bank table 0x3DCF0, a course's variant in 0x214354), Desert first. */
+const RALLY_COURSE_NAMES = ['Desert', 'Mountain', 'Forest', 'Lakeside'];
+
+/**
+ * Sega Rally Championship's courses: a list of models per course.
+ *
+ * The routine at 0x3BCC0 draws the course near the camera. It takes the
+ * course number and picks a 12-byte record out of a table in the program
+ * (`lda 0x5DCA00[g0*4]` on course*3, ROM 0x3DA00); 0x3BD90 does the same out
+ * of 0x5DCA60 (ROM 0x3DA60) for the low-detail copy further off. A record is
+ * three words:
+ *
+ *   +0  a header, [0, sky, 999, sky]: the sky model for the course
+ *   +4  a pointer into the data ROM, which 0x3B200 walks to find the
+ *       segment the camera is in (the course's path; not read here)
+ *   +8  the segment list, one model number a word
+ *
+ * Every segment is drawn with no matrix: model 1269, a stretch of the forest,
+ * has its vertices out at x 74 and z 400. So the geometry is in world space,
+ * as Daytona USA's blocks are, and a course is its list drawn where it lies.
+ * A course is 60 segments; the forest and mountain lists end with a 0 there,
+ * and the desert and lakeside lists run straight on into their low-detail
+ * copies.
+ *
+ * The four after the courses are the desert again and a one-model scene
+ * (818, 822) the attract uses; they are left out.
+ */
+export function readRallyStages(rom) {
+    const C = rom.game.stageTable.rally;
+    const av = rom.mainCpuView;
+    const ram = (a) => a - C.ramBase;
+    const lit = gameLighting(rom);
+    const word = (a) => av.getUint32(a, true);
+    const stages = [];
+    for (let c = 0; c < C.count; c++) {
+        const rec = C.near + c * C.stride;
+        const head = ram(word(rec));
+        const list = ram(word(rec + 8));
+        const far = ram(word(C.far + c * C.stride + 8));
+        const sky = word(head + 4);
+        const draws = [];
+        for (let i = 0; i < C.segments; i++) {
+            const m = word(list + i * 4);
+            if (!m || m >= rom.game.modelTable.count) break;
+            draws.push({ model: m, pos: [0, 0, 0], set: c, block: i });
+        }
+        /* The sky is a dome round the whole course, drawn first, and kept out
+         * of the face layering, which would cut it into a grid too fine for
+         * its size. */
+        draws.unshift({ model: sky, pos: [0, 0, 0], set: c, layer: 'sky', layered: false });
+        stages.push({
+            slot: stages.length,
+            placements: true,
+            mixedSets: false,
+            num: c,
+            name: RALLY_COURSE_NAMES[c] ?? `Course ${c}`,
+            chapter: c,
+            draws,
+            objects: [],
+            sky: null,
+            panorama: null,
+            views: null,
+            texSets: [c],
+            texSet: [c, c],
+            tint: [1, 1, 1],
+            bright: 1,
+            light: lit.light,
+            materials: lit.materials,
+            colorCycles: [],
+            flags: 0,
+            floorSize: 0,
+            bgColor555: 0,
+            meta: [['course', c], ['segments', draws.length - 1], ['sky', sky],
+                ['low detail', `${word(far)}..${word(far + (C.segments - 1) * 4)}`]],
+        });
+    }
+    return stages;
+}

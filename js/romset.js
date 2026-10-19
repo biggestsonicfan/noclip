@@ -275,7 +275,8 @@ export function readModelName(rom, index) {
  * The face palette, as the 1024 colours a material record's 10-bit colorbase
  * can name: BGR555, or -1 where the ROM has nothing to say.
  *
- * Two layouts. The AM2 games keep one table in the data ROM at `paletteOffset`.
+ * Two layouts. The AM2 games keep one table in the data ROM at `paletteOffset`
+ * (Sega Rally in the program ROM, `paletteSource`).
  * The House of the Dead writes palette RAM from the program ROM in parts — a
  * shared table below `split`, the loaded set's table from `split` on, and a
  * fixed table down from the top — so its palette depends on `rom.paletteSet`,
@@ -290,7 +291,8 @@ export function facePalette(rom) {
 
     const out = new Int32Array(1024).fill(-1);
     if (!p) {
-        const md = rom.mainData;
+        /* Sega Rally keeps its table in the program ROM (0x267B0 copies it). */
+        const md = rom.game.paletteSource === 'maincpu' ? rom.maincpu : rom.mainData;
         /* A game whose upload is shorter than the palette leaves the rest of it
          * at whatever the boot clear put there, so the entries past the count
          * are left as no colour rather than read out of the next table along. */

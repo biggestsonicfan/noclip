@@ -810,6 +810,89 @@ function buildDaytonaTexram(rom, texSets) {
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
 }
 
+/* ---- Raw banks, Sega Rally's arrangement --------------------------------- */
+
+/*
+ * Sega Rally deals a bank out with a routine of its own as well, 0x3940 in
+ * its program ROM (run from RAM at 0x5A2940), which this is a port of. It is
+ * called with a bank number and a sheet flag; the bank is the megabyte at
+ * main_data 0x200000 + bank * 0x100000.
+ *
+ * It keeps two sheet cursors, A and B. A starts on sheet 0 when the flag is 0
+ * and on sheet 1 when it is not, and B on the other. The run table at 0x3880
+ * is six entries of eight words: a repeat count, then runs, then a word that
+ * ends them. For each run of n halfwords, B steps on n, n halfwords are copied
+ * to A and A steps on n, and the two cursors swap. An end word of -1 swaps
+ * them once more, 0 does not. So both cursors advance on every halfword and
+ * only one of them is written, as in Daytona's.
+ *
+ *     1 x    0x60000  0x10000                          the full size, level 0
+ *     0x40 x 0x100 0x100
+ *     0x20 x 0x100 0x80 0x80                (and a swap)
+ *     0x10 x 0x100 0x80 0x40 0x40                      ... and so on
+ *
+ * The first 0x60000 halfwords (rows 0..767) go to A's sheet alone and level 0
+ * (rows 768..895) to the other one. The table is read out of the program ROM
+ * rather than copied here, so this is the routine and not its numbers.
+ *
+ * The boot uploads bank 0 with the flag 0 (0x5A2170), so its full-size area
+ * is on sheet 0; a course uploads the bank `ld 0x3DCF0[variant*4]` names with
+ * the flag 1 (0x3DCF0: 2, 3, 4, 5), so its full-size area is on sheet 1 and
+ * the two banks' mip runs come out complementary. Graded against texture RAM
+ * dumped from m2-hle2 running the game, whose Sega Rally profile does no
+ * texture upload of its own: both sheets, every halfword, on the desert, the
+ * mountain and the forest.
+ */
+function uploadSrallycBank(rom, base, tex, flag) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const table = rom.game.texture.raw.runTable;
+    const word = (i) => cv.getInt32(table + i * 4, true);
+    let a = { sheet: flag ? SHEET1 : SHEET0, at: 0 };
+    let b = { sheet: flag ? SHEET0 : SHEET1, at: 0 };
+    let src = base;
+    for (let e = 0; e < 48; e += 8) {
+        const reps = word(e);
+        let p = e + 1;
+        for (let r = 0; r < reps; r++) {
+            p = e + 1;
+            while (word(p) > 0) {
+                const n = word(p++);
+                b.at += n;
+                if (src + n * 2 > md.length) return;
+                tex.set(md.subarray(src, src + n * 2), a.sheet + a.at * 2);
+                src += n * 2;
+                a.at += n;
+                [a, b] = [b, a];
+            }
+            if (word(p) < 0) [a, b] = [b, a];
+        }
+    }
+}
+
+/*
+ * Texture RAM for Sega Rally: the boot bank, then the set's course bank. A set
+ * is a course variant, an index into the bank table.
+ */
+function buildSrallycTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const bank = (n) => MAIN_DATA_BANKS + n * SHEET_BYTES;
+    uploadSrallycBank(rom, bank(raw.bootBank), tex, 0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    let pages = 1;
+    if (sets.length) {
+        const n = rom.mainCpuView.getUint32(raw.bankTable + sets[sets.length - 1] * 4, true);
+        if (bank(n) + SHEET_BYTES <= rom.mainData.length) {
+            uploadSrallycBank(rom, bank(n), tex, 1);
+            pages++;
+        }
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+/* Where Sega Rally's bank 0 starts: 0x2200000 on the i960. */
+const MAIN_DATA_BANKS = 0x200000;
+
 /*
  * Texture RAM for Dead or Alive. The program copies 128-row strips out of
  * 0xC0000-byte slabs in the data ROMs (0x7CBA0): a slab's first and last
@@ -964,6 +1047,31 @@ export function fighterSetList(rom) {
     return [...new Set([...fighterSets(rom).values()].flatMap((s) => [...s]))].sort((a, b) => a - b);
 }
 
+/* Sega Rally's course lists, model -> course: the sky and the near and far
+ * segment lists out of each course's records (stageTable.rally). */
+function rallyCourseModels(rom) {
+    if (rom.rallyCourses) return rom.rallyCourses;
+    const C = rom.game.stageTable?.rally;
+    const map = new Map();
+    if (C) {
+        const v = rom.mainCpuView;
+        const word = (a) => v.getUint32(a, true);
+        for (let c = 0; c < C.count; c++) {
+            map.set(word(word(C.near + c * C.stride) - C.ramBase + 4), c);
+            for (const t of [C.near, C.far]) {
+                const list = word(t + c * C.stride + 8) - C.ramBase;
+                for (let i = 0; i < C.segments; i++) {
+                    const m = word(list + i * 4);
+                    if (!m) break;
+                    map.set(m, c);
+                }
+            }
+        }
+    }
+    rom.rallyCourses = map;
+    return map;
+}
+
 /**
  * The sets the board has resident when it draws a model no stage record
  * names, where the program says which.
@@ -993,6 +1101,22 @@ export function programTextureSets(rom, index, decoded) {
         if (!sheet0) return { sets: [], how: 'boot' };
         const courses = courseNamedModels(rom).get(index);
         return courses?.size === 1 ? { sets: [...courses], how: 'course' } : null;
+    }
+    /* Sega Rally the other way round: the boot bank's full size is on sheet 0
+     * and a course's on sheet 1. A sheet-1 model in one of the course lists
+     * (readRallyStages in js/stages.js) takes that course's bank; the cars and
+     * the rest of what is on sheet 1 are left to the picker. */
+    if (T.raw?.layout === 'srallyc') {
+        if (!decoded) return null;
+        let sheet0 = false, sheet1 = false;
+        for (let i = 0; i < decoded.tiles.length; i += 4) {
+            if (!decoded.tiles[i + 2]) continue;
+            if (decoded.tiles[i + 1] >= SHEET_H) sheet1 = true; else sheet0 = true;
+        }
+        if (!sheet0 && !sheet1) return { sets: [], how: 'untextured' };
+        if (!sheet1) return { sets: [], how: 'boot' };
+        const course = rallyCourseModels(rom).get(index);
+        return course != null ? { sets: [course], how: 'course' } : null;
     }
     if (T.raw || T.bankSets) return null;
     if (!decoded) return null;
@@ -1032,6 +1156,7 @@ export function buildTexram(rom, texSets, fighters) {
         const layout = rom.game.texture.raw.layout;
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
+        if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         return buildRawTexram(rom, texSets);
     }
     const md = rom.mainData;
