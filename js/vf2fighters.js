@@ -168,6 +168,7 @@ function readFighter(rom, F, record, char) {
     const list = u32(root + PARTS);
     const offsets = readOffsets(rom, u32(root + SKELETON));
     const actions = F.actions ? readActions(rom, F.actions, u32(root + F.actions.at)) : [];
+    const moves = fighterMoves(rom, char);
     return {
         index: record,
         char,
@@ -180,7 +181,8 @@ function readFighter(rom, F, record, char) {
         start: actions[0] ?? -1,
         actions,
         commands: F.commands ? readCommands(rom, F.commands, char) : [],
-        inputs: F.commands ? readInputs(rom, F.commands, char) : null,
+        inputs: readInputs(moves),
+        moves,
         poses: F.poses ? readPoses(rom, F.poses, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
@@ -855,10 +857,7 @@ function readCommands(rom, C, char) {
  * input and the bits it needs. Moves of another context (the high byte of a
  * table's key) have none.
  */
-function readInputs(rom, C, char) {
-    const at = C.table + char * 4;
-    if (at + 4 > rom.maincpu.length) return null;
-    const moves = programMoves(rom, rom.mainCpuView.getUint32(at, true), C.isa);
+function readInputs(moves) {
     if (!moves) return null;
     const out = new Map();
     for (const mv of moves.moves) {
@@ -1472,6 +1471,34 @@ function moveSetup(rom, id) {
     const times = setup.times && end !== undefined ? [setup.times[0], setup.times[1], end] : setup.times;
     const ops = readScriptOps(script, r.view, setup.script);
     return { ...setup, times, ops, word: r.view.getUint32(r.off, true), second: r.view.getUint32(r.off + 4, true), drop: flags.drop };
+}
+
+/*
+ * When the next move of a string takes over, as the last frame of motion
+ * `id` (`frames` long) that is shown (js/moves.js, handoverFrame, for Sonic
+ * the Fighters'). set_mot_dat (VF2 0x1A22C, Fighting Vipers 0x1B880) sets
+ * +0x80A and +0x80C to the motion's length, and setup op 2 to its cancel and
+ * end frames (moveSetup's `times`). A follow-up's commit waits in the
+ * matcher (op 0x12) for the motion frame + 1 to reach the field the entry
+ * names plus its wait: +0x80A for all of Fighting Vipers' and most of
+ * VF2's, +0x80C for 24 of VF2's. Anything else takes over once the fighter
+ * is free, at +0x80C. Never past the motion's last frame.
+ */
+export function stringHandover(rom, id, frames, next, isFollowUp) {
+    const t = moveSetup(rom, id)?.times;
+    const cancel = t ? t[1] : frames, end = t ? t[2] : frames;
+    const f = !isFollowUp ? end : (next?.waitOn === FREE_FRAME ? end : cancel) + (next?.wait ?? 0) - 1;
+    return Math.max(1, Math.min(frames, f));
+}
+const FREE_FRAME = 0x80c;
+
+/* The input program the matcher runs for fighter `char` (js/moves.js,
+ * programMoves), or null for a game without one. */
+export function fighterMoves(rom, char) {
+    const C = rom.game.rig?.fighters?.commands;
+    const at = C ? C.table + char * 4 : 0;
+    if (!C || at + 4 > rom.maincpu.length) return null;
+    return programMoves(rom, rom.mainCpuView.getUint32(at, true), C.isa);
 }
 
 function playMoveFlags(m, frames, bit) {
