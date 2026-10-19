@@ -680,9 +680,16 @@ const FRAG_SHADER = /* glsl */`
         // The checker bit is the board's half-transparency: the polygon is drawn
         // on every other screen pixel and whatever is behind it shows through
         // the rest (model2rd.ipp steps x by 2 and skips the opposite parity).
-        // South Island uses it on the water planes and the waterfall.
+        // South Island uses it on the water planes and the waterfall. The board
+        // counts scanlines from the top, gl_FragCoord from the bottom: on an
+        // even number of rows (the board's 384) that is the other phase, so the
+        // row is taken from the viewport's top (m2-hle2 game_render.h, bpix).
 #ifndef BAKE
-        if (flags(2) && ((int(gl_FragCoord.x) ^ int(gl_FragCoord.y)) & 1) == 0) discard;
+        if (flags(2)) {
+            int cx = int(gl_FragCoord.x - uViewport.x);
+            int cy = uViewport.w > 0.0 ? int(uViewport.y + uViewport.w - gl_FragCoord.y) : int(gl_FragCoord.y);
+            if (((cx ^ cy) & 1) == 0) discard;
+        }
 #endif
 
 #ifdef ZSORT_PLATES
