@@ -3560,7 +3560,66 @@ const vf2 = {
         /* The stance poses, 0x270D4. */
         blendOut: [0, 1, 8, 10, 31],
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The Cells tab (js/cells.js), on Daytona's terms: no pattern table.
+     * The draw (0x8F1C) takes the record's address from an lda or from a
+     * table of absolute pointers, and reads the halfword at 0x02 as Daytona's
+     * does. The records lie end to end in `records`; each run stops at a
+     * strip of frames 0x8FE0 draws one frame of (the timer's digits, the
+     * round marks), whose header has a frame count Daytona's has not, or
+     * where the next words are no record. The loaders are two: 0x23EE8 takes
+     * a CG list and 0x23F30 a palette list, each by its own lda, so a CG is
+     * the pair one routine loads (`cgLists`): the boot pair (through the
+     * pointer at 0x2800000), the stage skies (0x24314, the stage record's
+     * +0x08 and +0x0C, `cgPairs`), the fight's own on top of a sky (0x10838),
+     * and the rest. 0x31A34 loads two: they are two CGs here, the second
+     * under the first. Some lists and records are in the program ROM, named
+     * at their own addresses (`programAt0`). The tile layer goes through
+     * colorxlat as the sky's does. */
+    cells: {
+        records: [
+            [0x13d3c, 0x13f08], [0x345ec, 0x346b6], [0x763f0, 0x76974],
+            [0x2a67d0c, 0x2a67d84], [0x2a67e44, 0x2a67e66], [0x2a6845a, 0x2a69f82],
+            [0x2a6a22e, 0x2a719c2], [0x2a71a4a, 0x2a7905a], [0x2aa8346, 0x2ab03ce],
+            [0x2ab0906, 0x2ab488e], [0x2ab587e, 0x2ab596e], [0x2ab5be6, 0x2ab5d7c],
+        ],
+        cgPairs: [
+            [0x280000c, 'boot'],
+            [0x25034, 'stage 0 sky'],
+            [0x25054, 'stage 1 sky'],
+            [0x25074, 'stage 2 sky'],
+            [0x25094, 'stage 3 sky'],
+            [0x250b4, 'stage 4 sky'],
+            [0x250d4, 'stages 5, 15 sky'],
+            [0x250f4, 'stage 6 sky'],
+            [0x25114, 'stage 7 sky'],
+            [0x25134, 'stage 8 sky'],
+            [0x25154, 'stages 9, 12, 13, 14 sky'],
+            [0x25174, 'stages 10, 11 sky'],
+        ],
+        cgLists: [
+            [0x0001256c, 0x00012520, '0x11B70'],
+            [0x02800380, 0x02805abc, '0xAF54'],
+            [0x02800394, 0x02805890, '0xB424'],
+            [0x02800280, 0x02804160, '0x10388'],
+            [0x000734a4, 0x00073418, 'fight, 0x10838'],
+            [0x028002d4, 0x02805224, '0x2DB94'],
+            [0x028000d0, 0x02800b38, '0x31A34'],
+            [0x00033f1c, 0x00033ef0, '0x31A34, second'],
+            [0x028003b0, 0x02805c28, '0x60624'],
+        ],
+        /* Cells a routine draws straight after it loads a CG: 0x11B70's
+         * (CG 12) at 0xBBF4, 0xAF54's (13) at 0xAF94, 0x2DB94's (17) at
+         * 0x2DC00-0x2DC3C, 0x31A34's (18) at 0x31A8C and 0x60624's (20) at
+         * 0x6064C-0x60688. */
+        screens: [
+            { cg: 12, cells: [0] }, { cg: 13, cells: [260] }, { cg: 17, cells: [152, 155, 156] },
+            { cg: 18, cells: [87] }, { cg: 20, cells: [255, 256, 257, 258] },
+        ],
+        charBytes: 0x80000,
+        colorxlat: true,
+        programAt0: true,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* Dead or Alive's stage 4 conveyor fix (doab's `doa.fixes`), for a program

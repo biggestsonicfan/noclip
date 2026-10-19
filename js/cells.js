@@ -39,6 +39,12 @@
  * them, and `cgPairs` pairs the code names directly. See js/games.js
  * DAYTONA_CELLS.
  *
+ * Virtua Fighter 2 draws the same records by address too (0x8F1C), some of
+ * them in the program ROM (`programAt0`), in runs its pointers lead to. Its
+ * CGs are pairs of lists the code hands the loaders directly: `cgPairs` for a
+ * pointer to a pair, `cgLists` for the two lists themselves. See js/games.js
+ * vf2.cells.
+ *
  * Fighting Vipers keeps Sonic The Fighters' two tables, a year earlier and
  * without the bounds: its dsp_pattern (0x6744) takes any cell number and its
  * _ScrollCG_Initialize (0x2934C) any CG, so the CG table runs up to the
@@ -196,8 +202,8 @@ function cgListsAll(rom) {
     const pairAt = (pair, name, extra) => ({
         tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
     });
-    if (C.cgTables) {
-        for (const [table, count] of C.cgTables) {
+    if (C.cgTables || C.cgPairs || C.cgLists) {
+        for (const [table, count] of C.cgTables ?? []) {
             for (let i = 0; i < count; i++) {
                 const n = all.length;
                 all.push(pairAt(word(rom, table + i * 4), C.cgNames?.[n], C.cgExtra?.[n]));
@@ -208,6 +214,7 @@ function cgListsAll(rom) {
             if (L) L.course = course;
         }
         for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
+        for (const [tiles, pal, name] of C.cgLists ?? []) all.push({ tiles: [tiles], pal, name });
     } else {
         for (let cg = 0; cg < (C.cgEntries ?? CG_ENTRIES) / 2; cg++) {
             const tiles = word(rom, C.cgTable + cg * 8);

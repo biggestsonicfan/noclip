@@ -501,7 +501,7 @@ points at polygon ROM, and the game never writes polygons into RAM.
 
 ## Virtua Fighter 2
 
-`vf2.zip` (Version 2.1) loads with both tabs. Virtua Fighter 2 is AM2's library
+`vf2.zip` (Version 2.1) loads with the Stages, Models, Animation and Cells tabs. Virtua Fighter 2 is AM2's library
 the year before Fighting Vipers: the model table, the face palette and the
 colour uploads are at the same addresses, and what moved is in the program ROM,
 each number read off the instruction that uses it ([`js/games.js`](js/games.js)).
@@ -561,6 +561,20 @@ twist toward the opponent is left out: the move record says when it may run,
 but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
 to the face target `+0xB0C`, which the fight writes.
 
+The **Cells** tab has the game's 2D pictures: 268 cells on 21 CGs, the title
+logo, the player select with its portraits, the profiles, the ranking
+certificates, the fight's messages, the staff roll and the screens the test
+menu draws among them. There is no table of cells: the draw takes the
+record's address, as Daytona's does, so a cell is a record in the runs the
+game's own pointers lead to, and a CG is a pair of lists one routine loads
+(the boot pair, the stage skies, and the screens' own). Every cell has a CG
+that writes every tile it names, and where the code loads a CG and draws a
+cell straight after (the title, the player select, the test screens) the tab
+opens it on that CG. Searching for `unused` lists the 12 records nothing in
+the program or data ROM points at. The timer's digits and the other strips
+of frames are drawn by another routine a frame at a time, and are left out.
+See [Virtua Fighter 2's cells](TECHNICAL.md#virtua-fighter-2s-cells-jscellsjs).
+
 ### What each game has
 
 The games share one explorer, but not every feature reaches every game: some
@@ -578,7 +592,7 @@ need a table found in that game's ROM first. Where they stand:
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
 | Stage sounds | | yes | yes | |
-| Cells tab | yes | yes | | yes |
+| Cells tab | yes | yes | yes | yes |
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose

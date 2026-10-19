@@ -4171,6 +4171,45 @@ before `0x8A6C` draws cell 111. The title's SEGA mark, cell 15, is drawn at
 already in from an earlier CG; the tab opens it on CG 9, which writes them
 all. The unused cells are not worked out: `cells.unused` is empty.
 
+### Virtua Fighter 2's cells (`js/cells.js`)
+
+Virtua Fighter 2 (Version 2.1) has the same tile chip but neither Sonic The
+Fighters' tables nor Daytona's: the draw, `0x8F1C`, takes the record's
+address in g0 and copies it to the tilemap at g9. The record is Daytona's: a
+halfword at 0x00 added to every entry, a halfword at 0x02 that is 0 for byte
+entries and anything else for halfwords, rows at 0x04, columns at 0x08, the
+entries from 0x0C, a row 0x80 bytes on in the tilemap. Callers name records
+in the program ROM at their own addresses (`0x13D3C`), so the profile sets
+`cells.programAt0` and js/scroll.js reads addresses below 0x200000 there.
+
+There is no list of cells, so `cells.records` holds the runs the game's own
+pointers lead to, records end to end, 12 runs and 268 cells across the
+program and data ROMs. `0x8FE0` draws one frame of a strip (base, mode,
+columns, rows, a frame count, then the frames side by side: the timer's
+digits and the like); those records are not cells and each run stops at one.
+
+The CGs are the two lists `0x23EE8` loads: a CG list of (source,
+destination) pairs, each source a tile count and then 32-byte tiles, and
+`0x23F30`'s palette list of (destination, halfword count, data), ending with
+a destination of 0. They come three ways:
+
+- the boot pair at `0x280000C` (`cells.cgPairs`);
+- the stage skies, which `0x24314` loads from the pair at
+  `0x2502C + n * 32 + 8`: 11 pairs, some shared by more than one stage;
+- the pairs the screens' routines pass straight to the loaders
+  (`cells.cgLists`, named by the routine): `0x11B70`, `0xAF54`, `0xB424`,
+  `0x10388`, the fight's `0x10838`, `0x2DB94`, `0x31A34` (two, one on top of
+  the other) and `0x60624`.
+
+That is 21 CGs, and every cell has one that writes every tile it names. Where
+a routine loads a CG and then draws cells, `cells.screens` opens them on it:
+cell 0 on CG 12, 260 on 13, 152, 155 and 156 on 17, 87 on 18, 255 to 258 on
+20; the ranking puts the same CG first for each. Cell 72 is drawn after CG 14
+is loaded, but CG 14 writes none of its tiles, so it is not paired. The 12
+unused cells (19, 38, 68, 83, 146 to 150, 153, 154, 259) are records no
+aligned word in the program or data ROM points at; some of them show only
+jumbles on every CG listed, so the CG they were made for is not among them.
+
 ### Dead or Alive's pictures (`js/cells.js`)
 
 The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its
