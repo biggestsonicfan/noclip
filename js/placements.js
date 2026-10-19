@@ -1383,6 +1383,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         ...(o.live ? { live: o.live, slides: true } : {}),
         /* Out of the face layering: Virtua Cop's enemies' joints. */
         ...(o.layered === false ? { layered: false } : {}),
+        /* Behind a stage switch: Virtua Cop's enemies and hostages. */
+        ...(o.extra ? { extra: o.extra } : {}),
     }));
     /* Objects a stage builds itself, already in the draw list's own shape —
      * Daytona USA's, whose routines are in js/daytona.js. */

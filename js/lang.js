@@ -433,6 +433,7 @@ const JA_TEXT = {
     'corner objects': 'コーナーのオブジェクト',
     'corner falls (stand-in)': 'コーナーの物が倒れる（代役）',
     'burst (stand-in)': 'バースト（代役）',
+    'enemies and hostages': '敵と人質',
 
 
     /* report.js */

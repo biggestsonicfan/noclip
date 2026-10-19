@@ -431,6 +431,14 @@ function stageWaves(rom, n) {
     return waves;
 }
 
+/* Every wave's people at once are thousands of draws and slow the view, so
+ * they are a switch, off to begin with. */
+const PEOPLE_SWITCH = {
+    key: 'vcopPeople', label: 'enemies and hostages',
+    title: 'Every wave\'s enemies and hostages on the frame each comes in (0x13A90, 0x14AD0), all of them at once. They slow the view down',
+    on: false,
+};
+
 /* Every enemy of the stage on the frame it comes in, as the board draws it. */
 function stageEnemies(rom, n, set, rail) {
     const machine = doaMachine(rom, { copro: VCOP_COPRO });
@@ -457,7 +465,7 @@ function stageEnemies(rom, n, set, rail) {
                  * the same spots, and pairing all their faces took minutes.
                  * The shadow lies on the ground, so it stays in. */
                 out.push({
-                    model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer: 'fighters',
+                    model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer: 'fighters', extra: PEOPLE_SWITCH.key,
                     ops: boardToOps(d.m), zones: new Set([Math.max(zone, 0)]),
                     ...(d.model !== ENEMY_SHADOW && { layered: false }),
                 });
@@ -613,6 +621,7 @@ function stageOf(rom, lit, n, segs) {
             enemies ??= stageEnemies(rom, n, set, rail);
             return [...clouds, ...objects, ...enemies];
         },
+        extras: [PEOPLE_SWITCH],
         sky: null,
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
