@@ -382,7 +382,16 @@ function hashPixels(px) {
  * camera's side by its layer: a step a layer of a two-thousandth of the draw's
  * size, within bounds, which a depth buffer keeps from the distances a draw of
  * that size is looked at from and is not seen as a gap. Works in the draw's
- * own space, on a triangle's three corners. */
+ * own space, on a triangle's three corners.
+ *
+ * Moved face by face, a lifted face came off the faces it shares an edge
+ * with, and Blender showed the background through every such edge: cracks
+ * across Honey's face and gloves. So a corner moves as the highest face on it
+ * moves, and every face on that corner goes with it; only a face lying on a
+ * higher one corner for corner (a copy) keeps its own, or the two would meet
+ * again. A corner on the open edge of a lower face stays put, for all the
+ * faces on it: across that edge is another draw (Sonic's shoe meets his leg
+ * there), which does not move with them. */
 const LAYER_LIFT = 5e-4, LIFT_MIN = 0.004, LIFT_MAX = 0.05;
 function layerPlacer(draw, eye) {
     const g = draw.geom;
@@ -392,27 +401,78 @@ function layerPlacer(draw, eye) {
     const lift = Math.min(LIFT_MAX, Math.max(LIFT_MIN, LAYER_LIFT * g.boundingSphere.radius));
     const local = eye.clone().applyMatrix4(draw.mesh.matrixWorld.clone().invert());
     const n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+    /* Where one face alone would put its corners: true if it moves them. */
+    const shift = (i, p) => {
+        const L = layer.getX(i);
+        let w = 0;
+        if (plane) n.set(plane.getX(i), plane.getY(i), plane.getZ(i)), w = plane.getW(i);
+        if (plane && n.lengthSq() > 0) {
+            const s = 1 / n.length();
+            n.multiplyScalar(s);
+            w *= s;
+            for (const q of p) q.addScaledVector(n, w - n.dot(q));
+        } else {
+            if (L < 0.5) return false;
+            n.crossVectors(e1.subVectors(p[1], p[0]), e2.subVectors(p[2], p[0]));
+            if (n.lengthSq() === 0) return false;
+            n.normalize();
+            w = n.dot(p[0]);
+        }
+        if (L < 0.5) return true;
+        const toward = n.dot(local) >= w ? 1 : -1;
+        for (const q of p) q.addScaledVector(n, toward * L * lift);
+        return true;
+    };
+    const pos = g.getAttribute('position');
+    const keyOf = (q) => `${q.x},${q.y},${q.z}`;
+    const rankOf = (i, moved) => Math.round(layer.getX(i)) * 2 + (moved ? 1 : 0);
+    /* Per corner: the highest face's rank and the sum of its moves (ties are
+     * averaged). Per face's three corners: the highest rank there. */
+    const corners = new Map(), copies = new Map();
+    const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const q0 = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const own = [], ranks = [], edges = new Map();
+    for (let t = 0; t < draw.tris; t++) {
+        for (let k = 0; k < 3; k++) q0[k].fromBufferAttribute(pos, t * 3 + k), p[k].copy(q0[k]);
+        const moved = shift(t * 3, p);
+        const keys = q0.map(keyOf);
+        const d = p.map((q, k) => q.clone().sub(q0[k]));
+        own.push(d);
+        const rank = rankOf(t * 3, moved);
+        ranks.push(rank);
+        keys.forEach((key, k) => {
+            const c = corners.get(key);
+            if (!c || rank > c.rank) corners.set(key, { rank, d: d[k].clone(), count: 1 });
+            else if (rank === c.rank) c.d.add(d[k]), c.count++;
+        });
+        const face = [...keys].sort().join('|');
+        copies.set(face, Math.max(copies.get(face) ?? -Infinity, rank));
+        keys.forEach((key, k) => {
+            const edge = [key, keys[(k + 1) % 3]].sort().join('|');
+            const e = edges.get(edge);
+            if (e) e.count++;
+            else edges.set(edge, { count: 1, rank });
+        });
+    }
+    for (const [edge, e] of edges) {
+        if (e.count > 1) continue;
+        for (const key of edge.split('|')) {
+            const c = corners.get(key);
+            if (c.rank > e.rank) c.d.set(0, 0, 0);
+        }
+    }
     return {
         place(tri, p) {
-            const i = tri * 3;
-            const L = layer.getX(i);
-            let w = 0;
-            if (plane) n.set(plane.getX(i), plane.getY(i), plane.getZ(i)), w = plane.getW(i);
-            if (plane && n.lengthSq() > 0) {
-                const s = 1 / n.length();
-                n.multiplyScalar(s);
-                w *= s;
-                for (const q of p) q.addScaledVector(n, w - n.dot(q));
-            } else {
-                if (L < 0.5) return;
-                n.crossVectors(e1.subVectors(p[1], p[0]), e2.subVectors(p[2], p[0]));
-                if (n.lengthSq() === 0) return;
-                n.normalize();
-                w = n.dot(p[0]);
+            const keys = p.map(keyOf);
+            const rank = ranks[tri];
+            if (copies.get([...keys].sort().join('|')) > rank) {
+                p.forEach((q, k) => q.add(own[tri][k]));
+                return;
             }
-            if (L < 0.5) return;
-            const toward = n.dot(local) >= w ? 1 : -1;
-            for (const q of p) q.addScaledVector(n, toward * L * lift);
+            p.forEach((q, k) => {
+                const c = corners.get(keys[k]);
+                q.addScaledVector(c.d, 1 / c.count);
+            });
         },
     };
 }
