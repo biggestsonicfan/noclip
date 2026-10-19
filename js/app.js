@@ -9,7 +9,7 @@ import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
 import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, BOARD_H, BOARD_FOCAL } from './skyeye.js';
 import { decodeModel } from './model.js';
-import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
+import { readStageTable, readCourseStages, readRallyStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
@@ -943,7 +943,7 @@ function describeTextureGuess(g) {
     case 'untextured': return 'samples no texture';
     case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
     case 'boot': return state.rom.game.texture.raw
-        ? 'sheet 1 only, the bank boot loads for every course'
+        ? `sheet ${state.rom.game.texture.raw.layout === 'srallyc' ? 0 : 1} only, the bank boot loads for every course`
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
     case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
@@ -6004,6 +6004,7 @@ function loadGameContent() {
          * segments. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
+        else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);

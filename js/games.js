@@ -4340,26 +4340,17 @@ const doaae = relocateDoa(doaa, {
     program: DOAAE_PROGRAM,
 });
 
-/* Revision C first: a merged set is MAME's parent with its clones beside it,
- * and the parent is the one it is named for. Then the build with the most to
- * show, and the 2A builds, which have no fighters yet. */
-export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
-    doa, doab, doaa, doaab, doaae];
-
 /*
- * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
- * m2-hle2). m2-hle2 runs Sega Rally Championship (src/profiles/srallyc.h) and
- * the viewer had no profile for it; the chips are here, in the same `regions`
- * shape as above and with MAME's names, CRCs and offsets, so a drop of the set
- * is named and told what is missing rather than called unrecognised. A
- * prepared profile becomes a game by finding what `lacks` lists and moving it
- * into GAMES.
+ * Sega Rally Championship, Revision C: a Model 2A, so a TGP with its program
+ * uploaded by the i960, and the same geometrizer and texture RAM as the
+ * other games here. None of its tables is named by a debug table or a
+ * symbol; each was found by watching the board draw (m2-hle2 running the set,
+ * its watchpoints and memory dumps) and following the program back to the
+ * ROM. See README's Sega Rally section and TECHNICAL.md.
  *
- * m2-hle2 keeps the same list the other way round: a set this viewer opens and
- * the emulator cannot run yet is a prepared profile there, taking its model
- * table from this file. Since m2-hle2's #1034 and #1035 (The House of the Dead
- * and Daytona USA run) that is Virtua Cop alone.
+ * The program copies itself to RAM at boot, ROM 0x1000..0x61000 to 0x5A0000,
+ * and runs there, so a RAM address in the code is the ROM offset plus
+ * 0x59F000.
  */
 const srallyc = {
     id: 'srallyc',
@@ -4371,7 +4362,9 @@ const srallyc = {
             size: 0x200000,
             parts: [[0x000000, 'epr-17888c.12', 0x3d6808aa, 'epr-17889c.13', 0xf43c7802]],
         },
-        /* MAME's region is 0x2400000; it is cut where the chips end. */
+        /* MAME's region is 0x2400000; it is cut where the chips end. The
+         * first pair holds texture banks 0 and 1 from 0x200000, the second
+         * banks 2 to 5, and the third the model table. */
         mainData: {
             size: 0xc00000,
             parts: [
@@ -4387,22 +4380,112 @@ const srallyc = {
                 [0x400000, 'mpr-17749.17', 0x0838d184, 'mpr-17751.21', 0xed87ac62],
             ],
         },
+        /* The UV and material streams only: the sheets are raw in the data
+         * ROM, as Daytona's are. */
         textures: {
             size: 0x1000000,
             parts: [[0x000000, 'mpr-17753.25', 0x6db0eb36, 'mpr-17752.24', 0xd6aa86ce]],
         },
-        /* The TGP's data ROM (a Model 2A: the program is uploaded by the i960). */
+        /* The TGP's data ROM. Nothing here reads it yet. */
         copro: {
             size: 0x800000,
             optional: true,
             parts: [[0x000000, 'mpr-17754.28', 0x81a84f67, 'mpr-17755.29', 0x2a6e7da4]],
         },
     },
+    /*
+     * The model table: 1508 entries of 16 bytes at main_data 0x864B40, the
+     * three words geo_object_data takes (tpa, tha, oba) and a polygon count.
+     * Every draw routine reads it the same way, `ldq 0x2864B40[g5*16]` and the
+     * four words straight on to the TGP's FIFO at 0x804000 (0x23CEC is one of
+     * 34 such sites), with the model number out of +4 of an object record.
+     * The entries run in order through the ROMs, and the "CGM 1.0 " block
+     * after the last one (0x86A980) is where they stop.
+     */
+    modelTable: { offset: 0x864b40, count: 1508, stride: 16 },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
-    lacks: 'its model table, palette and texture sheets have not been found in the data ROMs yet',
+    /* 541 colours, in the program ROM: the boot routine at 0x267B0 reads the
+     * count, `ldos 0x5FB89C` (ROM 0x5C89C), and copies that many halfwords
+     * from 0x5C89E to palette RAM 0x1802000, colorbase 0. The courses do not
+     * change it. */
+    paletteSource: 'maincpu',
+    paletteOffset: 0x5c89e,
+    paletteCount: 541,
+    /*
+     * The sheets, raw in the data ROM and dealt out by 0x3940 (see
+     * uploadSrallycBank in js/texture.js): the boot's bank 0, then the bank
+     * the course variant picks out of the table at 0x3DCF0. The variant is
+     * work RAM 0x214354, 0 to 3, and the banks 2, 3, 4 and 5: the desert,
+     * the mountain, the forest, and the fourth, which the attract mode never
+     * shows and is taken to be the lakeside.
+     */
+    texture: {
+        raw: { layout: 'srallyc', runTable: 0x3880, bankTable: 0x3dcf0, bootBank: 0 },
+        sets: 4,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* Both tables are made by running the program's own routines (see
+     * runColorRoutines in js/colors.js). `solid` as Daytona's: an untextured
+     * face goes through colorxlat as well. */
+    colors: {
+        i960: { copy: [0x1000, 0x61000, 0x5a0000], run: [0x5a2c80, 0x5a3350, 0x5a3590] },
+        solid: true,
+    },
+    /*
+     * The materials go up once a scene, as the TGP's function 6, from 0x4AC0:
+     * `mov 0, g0; mov 22, g1; lda 0x5A39C0, g2` and `bal 0x4958`, the same
+     * (parameter, coefficient) pairs as the other 1995 games, 22 of them at
+     * ROM 0x49C0, every coefficient 1.0.
+     *
+     * The light is function 0xA. The attract scenes send a world light of
+     * (-0.707, -0.707, 0.707) through the TGP into camera space before it
+     * (0x13914, 0x17450, 0x1F858, 0x4AC34). Z is negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x49c0, count: 22, stride: 8 },
+    },
+    /*
+     * The courses (readRallyStages in js/stages.js): a 12-byte record a course
+     * at ROM 0x3DA00, which 0x3BCC0 reads as `lda 0x5DCA00[g0*4]` on course*3,
+     * and the low-detail copy's at 0x3DA60. The pointers are into the copy of
+     * the program in RAM, ROM + 0x59F000. The models are in world space.
+     */
+    stageTable: {
+        rally: { near: 0x3da00, far: 0x3da60, stride: 12, count: 4, segments: 60, ramBase: 0x59f000 },
+        flat: true,
+    },
+    /* Daytona's depth arrangement, for the same reason: no depth buffer, and
+     * a road made of plates laid on plates. */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    /* The courses but not the cars' placement on them, nor the trackside
+     * objects. */
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
-export const PREPARED = [srallyc];
+/* Revision C first: a merged set is MAME's parent with its clones beside it,
+ * and the parent is the one it is named for. Then the build with the most to
+ * show, and the 2A builds, which have no fighters yet. */
+export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    doa, doab, doaa, doaab, doaae, srallyc];
+
+/*
+ * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
+ * m2-hle2): the chips in the same `regions` shape as a game's and with MAME's
+ * names, CRCs and offsets, and `lacks` saying what is missing, so a drop of
+ * the set is named and told so rather than called unrecognised. A prepared
+ * profile becomes a game by finding what `lacks` lists and moving it into
+ * GAMES. Sega Rally Championship was the first, and moved (Pinboard #1286);
+ * the list is empty until the next.
+ *
+ * m2-hle2 keeps the same list the other way round: a set this viewer opens and
+ * the emulator cannot run yet is a prepared profile there, taking its model
+ * table from this file. Since m2-hle2's #1034 and #1035 (The House of the Dead
+ * and Daytona USA run) that is Virtua Cop alone.
+ */
+export const PREPARED = [];
 
 /** The prepared profile these member names are, or null. */
 export function detectPrepared(names, byCrc = null) {

@@ -4240,6 +4240,107 @@ those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
 
+### Sega Rally Championship (`js/games.js`, `readRallyStages` in `js/stages.js`)
+
+The method is Daytona's and Virtua Cop's: run the game on a board that can be
+watched, find the routine that writes each table, and read the table that
+routine reads. m2-hle2 ran the attract mode, with save states taken on the
+desert, the mountain and the forest, and its memory dumps of texture RAM,
+palette RAM, colorxlat and lumaram are what everything below is checked
+against. MAME's Lua read taps answered the one question the dumps cannot,
+which models a course draws.
+
+The program copies ROM 0x1000-0x61000 to RAM 0x5A0000 at boot and runs from
+there, so a code or table address in RAM is the ROM's plus 0x59F000.
+
+**The model table.** The TGP's draw command is four words on its FIFO at
+0x804000, and every draw routine loads them with `ldq 0x2864B40[g5*16]`
+(0x23CEC is one of 34 such sites). That is main_data 0x864B40: 1508 entries of
+16 bytes, (tpa, tha, oba, count), in order through the ROMs, up to the
+"CGM 1.0 " block at 0x86A980. Only entry 0 is empty, so there are no bank
+separators. All 1508 decode: 146558 faces, 129983 of them textured.
+
+**The palette.** A watch on palette RAM stops in the boot routine at 0x267B0,
+which reads a count, `ldos 0x5FB89C` (ROM 0x5C89C), and copies that many
+halfwords from ROM 0x5C89E to 0x1802000, colorbase 0. The count is 541; the
+highest colour any face names is 538. The dumps on the three courses match it
+with no differences and nothing written past it, so the courses do not change
+it.
+
+**The sheets.** Texture RAM is written by 0x3940, which deals a bank out of
+the data ROM (bank n at main_data 0x200000 + n * 0x100000) by a run table at
+0x3880: seven groups of eight halfwords, a repeat count and runs, each run
+copied to one cursor while the other skips the same length, and the cursors
+swapped after each (`uploadSrallycBank` in `js/texture.js`). The boot uploads
+bank 0 with flag 0, which puts its full-size area on sheet 0; a course
+uploads `bankTable[variant]` from 0x3DCF0, (2, 3, 4, 5), with flag 1, which
+puts it on sheet 1. The variant is work RAM 0x214354. Built that way, both
+sheets match the dumps byte for byte on all three courses. So a model that
+samples only sheet 0 is the boot bank's, on every course, and one that
+samples sheet 1 takes its course's bank: 671 and 668 models, and 169 are
+untextured.
+
+**colorxlat and lumaram.** Both are built by code, as Dead or Alive's are, so
+they come from running it on the i960 interpreter (`runColorRoutines` in
+`js/colors.js`): 0x5A2C80 then 0x5A3350 fill colorxlat at 0x1810000, and
+0x5A3590 writes lumaram a byte every 4 bytes from 0x12800000. Only 256 luma
+entries are set, two bands at lumabase 0 and 128, the only two any face uses.
+Both match the dumps byte for byte and are the same on every course; the run
+takes about 50 ms.
+
+**Materials and light.** 0x4AC0 sends the scene's setup: the window
+(function 3), the focal length, 350 by 350 (function 9), and the materials,
+`mov 22, g1; lda 0x5A39C0, g2; bal 0x4958`, 22 (parameter, 1.0) pairs at ROM
+0x49C0 sent as function 6. The light is function 0xA. The attract scenes send
+a world light of (-0.707, -0.707, 0.707) through the TGP into camera space
+before it (0x13914, 0x17450, 0x1F858, 0x4AC34); the profile negates Z, as
+Daytona's does.
+
+**The courses.** A MAME tap on reads of the model table (0x2864B40-0x286A97F),
+reinstalled every 30 frames, logged the entries each course reads: 937-998 on
+the desert, 1135-1195 on the mountain, 1257-1318 on the forest, besides the
+cars. Those numbers are in the program ROM as runs of words, and a search for
+pointers to them finds the table they hang from. 0x3BCC0 draws the course near
+the camera:
+
+    lda  (g0)[g0*2], g0         ; course * 3
+    lda  0x5DCA00[g0*4], r6     ; its record, ROM 0x3DA00
+    ld   0x4(r6), g0
+    call 0x3B200                ; the segment the camera is in
+
+and 0x3BD90 is the same with 0x5DCA60 (ROM 0x3DA60), the low-detail copy. A
+record is three words: a header, [0, sky, 999, sky], a pointer into the data
+ROM that 0x3B200 walks (the course's path; not read), and the segment list,
+a model number a word. Four records are courses, in the order of the texture
+variants: the desert (937-996, sky 997), the mountain (1135-1194, sky 1195),
+the forest (1259-1318, sky 1257) and the fourth (1379-1438, sky 1439), which
+the attract mode never draws. The fifth repeats the desert, and the last three
+are a one-model scene (818). The low-detail lists are 1000-1059, 1197-1256,
+1319-1378 and 1441-1500: the same ground in a tenth of the faces.
+
+A course is 60 segments. The mountain's and the forest's lists end with a 0
+there; the desert's and the fourth's run straight on into their low-detail
+lists, which is why the reader stops at 60. A segment is drawn with no
+matrix: model 1269, a stretch of the forest, has its vertices out at x 74
+and z 400. So the geometry is in world space and a course is its list drawn
+where it lies, as Daytona's blocks are (`stageTable.flat`). The sky is a dome
+up to 400000 across and is kept out of the face layering
+(`layered: false`), whose grid of 32-unit cells it would fill.
+
+The fourth course is taken to be Lakeside, the secret one: it is the last
+record, bank 5, and its trees are autumn colours. The courses' names are not
+in the ROM.
+
+Checked against MAME: the Castrol Celica (model 110) in snapshot colours, the
+forest's banks and trees, and the mountain's sky with the snowy range MAME
+shows behind the stone wall. Not right yet: the car windows are black, where
+MAME draws dark glass, and what is under the sky beyond a course is left
+black.
+
+Not read: the course paths, the cars' places, the trackside objects, and the
+CGM blocks in the data ROM, which the dumps show change nothing in palette
+RAM on these three courses.
+
 ### Fighting Vipers' cells (`js/cells.js`)
 
 Sonic The Fighters' two tables a year earlier, at the addresses the stage sky
