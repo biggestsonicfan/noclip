@@ -6375,12 +6375,20 @@ shot and no 0x51EFB0. Its swing is a spring on +0x34, +0x304 its speed: each
 frame +0x34 takes the speed and the speed loses a tenth of +0x34. The spring
 is kicked (+0x34 to 0, the speed to 0x400) only once the camera frame
 (0x51E788) is past 593 and +0x2E4, which the generic init (0x2EDD8) sets to
-the script index, has counted past 55 from there. Chapter 1's section 8
-spawns the only one, record 0xE8620, at the finished game's place, (133.83,
-42.5, 358.8), turn 0x4000 in yaw only, so +0x34 and the speed start at 0 and
-it stands still. The walk `propZones` runs has it spawned at camera frame 507
-and closed by 595, before any kick, so it never swings. It keeps the zones
-its 190 frames are drawn in (`frames`): zone 35. Stage 1 · set 3 goes from 45
+the script index, has counted past 55 from there, and again each 32 frames
+after. Chapter 1's section 8, script 7 spawns the only one, record 0xE8620,
+at the finished game's place, (133.83, 42.5, 358.8), turn 0x4000 in yaw
+only, so +0x34 and the speed start at 0 and it stands still until kicked.
+The close is `lda 0xBE, g3` and `cmpible g4, g3` at 0x32E90: +0x50, counted
+up first, past 190 closes it, on its 191st frame. The walk `propZones` runs
+has the spawn at camera frame 506, the camera then plays 507 to 595 over the
+object's first 89 frames, and the script's op 81 waits 220 frames with nothing
+queued, the camera held at 595. So frame 191 lands at camera frame 595, in
+that wait, before op 20 makes zone 36 current. It keeps the zones its 190
+frames are drawn in (`frames`): zone 35. With the camera at 594 from its 88th
+frame and +0x2E4 starting at 7, the spring is kicked on its 137th and 169th
+frames, so on the board it swings for its last 54; the explorer stands it
+still throughout, and the swing is left out. Stage 1 · set 3 goes from 45
 props to 46, and `hotdp` set props from 112 to 113. Read from the ROM, not
 checked in MAME.
 

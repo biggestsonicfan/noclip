@@ -280,8 +280,10 @@ function walkScript(rom, at, visit) {
  * 190 frames, and it turns +0x34 as a spring (+0x304 its speed) that is kicked
  * only past camera frame 593, once +0x2E4 has counted past 55. Its one
  * record (0xE8620, Stage 1 set 3) is the finished game's, turned only in yaw,
- * so it stands still until it closes, by camera frame 595: it keeps the zones
- * its 190 frames are drawn in (`frames`).
+ * so it stands still until kicked. It closes on its 191st frame, camera frame
+ * 595, in the op 81 wait that holds the camera there: it keeps the zones its
+ * 190 frames are drawn in (`frames`). The kicks come on its 137th and 169th
+ * frames, with the camera held past 593, and the swing is left out.
  *
  * Type 14 (PN_jinmengyo_01, scale 0.3) on 0x3B550 is a fish that swims a
  * path of its own: its record stands at the origin, and each frame the
