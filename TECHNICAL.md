@@ -5930,7 +5930,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for thirteen handlers.
+The others are left out rather than guessed at, but for fourteen handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6181,6 +6181,19 @@ record 0xEC720, at (28.4, -6.8, 0.4), yaw 0x4000. The explorer stands it there,
 Stage 2 · set 5, which goes from 19 props to 20; `hotdo` set props go from 207
 to 208. The shot and the break are left out. Read from the ROM, not checked in
 MAME.
+
+The fourteenth is type 78 on 0x3DA60, whose entry names `PN_r2do_01a`
+(0x51A), scale 1. While the section byte (0x51F350) is 1 it is a door: once
+event flag 0x0E (0x51E2CE) is up it sets its swing and hands itself to
+0x3DC40. In any other section it closes as a prop does (0x3ED60) and then
+issues 0x413B0's commands itself, with two changes: the model is
+`PN_door_n4a` (0x165), not +0x54, and the scale command takes 0.9, 1.4 and
+1.0 for x, y and z, not +0x94 three times. The spawn's per-type cases
+(0x38A1C) have none for it. Chapter 2's section 9 (list 0xF00B4) spawns the
+only one, record 0xF05A0, at (1263.8, -65.5, 295.5), yaw 0x4000. So it stands
+there as `PN_door_n4a`, stretched, Stage 2 · set 7, which goes from 8 props
+to 9; `hotdo` set props go from 208 to 209. No section 1 spawns one, so the
+door and its flag are left out. Read from the ROM, not checked in MAME.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

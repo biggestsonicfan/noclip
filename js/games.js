@@ -1894,11 +1894,14 @@ const hotdo = {
          * PN_kikai_b on 0x3EB30, which stands as a prop until a shot; the
          * second pair at a place takes over from the first, so only one is
          * stood there. Type 67, PN_r2_01_futa on 0x3E010, stands the same
-         * way until a shot. */
+         * way until a shot. Type 78 on 0x3DA60 is a door in section 1;
+         * anywhere else it closes as a prop does and draws PN_door_n4a in
+         * place of its own model, at 0.9, 1.4 and 1 on the three axes. */
         plain: [{ handler: 0x3e180, types: [87, 88] },
             { handler: 0x3e180, types: [95], sections: { 3: 0x16cf } },
             { handler: 0x3eb30, types: [121], onePerPlace: true },
-            { handler: 0x3e010, types: [67] }],
+            { handler: 0x3e010, types: [67] },
+            { handler: 0x3da60, types: [78], model: 0x165, axes: [0.9, 1.4, 1], door: 1 }],
         /* Four props that step their model a frame (see spawnProps): type
          * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a, type 69
          * PN_powa00a to 29a and type 93 PN_eneene00a to 34a, each back to its

@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but those on thirteen handlers, which are read below.
+ * all but those on fourteen handlers, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -256,6 +256,12 @@ function walkScript(rom, at, visit) {
  * once a shot sets bit 1 or 2 of +0x58. Chapter 2's section 0 spawns one
  * (0xEC720, Stage 2 set 5); the shot is left out.
  *
+ * Type 78 (PN_r2do_01a) on 0x3DA60 is a door, opening on event flag 0x0E,
+ * only while the section byte (0x51F350) is 1. In any other section it
+ * closes as a prop does and draws 0x413B0's commands with its own model and
+ * size: PN_door_n4a (0x165) at 0.9, 1.4 and 1.0 on x, y and z. Chapter 2's
+ * section 9 spawns the only one (0xF05A0, Stage 2 set 7).
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -296,10 +302,11 @@ function spawnProps(rom, at, set, out, section) {
         const plain = O.plain?.find((c) => c.handler === handler && c.types.includes(type));
         if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item
             && !plain) continue;
+        if (plain && section === plain.door) continue;
         if (plain?.onePerPlace && [...out.values()].some((o) => o.type === type
             && o.pos[0] === dv.getFloat32(rec + 8, true) && o.pos[1] === dv.getFloat32(rec + 12, true)
             && o.pos[2] === dv.getFloat32(rec + 16, true))) continue;
-        const model = item ? item.model : plain?.sections?.[section]
+        const model = item ? item.model : plain?.sections?.[section] ?? plain?.model
             ?? dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
@@ -319,6 +326,8 @@ function spawnProps(rom, at, set, out, section) {
             model,
             set,
             scale: scale > 0 ? scale : 1,
+            /* A size of its own on each axis, which type 78 draws at. */
+            ...(plain?.axes ? { axes: plain.axes } : {}),
             pos: [dv.getFloat32(rec + 8, true),
                 item?.y ?? dv.getFloat32(rec + 12, true) + (item?.lift ?? 0),
                 dv.getFloat32(rec + 16, true)],
@@ -521,7 +530,7 @@ function propOps(o, spin = 0) {
     turn[axis] = (turn[axis] + spin) & 0xffff;
     return [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
         ...propTurn(turn),
-        ...(o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
+        ...(o.axes ? [['s', o.axes]] : o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
 }
 
 /* A -1-terminated list of pointers, as the section and script tables are. */
