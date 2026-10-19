@@ -5930,7 +5930,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for twelve handlers.
+The others are left out rather than guessed at, but for thirteen handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6168,6 +6168,19 @@ handed to objects that know whether the first were shot. The explorer stands
 one at each place, (227.9, -24.7, 131) and (231.7, -24.7, 137.5), Stage 3 ·
 set 8, which goes from 43 props to 45; `hotdo` set props go from 205 to 207.
 The shot and the life are left out. Read from the ROM, not checked in MAME.
+
+The thirteenth is type 67 on 0x3E010, `PN_r2_01_futa` (0x514), scale 1, a lid
+held down by chains. The generic init (0x389E0) has no case for it. Each frame
+it closes as a prop does (0x3ED60), draws its current model through 0x413B0
+and offers itself as a target (0x41890, 0x44530). Only once a shot sets bit 1
+or 2 of +0x58 (with bit 0, the shootable bit, up) does it step through its
+entry's list, `PN_r2_02_futa` and `PN_r2_03_futa`, open the two halves
+`PN_r2_04a_futa` and `PN_r2_04b_futa` as tasks of their own (0x41360, on
+0x41F70) and set 0x51EBF0. Chapter 2's section 0 (list 0xEC380) spawns one,
+record 0xEC720, at (28.4, -6.8, 0.4), yaw 0x4000. The explorer stands it there,
+Stage 2 · set 5, which goes from 19 props to 20; `hotdo` set props go from 207
+to 208. The shot and the break are left out. Read from the ROM, not checked in
+MAME.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

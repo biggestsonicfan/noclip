@@ -1893,10 +1893,12 @@ const hotdo = {
          * 95 takes PN_sekom02a in section 3 (see spawnProps). And type 121,
          * PN_kikai_b on 0x3EB30, which stands as a prop until a shot; the
          * second pair at a place takes over from the first, so only one is
-         * stood there. */
+         * stood there. Type 67, PN_r2_01_futa on 0x3E010, stands the same
+         * way until a shot. */
         plain: [{ handler: 0x3e180, types: [87, 88] },
             { handler: 0x3e180, types: [95], sections: { 3: 0x16cf } },
-            { handler: 0x3eb30, types: [121], onePerPlace: true }],
+            { handler: 0x3eb30, types: [121], onePerPlace: true },
+            { handler: 0x3e010, types: [67] }],
         /* Four props that step their model a frame (see spawnProps): type
          * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a, type 69
          * PN_powa00a to 29a and type 93 PN_eneene00a to 34a, each back to its

@@ -722,7 +722,8 @@ fans spin while animate is ticked, as they do once spawned, and chapter 2's
 breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
 hang still. Chapter 3's `PN_st3_card01a`, `PN_sekom01a` and `PN_sekom02a`
 and chapter 4's `PN_sousa00a` stand as props, and so do chapter 3's two
-`PN_kikai_b` machines, until a shot breaks them.
+`PN_kikai_b` machines and chapter 2's chained lid (`PN_r2_01_futa`), until a
+shot breaks them.
 Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the

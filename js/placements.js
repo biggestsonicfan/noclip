@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but those on twelve handlers, which are read below.
+ * all but those on thirteen handlers, which are read below.
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -250,6 +250,11 @@ function walkScript(rom, at, visit) {
  * (0xF5A10, 0xF5A70) at the same places, turns and scale: the same machines,
  * taken over by objects that know whether the first were shot. So one stands
  * at each place (Stage 3 set 8), and the shot is left out.
+ *
+ * Type 67 (PN_r2_01_futa, a chained lid) does the same on 0x3E010: it closes
+ * as a prop does, draws through 0x413B0 and steps to its breaking models only
+ * once a shot sets bit 1 or 2 of +0x58. Chapter 2's section 0 spawns one
+ * (0xEC720, Stage 2 set 5); the shot is left out.
  *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
