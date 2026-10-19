@@ -372,7 +372,9 @@ const ROLE_HEAD = 1, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROL
  *   Samson               his right hand, swapped every vsync for PN_samson_ter2
  *   Sophie               her head: eyes shut three vsyncs in ninety, or a run
  *                        of PN_sofatama_CT through MO_s_tatiaga
- *   the two Devilons     a hundred-model wing beat, drawn with the chest
+ *   the Devilons         a hundred-model wing beat, drawn with the chest; the
+ *                        finished game's BO_devilonx shares BO_devilon's case
+ *                        and beats PN_devilonx_hane01-9a
  *
  * The muzzle flashes of the firing motions are left out: they are drawn along
  * a matrix sub_FE90 keeps, not along the part.
@@ -445,6 +447,7 @@ export function partDraws(rom, body, motion, frame, tick) {
         }
         if (is(BD.devilon) && p.joint === 1 && MD.devilonWing != null) return [...own, MD.devilonWing + (tick % 100)];
         if (is(BD.devilonM) && p.joint === 1 && MD.devilonMWing != null) return [...own, MD.devilonMWing + (tick % 100)];
+        if (is(BD.devilonX) && p.joint === 1 && MD.devilonXWing != null) return [...own, MD.devilonXWing + (tick % 100)];
         return own;
     });
 }

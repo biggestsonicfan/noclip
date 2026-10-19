@@ -404,8 +404,18 @@ compares the body number against 2, 34 and 50, which are `BO_tom`, `BO_sophi`
 and `BO_devilon` under the name mapping, and it reaches the two wing beats with
 `lda 0x1401` and `lda 0x7CD` — 5121 and 1997, which are exactly where
 `PN_devilon_hane01` and `PN_devilonm_hane01` sit in this build's model table.
-Its callback is the larger of the two and may treat bodies of its own apart;
-those have not been read yet.
+Its callback (0x9CE50) is the larger of the two and treats bodies of its own
+apart. Its body switch (0x9D240) jumps through `0x9D24C[body - 2]`, and the
+table sends `BO_devilonx` (69) to `BO_devilon`'s case (0x9DABC). On joint 1
+that case draws the part's model and a wing beat, `0x1401` plus the body's
+tick rem 100 for body 50 and `0x195F` plus it for the other: 6495,
+`PN_devilonx_hane01` to `_hane9a`. So `BO_devilonx` beats its own hundred
+wings as the other two do (`devilonX` in the profile; the prototype has no
+such body). The case's other half is left out: while the object's `+0x2F4`,
+which the case counts down, is odd, the part is drawn another way. What sets
+`+0x2F4` was not traced. Read from the ROM, not checked in
+MAME. The cases for bodies 48, 59, 60, 64, 70, 76, 78, 84, 88, 92 and 93 have
+not been read yet.
 
 #### The bodies were never given their layers
 

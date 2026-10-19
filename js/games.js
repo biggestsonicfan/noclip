@@ -1554,7 +1554,7 @@ const hotdp = {
         callback: {
             bodies: {
                 tom: 2, hand: 6, gman: 14, gmanKihon: 17, haride: 18, staje: 19,
-                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64,
+                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64, devilonX: null,
             },
             motions: {
                 gmanDash: 118, soten: 124, handra: 126, pDash: 232, kousya: 244,
@@ -1565,7 +1565,7 @@ const hotdp = {
                 magazine: 1728, gunHand: 1734, kousyaHand: 795, sotenHand: 2445,
                 coat: 162, fingersA: 2452, fingersB: 2493, spiderLegs: 4157,
                 samsonHand: 1300, sophieHead: 1467, sophieBlink: 1468,
-                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886,
+                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886, devilonXWing: null,
             },
         },
     },
@@ -2062,12 +2062,16 @@ const hotdo = {
          * Three of the prototype's are null because this game has no such body:
          * there is no BO_gman, no BO_handrb and no BO_tarab, and the rules that
          * name them cannot fire. This build's callback is the larger of the two
-         * and may treat bodies of its own apart; those have not been read yet.
+         * (0x9CE50; its body switch at 0x9D240 is `0x9D24C[body - 2]`). Its own
+         * bodies there: BO_devilonx (69) shares BO_devilon's case (0x9DABC),
+         * which takes 0x1401 for body 50 and 0x195F, 6495, PN_devilonx_hane01,
+         * for the other. Cases for bodies 48, 59, 60, 64, 70, 76, 78, 84, 88, 92
+         * and 93 have not been read yet.
          */
         callback: {
             bodies: {
                 tom: 2, hand: null, gman: null, gmanKihon: 13, haride: 14, staje: 15,
-                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55,
+                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55, devilonX: 69,
             },
             motions: {
                 gmanDash: 188, soten: 195, handra: null, pDash: 339, kousya: 360,
@@ -2078,7 +2082,7 @@ const hotdo = {
                 magazine: 1814, gunHand: 1819, kousyaHand: 875, sotenHand: null,
                 coat: 181, fingersA: null, fingersB: null, spiderLegs: null,
                 samsonHand: 1367, sophieHead: 1550, sophieBlink: 1551,
-                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997,
+                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997, devilonXWing: 6495,
             },
         },
         /* The prototype's bodyMotions, carried over by name. This build's code

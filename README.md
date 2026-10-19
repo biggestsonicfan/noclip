@@ -730,7 +730,9 @@ each drawn with the textures and palette of the chapter that draws it, across
 thirteen texture sets against the prototype's eleven, and its four chapters come
 out as eighteen stages — every zone a chapter's scripts reach while one texture
 set is loaded, plus the whole of each chapter's table, with its 94 enemy bodies
-playing the 674 motions baked for their joint counts.
+playing the 674 motions baked for their joint counts. `BO_devilonx` beats its
+own hundred wings (`PN_devilonx_hane01` on), as the game's draw callback gives
+it `BO_devilon`'s case.
 
 A stage opens in the first zone its scripts make current, and the **Zone**
 picker steps through the rest in the order the scripts reach them. That is what
