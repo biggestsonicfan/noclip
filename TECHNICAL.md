@@ -6465,10 +6465,33 @@ breakpoint in 0x3A210 for type 51): the init ran once with life 3 and no
 window, and all eight were drawn 342 times each, every model and place the
 explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
 
+Class 0x8A stands a room's furniture out of a table. Its task, 0x39830
+(`hotdo`; 0x2FDD0 in `hotdp`), reads the block of 0x16C bytes at 0xAA378
+(`hotdp` 0x81448) picked by the record's type, 28-byte entries until one whose
+word is -1: +0x00 the type (a halfword), +0x04/+0x08/+0x0C x, y and z, and
++0x10/+0x14/+0x18 the turns, which go to +0x2C/+0x30/+0x34. For each it opens a
+task on the shared prop handler (0x3A210; `hotdp` 0x30670), runs 0x417F0 for the
+type's model and scale, adds the type's +0x2C offset to y, and copies the
+record's +0x70 and +0x64 (`hotdp` +0x6C and +0x64), so each closes as a prop on
+that record would. The record's own place is not read. Chapter 1's section 8,
+which section 13 shares, spawns two: `hotdo` records 0xE91A0 (type 54, 8 props:
+a jar, two chairs, a table, a bookcase, two cups and a pot) and 0xE91D0 (type
+55, 11 props: a lamp, three bookcases, two chests, two chairs, a table and two
+cups); `hotdp` records 0xE8500 and 0xE8530, the same layout, in zones 35 and
+35-36. Stage 1 · set 3 goes from 44 props to 63 in `hotdo` and from 46 to 65 in
+`hotdp`; set props go from 219 to 238 and from 115 to 134. The explorer stands
+them in `standTable` (`js/placements.js`, the profile's `tables`). Left out:
+bit 30 (unbreakable), which every type but 2, 3, 34, 35 and 43 is given, and
+the bookcases at x 82.9 and 97.3 also when event flag 35 or 36 is set; the
+shot and break, as for every prop; and the second model the plain draw 0x3A800
+adds for type 11 (0x13A0, `PN_sara_dai00a`) and type 26 (0xD0D,
+`PN_takara_box01a`, moved by (0, 3.5, 2)), as for generic props. Read from the
+ROM, not checked in MAME.
+
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 34 in the courtyard
-and 44 in the mansion; the prototype, whose table is the same one 78 types long,
-stands 34 and 46.
+and 63 in the mansion (44 before class 0x8A's furniture); the prototype, whose
+table is the same one 78 types long, stands 34 and 65 (46).
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for
@@ -6661,9 +6684,10 @@ instructions. The flesh burst is `sub_425C0` on `sub_43F20`. Only the chunks
 loop; the other two are one-shots that call the task-close themselves at the top
 of the run.
 
-Three more tables turned up on the way and are not read: **0xAA378**, **0xAED40**
-and **0xAF620**, all indexed with a 28-byte stride whose first halfword is an
-object type, which is what a wave of spawns would look like.
+Three more tables turned up on the way: **0xAA378**, **0xAED40** and
+**0xAF620**, all indexed with a 28-byte stride whose first halfword is an object
+type. 0xAA378 is class 0x8A's furniture (see above); the other two are not
+read.
 
 ## Animation
 

@@ -1296,6 +1296,9 @@ const hotdp = {
              * 0x57FC0, 0x3A6FC) do; then they fly off and close below y -35.
              * The explorer opens no enemy, so they stand (`stays`). */
             { handler: 0x33130, types: [78, 79], stays: true }],
+        /* Class 0x8A's task, 0x2FDD0: the finished game's 0x39830 on the
+         * prototype's table, 0x81448 (see standTable in js/placements.js). */
+        tables: [{ init: 0x2fdd0, at: 0x81448, block: 0x16c, lift: 0x2c }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
@@ -1963,6 +1966,10 @@ const hotdo = {
          * 0xAFBB0 + 4i, less 14 (0x41600000), plus 0x4379BFBE. */
         rows: [{ init: 0x39b50, type: 51, model: 0x149c, step: 2, count: 8,
             x: 1210.341064453125, y: -59.0109977722168, z: 0xafbb0, less: 14, plus: 249.74899291992188 }],
+        /* Class 0x8A's task, 0x39830, which stands a room's furniture out of
+         * the table at 0xAA378: a block of 0x16C bytes per spawning type, of
+         * 28-byte entries (see standTable in js/placements.js). */
+        tables: [{ init: 0x39830, at: 0xaa378, block: 0x16c, lift: 0x2c }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2430,6 +2437,7 @@ const hotd = {
         cycles: null,
         items: null,
         rows: null,
+        tables: null,
     },
     rig: {
         bodies: {

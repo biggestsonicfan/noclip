@@ -121,8 +121,9 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but those on sixteen handlers, which are read below, and one class that
- * stands a row of props (see standRow).
+ * all but those on sixteen handlers, which are read below, one class that
+ * stands a row of props (see standRow) and one that stands a table of them
+ * (see standTable).
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -339,6 +340,9 @@ function spawnProps(rom, at, set, out, section) {
         /* A class that stands a row of props of its own (see standRow). */
         const row = O.rows?.find((r) => r.init === opens);
         if (row) { standRow(rom, rec, row, set, out); continue; }
+        /* And one that stands a room's furniture out of a table. */
+        const table = O.tables?.find((r) => r.init === opens);
+        if (table) { standTable(rom, rec, table, set, out); continue; }
         if (opens !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
@@ -450,6 +454,53 @@ function standRow(rom, rec, row, set, out) {
         out.set(`${rec}:${i}`, {
             rec, type: row.type, model, set, scale: scale > 0 ? scale : 1,
             pos: [row.x, row.y, z], turn: [0, 0, 0],
+        });
+    }
+}
+
+/*
+ * A spawn class that stands a room's furniture out of a table: class 0x8A
+ * (0x39830 in the first revision, 0x2FDD0 in the prototype). Its record's
+ * type picks a block of the table, 0x16C bytes from `at`, and each 28-byte
+ * entry of the block opens a task on the plain prop handler:
+ *
+ *     ldis 0xCC(r6), g5        ; the record's type
+ *     mulo 0x16C, g5, g5       ; picks the block
+ *     ldos 0xAA378(g5)[i*28]   ; +0x00 the entry's own type
+ *     call 0x417F0             ; that type's model and scale
+ *     ld   0xAA37C(g4)[i*28]   ; +0x04, +0x08, +0x0C the place
+ *     ld   0xAA388(g4)[i*28]   ; +0x10, +0x14, +0x18 the turns, to +0x2C..
+ *     ld   0x2C(type), g4      ; y plus the type's own offset
+ *     ldos 0x70(r6), g4        ; the record's life and window, copied
+ *
+ * until an entry's first word is -1; then it closes its own task. The record's
+ * own place and turns are not read. All but types 2, 3, 34, 35 and 43 are
+ * set bit 30, which takes them straight to the plain draw with no shot. The
+ * rest break when shot, as a prop does, and the bookcases (type 43) at x
+ * 82.9 and 97.3 also when event flag 35 or 36 is set: both left out. The plain draw also draws a second model for types 11 and 26
+ * (0x13A0, and 0xD0D moved (0, 3.5, 2)), as it does for any prop of those
+ * types: left out here as there.
+ */
+function standTable(rom, rec, table, set, out) {
+    const O = rom.game.objects;
+    const dv = rom.mainCpuView;
+    if (out.has(`${rec}:0`)) return;
+    const block = table.at + rom.maincpu[rec + O.type] * table.block;
+    for (let i = 0; i < 256; i++) {
+        const at = block + i * 28;
+        if (!inRom(rom, at, 28) || (i > 0 && dv.getInt32(at, true) === -1)) break;
+        const type = dv.getUint16(at, true);
+        if (!(type > 0 && type < O.count)) continue;
+        const entry = O.table + type * O.stride;
+        const model = dv.getUint32(entry + O.model, true);
+        if (!model || model >= rom.game.modelTable.count) continue;
+        const scale = dv.getFloat32(entry + O.scale, true);
+        out.set(`${rec}:${i}`, {
+            rec, type, model, set, scale: scale > 0 ? scale : 1,
+            pos: [dv.getFloat32(at + 4, true),
+                Math.fround(dv.getFloat32(at + 8, true) + dv.getFloat32(entry + table.lift, true)),
+                dv.getFloat32(at + 12, true)],
+            turn: [16, 20, 24].map((o) => dv.getUint32(at + o, true) & 0xffff),
         });
     }
 }

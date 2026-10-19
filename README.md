@@ -766,6 +766,9 @@ Its chapter 2 has the breaking wall too, standing whole in the zones the board
 draws it in.
 In chapter 2's section 9, one spawn stands a row of eight props of
 its own (`PN_kenita00a` to `07a`), where the board puts them.
+In chapter 1's section 8, two spawns stand a room's furniture out of a
+table (chairs, tables, cups, a pot, bookcases, a lamp and chests), in both
+builds.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
 until a shot or the game swings it. The prototype stands it at the same place,
 still, in the zone its section 8 draws it in before it closes; the swing it
