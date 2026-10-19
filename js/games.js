@@ -1274,6 +1274,12 @@ const hotdp = {
          * (0x121E, the type's own model) plus +0x50 rem 40, drawn through
          * 0x35AD0. It closes as a prop does (0x33320). */
         swimmers: [{ handler: 0x312b0, points: 0x85900, segments: 4, step: 0.01, models: 40 }],
+        /* Type 69, PN_powa00a to 29a on 0x32F30: the finished game's 0x3D860
+         * at the prototype's models (0x935, back to it past 0x950), drawn
+         * through 0x35AD0. It never calls 0x33320; it closes once the camera
+         * frame (0x51E788) passes +0x2F4, which the generic init (0x2EDD8)
+         * sets by section: `until` (see propZones in js/placements.js). */
+        cycles: [{ handler: 0x32f30, last: 0x951, until: { 3: 99, 9: 268, 11: 1048, 12: 1048 } }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own

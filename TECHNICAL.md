@@ -6319,6 +6319,19 @@ zones 14 and 15 with the tank's other pieces. Stage 2 · set 6 goes from 18
 props to 19, and `hotdp` set props from 107 to 108. Read from the ROM, not
 checked in MAME.
 
+The prototype's three `PN_powa` are type 69 on 0x32F30, 0x3D860's loop at
+the prototype's models: +0x54 steps a frame, back to 0x935 (`PN_powa00a`) once
+the model it stepped from is past 0x950, so `00a` to `29a` again, at the
+type's scale, 1, drawn through 0x35AD0. It does not call 0x33320. It closes
+(0x10D60) once the camera frame (0x51E788, the float the sweep above compares
+with 170) passes the float at +0x2F4, which the generic init sets by section
+(0x2EDD8): 99 in section 3, 268 in 9, 1048 in 11 and 12, the finished game's
+numbers. That is the clock `propZones` runs, so each keeps the zones it is
+drawn in rather than the prop rules: chapter 1's section 3 (record 0xE1600,
+zone 7), section 9 (0xE6050, zone 15) and section 12 (0xE7470, zone 20), at
+the finished game's three places. Stage 1 · set 1 goes from 31 props to 34,
+and `hotdp` set props from 108 to 111. Read from the ROM, not checked in MAME.
+
 The sixteenth is type 68 on 0x3D6E0, `PN_furukagi00a` (0xBA5), scale 1. It
 does not close as a prop does: once the zone's clock (0x51E51C) passes 521 it
 counts +0x50 up a frame, and past 226 queues a sound and closes (0x150D0).
@@ -6362,7 +6375,7 @@ explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 34 in the courtyard
 and 44 in the mansion; the prototype, whose table is the same one 78 types long,
-stands 31 and 45.
+stands 34 and 45.
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for
@@ -6423,7 +6436,7 @@ interpreter's clock over the scripts:
 
 Scripts that pass in the same frame count as one change, as they do on the
 board. The Zone picker draws only those props, and "every zone at once" draws
-all of them. In Stage 1, set 1, zone 1 keeps 2 of the set's 31 props, zone 3
+all of them. In Stage 1, set 1, zone 1 keeps 2 of the set's 34 props, zone 3
 none, and zone 14 keeps 17. The finished game's profiles carry none of these
 fields, so it still draws every prop in every zone.
 

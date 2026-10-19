@@ -186,7 +186,10 @@ function walkScript(rom, at, visit) {
  * once the zone's clock (0x51E51C) passes +0x30C, which the spawn sets by
  * section (0x38A7C): 99 in section 3, 268 in 9, 1048 in 11 and 12, the three
  * sections that spawn one. The explorer runs no clock inside a zone, so the
- * three stand and loop as spawned.
+ * three stand and loop as spawned. The prototype's 69 (0x32F30) is the same
+ * loop at its own models, but it closes once the camera frame passes those
+ * same numbers, the clock propZones already runs, so there it keeps the
+ * zones it is drawn in (`until`).
  *
  * Type 96, a fan (PN_koba01a), turns its third angle (+0x34) on 0x3E4A0 by
  * +0x31C a frame, which is 0x800 while the zone's clock is short of 1440; past
@@ -374,6 +377,8 @@ function spawnProps(rom, at, set, out, section) {
             ...(cycle && cycle.last >= model ? {
                 cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),
             } : {}),
+            /* And the prototype's 69 closes on the camera frame (see above). */
+            ...(cycle?.until ? { until: cycle.until } : {}),
             /* And the fish swims its path, stepping its model (see above). */
             ...(swimmer ? {
                 cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
@@ -496,6 +501,13 @@ function propZones(rom, chapter, sections, props) {
         /* One frame of the object's task: sub_33320, in its order. */
         const frame = () => {
             if (!t) return true;
+            /* A handler that never calls sub_33320 and closes once the
+             * camera frame passes the number its spawn set by section. */
+            if (t.until != null) {
+                if (c.frame > t.until) return false;
+                if (c.zone != null) out.get(t.rec).add(c.zone);
+                return true;
+            }
             if (sweep && s === sweep.section && i === sweep.script && t.type !== sweep.spare
                 && c.frame > sweep.after) return false;
             if (i !== t.seen) {
@@ -577,6 +589,7 @@ function propZones(rom, chapter, sections, props) {
             run(s, i, e + 1, c, {
                 rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
                 seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
+                ...(prop.until ? { until: prop.until[s] ?? 0 } : {}),
             });
         }
     })));

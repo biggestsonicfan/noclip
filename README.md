@@ -753,6 +753,8 @@ narrower than its model, as the board draws it there.
 A fish with a man's face (`PN_jinmengyo`) swims its loop in chapter 2's fish
 tank while animate is ticked, along the path the board gives it. The prototype
 (`hotdp`) has the same fish in the same tank, and it swims there too.
+Its chapter 1 has the three `PN_powa` too, looping in the zones the board
+draws them in.
 In chapter 2's section 9, one spawn stands a row of eight props of
 its own (`PN_kenita00a` to `07a`), where the board puts them.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
