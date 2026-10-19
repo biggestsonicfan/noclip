@@ -1996,14 +1996,10 @@ its moves, then the rest of what it plays, then every other motion.
   standing 2 from its opponent reaches it by (a round starts them 2 apart),
   strings as their presses, and the rest under their input and the bits they
   need. State bit 18 stays a number: it is STF's hyper. The motion list
-  splits the moves into those two groups (Jane 26 and 52). Picking a
-  string plays it whole, each link handed over as the matcher hands over
-  (see "Strings" under [Moves and strings](#moves-and-strings-jsmovesjs)):
-  `set_mot_dat` (`0x1B880`) sets `+0x80A` and `+0x80C` to the motion's
-  length and set-up op 2 (`0x1BA64`) to its cancel and end frames; every
-  follow-up's wait (op `0x12`) counts from `+0x80A`. Jane's P, P, P hands
-  over after frames 9 and 19. The inputs and frames are read from the ROM,
-  not typed in MAME.
+  splits the moves into those two groups (Jane 26 and 52). A string plays
+  only its last motion: the hand-over at the cancel frame (STF's set-up
+  op 2) is not read here yet. The inputs are read from the ROM, not typed
+  in MAME.
 - **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
   `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
   and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
@@ -2015,13 +2011,7 @@ its moves, then the rest of what it plays, then every other motion.
   or 26 set; they are fight state and not listed. Akira lists 69 moves, Jacky
   78, Shun 76, each under its input as FV's are (Jacky 34 standing, 44 in
   other situations): throws on G+P, Jacky's P, P, back+P, Lau's P, P, P, K,
-  Pai's P, P, P, down+K. Strings play whole as FV's do: `set_mot_dat`
-  (`0x1A22C`, `0x1A230`) sets `+0x80A` and `+0x80C` to the length, set-up
-  op 2 (`0x1A420`) to the cancel and end frames, the end of motions `0x12E`
-  and `0x375` its own (`flags.ends`). 100 waits count from `+0x80A` and 24
-  from `+0x80C`, the end frame: Jacky's back . neutral . back+P hands its
-  five follow-ups over after frame 29 of 34, not at its cancel frame.
-  Read from the ROM, not checked in MAME. Checked against MAME: 200 s of `vf2` attract with
+  Pai's P, P, P, down+K. Checked against MAME: 200 s of `vf2` attract with
   the commits
   (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
   Shun, Jacky and Akira, all 43 in that fighter's list.
@@ -7649,14 +7639,6 @@ last binary radian — and the third punch picks up the second's frame 11 the
 same way. A move that is not a
 follow-up waits for the fighter to be free, at `p1_follow2`. 333 of the 519
 motions carry op 2; the rest keep their length in all three.
-
-Fighting Vipers and Virtua Fighter 2 run the same matcher and the same op 2
-(`+0x808`, `+0x80A`, `+0x80C`), and their strings play the same way
-(`stringHandover` in `js/vf2fighters.js`), with one difference: op `0x12`'s
-u16 names the field the wait counts from, and 24 of VF2's waits count from
-`+0x80C`, the end frame, not the cancel frame. The walker keeps that field
-(`waitOn`). A body blends into each motion its own way (poseFighter), so the
-ease checkbox is Sonic the Fighters' only.
 
 **Names.** `debug_cpu_movesets` (`0xDE278`) is the table the CPU opponent is
 driven from: 0x2C-byte records, a pointer to the move's name (`SNC_hataki`),

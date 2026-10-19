@@ -110,10 +110,10 @@ function readTable(m, dv, start, isa = null) {
     const inRom = (a) => a > 0 && a + 16 < m.length;
     for (let h = start; inRom(h) && m[h] === HEADER; h += HEADER_LENGTH) {
         const key = u16(h + 1);
-        const stack = [{ a: u32(h + 3), dirs: [], guards: [], follow: 0, wait: null, waitOn: 0, depth: 0 }];
+        const stack = [{ a: u32(h + 3), dirs: [], guards: [], follow: 0, wait: null, depth: 0 }];
         const seen = new Set();
         while (stack.length && out.length < 4000) {
-            let { a, dirs, guards, follow, wait, waitOn, depth } = stack.pop();
+            let { a, dirs, guards, follow, wait, depth } = stack.pop();
             if (depth > 60) continue;
             while (inRom(a)) {
                 const here = `${a}:${follow}:${dirs.map((d) => d.mask).join(',')}:${guards.join(';')}`;
@@ -146,13 +146,9 @@ function readTable(m, dv, start, isa = null) {
                 } else if (op === OP_CLRPC) {
                     follow = 0;
                 } else if (op === OP_WAIT || op === OP_WAIT2) {
-                    /* The player field the wait counts from (+0x80A,
-                     * the cancel frame, or +0x80C, the end), and by how
-                     * many frames. */
-                    waitOn = u16(a + 1);
                     wait = (u8(a + 3) << 24) >> 24;
                 } else if (op === OP_ALT || op === OP_ALT2) {
-                    stack.push({ a: u32(a + 1), dirs, guards, follow, wait, waitOn, depth: depth + 1 });
+                    stack.push({ a: u32(a + 1), dirs, guards, follow, wait, depth: depth + 1 });
                 } else if (op === OP_JUMP || op === OP_NATIVE_JUMP) {
                     a = u32(a + 1);
                     continue;
@@ -166,12 +162,12 @@ function readTable(m, dv, start, isa = null) {
                     const ways = [[1, { op, mask: FWD, here: true }],
                         [5, { op, mask: BACK, here: true }], [9, { op, mask: 0, here: true }]];
                     for (const [off, d] of ways.reverse()) {
-                        stack.push({ a: u32(a + off), dirs: [...dirs, d], guards, follow, wait, waitOn, depth: depth + 1 });
+                        stack.push({ a: u32(a + off), dirs: [...dirs, d], guards, follow, wait, depth: depth + 1 });
                     }
                     break;
                 } else if (op === OP_COMMIT || op === OP_COMMIT_SHORT) {
                     const cmd = u32(a + 1);
-                    out.push({ key, cmd, motion: cmd & 0xffff, dirs, guards, follow, wait, waitOn });
+                    out.push({ key, cmd, motion: cmd & 0xffff, dirs, guards, follow, wait });
                     break;
                 } else if (op === OP_END || op === OP_END_SETPC) {
                     break;
@@ -544,34 +540,26 @@ const EASE_SHIFT = { 8: 3, 4: 2 };
  * @param {object[]} entries the entries, in order; an entry sitting in the
  *   follow-up table the one before it parked is a string link and takes over
  *   at the cancel frame, anything else once the one before comes free.
- * @param {object} [how] for another game's motions: `motionOf(entry)`, the
- *   motion an entry plays; `decode(id)`, that motion's block; `handover(link,
- *   next)`, the frames `link` plays before `next` takes over. Sonic the
- *   Fighters' by default.
  * @returns {null | {links:object[], total:number}} each link `{entry, motion,
  *   decoded, follows, start, length}` — the tick it starts on and how many it
  *   plays before the next takes over.
  */
-export function buildChain(rom, moves, entries, {
-    motionOf = (e) => e.motion,
-    decode = (id) => decodeMotion(rom, id),
-    handover = (l, next) => handoverFrame(rom, l.motion, l.decoded.frames, next.entry, next.follows),
-} = {}) {
+export function buildChain(rom, moves, entries) {
     const links = [];
     for (const e of entries) {
-        const motion = motionOf(e);
-        const decoded = decode(motion);
+        const decoded = decodeMotion(rom, e.motion);
         if (!decoded) continue;
         const prev = links[links.length - 1]?.entry;
         const follows = Boolean(prev?.follow && moves.tables.get(prev.follow)?.includes(e));
-        links.push({ entry: e, motion, decoded, follows, start: 0, length: decoded.frames });
+        links.push({ entry: e, motion: e.motion, decoded, follows, start: 0, length: decoded.frames });
     }
     if (!links.length) return null;
     let t = 0;
     links.forEach((l, i) => {
         const next = links[i + 1];
         l.start = t;
-        l.length = next ? handover(l, next) : l.decoded.frames;
+        l.length = next ? handoverFrame(rom, l.motion, l.decoded.frames, next.entry, next.follows)
+            : l.decoded.frames;
         t += l.length;
     });
     return { links, total: t };

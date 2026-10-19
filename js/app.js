@@ -50,7 +50,7 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots, headPieceReflection, stringHandover,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
@@ -2701,10 +2701,7 @@ function setMotion(id, slot, { rebuild = true } = {}) {
  */
 function setChain(entries, { rebuild = true } = {}) {
     const m = state.motion;
-    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries, state.bodies ? {
-        motionOf: entryMotion, decode: (id) => m.list[id] ?? null,
-        handover: (l, next) => stringHandover(state.rom, l.motion, l.decoded.frames, next.entry, next.follows),
-    } : undefined) : null;
+    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries) : null;
     if (!chain) return;
     chain.code = chainCode(m.moves, chain.links.map((l) => l.entry));
     m.chain = chain;
@@ -2713,20 +2710,6 @@ function setChain(entries, { rebuild = true } = {}) {
     m.start = performance.now();
     enterLink(m);
     if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
-}
-
-/* The motion an entry plays: a body's keeps set_mot_dat's low 13 bits. */
-function entryMotion(e) {
-    return state.bodies ? e.motion & BODY_MOTION_ID : e.motion;
-}
-const BODY_MOTION_ID = 0x1fff;
-
-/* A body's motion picked from its list: a move that is a string plays the
- * whole string, as its input types it. */
-function setBodyMotion(id) {
-    const mv = state.motion.moves?.moves.find((x) => entryMotion(x) === id);
-    if (mv?.steps.length > 1) setChain(mv.steps);
-    else setMotion(id, -1);
 }
 
 /* Put the motion the chain is on at `m.tick` where the rest of the rig reads
@@ -3367,15 +3350,11 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.charIndex = body.char ?? body.index;
     state.character = body;
     const m = state.motion;
-    /* Fighting Vipers' and Virtua Fighter 2's fighters play strings from
-     * their input programs (readFighter's `moves`), handed over at the
-     * frames their setups give (stringHandover). A chain is held by its
-     * input, as Sonic the Fighters' is. */
-    const oldChain = keepMotion && m.chain ? m.chain.links : null;
-    m.moves = body.moves ?? null;
-    $('#string-field').hidden = !m.moves;
-    const retyped = oldChain && m.moves
-        ? retypeChain(m.moves, oldChain.map((l) => l.entry), oldChain.map((l) => l.follows)) : [];
+    /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
+     * are in its motion list with their inputs (fighterMotionList); the
+     * string panel is Sonic the Fighters'. */
+    m.moves = null;
+    $('#string-field').hidden = true;
     /* Start on the motion the game starts the body on, or another its
      * routines play: a body can play any motion of its joint count, but one
      * keyed on another skeleton bends its parts in ways they were not
@@ -3384,8 +3363,7 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     const { fits, lead } = bodyMotions(body);
     const held = keepMotion && m.decoded?.joints === body.joints ? m.decoded : null;
     const pick = held && lead.includes(held) ? held : lead[0] ?? fits[0];
-    if (retyped.length) setChain(retyped, { rebuild: false });
-    else setMotion(pick?.index ?? -1, -1, { rebuild: false });
+    setMotion(pick?.index ?? -1, -1, { rebuild: false });
     rebuildBody({ keepCamera });
     renderAnimPanel();
     updateHud();
@@ -4924,48 +4902,27 @@ function renderBodyMotionPanel() {
     const others = other ?? `Every other motion for ${body.joints} joints`;
     group(lead.length ? `${others} (${fits.length - lead.length})`
         : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
-    /* A string shows as the move it is, or as one built below. */
-    const last = m.chain?.links[m.chain.links.length - 1];
-    const whole = last && m.moves.moves.find((x) => entryMotion(x) === last.motion);
-    if (m.chain?.links.length > 1 && !(whole && sameEntries(whole.steps, m.chain.links.map((l) => l.entry)))) {
-        const o = el('option');
-        o.value = 'chain';
-        o.textContent = `A string of ${m.chain.links.length} — built below`;
-        sel.insertBefore(o, sel.firstChild);
-        sel.value = 'chain';
-    } else if (m.decoded) sel.value = `id:${last ? last.motion : m.decoded.index}`;
+    if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
     const d = m.decoded;
-    renderBodyMotionMeta();
-
-    const scrub = $('#motion-frame');
-    scrub.max = String(m.chain ? m.chain.total : d ? d.frames : 1);
-    scrub.value = String(scrubValue(m));
-    scrub.disabled = !d;
-    $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
-    $('#motion-play').disabled = !d;
-    renderStringPanel();
-    renderSparkPanel();
-    updateMotionFrameReadout();
-}
-
-/* A body's motion block, and in a string the link's input and hand-over. */
-function renderBodyMotionMeta() {
-    const m = state.motion;
-    const d = m.decoded;
-    const link = m.chain?.links[m.link];
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
     const size = !d ? '' : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
         : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
-    const more = link && m.link + 1 < m.chain.links.length ? `
-        <span>hands over</span><b>after frame ${link.length}${m.chain.links[m.link + 1].follows ? ', a string link' : ', once free'}</b>` : '';
-    $('#motion-meta').innerHTML = (link ? `
-        <span>input</span><b>${spellEntry(link.entry)} (${m.link + 1} of ${m.chain.links.length})</b>${more}` : '') + (d ? `
+    $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
         ${size}
-    ` : '<span>motion</span><b>none fits this body</b>');
+    ` : '<span>motion</span><b>none fits this body</b>';
+
+    const scrub = $('#motion-frame');
+    scrub.max = String(d ? d.frames : 1);
+    scrub.value = String(m.frame);
+    scrub.disabled = !d;
+    $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
+    $('#motion-play').disabled = !d;
+    renderSparkPanel();
+    updateMotionFrameReadout();
 }
 
 /* The fighter's moves, then the 52 action slots, then the whole motion table
@@ -5050,8 +5007,7 @@ function renderMotionPanel() {
  * so a list someone has open stays open. */
 function showLink() {
     const m = state.motion;
-    if (state.bodies) renderBodyMotionMeta();
-    else renderMotionMeta();
+    renderMotionMeta();
     [...$('#string-chain').children].forEach((c, i) => c.classList.toggle('active', i === m.link));
     updateHud();
 }
@@ -5094,8 +5050,6 @@ function renderStringPanel() {
     field.hidden = !m.moves;
     if (!m.moves) return;
     $('#string-ease').checked = state.easeChain;
-    /* A body blends into each motion its own way (poseFighter). */
-    $('#string-ease').parentElement.hidden = Boolean(state.bodies);
 
     const list = $('#string-chain');
     list.innerHTML = '';
@@ -5110,7 +5064,6 @@ function renderStringPanel() {
         chip.addEventListener('click', () => {
             const rest = links.slice(0, i).map((x) => x.entry);
             if (rest.length) setChain(rest);
-            else if (state.bodies) setMotion(state.character.start >= 0 ? state.character.start : l.motion, -1);
             else setMotion(state.character.motions[0], 0);
         });
         list.appendChild(chip);
@@ -5124,7 +5077,7 @@ function renderStringPanel() {
     for (const e of ups) {
         const b = el('button', 'btn');
         b.type = 'button';
-        b.textContent = `+ ${spellEntry(e)}` + (e.name ? ` → ${e.name}` : ` → motion ${entryMotion(e)}`);
+        b.textContent = `+ ${spellEntry(e)}` + (e.name ? ` → ${e.name}` : ` → motion ${e.motion}`);
         b.addEventListener('click', () => setChain([...links.map((x) => x.entry), e]));
         next.appendChild(b);
     }
@@ -5140,7 +5093,7 @@ function renderStringPanel() {
         if (!mv.reachable) return;
         const o = el('option');
         o.value = String(i);
-        o.textContent = `${mv.name ?? `motion ${entryMotion(mv)}`} · ${spellMove(mv)}`;
+        o.textContent = `${mv.name ?? `motion ${mv.motion}`} · ${spellMove(mv)}`;
         add.appendChild(o);
     });
     add.value = '';
@@ -5155,7 +5108,7 @@ function updateStringReadout() {
     if (!m.chain) { out.textContent = ''; return; }
     const l = m.chain.links[m.link];
     const n = easeLength(l.decoded.frames);
-    const easing = !state.bodies && state.easeChain && m.link > 0 && m.frame < n;
+    const easing = state.easeChain && m.link > 0 && m.frame < n;
     out.textContent = `link ${m.link + 1} of ${m.chain.links.length}: frame ${m.frame} of ${l.decoded.frames}`
         + (m.link + 1 < m.chain.links.length ? `, hands over after ${l.length}` : '')
         + (easing ? ` · easing in, ${n - m.frame} of ${n} left` : '');
@@ -5637,7 +5590,7 @@ function wireOptions() {
         const [kind, n] = e.target.value.split(':');
         if (kind === 'slot') setMotion(state.character.motions[+n], +n);
         else if (kind === 'move') setChain(state.motion.moves.moves[+n].steps);
-        else if (kind === 'id') state.bodies ? setBodyMotion(+n) : setMotion(+n, -1);
+        else if (kind === 'id') setMotion(+n, -1);
     });
     $('#string-add').addEventListener('change', (e) => {
         const mv = state.motion.moves?.moves[+e.target.value];
