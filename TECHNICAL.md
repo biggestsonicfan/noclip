@@ -4478,7 +4478,10 @@ from 4346 to 7216. `stf-tools/test-zsort.mjs` pins both the count and the mouth.
 Bit 15 is the other one: **checker**. The polygon is drawn on every other screen
 pixel and whatever is behind shows through the rest — the board's half
 transparency, with no blending hardware involved. South Island sets it on 134
-faces: the water planes at sea level and the waterfall.
+faces: the water planes at sea level and the waterfall. The pixels drawn are
+those where `(x ^ scanline) & 1`, scanlines counted from the top; the shader
+takes its row from the viewport's top, since `gl_FragCoord` counts from the
+bottom and on 384 rows that is the other phase.
 
 **The board sorts polygons, not pixels — and the viewer takes half of that.**
 
@@ -8314,8 +8317,10 @@ pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
 pointing at it). The wasm is committed because the site has no build step; a
 change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
-build is from `c4ed74f`; the current one is from `f797c4b`, which has the
-68000 fix The House of the Dead's driver needs (below). The build stubs out
+build is from `c4ed74f`, then `f797c4b`, which has the 68000 fix The House of
+the Dead's driver needs (below); the current one, and `model1.wasm`, are from
+`cd73efd`, with the 68000's bit-op fix (`3d283a3f`) and, for the Model 1 board,
+#1006's. The build stubs out
 `clock_gettime`: the board times its own work for m2-hle2's status display,
 which a page never reads, and libc's clock would have the module import WASI.
 

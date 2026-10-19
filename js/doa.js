@@ -284,6 +284,16 @@ function makeBus(rom, ram, copro, geo, models) {
         else other.set(a, v);
     };
     const lane = (a, bytes) => [a & ~3, (a & 3) * 8, bytes === 1 ? 0xff : 0xffff];
+    /* A byte or halfword store to the copro or geo ports pushes a whole word,
+     * the value in its lane and zeros around it (MAME's 32-bit handlers take
+     * the shifted bus word and ignore the mask; m2-hle2 #1035). A
+     * read-modify-write there would pop a pending reply into the word. */
+    const isPort = (a) => (a >= COPRO_CMD && a < COPRO_END) || (a >= GEO_CMD && a < GEO_END);
+    const writeLane = (a, v, bytes) => {
+        const [w, s, mask] = lane(a, bytes);
+        if (isPort(w)) write32(w, ((v & mask) << s) >>> 0);
+        else write32(w, (read32(w) & ~(mask << s)) | (v << s));
+    };
     return {
         other,
         read32,
@@ -292,13 +302,11 @@ function makeBus(rom, ram, copro, geo, models) {
         read16: (a) => { const [w, s] = lane(a, 2); return (read32(w) >>> s) & 0xffff; },
         write8: (a, v) => {
             if (inRam(a)) { ram[a - RAM_BASE] = v; return; }
-            const [w, s, mask] = lane(a, 1);
-            write32(w, (read32(w) & ~(mask << s)) | (v << s));
+            writeLane(a, v, 1);
         },
         write16: (a, v) => {
             if (inRam(a)) { rv.setUint16(a - RAM_BASE, v, true); return; }
-            const [w, s, mask] = lane(a, 2);
-            write32(w, (read32(w) & ~(mask << s)) | (v << s));
+            writeLane(a, v, 2);
         },
     };
 }

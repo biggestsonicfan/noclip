@@ -4350,9 +4350,10 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
  * prepared profile becomes a game by finding what `lacks` lists and moving it
  * into GAMES.
  *
- * m2-hle2 keeps the same list the other way round: Virtua Cop, Daytona USA and
- * The House of the Dead, which this viewer opens and the emulator cannot run
- * yet, are prepared profiles there, taking their model tables from this file.
+ * m2-hle2 keeps the same list the other way round: a set this viewer opens and
+ * the emulator cannot run yet is a prepared profile there, taking its model
+ * table from this file. Since m2-hle2's #1034 and #1035 (The House of the Dead
+ * and Daytona USA run) that is Virtua Cop alone.
  */
 const srallyc = {
     id: 'srallyc',
