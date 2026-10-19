@@ -302,6 +302,24 @@ export function facePalette(rom) {
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
+    } else if (p.blocks) {
+        /* Air Walkers: a block is {first, count, colours} (0x16370), laid
+         * over the boot's table, which is {count, colours} from 0 (0x16200). */
+        const cv = rom.mainCpuView;
+        const len = rom.maincpu.length;
+        const block = (first, count, at) => {
+            for (let i = 0; i < count && first + i < 1024 && at + i * 2 + 2 <= len; i++) {
+                out[first + i] = cv.getUint16(at + i * 2, true);
+            }
+        };
+        block(0, cv.getUint16(p.base, true), p.base + 2);
+        const lay = (t) => {
+            if (t && t + 4 <= len) block(cv.getUint16(t, true), cv.getUint16(t + 2, true), t + 4);
+        };
+        /* The intro and the title lay only the first block (0x256A0); a
+         * court's set-up lays the rest, then the team's. */
+        for (const t of set === p.titleSet ? p.blocks.slice(0, 1) : p.blocks) lay(t);
+        if (set >= 0 && set < p.sets) lay(cv.getUint32(p.tables + set * 4, true));
     } else {
         const cv = rom.mainCpuView;
         const table = (s, first) => {

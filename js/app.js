@@ -942,10 +942,15 @@ function describeTextureGuess(g) {
     switch (g.how) {
     case 'untextured': return 'samples no texture';
     case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
-    case 'boot': return state.rom.game.texture.raw
+    case 'boot': return state.rom.game.texture.raw?.layout === 'airwlkrs'
+        ? `${sets}: the boot pages, which every court has`
+        : state.rom.game.texture.raw
         ? 'sheet 1 only, the bank boot loads for every course'
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
+    case 'title': return `${sets}: drawn in the intro, on the title's page`;
+    case 'home': return `${sets}: on the home side's team page, team 0`;
+    case 'away': return `${sets}: on the away side's team page, team 0`;
     case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
     case 'resident': return `${sets} ${g.sets.length > 1 ? 'are' : 'is'} a guess: it is on the ${g.slot}s' pages, and nothing says which ${g.slot}'s`;
     case 'coverage': return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;

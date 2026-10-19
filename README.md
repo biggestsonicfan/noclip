@@ -13,7 +13,8 @@ trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
-[Dead or Alive](#dead-or-alive).
+[Dead or Alive](#dead-or-alive). Data East's *Air Walkers* has its models — see
+[Air Walkers](#air-walkers).
 
 Three views, and a fourth for the 2D art:
 
@@ -680,6 +681,24 @@ title logos. Tecmo's format is not Sega's: each picture brings its own tiles
 and colours, so each cell opens on a CG of its own with the same number (see
 [TECHNICAL.md](TECHNICAL.md#dead-or-alives-pictures-jscellsjs)).
 
+## Air Walkers
+
+`airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
+model table, with the textures, palette and colour tables the game loads for
+them: the players' bodies, the courts' lines and logos, the text the game
+puts over a play, the intro's city and dome, and each team's kit.
+
+The game numbers its teams twice, 0..16 for the home side and 17..33 for the
+away side, and each side keeps its team's page on a sheet of its own. A team
+model opens on team 0 of its side; the texture picker's sets 0..33 swap in
+the other teams, and set 34 is the intro's, with its own colours. The colours
+are court 0's, in the variant MAME's game was played on, and match MAME's
+dumps of a game and of the intro entry for entry.
+
+There is no Stages tab yet. The courts' floors and stands are not drawn by
+the routine the rest of the models go through, and it has not been found. See
+[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -719,6 +738,8 @@ how your set is organised:
 Where a set holds both builds, the other is offered as a variant.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
+
+So is `airwlkrs.zip` for Air Walkers.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version
