@@ -350,7 +350,8 @@ export function commandMotions(rom, root, isa = null) {
  * are this one, handler for handler, over the same player fields, and their
  * inputs carry the same bits (MAME's `vf2` and `schamp` ports: P 1, K 2, G 4,
  * down, up, right and left 0x10 to 0x80). Neither game's CPU name table is
- * found, so the moves go by number. A round starts the fighters 2 apart in
+ * found, so the moves go by motion (Fighting Vipers' named from its motion
+ * table, js/vf2fighters.js readMotionNames). A round starts the fighters 2 apart in
  * both, the distance `standing` reads a move at.
  * @returns {null | {root:number, tables:Map<number, object[]>, moves:object[]}}
  */

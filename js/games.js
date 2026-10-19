@@ -746,8 +746,12 @@ const fvipers = {
      *
      * The crouch is adj_taikaku (0x2BF4C), VF2's 0x29414 with other
      * constants: character 9, B.M., stands at 1.1 and 10, Sonic, at 0.56.
+     *
+     * The table's end, where entry 0 points (0x6C01080), is the motions'
+     * names: 1055 more pointers, one per id, into the data ROM (0x2E421CC on)
+     * and the second bank (0x6C95438 on).
      */
-    motionTable: { list: 0x06c00004, count: 1055 },
+    motionTable: { list: 0x06c00004, count: 1055, names: true },
     /*
      * The sway chains (js/osage.js), Sonic The Fighters' records and code on
      * this game's data. The definitions by record, `0x63E34[+0x1B0*4]` at

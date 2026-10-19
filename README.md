@@ -150,8 +150,10 @@ that does them, read from its input program the way Sonic the Fighters' are
 (*fwd+down . fwd+P*, the strings as their presses, *P , P , K*), and the ones
 a fighter standing in front of its opponent does not reach that way say what
 they need. They play one at a time: a string is listed by the motion its last
-press plays, and the strings themselves are not played yet. The game's names
-for its moves are not found, so they go by number. With the **Armour** switch's
+press plays, and the strings themselves are not played yet. Each move and
+motion carries the name the motion table keeps for it beside its number
+(*motion 21 AK_TA_KAMAE*, *TA_SYORYU_HNY*); the CPU opponent's names for the
+moves are not found. With the **Armour** switch's
 upper half broken, a helmet that comes off stays off: the face a move changes
 to is the bare-headed one the game's table gives (Bahn, Picky, Mahler and five
 others). The stages carry their names, from the sound test's song list, and

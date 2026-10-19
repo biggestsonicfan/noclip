@@ -1993,7 +1993,12 @@ its moves, then the rest of what it plays, then every other motion.
   are Sonic The Fighters' (`js/moves.js`): the lengths agree op for op over
   FV's 59 handlers, so the same walk lists every motion a commit names (Jane
   79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
-  are listed by number, each under its input. The matcher (table `0x1EBE0`,
+  are listed by motion, each under its input, with the motion's own name: entry
+  0 of `offset_list_motions` points at the list's end (`0x6C01080`), and that
+  is 1055 more pointers, a name per id (`DOMI_TA_KAMAE_2` for Jane's stance,
+  `SY_RPU` on down+P, `TA_SYORYU_HNY` for Honey's fwd . back+down . down .
+  fwd+down . fwd+P). Read from the ROM; no word in the program ROM holds its
+  address. The matcher (table `0x1EBE0`,
   handlers `0x1EC34`) is STF's (`0x1F00C`) instruction for instruction, on
   the same player fields (`+0x1218`, `+0x1203`, `+0x1242`, the distance at
   `+0x5F4`), and its input byte (`+0x1200`, from `0x500700`, built from the

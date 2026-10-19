@@ -740,12 +740,36 @@ export function armouredFighter(body, which) {
  */
 export function readFighterMotions(rom) {
     const M = rom.game.motionTable;
+    const names = M.names ? readMotionNames(rom, M) : [];
     const list = [];
     for (let id = 0; id < M.count; id++) {
         const d = decodeMotion(rom, id);
-        list.push(d ? { ...d, index: id, name: `motion ${id}`, joints: SLOT_COUNT } : null);
+        const name = names[id] ? `motion ${id} ${names[id]}` : `motion ${id}`;
+        list.push(d ? { ...d, index: id, name, joints: SLOT_COUNT } : null);
     }
     return list;
+}
+
+/*
+ * The motions' own names (`motionTable.names`). Entry 0 of the list points at
+ * the table's end, and that is a second list of as many pointers, the names in
+ * the same order: 0 NULL, 21 AK_TA_KAMAE (the stance the action tables put in
+ * slot 0), 224 GRA_TA_KAMAE (Grace's). A pointer that lands on no text names
+ * nothing.
+ */
+function readMotionNames(rom, M) {
+    const head = dataAt(rom, M.list);
+    const at = head && head.view.getUint32(head.off, true);
+    const out = [];
+    for (let id = 1; at && id < M.count; id++) {
+        const p = dataAt(rom, at + id * 4);
+        const s = p && dataAt(rom, p.view.getUint32(p.off, true));
+        if (!s) continue;
+        let name = '';
+        for (let i = s.off; i < s.data.length && s.data[i] >= 0x21 && s.data[i] < 0x7f && name.length < 32; i++) name += String.fromCharCode(s.data[i]);
+        if (name) out[id] = name;
+    }
+    return out;
 }
 
 /*
