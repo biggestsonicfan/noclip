@@ -6549,11 +6549,39 @@ cups); `hotdp` records 0xE8500 and 0xE8530, the same layout, in zones 35 and
 `hotdp`; set props go from 219 to 238 and from 115 to 134. The explorer stands
 them in `standTable` (`js/placements.js`, the profile's `tables`). Left out:
 bit 30 (unbreakable), which every type but 2, 3, 34, 35 and 43 is given, and
-the bookcases at x 82.9 and 97.3 also when event flag 35 or 36 is set; the
-shot and break, as for every prop; and the second model the plain draw 0x3A800
-adds for type 11 (0x13A0, `PN_sara_dai00a`) and type 26 (0xD0D,
-`PN_takara_box01a`, moved by (0, 3.5, 2)), as for generic props. Read from the
-ROM, not checked in MAME.
+the bookcases at x 82.9 and 97.3 also when event flag 35 or 36 is set; and the
+shot and break, as for every prop. Its two chests (type 26) take the lid the
+plain draw adds (see below). Read from the ROM, not checked in MAME.
+
+The plain draw adds a second model to two types. After the prop's own model,
+the shared handler's draw (0x3A800, reached by every standing prop on
+0x3A210) switches on the type, on the same matrix:
+
+```
+ld   0x54(r4), g0       ; the prop's own model
+call 0x14120
+ldis 0xCC(r4), g4
+lda  0x13A0, g0         ; type 11: PN_sara_dai00a
+call 0x14120
+...                     ; type 26: translate (0, 3.5, 2.0) (0x9001212)
+lda  0xD0D, g0          ; and PN_takara_box01a
+call 0x14120
+```
+
+Type 11 is `PN_sara01a`, a plate, and 0x13A0 its stand; type 26 is
+`PN_takara_box01b`, a chest, and 0xD0D its lid, 3.5 up and 2 along the chest's
+own z. No flag, clock or shot gates either. The prototype's 0x30670 does the
+same after its draw (0x30C74): `PN_sara_dai00a` (0x126C) on type 11, and
+`PN_takara_box01a` (0xC7A) moved (0, 3.5, 2) on type 26 while +0x314 is 0, the
+chest unbroken, which it always is here. It also draws 0x126C on any prop whose
++0x6C (the record's life) is 12, which no spawned prop has, and 0x114A at
+twice the size over type 73, which stays out with the finished game's 0x1241.
+The explorer draws the second model with its prop (`seconds` and `withSecond`
+in `js/placements.js`, the profile's `seconds`): the two chests of class 0x8A's
+second table, Stage 1 · set 3, and chapter 2's one type-11 plate, at (618,
+-9.6, 348), scale 1.2, Stage 2 · set 6, in both builds. Prop counts do not
+change; each build draws three models more. Revision A's profile leaves them
+out. Read from the ROM, not checked in MAME.
 
 Classes 0x93 and 0x98 each stand a fixed group of props about their own place.
 Their tasks, 0x394B0 and 0x395B0 (`hotdo`), open 15 and 12 tasks, on handlers
@@ -6566,7 +6594,7 @@ comes out nonzero gets a third turn of 0 and window row 28; five of its entries
 carry a 1 there. Both handlers set or clear bit 30 by the zone's clock and
 otherwise close and draw as the plain prop does: place, turns, scale +0x94 and
 model +0x54. 0x3ACF0 also draws 0x1241 at twice the size over type 73: left
-out, like the plain draw's second models. Each spawns once. 0x93 at 0xE4980 is
+out. Each spawns once. 0x93 at 0xE4980 is
 chapter 1's section 6 (Stage 1 · set 3), at (109.5, 0, 200): a laid table,
 `PN_tabul_02a` with six `PN_isu_02a`, six `PN_sara03a`, `PN_kabin_01a` and
 `PN_honeatama`. 0x98 at 0xF27D0 is chapter 2's section 12 (Stage 2 · set 5), at

@@ -1252,6 +1252,13 @@ const hotdp = {
         table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
         prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
         scale: 0x28,
+        /* The same two second models, drawn by 0x30670 after the prop's own
+         * (0x30C74): PN_sara_dai00a (0x126C) on type 11, and on type 26, while
+         * +0x314 is 0 (the chest unbroken), PN_takara_box01a (0xC7A) moved
+         * (0, 3.5, 2). The routine also draws 0x126C on any prop whose +0x6C
+         * is 12, and no prop the scripts spawn has that; and 0x114A at twice
+         * the size over type 73, the extra plate, which stays out. */
+        seconds: { 11: { model: 0x126c }, 26: { model: 0xc7a, at: [0, 3.5, 2] } },
         /*
          * What takes a prop down again, read in sub_33320, which the prop's
          * handler calls before it draws (see propZones in js/placements.js).
@@ -1928,6 +1935,12 @@ const hotdo = {
         table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
         prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
         scale: 0x28,
+        /* The second model the shared handler's draw (0x3A800) adds, on the
+         * prop's own matrix, for two types: type 11's plate stands on
+         * PN_sara_dai00a (0x13A0), and type 26's chest takes its lid,
+         * PN_takara_box01a (0xD0D), moved (0, 3.5, 2). Nothing gates either
+         * (see seconds in js/placements.js). */
+        seconds: { 11: { model: 0x13a0 }, 26: { model: 0xd0d, at: [0, 3.5, 2] } },
         /* Room 4's walls and shutters, types 97 to 101 on one handler; the
          * first turns 0x80 a frame (see spawnProps in js/placements.js). */
         room4: { handler: 0x3e510, first: 97, spin: 0x80 },
@@ -2483,6 +2496,7 @@ const hotd = {
         rows: null,
         tables: null,
         groups: null,
+        seconds: null,
     },
     rig: {
         bodies: {

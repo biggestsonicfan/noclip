@@ -774,6 +774,8 @@ its own (`PN_kenita00a` to `07a`), where the board puts them.
 In chapter 1's section 8, two spawns stand a room's furniture out of a
 table (chairs, tables, cups, a pot, bookcases, a lamp and chests), in both
 builds.
+The two chests there wear their lids, and chapter 2's plate (Stage 2 · set 6)
+stands on its stand, as the props' own draw adds them, in both builds.
 Chapter 1's section 6 lays a dining table (a table, six chairs, six plates, a
 vase and a skull) and chapter 2's section 12 a banquet (three round tables,
 plates, fruit and candlesticks), each one spawn standing a group of props

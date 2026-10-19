@@ -419,6 +419,8 @@ function spawnProps(rom, at, set, out, section, chapter) {
             ...(plain?.frames ? { frames: plain.frames } : {}),
             /* And the prototype's door halves never close by themselves. */
             ...(plain?.stays ? { stays: true } : {}),
+            /* And the plain draw's second model, on types 11 and 26. */
+            ...(handler === O.prop ? seconds(O, type) : {}),
             /* And the fish swims its path, stepping its model (see above). */
             ...(swimmer ? {
                 cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
@@ -486,9 +488,9 @@ function standRow(rom, rec, row, set, out) {
  * own place and turns are not read. All but types 2, 3, 34, 35 and 43 are
  * set bit 30, which takes them straight to the plain draw with no shot. The
  * rest break when shot, as a prop does, and the bookcases (type 43) at x
- * 82.9 and 97.3 also when event flag 35 or 36 is set: both left out. The plain draw also draws a second model for types 11 and 26
- * (0x13A0, and 0xD0D moved (0, 3.5, 2)), as it does for any prop of those
- * types: left out here as there.
+ * 82.9 and 97.3 also when event flag 35 or 36 is set: both left out. The
+ * plain draw also draws a second model for type 26, the chest's lid (see
+ * seconds), as it does for any prop of that type.
  */
 function standTable(rom, rec, table, set, out) {
     const O = rom.game.objects;
@@ -510,8 +512,30 @@ function standTable(rom, rec, table, set, out) {
                 Math.fround(dv.getFloat32(at + 8, true) + dv.getFloat32(entry + table.lift, true)),
                 dv.getFloat32(at + 12, true)],
             turn: [16, 20, 24].map((o) => dv.getUint32(at + o, true) & 0xffff),
+            ...seconds(O, type),
         });
     }
+}
+
+/*
+ * The second model the plain prop's draw adds after the prop's own, on the
+ * same matrix (0x3A800 in the finished game):
+ *
+ *     ld   0x54(r4), g0         ; the prop's own model
+ *     call 0x14120              ; drawn
+ *     ldis 0xCC(r4), g4         ; then by type:
+ *     lda  0x13A0, g0           ; 11: PN_sara_dai00a, the plate's stand
+ *     call 0x14120
+ *     ...                       ; 26: the translate command, (0, 3.5, 2.0),
+ *     lda  0xD0D, g0            ; and PN_takara_box01a, the chest's lid
+ *     call 0x14120
+ *
+ * No flag, clock or shot gates either. The prototype's 0x30670 does the same
+ * with its own models, the lid while the chest is unbroken (+0x314 = 0).
+ */
+function seconds(O, type) {
+    const second = O.seconds?.[type];
+    return second ? { second } : {};
 }
 
 /*
@@ -536,8 +560,8 @@ function standTable(rom, rec, table, set, out) {
  * the same life and window closes. Neither adds the type's +0x2C offset.
  * Each also marks its child unbreakable (+0x58 bit 30) over a stretch of the
  * zone's clock, which only changes whether a shot breaks it. 0x3ACF0 draws a
- * second model over type 73 (0x1241 at twice the size), as the plain draw
- * does for types 11 and 26: left out here as there. Each class spawns once:
+ * second model over type 73 (0x1241 at twice the size): left out. Each class
+ * spawns once:
  * 0x93 at 0xE4980 (Stage 1 set 3, at (109.5, 0, 200)), a laid table —
  * PN_tabul_02a, six PN_isu_02a chairs, six PN_sara03a plates, PN_kabin_01a
  * and PN_honeatama — and 0x98 at 0xF27D0 (Stage 2 set 5, at the origin),
@@ -888,6 +912,19 @@ function propOps(o, spin = 0) {
     return [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
         ...propTurn(turn),
         ...(o.axes ? [['s', o.axes]] : o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
+}
+
+/* A prop's draw, and the second model its handler draws after it on the same
+ * matrix (see seconds), moved by `at` in the prop's own frame. */
+function withSecond(o, draw) {
+    if (!o.second) return [draw];
+    const { model, at } = o.second;
+    const move = (ops) => (at ? [...ops, ['t', [at[0], at[1], -at[2]]]] : ops);
+    const { anim, ...rest } = draw;
+    return [draw, {
+        ...rest, model,
+        ops: typeof draw.ops === 'function' ? (frame) => move(draw.ops(frame)) : move(draw.ops),
+    }];
 }
 
 /*
@@ -1330,7 +1367,7 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
      * the camera frames on the room rather than on them. Under a zone, only
      * those still standing while it is current (see propZones). */
     const objects = (stage.objects ?? [])
-        .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).map((o) => ({
+        .filter((o) => !zone || !o.zones || o.zones.has(zone.zone)).flatMap((o) => withSecond(o, {
         model: o.model,
         /* A prop that steps its model a frame (types 104 and 108). */
         ...(o.cycle ? { anim: { frames: o.cycle, shift: 0, phase: 0 } } : {}),
