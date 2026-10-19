@@ -6392,6 +6392,23 @@ still throughout, and the swing is left out. Stage 1 · set 3 goes from 45
 props to 46, and `hotdp` set props from 112 to 113. Read from the ROM, not
 checked in MAME.
 
+The prototype (`hotdp`) also stands types 78 and 79 on 0x33130, the two halves
+of a door: `PN_r2do_01a` (0x4DA) and `PN_r2do_01b` (0x4DE), the types' own
+models, scale 1. Each frame the handler reads the byte 0x51E50E; while it is
+0 it draws through 0x35AD0 and does nothing else, never calling 0x33320. Once
+it is set, the half takes a push (+0x74, +0x78, +0x7C) and a spin (+0x2E4,
++0x2E8), one way for 0x4DA and the other for 0x4DE, queues a sound and goes
+over to 0x331E0, which moves it, takes 0.1 off its rise each frame, draws it
+every other frame and closes it (0x10D60) once y is below -35. Only three routines write
+0x51E50E: two states of an enemy's action table at 0x94830 (0x57B90 and
+0x57FC0, dispatched by 0x568B0 on +0x5C) and 0x3A6FC. No script op does.
+Chapter 2's section 1 spawns the pair, records 0xEBBE0 and 0xEBC10, at
+(256.71, -6.76, ±10.39), turned 0. The explorer opens no enemy, so they stand
+shut and never close (`stays`): the walk credits them every zone from their
+spawn to the chapter's end, which in Stage 2 · set 5 is zones 2, 3, 40, 41,
+29 and 31. The burst is left out. Stage 2 · set 5 goes from 11 props to 13,
+and `hotdp` set props from 113 to 115. Read from the ROM, not checked in MAME.
+
 One spawn class stands props of its own. A record's first word picks the task
 the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
 is not the generic object: it opens eight tasks on the shared prop handler

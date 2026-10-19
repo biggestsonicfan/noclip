@@ -1289,7 +1289,13 @@ const hotdp = {
          * spawn and closes (0x10D60) past 190, never calling 0x33320. Its
          * swing (+0x34, kicked only past camera frame 593) starts on its
          * 137th frame, with the camera held at 595; left out. */
-        plain: [{ handler: 0x32e80, types: [68], frames: 190 }],
+        plain: [{ handler: 0x32e80, types: [68], frames: 190 },
+            /* Types 78 and 79, the halves of a door (PN_r2do_01a and 01b), on
+             * 0x33130: they draw through 0x35AD0 and never close until the
+             * byte 0x51E50E is set, which only enemies' own routines (0x57B90,
+             * 0x57FC0, 0x3A6FC) do; then they fly off and close below y -35.
+             * The explorer opens no enemy, so they stand (`stays`). */
+            { handler: 0x33130, types: [78, 79], stays: true }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own

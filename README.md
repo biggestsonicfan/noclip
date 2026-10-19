@@ -763,6 +763,9 @@ Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
 until a shot or the game swings it. The prototype stands it at the same place,
 still, in the zone its section 8 draws it in before it closes; the swing it
 starts just before then is left out.
+The prototype's chapter 2 also stands a double door in its section 1
+(`PN_r2do_01a` and `01b`), shut, as the board draws it until an enemy bursts
+it open; the explorer opens no enemy, so the burst is left out.
 Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the

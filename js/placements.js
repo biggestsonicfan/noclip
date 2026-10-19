@@ -285,6 +285,15 @@ function walkScript(rom, at, visit) {
  * 190 frames are drawn in (`frames`). The kicks come on its 137th and 169th
  * frames, with the camera held past 593, and the swing is left out.
  *
+ * The prototype's 78 and 79 (PN_r2do_01a and 01b), on 0x33130, are the two
+ * halves of a door. Each frame they draw through 0x35AD0 and nothing else,
+ * never calling 0x33320, until the byte 0x51E50E is set; then they take a
+ * push and a spin, fall, and close once below y -35. Only enemies' own
+ * routines set that byte (states of 0x568B0's table at 0x57B90 and 0x57FC0,
+ * and 0x3A6FC), and the explorer opens none, so chapter 2's section 1 pair
+ * (0xEBBE0 and 0xEBC10, Stage 2 set 5) stand shut to the chapter's end
+ * (`stays`), and the burst is left out.
+ *
  * Type 14 (PN_jinmengyo_01, scale 0.3) on 0x3B550 is a fish that swims a
  * path of its own: its record stands at the origin, and each frame the
  * handler closes as a prop does, then puts it at t along segment +0x2F8 of
@@ -395,6 +404,8 @@ function spawnProps(rom, at, set, out, section) {
             ...(clocked?.until ? { until: clocked.until } : {}),
             /* And the prototype's 68 closes after its own count of frames. */
             ...(plain?.frames ? { frames: plain.frames } : {}),
+            /* And the prototype's door halves never close by themselves. */
+            ...(plain?.stays ? { stays: true } : {}),
             /* And the fish swims its path, stepping its model (see above). */
             ...(swimmer ? {
                 cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
@@ -524,6 +535,12 @@ function propZones(rom, chapter, sections, props) {
                 if (c.zone != null) out.get(t.rec).add(c.zone);
                 return true;
             }
+            /* One that never calls sub_33320 and has nothing the explorer
+             * opens to close it: up to the chapter's end. */
+            if (t.stays) {
+                if (c.zone != null) out.get(t.rec).add(c.zone);
+                return true;
+            }
             /* A handler that never calls sub_33320 and closes once the
              * camera frame passes the number its spawn set by section. */
             if (t.until != null) {
@@ -613,6 +630,7 @@ function propZones(rom, chapter, sections, props) {
                 rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
                 seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
                 ...(prop.frames ? { frames: prop.frames, n: 0 } : {}),
+                ...(prop.stays ? { stays: true } : {}),
                 ...(prop.until ? {
                     until: typeof prop.until === 'number' ? prop.until : prop.until[s] ?? 0,
                 } : {}),
