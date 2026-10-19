@@ -537,7 +537,9 @@ second set of lists. As in Fighting Vipers, the pieces are modelled where they
 stand, so a stage is its lists drawn at the origin; the ring floor is the one
 piece scaled, by the operator's ring size (8, the default). The raft is drawn
 whole, as it floats before a fighter nears its edge, and Dural's stage has its
-mirror floor.
+mirror floor. With that stage picked under **Fought on** in the Animation tab,
+the fighters show in the floor, and Kage's hood band and Pai's ornament show in
+it with them, each in the cut-down model the game keeps for its reflection.
 
 The **music** switch plays the stage's song on the emulated sound board, the
 same board as Sonic the Fighters'. Beside it, **stage sounds** plays what the

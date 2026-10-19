@@ -1365,10 +1365,34 @@ Left out, all of them fight state:
   `+0x714` through 1, 2, 3 as the piece flies (`+0x724`.., `+0x730`..,
   `+0x73C`..). With bit 3 as well (set at the load for `+0x1B1` = 3, Kage)
   it swaps the head model (`+0x48`) to 0xAD2, or 0xAC5 for record 16.
-- The second model `+0x75C` (Kage 0x260, Pai 0xD77). `0x193CC` draws it on
-  the floor matrix `0x501960` on stages with `0x6EEA0` bit 5, while the head
-  is inside the ring. It is the piece's own floor shadow, apart from the
-  fighters' ("The fighters' shadows").
+
+**Its reflection (drawn on stages 10 and 11).** An earlier note here had the
+struct's +8 (`+0x75C`) as the piece's floor shadow and fight state. It is
+neither. Straight after the piece (`0x193C8`), `0x193CC` tests the stage
+flags (`0x6EEA0` bit 5, the Mirror floor's), then the head's point `+0x20C`
+(slot 2's, read back as `+0x1F4` is slot 0's): y not below 0, and |x| and
+|z| not past the ring (`0x50A00C`, 8) less 1. If it passes, it pushes, sends
+`0x23804747` (op `0x47`, `Fn_mul_matrix_rev`: current = M · current) with
+the twelve words at `0x501960`, and draws `+0x75C` through the window
+`0x501834`. `0x1E52C` stores M each frame: push, invert (`0x6000C0C`), save
+to inner 0 (`0x43`), pop; push, scale (1, −1, 1), times inner 0 (`0x45`),
+read back (`0x05`) to `0x501960`, pop. So M = camera · S(1, −1, 1) ·
+camera⁻¹, and the draw is the piece's matrix reflected through y = 0, the
+same as the fighters' reflection (`0x20488`, below). The models are cut-down
+copies of the piece, as the body's reflection models are of the body: Kage
+0x988 → 0x260 (672 vertices → 282, same bounds), Pai 0xA7A → 0xD77 (240 →
+96), Pai player 2 (record 19) 0x987 → 0x2FA (303 → 132). The knock-off's
+routine (`0x634C0`) has the same test and draw for a flying piece.
+
+The explorer reads the +8 with the piece (`headPiece.reflection`) and adds
+its draw to the reflection's pool when the stage field names stage 10 or 11,
+placed as the piece is and reflected as the body is. The head bound is
+`reflection.piece` (ring 8, less 1). Node, on Kage's 990, Pai's 1227 and Pai
+player 2's start motion, frame 1: 0x260 at (0.301, −1.406, 0.083) in the
+board frame, 0xD77 at (0.135, −1.467, 0.086), 0x2FA at (0.143, −1.494,
+0.090); with the head moved 7.5 along x or 5 down, none. Other stages and
+fighters draw what they did. Read from the ROM, not checked against MAME:
+the attract never reaches stage 10 or 11.
 
 Fighting Vipers has no counterpart. Its slot 2 case (`0x1A12C`) draws only
 Picky's hair, and its fighter load copies no such struct.
@@ -3614,8 +3638,9 @@ to ±0.7 (`0x23`). The gate holds on frames 1–15 of motions 605–611, 820–8
   - the replay ring (`0x548000`, ruled out)
   - the foot table (`0x19D28`, ruled out)
   - `0x19E6C`, which has no caller
-  - the `+0x75C` head-piece shadow (stage flag `0x6EEA0` bit 5) and the
-    knocked-off head piece (`0x62FAC`)
+  - the knocked-off head piece (`0x62FAC`); the `+0x75C` model, once
+    listed here as a shadow, is the piece's reflection and is drawn (see
+    "Kage's and Pai's head piece")
   - `+0` bit 25's debug ball (`0x19790`) and the `+0x2A` name characters
     (`0x198C0`), which are set only by game-mode code
   - the per-slot culling in `0x19EBC`
@@ -3639,7 +3664,9 @@ the stage's display lists. What else it draws:
   `rob_disp` uses, so the copy shows whenever the fighter does. The models
   are a set of their own (Akira's are `0x997`–`0x9A6`; his body is
   `0x197`–`0x1A6`). Only stage numbers 10 and 11 have the bit (the Mirror
-  stage, Dural's).
+  stage, Dural's). Kage's and Pai's head piece has a reflection of its own,
+  drawn from `rob_disp` (`0x193CC`) rather than here; see "Kage's and Pai's
+  head piece".
 
   The explorer draws it in the Animation tab when the stage field names
   stage 10 or 11, for the fighter and the opponent. It uses the pose the

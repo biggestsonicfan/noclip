@@ -50,14 +50,14 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
 import { readCarried, carriedDraws, itemHeld, wallItem } from './fvitem.js';
 import { readWallShadows, wallShadowModels, wallSetting, wallShadowDraws } from './fvwallshadow.js';
 import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose, pieceShadowSetting, latchPieces, pieceShadowDraws } from './fightershadow.js';
-import { reflectionModels, stageReflects, reflectionDraws } from './vf2reflection.js';
+import { reflectionModels, stageReflects, reflectionDraws, pieceReflectionDraw } from './vf2reflection.js';
 import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
 import {
     readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
@@ -4233,25 +4233,27 @@ function shadowKit(holder) {
 
 /*
  * VF2's fighters in the Mirror stage's floor (js/vf2reflection.js): the
- * record's +0x34 models on the pose reflected through y = 0, on a stage the
+ * record's +0x34 models on the pose reflected through y = 0, and Kage's or
+ * Pai's head piece's own model while the head is in the ring, on a stage the
  * panel names whose flags have bit 5. `pose` is in the board frame, the
  * opponent's placed where it stands.
  */
-const REFLECTION_POOL = 16;
+const REFLECTION_POOL = 17;
 
 function placeReflection(holder, body, pose) {
     const kit = reflectionKit(holder, body);
     if (!kit) return;
-    const draws = stageReflects(state.rom, state.sparkStage) ? reflectionDraws(kit.models, pose) : [];
+    const piece = () => pieceReflectionDraw(state.rom, headPieceReflection(body, pose), pose);
+    const draws = stageReflects(state.rom, state.sparkStage) ? [...reflectionDraws(kit.models, pose), piece()].filter(Boolean) : [];
     placeEffectPool(holder, 'reflectionPool', REFLECTION_POOL, kit.geoms, draws);
 }
 
-/* The body's sixteen models, read once per record; none in a game without
- * them. */
+/* The body's sixteen models and its head piece's, read once per record;
+ * none in a game without them. */
 function reflectionKit(holder, body) {
     if (holder.reflection?.rom !== state.rom || holder.reflection.root !== body.root) {
         const models = reflectionModels(state.rom, body), geoms = new Map();
-        for (const id of models ?? []) {
+        for (const id of models ? [...models, ...body.extras?.filter((e) => e.reflection).map((e) => e.reflection) ?? []] : []) {
             const d = id > 0 && getModel(id);
             if (d) geoms.set(id, geomBundle(d));
         }

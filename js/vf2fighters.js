@@ -613,7 +613,9 @@ function lowHipsModel(body, waistY, flags) {
 }
 
 /* VF2's head piece (games.js `headPiece`): an extra on slot 2 when the
- * record has a model, always shown. The knock-off (0x63028, +0x714) is the
+ * record has a model, always shown, and the model its reflection in the
+ * Mirror stage's floor is drawn with (`reflection`, the struct's +8, which
+ * the load copies to +0x75C). The knock-off (0x63028, +0x714) is the
  * fight's. */
 function readHeadPiece(rom, H, root, record) {
     if (!H) return [];
@@ -621,7 +623,15 @@ function readHeadPiece(rom, H, root, record) {
     const r = dataAt(rom, u32(root + H.at)), model = r ? r.view.getUint32(r.off, true) : 0;
     if (!model) return [];
     const offset = [0, 1, 2].map((k) => r.view.getFloat32(r.off + H.offset + 4 * k, true));
-    return [{ slot: HEAD_SLOT, model, offset, turns: H.own[record] ?? H.turns }];
+    const reflection = H.reflection !== undefined ? r.view.getUint32(r.off + H.reflection, true) : 0;
+    return [{ slot: HEAD_SLOT, model, offset, turns: H.own[record] ?? H.turns, ...(reflection ? { reflection } : {}) }];
+}
+
+/** The head piece's reflection model and its place on `pose` (board frame),
+ * { model, r, t }, or null for a body without one. */
+export function headPieceReflection(body, pose) {
+    const e = body.extras?.find((x) => x.reflection);
+    return e ? { model: e.reflection, ...placeExtra(pose[e.slot], e) } : null;
 }
 
 /* A pad or panel's board-frame transform on its slot's. */

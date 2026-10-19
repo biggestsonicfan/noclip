@@ -15,6 +15,14 @@
  * 0x2069C skips a part the fight camera cannot see; the Animation tab has
  * only its orbit view, so every part is drawn.
  *
+ * Kage's and Pai's head piece has its own. After the piece (0x193C8),
+ * rob_disp's slot 2 case, on the same stage flag, multiplies the piece's
+ * matrix by 0x501960 (0x47, from the left), which 0x1E52C stored as
+ * camera * S(1, -1, 1) * camera^-1, and draws +0x75C: the piece reflected
+ * through y = 0, in a model of its own. It does so only while the head's
+ * point (+0x20C, slot 2's) is at or above the floor and within the ring
+ * (0x50A00C) less 1 in x and in z.
+ *
  * Everything here is in the pose's board frame (y up).
  */
 import { resolveData } from './motion.js';
@@ -39,6 +47,17 @@ export function stageReflects(rom, stage) {
     if (!R || stage == null) return false;
     const at = R.stages.at + R.stages.stride * stage + R.stages.flags;
     return ((rom.mainCpuView.getUint16(at, true) >> R.bit) & 1) === 1;
+}
+
+/** The head piece's reflection, `piece` ({ model, r, t } in the board
+ * frame, vf2fighters.js headPieceReflection) reflected as 0x193CC draws it,
+ * or null while the head (slot 2 of `pose`) is out of 0x193CC's bounds. */
+export function pieceReflectionDraw(rom, piece, pose) {
+    const P = rom.game.rig?.reflection?.piece;
+    if (!P || !piece) return null;
+    const [x, y, z] = pose[2].t, bound = P.ring - P.less;
+    if (!(y >= 0) || Math.abs(x) > bound || Math.abs(z) > bound) return null;
+    return reflectionDraws([piece.model], [piece])[0] ?? null;
 }
 
 /** What 0x19C94 sends under 0x20488's scale: { model, r, t } in the board

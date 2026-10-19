@@ -3624,8 +3624,10 @@ const vf2 = {
             stages: { at: 0x6ee38, stride: 256, light: 0x70 },
         },
         /* The fighters in the Mirror stage's floor (js/vf2reflection.js):
-         * 0x20488 under stage flag bit 5, 0x19C94 from record +0x34. */
-        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 } },
+         * 0x20488 under stage flag bit 5, 0x19C94 from record +0x34; the
+         * head piece's (0x193CC) while the head is at or above the floor
+         * and within the ring (0x50A00C, 8) less 1. */
+        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 }, piece: { ring: 8, less: 1 } },
         /* The action table is record +0x14 as in Fighting Vipers:
          * action_init (0x13F1C) puts it at player +0x1A0, and the action
          * code reads it to +0xA6, 84 motion ids, the stance first. */
@@ -3674,8 +3676,9 @@ const vf2 = {
              * bit 0 when the model is not 0. rob_disp's slot 2 (0x19298)
              * then draws it on the head, moved by the offset and turned Z
              * then X by `turns`, or by `own[+0x1B0]`'s (0x192F8). Kage's
-             * and Pai's. */
-            headPiece: { at: 0x40, offset: 0x10, turns: [[2, 0x4000], [0, 0x4000]], own: { 6: [[2, 0x4000], [0, 0x8000]] } },
+             * and Pai's. The struct's +8 (+0x75C) is its reflection's
+             * model, which 0x193CC draws in the Mirror stage's floor. */
+            headPiece: { at: 0x40, offset: 0x10, reflection: 8, turns: [[2, 0x4000], [0, 0x4000]], own: { 6: [[2, 0x4000], [0, 0x8000]] } },
         },
         /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
          * reads 0x200D34C[motion] past an 8-byte head with the lengths at
