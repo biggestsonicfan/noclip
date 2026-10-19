@@ -1003,6 +1003,22 @@ function buildAirwlkrsTexram(rom, texSets) {
 }
 
 /*
+ * Texture RAM that is one straight copy of the data ROM: Power Sled's 0xC540
+ * copies 0x80000 halfwords from data 0x600000 into sheet 0 and the next
+ * 0x80000 into sheet 1, and nothing loads over them. m2-hle2's sheets match
+ * the ROM byte for byte.
+ */
+function buildCopyTexram(rom) {
+    const md = rom.mainData;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    rom.game.texture.raw.sheets.forEach((src, i) => {
+        const at = src - MAIN_DATA_BASE;
+        tex.set(md.subarray(at, Math.min(at + SHEET_BYTES, md.length)), i * SHEET_BYTES);
+    });
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
  * rectangles are complementary, so each sheet's mip half is half one bank and
@@ -1153,6 +1169,7 @@ export function fighterSetList(rom) {
  *   sheet 0 takes the bank sel_course picks (0x1438, `ld 0x15A0[course*4]`),
  *   and the course is the one whose object records name it.
  * - Air Walkers: see airwlkrsModelSets.
+ * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1171,6 +1188,10 @@ export function programTextureSets(rom, index, decoded) {
         return courses?.size === 1 ? { sets: [...courses], how: 'course' } : null;
     }
     if (T.raw?.layout === 'airwlkrs') return airwlkrsModelSets(T.raw, index, decoded);
+    if (T.raw?.layout === 'copy') {
+        if (!decoded) return null;
+        return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
+    }
     if (T.raw || T.bankSets) return null;
     if (!decoded) return null;
     const want = sampledTiles(decoded);
@@ -1210,6 +1231,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
         if (layout === 'airwlkrs') return buildAirwlkrsTexram(rom, texSets);
+        if (layout === 'copy') return buildCopyTexram(rom);
         return buildRawTexram(rom, texSets);
     }
     const md = rom.mainData;

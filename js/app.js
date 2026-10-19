@@ -948,6 +948,7 @@ function describeTextureGuess(g) {
         ? 'sheet 1 only, the bank boot loads for every course'
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
+    case 'only': return `${sets}: the only texture RAM the game loads`;
     case 'title': return `${sets}: drawn in the intro, on the title's page`;
     case 'home': return `${sets}: on the home side's team page, team 0`;
     case 'away': return `${sets}: on the away side's team page, team 0`;

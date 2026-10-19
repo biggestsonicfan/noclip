@@ -4437,12 +4437,71 @@ const airwlkrs = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/* ---- Power Sled ----------------------------------------------------------- */
+
+/*
+ * Sega's sled racer on Model 2B CRX (m2-hle2's src/profiles/powsled.h,
+ * MAME's `powsled`, the Slave unit's program, Revision A). Like Air Walkers it
+ * keeps nothing in the AM2 shapes: it has no model table, its colours are a
+ * curve it works out, and its textures are one straight copy.
+ */
+const powsled = {
+    id: 'powsled',
+    name: 'Power Sled (Slave, Revision A)',
+    identify: ['epr-19470a.15', 'epr-19471a.16', 'fpr-19455.17', 'fpr-19458.27'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19470a.15', 0x8f28cc09, 'epr-19471a.16', 0x01a013e3]],
+        },
+        mainData: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19468.11', 0x56fae4e2, 'fpr-19469.12', 0x5579c922]],
+        },
+        polygons: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19455.17', 0x165ee345, 'fpr-19456.21', 0xc3b2e2c5]],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19458.27', 0xf24acca2, 'fpr-19457.25', 0x79d7e6fa]],
+        },
+    },
+    /*
+     * No table: js/powsled.js lists every {texture word, material word, mesh}
+     * triple the program hands the geometry engine, out of the data ROM's
+     * placement records, the program's named records and its immediates.
+     * 494 of them, sorted by mesh.
+     */
+    modelTable: { list: 'powsled', count: 494, offset: 0 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* {count, colours}: 0x20A colours at 0x128EE, copied to the face palette
+     * (0x1802000) by 0xF1B0. */
+    paletteProgram: 0x128ec,
+    paletteOffset: null,
+    /* Data 0x600000 on sheet 0 and 0x700000 on sheet 1, by 0xC540. */
+    texture: {
+        raw: { layout: 'copy', sheets: [0x02600000, 0x02700000] },
+        sets: 1,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* js/colors.js's Power Sled section: luma from 0xC8F0, colorxlat from
+     * 0xE2D0 and 0xE1D0 with the odd rows' colours at 0xCB50. */
+    colors: {
+        luma: { halfRamp: true },
+        powsled: { table: 0xcb50, rows: 15 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
-    doa, doab, doaa, doaab, doaae, airwlkrs];
+    doa, doab, doaa, doaab, doaae, airwlkrs, powsled];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
