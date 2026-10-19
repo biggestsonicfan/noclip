@@ -276,6 +276,13 @@ function walkScript(rom, at, visit) {
  * frames; the explorer opens neither. Chapter 1's section 13 spawns the only
  * one (0xE92C0, Stage 1 set 3), and it stands still here.
  *
+ * The prototype's 68 (0x32E80) counts +0x50 from its spawn and closes past
+ * 190 frames, and it turns +0x34 as a spring (+0x304 its speed) that is kicked
+ * only past camera frame 593, once +0x2E4 has counted past 55. Its one
+ * record (0xE8620, Stage 1 set 3) is the finished game's, turned only in yaw,
+ * so it stands still until it closes, by camera frame 595: it keeps the zones
+ * its 190 frames are drawn in (`frames`).
+ *
  * Type 14 (PN_jinmengyo_01, scale 0.3) on 0x3B550 is a fish that swims a
  * path of its own: its record stands at the origin, and each frame the
  * handler closes as a prop does, then puts it at t along segment +0x2F8 of
@@ -384,6 +391,8 @@ function spawnProps(rom, at, set, out, section) {
              * above). */
             ...(cycle?.until ? { until: cycle.until } : {}),
             ...(clocked?.until ? { until: clocked.until } : {}),
+            /* And the prototype's 68 closes after its own count of frames. */
+            ...(plain?.frames ? { frames: plain.frames } : {}),
             /* And the fish swims its path, stepping its model (see above). */
             ...(swimmer ? {
                 cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
@@ -506,6 +515,13 @@ function propZones(rom, chapter, sections, props) {
         /* One frame of the object's task: sub_33320, in its order. */
         const frame = () => {
             if (!t) return true;
+            /* One that counts its own frames from its spawn and closes past
+             * `frames`. */
+            if (t.frames != null) {
+                if (++t.n > t.frames) return false;
+                if (c.zone != null) out.get(t.rec).add(c.zone);
+                return true;
+            }
             /* A handler that never calls sub_33320 and closes once the
              * camera frame passes the number its spawn set by section. */
             if (t.until != null) {
@@ -594,6 +610,7 @@ function propZones(rom, chapter, sections, props) {
             run(s, i, e + 1, c, {
                 rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
                 seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
+                ...(prop.frames ? { frames: prop.frames, n: 0 } : {}),
                 ...(prop.until ? {
                     until: typeof prop.until === 'number' ? prop.until : prop.until[s] ?? 0,
                 } : {}),

@@ -760,7 +760,8 @@ draws it in.
 In chapter 2's section 9, one spawn stands a row of eight props of
 its own (`PN_kenita00a` to `07a`), where the board puts them.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
-until a shot or the game swings it.
+until a shot or the game swings it. The prototype stands it at the same place,
+still, in the zone its section 8 draws it in before it closes.
 Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the

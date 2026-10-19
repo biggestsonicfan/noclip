@@ -6367,6 +6367,23 @@ times as 0xBA5 at the record's place, turns 0, 0x4000 and 0, scale 1, flags
 0x1401 throughout, the clock going from 292 to 589. 0x51EFB0 was 1 on the
 last 33 draws, too few to start the swing, and the run ended before the close.
 
+The prototype (`hotdp`) has its own type 68 on 0x32E80, `PN_furukagi00a`
+(0x1AA, the type's own), scale 1, drawn through 0x35AD0. It never calls
+0x33320, and it does not wait on a clock: from its spawn it counts +0x50 up a
+frame, and past 190 (0xBE) it queues a sound and closes (0x10D60). It has no
+shot and no 0x51EFB0. Its swing is a spring on +0x34, +0x304 its speed: each
+frame +0x34 takes the speed and the speed loses a tenth of +0x34. The spring
+is kicked (+0x34 to 0, the speed to 0x400) only once the camera frame
+(0x51E788) is past 593 and +0x2E4, which the generic init (0x2EDD8) sets to
+the script index, has counted past 55 from there. Chapter 1's section 8
+spawns the only one, record 0xE8620, at the finished game's place, (133.83,
+42.5, 358.8), turn 0x4000 in yaw only, so +0x34 and the speed start at 0 and
+it stands still. The walk `propZones` runs has it spawned at camera frame 507
+and closed by 595, before any kick, so it never swings. It keeps the zones
+its 190 frames are drawn in (`frames`): zone 35. Stage 1 · set 3 goes from 45
+props to 46, and `hotdp` set props from 112 to 113. Read from the ROM, not
+checked in MAME.
+
 One spawn class stands props of its own. A record's first word picks the task
 the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
 is not the generic object: it opens eight tasks on the shared prop handler
@@ -6389,7 +6406,7 @@ explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 34 in the courtyard
 and 44 in the mansion; the prototype, whose table is the same one 78 types long,
-stands 34 and 45.
+stands 34 and 46.
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for

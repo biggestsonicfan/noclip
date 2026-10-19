@@ -1285,6 +1285,11 @@ const hotdp = {
          * PN_r2_05_kabe_dam01a (0x113F) and throws its pieces (0x30460), left
          * out; past 723 it closes (0x10D60), never calling 0x33320. */
         clocked: { handler: 0x33000, until: 723 },
+        /* Type 68, PN_furukagi00a on 0x32E80: counts +0x50 a frame from its
+         * spawn and closes (0x10D60) past 190, never calling 0x33320. Its
+         * swing (+0x34, kicked only past camera frame 593) never starts
+         * before then. */
+        plain: [{ handler: 0x32e80, types: [68], frames: 190 }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
