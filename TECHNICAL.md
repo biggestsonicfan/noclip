@@ -6142,6 +6142,20 @@ drawn 1389 times at (405.7, -82.2, 33.7), turn 0, scale 1, as 0x1236, until
 the clock reached 459; then 0x1237 with twelve pieces (0x122A to 0x1235) flying
 from it, which closed at 701, and the wall itself at 724.
 
+The prototype (`hotdp`) has the same wall, type 77 on 0x33000, at its own
+models: `PN_r2_05_kabe01a` (0x113E, the type's own) and `PN_r2_05_kabe_dam01a`
+(0x113F), drawn through 0x35AD0. It takes the finished game's two numbers off
+the camera frame (0x51E788) rather than the zone's clock: past 458 a model
+still 0x113E becomes 0x113F and 0x30460 throws its pieces, and past 723 it
+closes (0x10D60). It never calls 0x33320, and the generic init (0x2EDD8) has a
+case for type 69 only. The camera frame is the clock `propZones` runs, so the
+wall keeps the zones it is drawn in, up to 723, as the prototype's `PN_powa`
+do. Chapter 2's section 12 spawns the only one, record 0xF11A0, at the finished
+game's place, (405.7, -82.2, 33.7), turn 0, scale 1. It is drawn in zones 29
+and 31, whole; the break and the pieces are left out. Stage 2 · set 5 goes
+from 10 props to 11, and `hotdp` set props from 111 to 112. Read from the ROM,
+not checked in MAME.
+
 The eighth is type 84 on 0x3DE20, `PN_niku_001` (0x11B1), a body hanging on a
 rope. It closes as a prop's does (0x3ED60) and draws through 0x413B0 with the
 type's model. Once bit 1 or 2 of its flags word (+0x58) is set while it shows

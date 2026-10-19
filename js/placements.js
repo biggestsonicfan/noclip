@@ -201,6 +201,9 @@ function walkScript(rom, at, visit) {
  * does not close as one: past 458 on the zone's clock it breaks
  * (PN_r2_05_kabe_dam01a and its pieces, 0x39E10), and past 723 it closes.
  * Chapter 2's one (Stage 2 set 5) stands whole here, as it does until then.
+ * The prototype's 77 (0x33000) takes the same two numbers off the camera
+ * frame instead, the clock propZones runs, so there it keeps the zones it is
+ * drawn in, up to 723 (`until`); it too stands whole.
  *
  * Type 84 (PN_niku_001) closes as a prop does (0x3ED60) and draws on 0x3DE20
  * through 0x413B0. Once bit 1 or 2 of its flags (+0x58) is set, it queues the
@@ -377,8 +380,10 @@ function spawnProps(rom, at, set, out, section) {
             ...(cycle && cycle.last >= model ? {
                 cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),
             } : {}),
-            /* And the prototype's 69 closes on the camera frame (see above). */
+            /* And the prototype's 69 and 77 close on the camera frame (see
+             * above). */
             ...(cycle?.until ? { until: cycle.until } : {}),
+            ...(clocked?.until ? { until: clocked.until } : {}),
             /* And the fish swims its path, stepping its model (see above). */
             ...(swimmer ? {
                 cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
@@ -589,7 +594,9 @@ function propZones(rom, chapter, sections, props) {
             run(s, i, e + 1, c, {
                 rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
                 seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
-                ...(prop.until ? { until: prop.until[s] ?? 0 } : {}),
+                ...(prop.until ? {
+                    until: typeof prop.until === 'number' ? prop.until : prop.until[s] ?? 0,
+                } : {}),
             });
         }
     })));

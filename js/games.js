@@ -1280,6 +1280,11 @@ const hotdp = {
          * frame (0x51E788) passes +0x2F4, which the generic init (0x2EDD8)
          * sets by section: `until` (see propZones in js/placements.js). */
         cycles: [{ handler: 0x32f30, last: 0x951, until: { 3: 99, 9: 268, 11: 1048, 12: 1048 } }],
+        /* Type 77, PN_r2_05_kabe01a on 0x33000: the finished game's 0x3D930
+         * on the camera frame (0x51E788). Past 458 it takes
+         * PN_r2_05_kabe_dam01a (0x113F) and throws its pieces (0x30460), left
+         * out; past 723 it closes (0x10D60), never calling 0x33320. */
+        clocked: { handler: 0x33000, until: 723 },
     },
     /*
      * The prototype's own sound program and samples: a driver of its own

@@ -755,6 +755,8 @@ tank while animate is ticked, along the path the board gives it. The prototype
 (`hotdp`) has the same fish in the same tank, and it swims there too.
 Its chapter 1 has the three `PN_powa` too, looping in the zones the board
 draws them in.
+Its chapter 2 has the breaking wall too, standing whole in the zones the board
+draws it in.
 In chapter 2's section 9, one spawn stands a row of eight props of
 its own (`PN_kenita00a` to `07a`), where the board puts them.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
