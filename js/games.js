@@ -1230,9 +1230,8 @@ const hotdp = {
      * of, so a stage carries the sky the chapter turns on while its set is
      * loaded — the courtyard's, and none for the mansion, which is indoors.
      *
-     * The moons (PN_moon, PN_moonb, PN_moonc) are not part of this. They are
-     * flat quads an object handler billboards at the camera, spawned from the
-     * script's own object lists, which are not read.
+     * The moon is not part of this. It is a flat quad, PN_moonc, that a
+     * spawn of class 0x13 turns to the camera (`objects.facing` below).
      */
     sky: { models: 0x840e0, heights: 0x840f0, count: 4, band: 1462, spin: 4 },
     /*
@@ -1311,6 +1310,9 @@ const hotdp = {
          * js/placements.js). */
         fixed: [{ init: 0x2f3b0, at: 0x85b00, count: 4, first: 0x820, last: 0x83d,
             spins: { 0x83e: 0x80, 0x83f: 0x80, 0x840: -0x80 } }],
+        /* Class 0x13's task, 0x27D70, which turns PN_moonc to the camera
+         * at five times its size (see standFacing in js/placements.js). */
+        facing: [{ init: 0x27d70, model: 0x13a2, scale: 5 }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
@@ -1994,6 +1996,9 @@ const hotdo = {
          * js/placements.js). */
         fixed: [{ init: 0x38f50, at: 0xaea30, count: 4, first: 0x8a8, last: 0x8c5,
             spins: { 0x8c6: 0x80, 0x8c7: 0x80, 0x8c8: -0x80 } }],
+        /* Class 0x13's task, 0x2F740, which turns PN_moon22 to the camera
+         * at five times its size (see standFacing in js/placements.js). */
+        facing: [{ init: 0x2f740, model: 0x14ac, scale: 5 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same

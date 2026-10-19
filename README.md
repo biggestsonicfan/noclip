@@ -778,6 +778,9 @@ about its own place, in both builds.
 In chapter 1's section 10, one spawn stands three gears (`PN_haguuu`, `01a`
 and `02a`) and running water (`PN_hagumizu00a` to `29a`) at places of its own,
 in both builds. The gears turn and the water loops while animate is ticked.
+Chapter 2's moon (`PN_moon22`; the prototype's `PN_moonc`) stands in the sky
+of Stage 2 · set 7 at five times its size and turns to face the camera every
+frame, as its routine turns it to the board's, in both builds.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
 until a shot or the game swings it. The prototype stands it at the same place,
 still, in the zone its section 8 draws it in before it closes; the swing it

@@ -5969,8 +5969,8 @@ g4` — the base plus 0x2C. Its first word is a model number, and read that way 
 0 to about 122 come out as exactly what a house is full of — `PN_isu` chairs,
 `PN_tabul` tables, `PN_tokei` a clock, `PN_sitai` a corpse, `PN_sara` plates,
 `PN_nabe` pots, `PN_tarun_dam` a breaking barrel, `PN_niku_001` the flesh, and
-at type 59 `PN_moon`, which is the moon the prototype's notes say is billboarded
-at the camera from the script's own object lists.
+at type 59 `PN_moon`. (The moon turned to the camera is another class, 0x13;
+see **Standing the props up**.)
 
 Every type resolves there. The ones that appeared not to were records of another
 class, whose first word was never a type at all.
@@ -6564,6 +6564,36 @@ to the coprocessor. The explorer follows neither. The explorer stands the four
 in `standFixed` (`js/placements.js`, the profile's `fixed`), the gears as `spin`
 and the water as a `cycle`. Revision A is not covered: its profile has no
 groups either. Read from the ROM, not checked in MAME.
+
+Class 0x13 is a second moon, not the type-59 `PN_moon` prop: one flat quad
+turned to the camera. Its task, 0x2F740 (`hotdo`; 0x27D70 in the prototype),
+sets its own model, `PN_moon22` (0x14AC; the prototype's `PN_moonc`, 0x13A2),
+and every frame sends the camera's place (0x51EBD0) less its own (+0x20) to
+the coprocessor's 0xF0F, which returns the vector's heading (kept at +0x30)
+and then its pitch (+0x2C):
+
+```
+ldq  0x51EBD0, g0        ; the camera
+ld   0x20(r4), g4 ...    ; less the moon's place
+lda  0xF0F, r5
+st   r5, 0x8800F0
+st   g6/g5/g4, 0x884000  ; the vector
+ld   0x884000, g4        ; heading -> +0x30
+ld   0x884000, g0        ; pitch   -> +0x2C
+```
+
+A pitch past a right angle either way is taken from 0x8000 and the heading
+turned half round. The draw is the prop's commands with its own numbers: the
+place, the heading (0xA801515), the pitch less 0x4000 (0xA001414), the
+record's third angle (0xB001616) and scale 5.0 (0x40A00000) on every axis.
+It never calls `sub_33320`; it closes only when byte 0x51E3BD (0x51E5FD) is
+1, which no store in either program names, so it stays up to the chapter's
+end. The one record of the class, 0xF3D70 (0xF23C0), stands at (2550, 1120,
+-425) in Stage 2 · set 7, which now stands 18 props in the finished game
+(17 before) and 4 in the prototype (3), where it is drawn from zone 22 on.
+The explorer stands it in `standFacing` (`js/placements.js`, the profile's
+`facing`) as a `live` draw that works the same heading and pitch from its own
+camera each frame. Read from the ROM, not checked in MAME.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 38 in the courtyard

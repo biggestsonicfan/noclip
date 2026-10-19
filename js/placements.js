@@ -350,6 +350,8 @@ function spawnProps(rom, at, set, out, section, chapter) {
         /* And one that stands models of its own at places of its own. */
         const fixed = O.fixed?.find((r) => r.init === opens);
         if (fixed) { standFixed(rom, rec, fixed, set, out); continue; }
+        const facing = O.facing?.find((r) => r.init === opens);
+        if (facing) { standFacing(rom, rec, facing, set, out); continue; }
         if (opens !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
@@ -626,6 +628,48 @@ function standFixed(rom, rec, fixed, set, out) {
             } : {}),
         });
     }
+}
+
+/*
+ * Class 0x13's moon (the finished game's task 0x2F740, the prototype's
+ * 0x27D70), which turns one flat model to the camera every frame. It takes
+ * the camera's place (0x51EBD0) less its own (+0x20) to the coprocessor's
+ * 0xF0F, which hands back the vector's heading, kept at +0x30, and its pitch,
+ * at +0x2C; a pitch past a right angle either way is taken from 0x8000 and
+ * the heading turned half round. Then it draws its model (PN_moon22, 0x14AC;
+ * the prototype's PN_moonc, 0x13A2) at its place, turned by the heading, by
+ * the pitch less 0x4000, and by the record's own third angle (+0x34), and
+ * scaled 5 (0x40A00000) on each axis. It never calls sub_33320, and closes
+ * only once byte 0x51E3BD (0x51E5FD) is 1, which no store in the program
+ * names, so it stays up to the chapter's end (`stays`).
+ */
+function standFacing(rom, rec, facing, set, out) {
+    const dv = rom.mainCpuView;
+    if (out.has(rec)) return;
+    const pos = [8, 12, 16].map((o) => dv.getFloat32(rec + o, true));
+    const third = dv.getUint32(rec + 0x1c, true) & 0xffff;
+    const turn = (v) => Math.round((v * 0x10000) / (2 * Math.PI)) & 0xffff;
+    const deg = (v) => (v * 360) / 0x10000;
+    const scale = facing.scale;
+    out.set(rec, {
+        rec, type: rom.maincpu[rec + rom.game.objects.type], model: facing.model, set, scale,
+        pos, turn: [0, 0, third], stays: true,
+        live: (frame, cam) => {
+            const d = [cam.x - pos[0], cam.y - pos[1], cam.z - pos[2]];
+            let heading = turn(-Math.atan2(d[0], d[2]));
+            let pitch = turn(Math.atan2(d[1], Math.hypot(d[0], d[2])));
+            if (((pitch ^ (pitch << 1)) & 0x8000) !== 0) {
+                pitch = (0x8000 - pitch) & 0xffff;
+                heading = (heading + 0x8000) & 0xffff;
+            }
+            return {
+                model: facing.model,
+                ops: [['t', [pos[0], pos[1], -pos[2]]], ['r', deg(heading)],
+                    ['rx', deg((pitch - 0x4000) & 0xffff)], ...(third ? [['rz', -deg(third)]] : []),
+                    ['s', [scale, scale, scale]]],
+            };
+        },
+    });
 }
 
 /*
