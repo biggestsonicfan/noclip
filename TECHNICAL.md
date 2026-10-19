@@ -1801,6 +1801,10 @@ FV adds, all read from its own tables:
   4): the distance is 0.70710677 · hypot.
 - Slot 9 is skipped while the move flags (`+0x1A4`) have bits 14 and 16
   (`0x60690`).
+- The shadow cards (models 0xE4 to 0xF2) name palette entry 247, which
+  the stage setup (`0x21664`) fills from the stage record's u16 at +0x16:
+  black on all sixteen stages, and black in MAME's palette RAM. The
+  table's own colour there, 0x9970, drew them brown.
 - The Factory (stage 1, `[0x5FA6C + stage]`) is lit by four lamps
   (`0x60468`) at (±1, 0), (0, ±1) × the ring (`0x60620`). The one nearest
   slot 0 (`+0x1F4`) in plan wins, the last on a tie; a1 = 0x8000 − its

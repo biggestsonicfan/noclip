@@ -496,6 +496,12 @@ const fvipers = {
     },
     meshPtr: { subtract: 0x02000010, add: 0x10 },
     paletteOffset: 0x00100000,
+    /* The stage setup (0x21664) stores the stage record's u16 at +0x16 over
+     * entry 247, the colour of the fighters' shadow cards (models 0xE4 to
+     * 0xF2, the only ones that name it). Every one of the sixteen records
+     * holds black there, and MAME's palette RAM has it black from frame 600
+     * on, the one entry that differs from the table; the table's own 0x9970 drew the shadows brown. */
+    paletteFixes: [[247, 0x8000]],
     /* The whole texture pipeline carried across: every routine texture.js ports
      * is in this program ROM under the same official label, and
      * unp_send_tex_para_sub reaches the data header through the same
