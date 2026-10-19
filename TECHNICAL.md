@@ -4295,6 +4295,29 @@ plates, portraits, the stage skies (named from `doa.sky`), the fight's
 messages, fonts, the rankings, endings, staff roll and title logos. The table
 is the same in every build.
 
+### The House of the Dead's cells (`js/cells.js`)
+
+The finished game (`hotdo`) keeps its 2D art in Dead or Alive's shape a year
+early. The table at program 0xA6580 holds 630 entries of three pointers, 12
+bytes each (tiles, colours, map), and ends where the floats at 0xA8308 start.
+The draw (`0x17D80`) takes the tilemap, two bits, the column, the row and the
+picture's number. It reads the picture's slot, a halfword at
+`0xA9B50 + 2 * n`. If the slot is negative, `0x17D50` loads the picture:
+`0x17B20` finds a run of free 128-tile blocks, `0x17CB0` copies each chunk of
+tiles into a block of its own, and `0x17C10` copies that chunk's 16 colours
+into the block's group. The map is the u16 columns and rows and then halfword
+entries; the draw adds `(g1 << 15) + (g2 << 14) + (firstBlock << 7)` to each, so
+the group is the block, as in Dead or Alive. The panel loads each picture from
+block 0, with no other CG under it.
+
+The palette goes through colorxlat, as MAME's `palette_w` sends it. Checked
+against MAME's title frame: cells 38 and 39, drawn at (8, 24), match every
+pixel (27994 and 29517 of them); without colorxlat, 31% match. The pictures
+are reached by number, not by pointer, so there is no unused list.
+
+Revision A (`hotd`) moved its tables, and its picture table has not been found,
+so it has no Cells tab.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

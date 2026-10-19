@@ -72,6 +72,12 @@
  * block 0. Every map's highest tile is its own list's last: no picture is
  * drawn over another's tiles. See js/games.js doab.cells and js/scroll.js
  * buildDoaSky, which reads the same table.
+ *
+ * The House of the Dead (hotdo) has the same pictures a year early, in its
+ * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free
+ * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its
+ * entries on by the first block, as Dead or Alive's does. Its colours go
+ * through colorxlat. See js/games.js hotdo.cells.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';

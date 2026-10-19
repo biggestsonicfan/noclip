@@ -771,6 +771,13 @@ music](TECHNICAL.md#the-house-of-the-deads-music). The prototype (`hotdp`) plays
 its own: its own sound program and samples, and the songs its own scripts start
 for its two chapters.
 
+`hotdo` has a **Cells** tab too: its 630 pictures, the title logo's layers, the
+EPA notice, the house map, the weak-point cards, the colour bars and FREE PLAY
+among them. Each picture brings its own tiles and colours, as Dead or Alive's
+do. Revision A moved the table, and it has not been found yet, so `hotd` has
+no Cells tab. See [The House of the Dead's
+cells](TECHNICAL.md#the-house-of-the-deads-cells-jscellsjs).
+
 A merged archive carrying the parent and its clones together works too, and
 loads as the parent: the chips at the top level are the parent's, and the ones
 in a directory are a clone's, which is how MAME writes them.

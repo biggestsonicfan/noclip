@@ -2293,7 +2293,15 @@ const hotdo = {
         ],
         bodyMotionsLabel: 'Played by its routine in the prototype',
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The 2D pictures (js/cells.js): 630 of them at 0xA6580, three pointers
+     * each, tiles, colours and map, Dead or Alive's shape. The draw (0x17D80)
+     * takes the picture's number, finds the first block of the run 0x17B20
+     * gave its slot (0xA9B50, a halfword a picture) and adds it to every
+     * entry, so the group is the block; 0x17CB0 and 0x17C10 load each chunk
+     * of tiles from a block of its own, with its 16 colours. The table ends
+     * where the floats at 0xA8308 start. Colours go through colorxlat. */
+    cells: { pictures: { table: 0xa6580, count: 630 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead (Revision A) ---------------------------------- */
@@ -2406,6 +2414,9 @@ const hotd = {
         bodyMotions: hotdo.rig.bodyMotions,
         bodyMotionsLabel: hotdo.rig.bodyMotionsLabel,
     },
+    /* Revision A moved its tables, and its picture table has not been found. */
+    cells: undefined,
+    features: { ...hotdo.features, cells: false },
 };
 
 /* ---- Daytona USA --------------------------------------------------------- */
