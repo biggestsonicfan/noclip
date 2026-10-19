@@ -105,7 +105,7 @@ per cent of one core. See [Music](TECHNICAL.md#music-jssound).
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
-Stages, Models and Animation tabs — sixteen arenas and 5413 table entries, 3601 of which
+Stages, Models, Animation and Cells tabs — sixteen arenas and 5413 table entries, 3601 of which
 carry geometry, textured and lit from the ROM.
 
 It works because the two games are built on the same Sega library, and that went
@@ -147,6 +147,15 @@ are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
 motions, with the same opponent, which can play the game's reaction to the
 fighter's strike or throw. The stages carry their names, from the sound test's song list, and
 play their music and stage sounds on the emulated sound board.
+
+The **Cells** tab has the game's 2D pictures, from the same two tables the stage
+skies come from: 473 cells, the title's backdrop and SEGA mark, the game-over
+picture and the Fighting Vipers logo among them, each opened on a CG that writes
+every tile it names (472 have one; cell 22's pointer leads to no record). The
+game's own pairs agree where its code loads a CG and draws a cell straight
+after: the title's backdrop, cell 93, on CG 13, and cell 111 on CG 55. The cells
+the game never draws are not marked yet, so searching for `unused` lists none.
+See [Fighting Vipers' cells](TECHNICAL.md#fighting-vipers-cells-jscellsjs).
 
 ## Daytona USA
 
@@ -569,7 +578,7 @@ need a table found in that game's ROM first. Where they stand:
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
 | Stage sounds | | yes | yes | |
-| Cells tab | yes | | | yes |
+| Cells tab | yes | yes | | yes |
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose

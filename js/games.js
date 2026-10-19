@@ -949,7 +949,17 @@ const fvipers = {
         blendOut: [0, 1, 8, 12, 42],
         note: 'fv',
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The Cells tab (js/cells.js): the tables stageTable.scroll reads the sky
+     * from. dsp_pattern (0x6744) loads off_6450300[g0] and _ScrollCG_Initialize
+     * (0x2934C) off_6450000[g0], neither with a bound, so the CGs run up to
+     * the pattern table and the cells to its terminating zero, 473 of them.
+     * The halfword at 0x02 of a record would pick byte entries where it is 0
+     * (0x677C); none is. Cell 22's pointer, 0x2A32EF0, leads to no record. */
+    cells: {
+        cgTable: 0x06450000, patternTable: 0x06450300, charBytes: 0x100000,
+        cgEntries: 0xc0,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead (prototype) ----------------------------------- */

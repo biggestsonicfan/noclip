@@ -4142,6 +4142,35 @@ those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
 
+### Fighting Vipers' cells (`js/cells.js`)
+
+Sonic The Fighters' two tables a year earlier, at the addresses the stage sky
+already reads (`stageTable.scroll`): `_ScrollCG_Initialize` (`0x2934C`) loads
+`off_6450000[g0]` and `_ScrollColor_Initialize` `off_6450000[g0 + 1]`, and
+`dsp_pattern` (`0x6744`) loads cell `off_6450300[g0]`. Neither routine has
+Sonic The Fighters' bound, so the CG table runs up to the pattern table, 0xC0
+entries or 96 CGs (`cells.cgEntries`), and the cells run to the pattern
+table's terminating zero: 473.
+
+The record is the same: the halfword at 0x00 is added to every entry, rows at
+0x04, columns at 0x08, then the entries, a row 0x80 bytes on in the tilemap.
+One difference: `dsp_pattern` reads the halfword at 0x02 as Daytona's draw
+does, and copies byte entries where it is 0 (`0x677C`). No record has 0
+there, so every cell is halfwords, as the profile reads them. Every record's
+base is 0x8000, the category bit; `dsp_pattern_low` (`0x6708`) draws a cell
+without it, which changes no tile or colour. Cell 22's pointer (`0x2A32EF0`)
+leads to no record (a row count of 0x1020101), so the tab skips it.
+
+472 cells have a CG that writes every character and colour they name. The
+profile has no table of which CG the game uses for which cell, so the tab
+ranks them as it does for an unnamed Sonic The Fighters cell. Where the code
+loads a CG and then draws a cell, the ranking agrees: `0x9F40` loads CG 13
+and `0x9F68` draws cell 93 (the title's backdrop), and `0x8A44` loads CG 55
+before `0x8A6C` draws cell 111. The title's SEGA mark, cell 15, is drawn at
+`0xA004` after CG 13 too, but CG 13 writes none of its tiles, so they are
+already in from an earlier CG; the tab opens it on CG 9, which writes them
+all. The unused cells are not worked out: `cells.unused` is empty.
+
 ### Dead or Alive's pictures (`js/cells.js`)
 
 The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its

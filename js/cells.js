@@ -39,6 +39,13 @@
  * them, and `cgPairs` pairs the code names directly. See js/games.js
  * DAYTONA_CELLS.
  *
+ * Fighting Vipers keeps Sonic The Fighters' two tables, a year earlier and
+ * without the bounds: its dsp_pattern (0x6744) takes any cell number and its
+ * _ScrollCG_Initialize (0x2934C) any CG, so the CG table runs up to the
+ * pattern table, 0xC0 entries (`cgEntries`). Its draw reads the halfword at
+ * 0x02 as Daytona's does, a byte entry where it is 0, but no record of its
+ * has a 0 there. See js/games.js fvipers.cells.
+ *
  * Dead or Alive's format is Tecmo's own (`pictures`): a table of pictures,
  * each three pointers, its tiles, its colours and its map, so a picture is a
  * cell that brings its own CG, and CG n is picture n's tiles and colours. The
@@ -202,7 +209,7 @@ function cgListsAll(rom) {
         }
         for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
     } else {
-        for (let cg = 0; cg < CG_ENTRIES / 2; cg++) {
+        for (let cg = 0; cg < (C.cgEntries ?? CG_ENTRIES) / 2; cg++) {
             const tiles = word(rom, C.cgTable + cg * 8);
             all.push(tiles ? { tiles: [tiles], pal: word(rom, C.cgTable + cg * 8 + 4) } : null);
         }
