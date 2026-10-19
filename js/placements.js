@@ -262,6 +262,19 @@ function walkScript(rom, at, visit) {
  * size: PN_door_n4a (0x165) at 0.9, 1.4 and 1.0 on x, y and z. Chapter 2's
  * section 9 spawns the only one (0xF05A0, Stage 2 set 7).
  *
+ * Type 14 (PN_jinmengyo_01, scale 0.3) on 0x3B550 is a fish that swims a
+ * path of its own: its record stands at the origin, and each frame the
+ * handler closes as a prop does, then puts it at t along segment +0x2F8 of
+ * a uniform quadratic B-spline through the points at 0xAE7F0 —
+ * 0.5(1-t)², t(1-t)+0.5 and 0.5t² of points s, s+1 and s+2 — and steps t
+ * by 0.01, to segment s+1 once past 1, and back to 0 past 3. The six
+ * points close on themselves, so it loops every 404 frames. It turns to
+ * where it went, by coprocessor function 0x0F on the step: +0x2C the pitch
+ * and +0x30 the negated heading, kept from the frame before when t has
+ * just started again. It draws PN_jinmengyo_01 plus +0x50 rem 40, +0x50
+ * counting draws, through 0x413B0. Chapter 2's section 4, script 6 spawns
+ * the only one (0xEEB00, Stage 2 set 6).
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -300,8 +313,9 @@ function spawnProps(rom, at, set, out, section) {
         const spinner = O.spinners?.find((c) => c.handler === handler);
         const item = O.items?.find((c) => c.handler === handler);
         const plain = O.plain?.find((c) => c.handler === handler && c.types.includes(type));
+        const swimmer = O.swimmers?.find((c) => c.handler === handler);
         if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item
-            && !plain) continue;
+            && !plain && !swimmer) continue;
         if (plain && section === plain.door) continue;
         if (plain?.onePerPlace && [...out.values()].some((o) => o.type === type
             && o.pos[0] === dv.getFloat32(rec + 8, true) && o.pos[1] === dv.getFloat32(rec + 12, true)
@@ -346,7 +360,14 @@ function spawnProps(rom, at, set, out, section) {
             ...(cycle && cycle.last >= model ? {
                 cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),
             } : {}),
+            /* And the fish swims its path, stepping its model (see above). */
+            ...(swimmer ? {
+                cycle: Array.from({ length: swimmer.models }, (_, i) => model + i),
+                swim: swimPath(rom, swimmer),
+            } : {}),
         });
+        const o = out.get(rec);
+        if (o.swim) o.ops = (frame) => propOps({ ...o, ...o.swim(frame) });
     }
 }
 
@@ -531,6 +552,41 @@ function propOps(o, spin = 0) {
     return [['t', [o.pos[0], o.pos[1], -o.pos[2]]],
         ...propTurn(turn),
         ...(o.axes ? [['s', o.axes]] : o.scale === 1 ? [] : [['s', [o.scale, o.scale, o.scale]]])];
+}
+
+/*
+ * Where type 14's fish is on each frame, and how it is turned (see
+ * spawnProps): 0x3B550's own arithmetic, in single precision as the board
+ * does it, which lands on MAME's places exactly. The turn is the step's
+ * pitch and negated heading, held where t starts again; the board's first
+ * frame has none yet. Two laps are worked, so that only the first carries
+ * that unturned frame.
+ */
+function swimPath(rom, { points, segments, step }) {
+    const dv = rom.mainCpuView;
+    const F = Math.fround;
+    const P = Array.from({ length: segments + 2 }, (_, i) => [0, 1, 2]
+        .map((k) => dv.getFloat32(points + i * 12 + k * 4, true)));
+    const turn = (v) => Math.round((v * 0x10000) / (2 * Math.PI)) & 0xffff;
+    const frames = [];
+    let t = 0, s = 0, prev = null, angles = [0, 0, 0], lap = 0;
+    while (frames.length < 2 * lap || !lap) {
+        const u = F(1 - t);
+        const w = [F(F(u * 0.5) * u), F(F(u * t) + 0.5), F(F(t * t) * 0.5)];
+        const pos = [0, 1, 2].map((k) => F(F(F(w[0] * P[s][k]) + F(w[1] * P[s + 1][k]))
+            + F(w[2] * P[s + 2][k])));
+        let next = F(t + F(step));
+        if (next > 1) { next = 0; s = s + 1 < segments ? s + 1 : 0; }
+        if (prev && next !== F(step)) {
+            const d = pos.map((v, k) => v - prev[k]);
+            angles = [turn(Math.atan2(d[1], Math.hypot(d[0], d[2]))), turn(-Math.atan2(d[0], d[2])), 0];
+        }
+        frames.push({ pos, turn: angles });
+        t = next; prev = pos;
+        if (!lap && t === 0 && s === 0) lap = frames.length;
+        if (frames.length > 1 << 16) throw new Error('swimPath: the path does not close');
+    }
+    return (frame) => frames[frame < lap ? frame : lap + (frame % lap)];
 }
 
 /* A -1-terminated list of pointers, as the section and script tables are. */

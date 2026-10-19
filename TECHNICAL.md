@@ -5930,7 +5930,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for fourteen handlers.
+The others are left out rather than guessed at, but for fifteen handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6194,6 +6194,31 @@ only one, record 0xF05A0, at (1263.8, -65.5, 295.5), yaw 0x4000. So it stands
 there as `PN_door_n4a`, stretched, Stage 2 · set 7, which goes from 8 props
 to 9; `hotdo` set props go from 208 to 209. No section 1 spawns one, so the
 door and its flag are left out. Read from the ROM, not checked in MAME.
+
+The fifteenth is type 14 on 0x3B550, `PN_jinmengyo_01` (0x1352), scale 0.3,
+a fish with a man's face. Its record stands at the origin, because the
+handler places it itself. Each frame it closes as a prop does (0x3ED60),
+then puts the fish at t along segment s (+0x2F8) of a uniform quadratic
+B-spline through the twelve-byte points at 0xAE7F0: 0.5(1-t)², t(1-t)+0.5
+and 0.5t² of points s, s+1 and s+2. t (+0x30C) goes up 0.01 a frame, and
+past 1 it goes back to 0 and s to the next segment, back to 0 past 3. The
+six points end on the first two again, so the path closes, and in single
+precision it comes round every 404 frames. The step from the last place goes
+to coprocessor function 0x0F (`0xF0F`), which hands back the pitch, put in
++0x2C, and the heading, put negated in +0x30; on a frame where t has just
+come back to 0.01 the old angles are kept. It draws through 0x413B0 only
+while +0x2F0 is set and +0x2E6 is clear, as 0x417F0 leaves them, with model
+0x1352 plus +0x50 rem 40, +0x50 counting its draws: `PN_jinmengyo_01` to
+`_40`. The spawn's per-type cases (0x38A1C) have none for it, and no flag,
+shot or clock reaches it. Chapter 2's section 4, script 6 (0xEE49C) spawns
+the only one, record 0xEEB00. It swims in a fish tank, Stage 2 ·
+set 6, which goes from 20 props to 21; `hotdo` set props go from 209 to 210.
+The explorer works the handler's arithmetic in single precision, and the
+coprocessor's angles with `atan2`, and steps it a frame while animate is
+ticked. Checked in MAME (`hotdo`, the attract scene table pointed at chapter
+2's section 4, a breakpoint on the fish's draw at 0x3B758): 727 draws, every
+place the explorer's to the bit, every model the same, and every angle within
+2 of 0x10000. The board's first draw has angles 0, and so has the explorer's.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

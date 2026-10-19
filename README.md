@@ -726,6 +726,8 @@ and chapter 4's `PN_sousa00a` stand as props, and so do chapter 3's two
 shot breaks them.
 Chapter 2's section 9 stands a door (`PN_door_n4a`), drawn taller and
 narrower than its model, as the board draws it there.
+A fish with a man's face (`PN_jinmengyo`) swims its loop in chapter 2's fish
+tank while animate is ticked, along the path the board gives it.
 Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the

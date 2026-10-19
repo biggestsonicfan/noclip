@@ -1913,6 +1913,10 @@ const hotdo = {
          * frame on 0x3E4A0 while the zone's clock is short of 1440 (see
          * spawnProps). */
         spinners: [{ handler: 0x3e4a0, axis: 2, rate: 0x800 }],
+        /* Type 14, PN_jinmengyo_01 on 0x3B550, a fish that swims the four
+         * B-spline segments through the six points at 0xAE7F0, t 0.01 a
+         * frame, and steps through 40 models (see spawnProps). */
+        swimmers: [{ handler: 0x3b550, points: 0xae7f0, segments: 4, step: 0.01, models: 40 }],
         /* Type 122, whose handler 0x3C5A0 drops one PN_item_life in chapter
          * 4 and closes (see spawnProps); its own entry in the table is
          * empty, so the model, scale and lift are the handler's. Type 123's
