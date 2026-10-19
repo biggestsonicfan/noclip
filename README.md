@@ -13,9 +13,10 @@ trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
-[Dead or Alive](#dead-or-alive). *Cyber Troopers Virtual-On* has its models
-and its ten stages, some of them only in part — see
-[Virtual-On](#virtual-on).
+[Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
+courses and its models — see [Sega Rally Championship](#sega-rally-championship).
+*Cyber Troopers Virtual-On* has its models and its ten stages, some of them
+only in part — see [Virtual-On](#virtual-on).
 
 Three views, and a fourth for the 2D art:
 
@@ -681,6 +682,36 @@ fight's messages and fonts, the rankings, the endings, the staff roll and the
 title logos. Tecmo's format is not Sega's: each picture brings its own tiles
 and colours, so each cell opens on a CG of its own with the same number (see
 [TECHNICAL.md](TECHNICAL.md#dead-or-alives-pictures-jscellsjs)).
+
+## Sega Rally Championship
+
+`srallyc.zip` (Revision C, Model 2A) loads with the Stages and Models tabs.
+It is on the same board as Virtua Cop and Dead or Alive's 2A builds, and the
+program is built the way Daytona USA's is: the sheets are raw in the data ROM,
+there is no depth buffer, and a course's models are already in world space.
+
+The **Models** tab has the whole model table, 1508 entries: the Toyota Celica
+and the Lancia Delta in every livery, the four courses' track segments in
+their near and far versions, and their skies. The textures are the boot bank and the course's bank, copied into
+texture RAM in the order the game copies them, and match the board's texture
+RAM byte for byte on the desert, the mountain and the forest. The palette and
+the colour and luma tables are the game's own, made by running its routines
+(the luma one included), and match MAME's dumps the same way. A course model
+opens on its course's bank; a model on the course sheet that no course list
+names, a car for one, opens on the desert's, and the **Texture set** list picks
+another.
+
+The **Stages** tab has the four courses: Desert, Mountain, Forest and
+Lakeside, each its 60 segments and its sky, read from the course records the
+game draws them from. Lakeside is the fourth record, which the attract mode
+does not show; its bank and its autumn trees say it is the secret course. The
+segments drawn are the near ones; the low-detail copy the game draws further
+off is listed in the stage's details.
+
+Not read yet: the low-detail copy as a view of its own, the trackside objects
+and the cars' places on the grid, and the ground beyond the course, which the
+explorer leaves black. The car windows are black, where MAME draws them as
+dark glass. MAME's other Sega Rally builds are not added.
 
 ## Virtual-On
 

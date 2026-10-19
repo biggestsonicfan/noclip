@@ -30,6 +30,7 @@
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
+import { I960 } from './i960.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -144,6 +145,7 @@ function trim(v, tint) {
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
 export function buildLumaram(rom) {
+    if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
     /* Daytona USA keeps both the count and the bands in its program ROM, where
      * the other games keep them in the data ROM — `lda 0x22FD38` and
      * `ld 0x22FD34` in the upload at 0x1314, which are that region's own
@@ -388,6 +390,68 @@ function buildVonColorxlat(rom, field, robots) {
 }
 
 /*
+ * Sega Rally's tables, made by running the game's own routines rather than a
+ * port of them: js/i960.js runs each entry in `i960.run` against a bus of the
+ * program ROM, its copy in RAM, a zeroed work RAM and the two colour RAMs, and
+ * the tables are what they leave behind.
+ *
+ * The boot copies program ROM 0x1000..0x61000 to RAM 0x5A0000 and runs it
+ * there (`i960.copy`). 0x5A2C80 (ROM 0x3C80) builds colorxlat's 32 rows with
+ * float arithmetic and a gamma, and 0x5A3350 (0x4350) lays rows out of a
+ * keyframe table over them; 0x5A3590 (0x4590) writes luma RAM, a byte every
+ * four bytes from 0x12800000 (MAME's model2o/2a map, umask 0xff). Both tables
+ * came out byte for byte as m2-hle2's board holds them in the attract mode,
+ * and neither changes from course to course. The routines take about 220,000
+ * instructions between them, once per ROM set.
+ */
+const COLOR_RAM = 0x01800000;
+const COLOR_RAM_BYTES = 0x20000;
+const LUMA_RAM = 0x12800000;
+function runColorRoutines(rom) {
+    if (rom.i960Colors) return rom.i960Colors;
+    const C = rom.game.colors.i960;
+    const prog = rom.maincpu;
+    const [from, to, at] = C.copy;
+    const ram = new Uint8Array(0x100000);
+    ram.set(prog.subarray(from, to), at - 0x500000);
+    const work = new Uint8Array(0x40000);
+    const pal = new Uint8Array(COLOR_RAM_BYTES);
+    const luma = new Uint8Array(LUMA_BYTES);
+    const where = (a) => {
+        if (a < prog.length) return [prog, a];
+        if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
+        if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
+        if (a >= COLOR_RAM && a < COLOR_RAM + COLOR_RAM_BYTES) return [pal, a - COLOR_RAM];
+        throw new Error(`colour routine read 0x${a.toString(16)}`);
+    };
+    const read = (a, n) => {
+        const [b, o] = where(a);
+        let v = 0;
+        for (let k = n - 1; k >= 0; k--) v = (v << 8) | b[o + k];
+        return v >>> 0;
+    };
+    const write = (a, v, n) => {
+        /* One byte lane of a 32-bit unit, stored here as the even byte of a
+         * halfword the way a luma dump has it (buildLumaram). */
+        if (a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
+            luma[((a - LUMA_RAM) >> 2) * 2] = v & 0xff;
+            return;
+        }
+        const [b, o] = where(a);
+        for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
+    };
+    const cpu = new I960({
+        read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
+        write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
+    });
+    for (const entry of C.run) {
+        if (!cpu.call(entry, [], { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
+    }
+    const cxlat = pal.slice(0x10000, 0x10000 + CXLAT_BYTES);
+    return (rom.i960Colors = { cxlat, luma });
+}
+
+/*
  * Virtua Cop's 0x43B0, run on the fresh ramp before the band goes over it:
  * rows 1..31, luma 1..63, every entry whose red is not zero and at most `top`
  * gains `add` in each channel. The test is on red alone, and the channels are
@@ -468,6 +532,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
+    if (rom.game.colors.i960) return runColorRoutines(rom).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
