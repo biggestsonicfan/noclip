@@ -415,10 +415,19 @@
         <label class="check"><input type="checkbox" id="char-skel" checked> <span data-i18n="char.skel">skeleton</span></label>
         <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> <span data-i18n="char.squish">hammer squished</span></label>
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
+        <label class="check" id="char-mirror-field" hidden title="Player +0 bit 6: the fighter plays its motions the other way round"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
         <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
         <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
         <label class="check" id="char-p2-field" hidden><input type="checkbox" id="char-p2"> <span data-i18n="char.p2">P2 colours</span></label>
+      </div>
+      <div class="field" id="char-rival-opts" hidden>
+        <label>Opponent</label>
+        <div class="row">
+          <select id="char-rival-who" title="Who stands opposite"></select>
+          <select id="char-rival-plays" title="What the opponent plays"></select>
+        </div>
+        <div class="meta" id="char-rival-note"></div>
       </div>
       <div class="field" id="armour-field" hidden>
         <label data-i18n="f.armour">Armour</label>
@@ -465,6 +474,15 @@
         <label class="check"><input type="checkbox" id="trail-show" checked> <span data-i18n="trail.show">draw the trail</span></label>
         <div id="trail-readout" class="mono dim"></div>
       </div>
+      <div class="field" id="fight-stage-field" hidden>
+        <label>Fought on <select id="spark-stage"></select></label>
+        <div class="dim">the light on the fighters and their shadows, and the move trails' models</div>
+      </div>
+      <div class="field" id="spark-field" hidden>
+        <label>Move trails</label>
+        <label class="check"><input type="checkbox" id="spark-show" checked> draw the trail</label>
+        <div id="spark-readout" class="mono dim"></div>
+      </div>
       <div class="field" id="osage-field" hidden>
         <label data-i18n="f.osage">Sway chains &mdash; pigtails, tails, feathers</label>
         <label id="osage-wind-field" hidden><span data-i18n="osage.wind">wind</span> <select id="osage-wind"></select></label>
@@ -490,9 +508,11 @@
         kept. The pose is solved on one standard rig for everyone
         (<code>0x296A0</code>) and the parts are then placed along the
         fighter's own skeleton, as the board draws them. The
-        <em>opponent</em> (off by default) is the same fighter on the same
-        motion, standing where a round starts the other, ahead of the
-        fighter. <em>Behind</em> stands it at the fighter's back instead,
+        <em>opponent</em> (off by default) stands where a round starts the
+        other, ahead of the fighter: the same fighter unless picked, playing
+        the same motion, or the hit, counter, guard or knock-down motion the
+        game gives the one the fighter's strike lands on (from the frame it
+        lands), or the thrown one's with a throw. <em>Behind</em> stands it at the fighter's back instead,
         where it is once the fight has turned a fighter round: a motion does
         not say which, so turning motions and back-turned ones want it
         there. Each head then turns
@@ -508,7 +528,8 @@
         everyone (<code>0x2C194</code>), then the parts placed along the
         fighter's own skeleton. The roster ends in Sonic, drawn at 0.56 of
         the motion's height (B.M. at 1.1), two untextured dummies and Jane in
-        other clothes. With the <em>opponent</em> on, each head
+        other clothes. The <em>opponent</em> can play the reaction to the
+        fighter's move, as in Virtua Fighter 2. With it on, each head
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
       </div>

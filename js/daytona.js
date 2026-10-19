@@ -39,10 +39,7 @@
  * race, attract mode, time attack and the ending — see MODES. What is left
  * out in all of them: the cones stand and are never knocked flying; the
  * Jeffry statue does not do its turn, which the board saves for a player who
- * stops beside it and presses the view button; and the two windows — the
- * grandstand's glass and the covered walkway's — show the first of the 64
- * frames of sky the board picks between by where the car stands, since the
- * TGP functions that choose one are not ported.
+ * stops beside it and presses the view button.
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
@@ -253,11 +250,17 @@ const KINDS = {
      * place and not turned. */
     jeffry: (r, { rom, O }) => [{ model: modelOf(rom, O.jeffry), ops: [at(r)] }],
 
-    /* stand_window and arcade_window: the grandstand's glass and the covered
-     * walkway's, each a list of 64 frames of reflected sky that the board
-     * picks between by where the car stands, so the reflection slides as it
-     * drives past. Drawn at the first. */
-    window: (r, { rom }) => [{ model: modelOf(rom, u32(rom, r.arg)), ops: [] }],
+    /*
+     * stand_window and arcade_window: the grandstand's glass and the covered
+     * walkway's, each a list of 64 frames of reflected sky, in world space, that
+     * the board picks between by where the car stands (the task at *0x501240,
+     * x at +0x1C and z at +0x24), so the reflection slides as it drives past.
+     * The camera stands in for the car, as it does for the horses. In attract
+     * mode the board's car stays at (0, 0), so the frame does not move: 27 on
+     * the grandstand, 57 on the walkway, measured in MAME — see windowDraw.
+     */
+    standWindow: (r, ctx) => windowDraw(r, ctx, standWindowFrame),
+    arcadeWindow: (r, ctx) => windowDraw(r, ctx, arcadeWindowFrame),
 
     /*
      * The pylons: four kinds, the same routine, differing in how high the
@@ -417,7 +420,7 @@ const SHOWN = {
     static: 'area', cycle: 'near', cycle4: 'near', slot: 'area', spinZ: 'near', spinY: 'near',
     ship: { area: [0x75, 0x55] }, flags: { near: [0x55, 0x65, 0x75] }, light: 'always',
     world: 'area', rank: 'area', checkpoint: 'area', checkpointAt: 'area', pylon: 'area',
-    window: 'area', flock: 'area', birds: 'area', bigBird: 'area', horse: 'area',
+    standWindow: 'area', arcadeWindow: 'area', flock: 'area', birds: 'area', bigBird: 'area', horse: 'area',
     windmill: (mode) => (mode === 'race' || mode === 'timeAttack' ? { road: [250, 360] } : 'area'),
     jeffry: (mode) => (mode === 'ending' ? 'always' : { road: [242, 320] }),
     curtainCall: 'always',
@@ -508,6 +511,51 @@ function horseRing(r, n) {
 function horseOffset(a) {
     const t = (a & 0xffff) * (2 * Math.PI / 65536);
     return [Math.sin(t) * HORSE_RADII[0], 0, Math.cos(t) * HORSE_RADII[1]];
+}
+
+/*
+ * The windows' frame, as their display routines (Rev A 0x21E60, 0x21F18) pick
+ * it from the car's place on the ground. Each reads a point out of the ROM,
+ * the lda in its routine (`windows` in the profile); every build has the same
+ * routines and the same points, at addresses of its own.
+ *
+ * The grandstand's (stand_window): TGP function 0x0F with the point's z, the
+ * car's x and z and the point's x is the heading from the point to the car,
+ * in the board's 16-bit angle; the frame is that negated, shifted down 5 and
+ * kept to 6 bits, so the 64 frames come round every 2048 (11.25 degrees).
+ *
+ * The walkway's (arcade_window): TGP function 0x43 is the distance across the
+ * ground from the car to the point, and 0x0A with it and the point's height
+ * (220) the angle the point stands up at from there — atan2(height, distance);
+ * the frame is that shifted down 6 and kept to 6 bits. The routine takes a
+ * second point, 0x0C on, and turns the angle the other way when bit 28 of the
+ * word at *0x501220 is set; no MAME run set it (0x80000800 and 0x80000900 in
+ * attract mode), so the first point is the one used.
+ *
+ * Checked in MAME (attract mode, the car's x and z swapped for random places
+ * across the course as the board reads them): the grandstand's frame matched
+ * on all 156 frames drawn, the walkway's on 119 of 121, the two others one off
+ * with the angle within 0.006 of a frame's edge — the TGP's own arctangent.
+ */
+const boardTurn = (y, x) => Math.round((Math.atan2(y, x) * 32768) / Math.PI);
+function standWindowFrame(rom, at, x, z) {
+    const [px, , pz] = [0, 4, 8].map((o) => f32(rom, at + o));
+    return (-boardTurn(-(x - px), z - pz) >> 5) & 63;
+}
+function arcadeWindowFrame(rom, at, x, z) {
+    const [px, py, pz] = [0, 4, 8].map((o) => f32(rom, at + o));
+    return (boardTurn(py, Math.hypot(x - px, z - pz)) >> 6) & 63;
+}
+function windowDraw(r, { rom, O, mode }, frameAt) {
+    const frames = modelList(rom, r.arg, 64);
+    const at = O.windows?.[r.init];
+    if (at == null) return [{ model: frames[0], ops: [] }];
+    const still = frames[frameAt(rom, at, 0, 0)];
+    if (mode === 'attract') return [{ model: still, ops: [] }];
+    return [{
+        model: still, ops: [],
+        live: (f, cam) => ({ model: cam ? frames[frameAt(rom, at, cam.x, cam.z)] : still, ops: [] }),
+    }];
 }
 
 /*
@@ -708,7 +756,7 @@ export function courseNamedModels(rom) {
         }
         for (const r of readObjectRecords(rom, course)) {
             const kind = O.kinds[r.init];
-            if (kind === 'window') for (const m of modelList(rom, r.arg, 64)) add(m, course);
+            if (kind === 'standWindow' || kind === 'arcadeWindow') for (const m of modelList(rom, r.arg, 64)) add(m, course);
             if (kind === 'checkpoint') {
                 for (const m of modelList(rom, u32(rom, O.checkpoints + r.id * 24 + 20), 64)) add(m, course);
             }

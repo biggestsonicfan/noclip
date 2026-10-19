@@ -32,6 +32,7 @@
  * hands it to the bank switch at 0x6FE0, which indexes the bank table with it.
  */
 
+import { doaMachine, boardToOps } from './doa.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { gameLighting } from './stages.js';
 import { buildVcopSky } from './vcopsky.js';
@@ -146,7 +147,10 @@ const MAX_PARTS = 32;
  * it. Slot word +0x11B8 is set in play and the attract both (with it zero the
  * routine passes no offsets). Per routine: its table, words, the sign on the
  * yaw and the scale; the second car's six (0x40B20 on) are the first's again.
- * Checked against the words MAME sends at yaw -0x8000 and 16790. */
+ * Checked against the words MAME sends at yaw -0x8000 and 16790. The slide and
+ * the lift are the same for every word of a column, so a window is drawn with
+ * the table's points and slid live by the explorer's camera, as the board
+ * slides it by its own. */
 const GLASS_TABLES = [
     [0x281d9ca, 42, 1, 3],      /* windscreen */
     [0x281da1e, 8, -1, 3],      /* rear window */
@@ -160,37 +164,38 @@ const GLASS = new Map([
     ...[0x40b20, 0x40ba0, 0x40c30, 0x40cc0, 0x40d40, 0x40dd0].map((r, i) => [r, GLASS_TABLES[i]]),
 ]);
 const GLASS_TILE = 0x400;
-const TURN = 0x10000;
 
-/* The board's turns for a camera, in its own axes (z the explorer's negated):
- * yaw about Y from +Z towards +X, pitch up; half a turn is -0x8000. */
-function cameraTurns({ eye, at }) {
-    const dx = at[0] - eye[0], dy = at[1] - eye[1], dz = -(at[2] - eye[2]);
-    const turn = (rad) => {
-        const t = Math.round(rad / (2 * Math.PI) * TURN);
-        return t >= TURN / 2 ? t - TURN : t;
-    };
-    return { yaw: turn(Math.atan2(dx, dz)), pitch: turn(Math.atan2(dy, Math.hypot(dx, dz))) };
-}
-
-function glassPoints(rom, [table, words, sign, scale], { yaw, pitch }) {
+function glassWords(rom, [table, words]) {
     const dv = rom.mainDataView, off = table - MAIN_DATA_BASE;
-    const slide = [scale * Math.trunc(sign * 0x900 * yaw / 0x8000), scale * Math.trunc(-0x300 * pitch / 0x8000)];
-    const out = [];
-    for (let i = 0; i < words; i++) out.push(dv.getUint16(off + i * 2, true) + slide[i & 1]);
-    for (const c of [0, 1]) {
-        const least = Math.min(...out.filter((_, i) => (i & 1) === c));
-        if (least < 0) for (let i = c; i < words; i += 2) out[i] += Math.ceil(-least / GLASS_TILE) * GLASS_TILE;
-    }
-    return out;
+    return Array.from({ length: words }, (_, i) => dv.getUint16(off + i * 2, true));
 }
 
-/* A window record's points, from the rail's stop that faces the car it is on. */
-function glassOf(rom, rail, s, list, k) {
-    const glass = GLASS.get(list[k].routine);
-    const car = list[list[k].parent];
-    const cam = glass && car && rail ? railFacing(rail, s, [car.x, -car.z]) : null;
-    return cam ? glassPoints(rom, glass, cameraTurns(cam)) : null;
+/* What the routine adds to every v and every u of its table for a camera's
+ * turns, in the table's own units (eighths of a texel). */
+function glassSlide(raw, [, words, sign, scale], { yaw, pitch }) {
+    const slide = [scale * Math.trunc(sign * 0x900 * yaw / 0x8000), scale * Math.trunc(-0x300 * pitch / 0x8000)];
+    return slide.map((d, c) => {
+        let least = Infinity;
+        for (let i = c; i < words; i += 2) least = Math.min(least, raw[i] + d);
+        return least < 0 ? d + Math.ceil(-least / GLASS_TILE) * GLASS_TILE : d;
+    });
+}
+
+/* A window's draw: the table's points, slid every frame by the explorer's
+ * camera, which stands where the board's does. The board's yaw (0x50F458)
+ * turns from +Z towards +X, its own axes, against the explorer's heading
+ * (js/app.js cameraOnCourse); its pitch (0x50F454) is the explorer's, up. */
+function glassOf(rom, set, routine) {
+    const glass = GLASS.get(routine);
+    if (!glass) return null;
+    const raw = glassWords(rom, glass);
+    const points = { words: raw, key: `glass@${set}:${glass[0].toString(16)}` };
+    const s16 = (a) => (a << 16) >> 16;
+    const uv = (cam) => {
+        const [dv, du] = glassSlide(raw, glass, { yaw: s16(-cam.heading), pitch: s16(cam.pitch) });
+        return [du / 8, dv / 8];
+    };
+    return { points, uv };
 }
 
 /* The objects that break, and how many of their parts stand whole: the rest
@@ -281,8 +286,8 @@ function objectOps(list, k, depth = 0) {
 }
 
 /* Every part of every object of the stage once, with the segments that list it.
- * A window takes its points from the rail stop that faces its car. */
-function stageObjects(rom, n, set, segments, rail) {
+ * A window slides its points by the camera (see glassOf). */
+function stageObjects(rom, n, set, segments) {
     const arr = dataU32(rom, OBJECT_TABLE + n * 4);
     const count = rom.game.modelTable.count;
     const byKey = new Map();
@@ -294,14 +299,18 @@ function stageObjects(rom, n, set, segments, rail) {
         list.forEach((r, k) => {
             if (SCRIPTS.has(r.type)) return;
             const ops = IN_WORLD.has(r.type) ? [] : objectOps(list, k);
-            const points = glassOf(rom, rail, s, list, k);
+            const glass = glassOf(rom, set, r.routine);
             for (const part of typeParts(rom, r.type)) {
                 if (part.model >= count) continue;
                 const partOps = [...ops, ...recordOps(part), ...(part.scale ? [['s', part.scale]] : [])];
                 const key = JSON.stringify([part.model, partOps]);
                 if (!byKey.has(key)) {
                     byKey.set(key, { model: part.model, pos: [r.x, r.y, r.z], set, ops: partOps, zones: new Set() });
-                    if (points) byKey.get(key).points = { words: points, key: `glass@${set}:${points.join(',')}` };
+                    if (glass) {
+                        const it = byKey.get(key);
+                        it.points = glass.points;
+                        it.live = (f, cam) => ({ model: part.model, points: glass.points, ops: partOps, uv: glass.uv(cam) });
+                    }
                 }
                 byKey.get(key).zones.add(s);
             }
@@ -339,6 +348,121 @@ function stageClouds(rom, n, set, segments) {
             model, pos: [x, y, z], set, zones, layer: 'sky',
             ops: [['t', [x, y, -z]], ['r', turn * ANGLE_DEG], ['s', [CLOUD_SCALE, CLOUD_SCALE, CLOUD_SCALE]]],
         });
+    }
+    return out;
+}
+
+/* ---- the enemies -------------------------------------------------------------
+ *
+ * They are not objects: a stage's shoot-outs come in waves. `0x2864860[stage]`
+ * lists its sections, each the rail counts its waves come at (to a -1), and
+ * 0x141D0 starts wave w of section c, the one at 0x50F2AC and 0x50F2B0, when
+ * the rail's count (0x50F490) reaches its count. Its enemies are the 0x2C-byte
+ * records at `0x282C2D0[stage][c][w]`, to a zero first byte, and 0x13A90 puts
+ * each in a free one of nine slots (0x50F510, 0x9F4 bytes each):
+ *
+ *     +0x00  u8    kind          4: a wait (0x50F2BC frames), no one in it
+ *     +0x04  f32   x, y, z
+ *     +0x10  s16   turn about Y, a tenth of a degree to the unit
+ *     +0x13  u8    body          0x281EDF0[body]: joints, spheres, models
+ *     +0x14  u8    script        0x2820D40[script]: what the enemy does
+ *     +0x18  s32   object it stands on, -1 none (0x55991C + 0x1214 each)
+ *     +0x1E  u8    group         the order they come in within the wave
+ *
+ * A wave whose first record has bit 0x20 is 0x708C0's instead (stage 2's
+ * last section has one), and is left out. The script's first step (0x14118:
+ * the action, the motion, a mirror flag, a turn) picks the motion, 0x1EAD0
+ * plays it from the poses 0x23090 copies from 0x2470000 at boot, 0x1F258 turns the joints'
+ * angles into a matrix per joint, and 0x21A70 draws a model on each, with
+ * the shadow (0xAC) under it from 0x21C10. All of that is the enemy's task,
+ * 0x14AD0, and the explorer runs it: the spawn, then the task once, which is
+ * the first frame the board draws the enemy (the slot's sixteen matrices
+ * match MAME's on that frame to 1e-5). The rest of its moves go by the clock
+ * and the player's shots, which the explorer has not got.
+ *
+ * An enemy on an object (22 records in all) stands in the object's frame,
+ * which moves with the object's own clock; those are left out too. Each
+ * enemy comes up with the segment its wave's count is on.
+ */
+const WAVE_COUNTS = 0x2864860;
+const WAVE_RECORDS = 0x282c2d0;
+const ENEMY_BYTES = 0x2c;
+const WAIT = 4;
+const OTHER_WAVE = 0x20;
+const RAM_BASE = 0x500000;
+const ENEMY_SLOTS = 0x50f510;
+const ENEMY_SLOT = 0x9f4;
+const STAGE_NOW = 0x50f2a8;
+const POSE_COPY = 0x23090;
+const SPAWN = 0x13a90;
+const ENEMY_TASK = 0x14ad0;
+const MAX_WAVES = 64;
+const MAX_ENEMIES = 32;
+const ENEMY_SHADOW = 0xac;
+/* TGP function 3, which the board's program has and Dead or Alive's has not:
+ * a divide (the enemy's screen point, x times the focal length over z, for
+ * the shot test). */
+const VCOP_COPRO = { 0x03: [2, (cp, [a, b]) => cp.out([a / b])] };
+
+function dataU8(rom, addr) {
+    const off = addr - MAIN_DATA_BASE;
+    return off < 0 || off >= rom.mainData.length ? 0 : rom.mainData[off];
+}
+
+/* The stage's waves: the rail count each comes at, and its enemies' records. */
+function stageWaves(rom, n) {
+    const counts = dataU32(rom, WAVE_COUNTS + n * 4);
+    const records = dataU32(rom, WAVE_RECORDS + n * 4);
+    const waves = [];
+    for (let c = 0; counts && records; c++) {
+        const list = dataU32(rom, counts + c * 4);
+        const lists = dataU32(rom, records + c * 4);
+        if (!list || !lists) break;
+        for (let w = 0; w < MAX_WAVES; w++) {
+            const count = dataU32(rom, list + w * 4);
+            const at = dataU32(rom, lists + w * 4);
+            if (count === null || count === END || !at) break;
+            const recs = [];
+            for (let k = 0; k < MAX_ENEMIES && dataU8(rom, at + k * ENEMY_BYTES); k++) recs.push(at + k * ENEMY_BYTES);
+            if (dataU8(rom, at) & OTHER_WAVE) continue;
+            waves.push({ count, records: recs.filter((r) => dataU8(rom, r) !== WAIT && (dataU32(rom, r + 0x18) | 0) === -1) });
+        }
+    }
+    return waves;
+}
+
+/* Every enemy of the stage on the frame it comes in, as the board draws it. */
+function stageEnemies(rom, n, set, rail) {
+    const machine = doaMachine(rom, { copro: VCOP_COPRO });
+    const { cpu, ram, rv, copro, geo } = machine;
+    cpu.call(POSE_COPY);
+    const boot = ram.slice();
+    const count = rom.game.modelTable.count;
+    const out = [];
+    for (const wave of stageWaves(rom, n)) {
+        const zone = rail ? rail.starts.findLastIndex((c) => c <= wave.count) : 0;
+        for (const rec of wave.records) {
+            ram.set(boot);
+            rv.setUint32(STAGE_NOW - RAM_BASE, n, true);
+            Object.assign(copro, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], stack: [], outQ: [], pending: null });
+            cpu.call(SPAWN, [rec]);
+            const slot = cpu.reg(16) | 0;
+            if (slot < 0 || slot > 8) continue;
+            geo.draws = [];
+            if (!cpu.call(ENEMY_TASK, [ENEMY_SLOTS + slot * ENEMY_SLOT], { maxSteps: 5_000_000 })) continue;
+            for (const d of geo.draws) {
+                if (d.model >= count || !d.m || d.m.some((v) => !Number.isFinite(v))) continue;
+                /* `layered: false`: the joints stay out of the stage's face
+                 * layering (js/layers.js). Enemies of different waves stand on
+                 * the same spots, and pairing all their faces took minutes.
+                 * The shadow lies on the ground, so it stays in. */
+                out.push({
+                    model: d.model, pos: [d.m[9], d.m[10], d.m[11]], set, layer: 'fighters',
+                    ops: boardToOps(d.m), zones: new Set([Math.max(zone, 0)]),
+                    ...(d.model !== ENEMY_SHADOW && { layered: false }),
+                });
+            }
+        }
     }
     return out;
 }
@@ -463,24 +587,6 @@ function stageCameras(rail) {
     return cameras;
 }
 
-/* The camera at the stop on a segment's stretch of rail that looks most
- * nearly at a point (the explorer's axes): where the player stands and faces
- * what stands there. Stage 1's second car is 8 degrees off at stop 805; the
- * camera that passes it nearest (count 935) has it 42 degrees off, at the
- * edge of the screen. */
-function railFacing(rail, s, [x, z]) {
-    const from = rail.starts[s] ?? 0, to = rail.starts[s + 1] ?? rail.count;
-    let best = null, bestA = Infinity;
-    for (const i of rail.stops.filter((c) => c >= from && c < to)) {
-        const cam = rail.at(i);
-        const look = Math.atan2(cam.at[0] - cam.eye[0], cam.at[2] - cam.eye[2]);
-        const off = Math.atan2(x - cam.eye[0], z - cam.eye[2]) - look;
-        const a = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
-        if (a < bestA) { best = cam; bestA = a; }
-    }
-    return best ?? rail.at(from);
-}
-
 function stageOf(rom, lit, n, segs) {
     const t = rom.game.modelTable;
     const set = n % rom.game.texture.sets;
@@ -488,9 +594,11 @@ function stageOf(rom, lit, n, segs) {
         model: r.model, pos: [r.x, r.y, r.z], set, zones: r.zones, ops: recordOps(r),
     }));
     const rail = stageRail(rom, n, segs.length);
-    const objects = stageObjects(rom, n, set, segs.length, rail);
+    const objects = stageObjects(rom, n, set, segs.length);
     const clouds = stageClouds(rom, n, set, segs.length);
     const zones = segs.map((recs, s) => ({ zone: s, set, label: `segment ${s + 1} · ${recs.length} pieces` }));
+    const waves = stageWaves(rom, n);
+    let enemies = null;
     return {
         slot: n,
         placements: true,
@@ -499,7 +607,12 @@ function stageOf(rom, lit, n, segs) {
         name: STAGE_NAMES[n] ?? `Stage ${n + 1}`,
         chapter: n,
         draws,
-        objects: [...clouds, ...objects],
+        /* The enemies take the game's own code a second or so a stage, so
+         * they are run when the stage is first drawn. */
+        get objects() {
+            enemies ??= stageEnemies(rom, n, set, rail);
+            return [...clouds, ...objects, ...enemies];
+        },
         sky: null,
         /* The tile layer's, not geometry (js/vcopsky.js). */
         panorama: (cxlat) => buildVcopSky(rom, n, cxlat),
@@ -522,7 +635,8 @@ function stageOf(rom, lit, n, segs) {
         colorCycles: [],
         flags: 0,
         floorSize: 0,
-        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length], ['object parts', objects.length]],
+        meta: [['stage', n + 1], ['texture set', set], ['segments', segs.length], ['pieces', draws.length], ['object parts', objects.length],
+            ['waves', waves.length], ['enemies', waves.reduce((k, w) => k + w.records.length, 0)]],
     };
 }
 

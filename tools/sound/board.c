@@ -41,6 +41,17 @@
 
 #include "sound.h"
 
+#ifdef __EMSCRIPTEN__
+/* The board times its own work for m2-hle2's status (emu_times.h), which a
+ * page never reads; libc's clock would make the module import WASI's. */
+int clock_gettime(clockid_t id, struct timespec *ts) {
+    (void)id;
+    ts->tv_sec = 0;
+    ts->tv_nsec = 0;
+    return 0;
+}
+#endif
+
 #define SND_BLOCK 1024u
 #define SND_QUEUE 256u
 

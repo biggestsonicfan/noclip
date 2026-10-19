@@ -39,6 +39,29 @@
  * them, and `cgPairs` pairs the code names directly. See js/games.js
  * DAYTONA_CELLS.
  *
+ * Virtua Fighter 2 draws the same records by address too (0x8F1C), some of
+ * them in the program ROM (`programAt0`), in runs its pointers lead to. Its
+ * CGs are pairs of lists the code hands the loaders directly: `cgPairs` for a
+ * pointer to a pair, `cgLists` for the two lists themselves. See js/games.js
+ * vf2.cells.
+ *
+ * Fighting Vipers keeps Sonic The Fighters' two tables, a year earlier and
+ * without the bounds: its dsp_pattern (0x6744) takes any cell number and its
+ * _ScrollCG_Initialize (0x2934C) any CG, so the CG table runs up to the
+ * pattern table, 0xC0 entries (`cgEntries`). Its draw reads the halfword at
+ * 0x02 as Daytona's does, a byte entry where it is 0, but no record of its
+ * has a 0 there. See js/games.js fvipers.cells.
+ *
+ * Virtua Cop's draw (0x55A0, and 0x5610, which skips zero entries) takes the
+ * record's address as Daytona's does, but its record is Dead or Alive's
+ * shape a year early (`sized`): the width and the height as halfwords, then
+ * halfword entries, and the caller hands it the halfword to add (`base`,
+ * `bases`). The records lie in two runs of the data ROM with zero halfwords
+ * between some of them. The tile chip is filled once, at boot (`boot`): the
+ * characters copied out of the data ROM a halfword at a time with its bytes
+ * swapped, and the palette built by hand; the stage start adds one group.
+ * See js/games.js VCOP_CELLS.
+ *
  * Dead or Alive's format is Tecmo's own (`pictures`): a table of pictures,
  * each three pointers, its tiles, its colours and its map, so a picture is a
  * cell that brings its own CG, and CG n is picture n's tiles and colours. The
@@ -49,6 +72,12 @@
  * block 0. Every map's highest tile is its own list's last: no picture is
  * drawn over another's tiles. See js/games.js doab.cells and js/scroll.js
  * buildDoaSky, which reads the same table.
+ *
+ * The House of the Dead (hotdo) has the same pictures a year early, in its
+ * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free
+ * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its
+ * entries on by the first block, as Dead or Alive's does. Its colours go
+ * through colorxlat. See js/games.js hotdo.cells.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
@@ -76,6 +105,8 @@ function cellRecords(rom) {
     } else if (C.records) {
         for (const [first, end] of C.records) {
             for (let a = first; a < end && out.length < MAX_CELLS;) {
+                if (C.sized) a = pastPadding(rom, a, end);
+                if (a >= end) break;
                 const size = recordSize(rom, a);
                 if (!size) break;
                 out.push(a);
@@ -93,12 +124,24 @@ function cellRecords(rom) {
     return out;
 }
 
+/* Virtua Cop's zero halfwords between records. */
+function pastPadding(rom, a, end) {
+    while (a < end && scrollPtrOk(rom, a)) {
+        const R = scrollAt(rom, a);
+        if (R.view.getUint16(R.off, true)) break;
+        a += 2;
+    }
+    return a;
+}
+
 /* A record's header: the base, the entry width, the rows and the columns.
  * Null where it is no record. */
 function recordHeader(rom, p) {
     if (!scrollPtrOk(rom, p)) return null;
     const R = scrollAt(rom, p);
-    if (rom.game.cells.pictures) return pictureHeader(R);
+    const C = rom.game.cells;
+    if (C.pictures) return pictureHeader(R, 0);
+    if (C.sized) return pictureHeader(R, C.bases?.[p] ?? C.base);
     if (R.off + 0x0c > R.u8.length) return null;
     const rows = R.view.getUint32(R.off + 4, true);
     const cols = R.view.getUint32(R.off + 8, true);
@@ -109,14 +152,15 @@ function recordHeader(rom, p) {
     return { R, base: R.view.getUint16(R.off, true), wide, rows, cols, bytes, head: 0x0c };
 }
 
-/* A Dead or Alive map: the width and the height, then halfword entries. */
-function pictureHeader(R) {
+/* A Dead or Alive map, or a Virtua Cop record: the width and the height,
+ * then halfword entries. */
+function pictureHeader(R, base) {
     const cols = R.view.getUint16(R.off, true);
     const rows = R.view.getUint16(R.off + 2, true);
     if (!rows || !cols || rows > MAX_PICTURE_SIDE || cols > MAX_PICTURE_SIDE) return null;
     const bytes = 4 + rows * cols * 2;
     if (R.off + bytes > R.u8.length) return null;
-    return { R, base: 0, wide: true, rows, cols, bytes, head: 4 };
+    return { R, base, wide: true, rows, cols, bytes, head: 4 };
 }
 
 const recordSize = (rom, p) => recordHeader(rom, p)?.bytes ?? 0;
@@ -186,11 +230,19 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.boot) {
+        all.push({ boot: true, name: 'boot' });
+        for (let stage = 0; stage < C.boot.stages.count; stage++) {
+            all.push({ boot: true, stage, name: `stage ${stage + 1}` });
+        }
+        cgCache.set(rom, all);
+        return all;
+    }
     const pairAt = (pair, name, extra) => ({
         tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
     });
-    if (C.cgTables) {
-        for (const [table, count] of C.cgTables) {
+    if (C.cgTables || C.cgPairs || C.cgLists) {
+        for (const [table, count] of C.cgTables ?? []) {
             for (let i = 0; i < count; i++) {
                 const n = all.length;
                 all.push(pairAt(word(rom, table + i * 4), C.cgNames?.[n], C.cgExtra?.[n]));
@@ -201,8 +253,9 @@ function cgListsAll(rom) {
             if (L) L.course = course;
         }
         for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
+        for (const [tiles, pal, name] of C.cgLists ?? []) all.push({ tiles: [tiles], pal, name });
     } else {
-        for (let cg = 0; cg < CG_ENTRIES / 2; cg++) {
+        for (let cg = 0; cg < (C.cgEntries ?? CG_ENTRIES) / 2; cg++) {
             const tiles = word(rom, C.cgTable + cg * 8);
             all.push(tiles ? { tiles: [tiles], pal: word(rom, C.cgTable + cg * 8 + 4) } : null);
         }
@@ -278,6 +331,7 @@ function loadCG(rom, L) {
 function loadTiles(rom, L) {
     const charBytes = rom.game.cells.charBytes;
     if (L.picture) return loadPicture(rom, L, charBytes);
+    if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
     const out = parts[parts.length - 1];
@@ -315,6 +369,54 @@ function loadPicture(rom, L, charBytes) {
         p += 32;
     }
     return { chars, pal, written: block * 16, charRuns, palRuns };
+}
+
+/* What Virtua Cop's boot leaves in the tile chip, and a stage's group over
+ * it (js/games.js VCOP_CELLS). The palette steps, in the boot's order:
+ * `runs`, a count and sixteen colours, that group repeated count times, until
+ * `until` groups are written or for `lists` such entries; `colours`, sixteen
+ * colours over `groups` groups; `copy`, groups copied to others. */
+function loadBoot(rom, L, charBytes) {
+    const B = rom.game.cells.boot;
+    const chars = new Uint8Array(charBytes);
+    const pal = new Uint16Array(0x8000);
+    const charRuns = [], palRuns = [];
+    for (const [src, first, count] of B.chars) {
+        const S = scrollAt(rom, src);
+        const n = Math.min(count * TILE_BYTES, S.u8.length - S.off, charBytes - first * TILE_BYTES) & ~1;
+        for (let i = 0; i < n; i += 2) {
+            chars[first * TILE_BYTES + i] = S.u8[S.off + i + 1];
+            chars[first * TILE_BYTES + i + 1] = S.u8[S.off + i];
+        }
+        charRuns.push([first, n / TILE_BYTES]);
+    }
+    const put = (group, src, groups) => {
+        const S = scrollAt(rom, src);
+        for (let g = group; g < Math.min(group + groups, 0x100); g++) {
+            for (let i = 0; i < 16; i++) pal[g * 16 + i] = S.view.getUint16(S.off + i * 2, true);
+        }
+        palRuns.push([group * 16, groups * 16]);
+    };
+    for (const op of B.palette) {
+        if (op.runs) {
+            let src = op.runs, group = op.group;
+            for (let k = 0; k < 0x100 && (op.lists ? k < op.lists : group - op.group < op.until); k++) {
+                const S = scrollAt(rom, src);
+                const count = S.view.getUint16(S.off, true);
+                put(group, src + 2, count);
+                group += count;
+                src += 34;
+            }
+        } else if (op.colours) {
+            put(op.group, op.colours, op.groups);
+        } else if (op.copy) {
+            const [from, to, groups] = op.copy;
+            pal.copyWithin(to * 16, from * 16, (from + groups) * 16);
+            palRuns.push([to * 16, groups * 16]);
+        }
+    }
+    if (L.stage !== undefined) put(B.stages.group, word(rom, B.stages.table + L.stage * 4), 1);
+    return { chars, pal, charRuns, palRuns };
 }
 
 /* A course CG's palette list writes nothing into the groups its picture

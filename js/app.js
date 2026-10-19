@@ -50,16 +50,28 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, OPPONENT_DISTANCE, flashMaterial,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection,
 } from './vf2fighters.js';
-import { createDebrisSim, launchDebris, stepDebris, debrisPlace, effectPlace, SAMPLE_HIT } from './fvdebris.js';
+import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
+import { readBurst, burstModels, burstDraws } from './fvburst.js';
+import { readCarried, carriedDraws, itemHeld, wallItem } from './fvitem.js';
+import { readWallShadows, wallShadowModels, wallSetting, wallShadowDraws } from './fvwallshadow.js';
+import { readShadows, shadowModels, shadowSetting, shadowDraws, placedPose, pieceShadowSetting, latchPieces, pieceShadowDraws } from './fightershadow.js';
+import { reflectionModels, stageReflects, reflectionDraws, pieceReflectionDraw } from './vf2reflection.js';
+import { strobeAt, strobeAfter, stageFighterLight } from './fvstrobe.js';
+import {
+    readTrailTables, trailModels as sparkModels, createTrailRun, runTrailsTo, trailDraws as sparkDraws, RING_SLOTS,
+} from './fvtrails.js';
+import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
+import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
 import { buildTexram, bestTextureSet, bestTextureCombo, bankTextureSet, programTextureSets, fighterSetList } from './texture.js';
 import { buildLumaram, buildColorxlat, cycleStageColors, LUMA_BAND } from './colors.js';
-import { SoundBoard, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
+import { SoundBoard, commandBytes, musicChoices, soundSupported, stageMusic } from './sound/sound.js';
 import { StageSounds } from './sound/ambience.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -101,22 +113,33 @@ const state = {
     bodies: null,
     motionRanks: null,
     travel: false,
-    /* Virtua Fighter 2: a second fighter, the same one playing the same
-     * motion, standing where a round starts the other, for the heads to turn
-     * toward. Off unless asked for: the game looks at the other fighter only
-     * when fight state allows (see poseBout), and the explorer looks on every
-     * frame, so with it on a head can turn where the game's doesn't. */
+    /* Virtua Fighter 2 and Fighting Vipers: a second fighter, standing where
+     * a round starts the other, for the heads to turn toward and for the
+     * fighter's moves to land on. Off unless asked for: the game looks at the
+     * other fighter only when fight state allows (see poseBout), and the
+     * explorer looks on every frame, so with it on a head can turn where the
+     * game's doesn't. */
     opponent: false,
+    /* Who it is (a roster index; null for the fighter itself) and what it
+     * plays: a REACTIONS key, 'same' for the fighter's own motion. */
+    opponentChar: null,
+    opponentPlays: 'same',
     /* Where it stands: ahead, where a round starts it, or behind, where the
      * fight has it once a fighter is turned round (see opponentMatrix). */
     opponentBehind: false,
     /* The opponent in player 2's look, whatever the fighter wears. */
     opponentP2: false,
+    /* VF2 and FV: the fighter mirrored (player +0 bit 6), as a fight leaves it
+     * after a move that ends with move flag 21; see mirrorSample. */
+    mirrored: false,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
     /* The stage whose wind blows on the sway chains (js/osage.js), or none. */
     osageWind: null,
+    /* Fighting Vipers: the stage (0x500064) whose models the move trails
+     * take (js/fvtrails.js). */
+    sparkStage: 0,
     /* Show a fighter's second record, player 2's look (js/vf2fighters.js). */
     p2Look: false,
     useSquished: false,
@@ -959,7 +982,8 @@ function getSwappedModel(key) {
 }
 
 /* A model drawn with another material pointer, `model#material` with the
- * pointer in hex: a Fighting Vipers fighter's hit flash (flashMaterial). */
+ * pointer in hex: a Fighting Vipers fighter's hit flash (flashMaterial) or
+ * a part rob_disp recolours (partMaterial). */
 function getFlashedModel(key) {
     if (state.modelCache.has(key)) return state.modelCache.get(key);
     const [model, matPtr] = key.split('#');
@@ -1148,6 +1172,7 @@ function fighterRigModels(add, out) {
         for (const stages of f.armour?.slots ?? []) for (const m of stages) add(m, f.index);
         if (f.armour?.chest) add(f.armour.chest, f.index);
         for (const m of hipModels(f.armour?.hips)) add(m, f.index);
+        if (f.lowHips) add(f.lowHips.model, f.index);
         for (const e of [...f.extras, ...f.armour?.hair ?? []]) add(e.model, f.index);
         /* The sway chains with the upper half broken, which is every chain
          * the record can wear (Grace's earrings only come with it). */
@@ -1675,7 +1700,8 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
             if (!d) continue;
             composeOps(m, opsAt(entry, 0));
             const mesh = addStageDraw(entry, d, m, { shellFirst, windowed, material: partMaterial });
-            layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry, zones: entry.zones });
+            /* `layered: false` keeps a draw out of the face layering. */
+            if (entry.layered !== false) layered.push({ decoded: d, matrix: m.clone().elements, mesh, entry, zones: entry.zones });
             counts[entry.layer]++;
             const box = transformedBounds(d, m);
             drawn.push(box);
@@ -1775,7 +1801,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
      * start, so swapping a frame in is a pointer assignment. */
     const moves = Boolean(entry.anim || entry.band || entry.scroll || entry.live) ||
         typeof entry.ops === 'function';
-    const geom = entry.anim ? frameGeometry(entry.model) : null;
+    const geom = entry.anim || entry.live ? frameGeometry(entry.model, entry.points) : null;
     const { mesh, lines } = addModelToScene(d, {
         layer: entry.layer, matrix, geom, backdrop: entry.backdrop, shellFirst,
         zWindow: entry.window, underlay: entry.underlay,
@@ -2033,7 +2059,9 @@ function stepBillboards() {
 /*
  * The camera in the board's frame: where it stands (the decoder's Z negated
  * back) and the heading it faces as a board angle — the one a model turned by
- * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's.
+ * it faces, (-sin h, cos h) across the ground, as 0x5014A8 holds the board's —
+ * and its pitch, the board angle up from level (negative looking down), as
+ * VF2's camera keeps it at 0x515424.
  * `view(x, y, z)` puts a board point into the camera's space the way the
  * board's view matrix does: x right, y up, z ahead.
  */
@@ -2053,6 +2081,7 @@ function cameraOnCourse() {
     const ty = Math.tan((camera.fov * Math.PI) / 360);
     return {
         x: LIVE_POS.x, y: LIVE_POS.y, z: -LIVE_POS.z, heading: boardAngle(LIVE_FWD.x, -LIVE_FWD.z),
+        pitch: Math.round((Math.asin(Math.max(-1, Math.min(1, LIVE_FWD.y))) * 65536) / (2 * Math.PI)) & 0xffff,
         /* The screen's edges as x/z and y/z in view space. */
         lens: { x: ty * camera.aspect, y: ty },
         view: (x, y, z) => {
@@ -3320,7 +3349,9 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.charIndex = body.char ?? body.index;
     state.character = body;
     const m = state.motion;
-    /* A body has no input tables, so no moves and no strings. */
+    /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
+     * are in its motion list with their inputs (fighterMotionList); the
+     * string panel is Sonic the Fighters'. */
     m.moves = null;
     $('#string-field').hidden = true;
     /* Start on the motion the game starts the body on, or another its
@@ -3421,10 +3452,10 @@ function colourFighter(body) {
     return body.texSet !== undefined ? body.index : first == null ? null : modelFighter(first);
 }
 
-/* The opponent: the same fighter in the look its own P2 switch asks for,
- * wearing the same armour. */
+/* The opponent: the fighter the panel picks (the same one unless asked) in
+ * the look its own P2 switch asks for, wearing the same armour. */
 function rivalOf(main) {
-    const body = state.bodies ? shownBody(state.charIndex, state.opponentP2) : { ...main };
+    const body = state.bodies ? shownBody(state.opponentChar ?? state.charIndex, state.opponentP2) : { ...main };
     return {
         body: body === main ? { ...main } : body,
         parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
@@ -3583,45 +3614,131 @@ function rankJoinedParts(parts, { parents, joined }, changed) {
     }
 }
 
-/* A fighter's pads and skirt (body.extras), each a part of its own whose
- * matrix the pose gives beside the slots'. */
+/* A fighter's pads and skirt, or VF2's item and head piece (body.extras),
+ * each a part of its own whose matrix the pose gives beside the slots'. */
 function extraParts(body) {
     return (body.extras ?? []).map((e, i) => ({ part: i, slots: [] }));
 }
 
-function placeExtras(parts, body, matrices, material = null, flash = null) {
-    if (parts.length) placeBodyParts(parts, body.extras.map((e) => [flashed(e.model, flash)]), matrices, null, material);
+function placeExtras(parts, body, matrices, material = null, flash = null, shown = null) {
+    if (parts.length) placeBodyParts(parts, body.extras.map((e, i) => (shown?.[i] === false ? [] : [flashed(e.model, flash)])), matrices, null, material);
 }
 
 /* What each part draws this frame, with a bouncing chest's model (slot 1)
- * the one its spring picked, and the hips' (slot 9) the one their motion
- * picked, all in the flash's material on a frame that has it. A rig whose
- * pose says what each part draws (Dead or Alive's) is taken at its word. */
+ * the one its spring picked, the hips' (slot 9) and the hands' (5 and 8) the
+ * ones their motion picked, all in the flash's material on a frame that has
+ * it, else in the material rob_disp gives the model (partMaterial). A rig
+ * whose pose says what each part draws (Dead or Alive's) is taken at its
+ * word. */
 function bouncedDraws(body, posed, m) {
     const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
     if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
-    return m.flash == null ? draws : draws.map((list) => list.map((model) => flashed(model, m.flash)));
+    for (const [slot, model] of posed.hands ?? []) draws[slot] = [model];
+    const material = (model) => m.flash ?? (typeof model === 'number' ? partMaterial(state.rom, model) : null);
+    return draws.map((list) => list.map((model) => flashed(model, material(model))));
 }
 
 /* Pose the fighter, and its opponent when there is one: the pair face each
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel });
-    const at = opponentMatrix({ behind: state.opponentBehind });
+    const mirrored = state.mirrored && state.rom.game.rig?.kind === 'vf2';
+    const handsPass = playedOver(m);
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass });
+    const own = rivalPlays(m);
+    const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
+    /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
+     * and 0x18C58, FV 0x130D4 and 0x19C70): it stands as the thrower will once
+     * the motion it is in ends. Here that is the stance, which has no flag 21,
+     * so the one thrown is mirrored with the fighter. Otherwise the opponent's
+     * own bit is fight state, and left clear. */
     const [mine, theirs] = poseBout(state.rom, [
-        { body, motion: m.decoded, frame: m.frame },
-        { body: m.rival.body, motion: m.decoded, frame: m.frame },
+        { body, motion: m.decoded, frame: m.frame, mirrored, handsPass },
+        { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown), handsFrom: own.handsFrom, handsPass: own.handsPass ?? 0 },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
     const placed = theirs.matrices.map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements);
-    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), placed, null, m.rival.material);
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, { ...m, ...own }), placed, null, m.rival.material);
     placeExtras(m.rival.extras, m.rival.body,
-        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, m.flash);
-    placeSkin(m.rival, placed, m.flash);
-    placeBodyOsage(m.rival, theirs.pose, osageBoard(m, m.rival.body), m.tick, place, m.flash);
+        (theirs.extras ?? []).map((x) => new THREE.Matrix4().fromArray(x).premultiply(place).elements), m.rival.material, own.flash, theirs.shown);
+    placeSkin(m.rival, placed, own.flash);
+    placeBodyOsage(m.rival, theirs.pose, osageBoard(own, m.rival.body), m.tick, place, own.flash);
+    placeHitSparks(m.rival, m.rival.body, own.decoded, own.frame, mirrored && Boolean(own.thrown), place);
+    placeBursts(m.rival, theirs.pose, own.decoded, own.frame, place);
+    placeCarried(m.rival, m.rival.body, theirs.pose, own.decoded, own.frame, mirrored && Boolean(own.thrown), place, own.flash);
+    m.rivalPose = placedPose(at, theirs.pose);
+    placeShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame);
+    placeWallShadows(m.rival, m.rival.body, m.rivalPose, own.decoded, own.frame, mirrored && Boolean(own.thrown), (p) => placedPose(at, p));
+    placeReflection(m.rival, m.rival.body, m.rivalPose);
+    const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
+    strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
+}
+
+/* What the opponent plays on the fighter's frame: the fighter's motion, or
+ * the reaction the panel asks for (js/reactions.js), which waits in the
+ * opponent's stance until the move lands, then plays from its frame 1 and
+ * holds its last. A throw's starts with the throw, on the thrower's own
+ * place and facing (opponentMatrix's `thrown`). */
+function rivalPlays(m) {
+    const R = rivalReaction(m);
+    if (!R) return { decoded: m.decoded, frame: m.frame, flash: m.flash, handsPass: playedOver(m) };
+    if (R.motion && m.frame >= R.lands) {
+        const frame = Math.min(m.frame - R.lands + 1, R.motion.frames);
+        const thrown = R.attack.victim != null;
+        return { decoded: R.motion, frame, flash: flashMaterial(state.rom, R.motion, frame), thrown, handsFrom: caughtIn(R) };
+    }
+    const wait = R.stance ?? R.motion ?? m.decoded;
+    if (wait !== R.stance) return { decoded: wait, frame: 1, flash: null };
+    return { decoded: wait, frame: 1 + ((m.frame - 1) % wait.frames), flash: null, handsPass: Math.floor((m.frame - 1) / wait.frames) };
+}
+
+/* How many times the motion on show has played over since it was picked: a
+ * motion the game loops carries its hands from one pass into the next
+ * (js/fighterhands.js). */
+function playedOver(m) {
+    return m.decoded?.frames ? Math.floor(Math.max(0, m.tick) / m.decoded.frames) : 0;
+}
+
+/* The stance frame the opponent was shown on when the move landed, which its
+ * hands carry into the reaction (js/fighterhands.js). With no stance shown
+ * first, the reaction starts cold. */
+function caughtIn(R) {
+    if (!R.stance || R.lands < 2) return null;
+    const shown = R.lands - 2;
+    return { motion: R.stance, frame: 1 + (shown % R.stance.frames), pass: Math.floor(shown / R.stance.frames), mirrored: false };
+}
+
+/* The reaction to the motion on show, read once per motion and choice. */
+function rivalReaction(m) {
+    const reaction = REACTIONS.find((r) => r.key === state.opponentPlays);
+    if (reaction?.category == null || !m.decoded || !state.rom.game.rig?.reactions) return null;
+    const key = `${m.decoded.id}:${reaction.key}:${m.rival.body.index}`;
+    if (m.rival.reactionKey !== key) {
+        m.rival.reactionKey = key;
+        m.rival.reaction = readReaction(m, reaction);
+        $('#char-rival-note').textContent = describeReaction(m.rival.reaction, reaction);
+    }
+    return m.rival.reaction;
+}
+
+function readReaction(m, reaction) {
+    const attack = attackOf(state.rom, m.decoded.id);
+    const id = reactionMotion(state.rom, attack, reaction);
+    return {
+        attack, id,
+        motion: id == null ? null : m.list[id] ?? null,
+        lands: landingFrame(attack, m.decoded.frames, moveFlags(state.rom, m.decoded)),
+        stance: m.list[m.rival.body.start] ?? null,
+    };
+}
+
+function describeReaction(R, reaction) {
+    if (!R.attack) return 'This motion neither strikes nor throws: the opponent stands.';
+    if (R.attack.victim != null) return `A throw: the opponent plays motion ${R.id}, the one thrown, with it, on the fighter's place.`;
+    if (!R.motion) return `Kind ${R.attack.kind} has no ${reaction.label} motion: the opponent stands.`;
+    return `Kind ${R.attack.kind} blow: ${reaction.label} motion ${R.id} from the fighter's frame ${R.lands}.`;
 }
 
 /* A fighter's sway chains, in a game whose profile names its own table
@@ -3673,7 +3790,10 @@ function placeBodyOsage(holder, pose, board, tick, place = null, flash = null) {
  * hit, and they fly on by board frames of their own, whether the motion plays
  * or not, with the flipbook effect a piece can become. A half put back whole
  * takes its pieces and effects back, and another fighter starts with none.
- * Only the fighter's own: the opponent's armour is whole.
+ * Only the fighter's own: the opponent's armour is whole. They are pushed out
+ * of the bodies on screen, the fighter's as player 1's and the opponent's,
+ * when it is shown, as player 2's. A resting piece that leaves the explorer's
+ * screen is gone, as one that leaves the board's is (0x316F0).
  */
 const DEBRIS_CATCH_UP = 8;
 const HALVES = ['upper', 'lower'];
@@ -3699,6 +3819,8 @@ function syncDebris(m, body) {
         d.halves[half] = thrown.length > 0;
     }
     d.tables = tables;
+    d.balls ??= fighterBodyBalls(state.rom);
+    d.bodies ??= [];
     m.debris = d;
 }
 
@@ -3715,6 +3837,14 @@ function launchPendingDebris(m, pose) {
     d.start ??= performance.now() - (d.sim.frame * 1000) / GAME_HZ;
 }
 
+/* The body balls the pieces are pushed out of next: where the fighter's
+ * pose and the opponent's (m.rivalPose, poseFighterAndRival's) have them. */
+function noteDebrisBodies(m, pose) {
+    const d = m.debris;
+    if (!d?.balls || !pose) return;
+    d.bodies = [pose, m.rival ? m.rivalPose : null].map((p) => p && bodyBallsAt(d.balls, p));
+}
+
 /* Run the pieces on to the frame the clock is at; after a long gap (a held
  * view, another tab) they carry on from where they were. */
 function stepBodyDebris(now) {
@@ -3726,8 +3856,31 @@ function stepBodyDebris(now) {
         d.start += ((n - DEBRIS_CATCH_UP) * 1000) / GAME_HZ;
         n = DEBRIS_CATCH_UP;
     }
-    for (let i = 0; i < n; i++) stepDebris(d.sim);
+    const lit = pieceSetting(m);
+    /* 0x316F0 asks the board's screen; here it is the explorer's. */
+    const cam = cameraOnCourse();
+    const onScreen = (s) => pieceOnScreen(cam.view(...s.p), s.radius, cam.lens);
+    for (let i = 0; i < n; i++) {
+        stepDebris(d.sim, d.bodies, onScreen);
+        if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
+    }
+    sendDebrisCues(d.sim);
     placeDebris(m);
+}
+
+/* The pieces' landing sounds (0x2D218), sent to the sound board the music
+ * runs on, as 0x41EA4 queues them for it. */
+function sendDebrisCues(sim) {
+    const board = state.music.on && state.music.board?.node ? state.music.board : null;
+    for (const code of sim.cues) board?.send(commandBytes(code));
+    sim.cues.length = 0;
+}
+
+/* The light the pieces' shadows are slid along on the panel's stage; null
+ * where 0x602F0 does not reach 0x60350. */
+function pieceSetting(m) {
+    const kit = shadowKit(m);
+    return kit && pieceShadowSetting(state.rom, kit.shadows, state.sparkStage);
 }
 
 /* One mesh per shared slot, built when a piece first lands in it. */
@@ -3743,6 +3896,26 @@ function placeDebris(m) {
         if (s && m.debrisParts[i].mesh) placePartAt(m.debrisParts[i], viewerMatrix(debrisPlace(s)));
     });
     placeEffects(m);
+    placeDebrisShadows(m);
+}
+
+/* The pieces' shadows: 0x78384's floor copy under those near the floor on
+ * the stages 0x76A70 draws it on (the Factory and Bay Side), and on the rest
+ * 0x609B0's, slid along the stage's light as the fighters' are. */
+function placeDebrisShadows(m) {
+    const sim = m.debris.sim;
+    const lit = pieceSetting(m);
+    const draws = debrisShadowStage(state.rom, state.sparkStage) ? debrisShadowDraws(sim)
+        : lit ? pieceShadowDraws(sim.slots, lit, debrisPlace) : [];
+    if (!draws.length && !m.debrisShadowPool) return;
+    if (m.debrisShadowGeoms?.rom !== state.rom) m.debrisShadowGeoms = { rom: state.rom, geoms: new Map() };
+    const { geoms } = m.debrisShadowGeoms;
+    for (const d of draws) {
+        if (geoms.has(d.model)) continue;
+        const g = getModel(d.model);
+        if (g) geoms.set(d.model, geomBundle(g));
+    }
+    placeEffectPool(m, 'debrisShadowPool', DEBRIS_SLOTS, geoms, draws);
 }
 
 /* One mesh per effect slot, swapping through the flipbook's frames, built
@@ -3769,6 +3942,351 @@ function effectFrames(m) {
     return m.effectCycle;
 }
 
+/*
+ * Fighting Vipers' move trails (js/fvtrails.js). The motion's script op 28 is
+ * run through the board's two rings on a stand-in for the fighter, posed frame
+ * by frame from frame 1 of the pass on screen, so the sparks are what the
+ * board leaves on the motion played from its start. Like the afterimages, the
+ * rings are stepped a frame at a time while the counter moves on by a few, and
+ * run again from frame 1 otherwise. Only the fighter's: on the board the
+ * opponent's sparks share the rings.
+ */
+const SPARK_POOL = 2 * RING_SLOTS;
+
+function placeSparks(m, body) {
+    const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
+    const key = script && `${m.decoded.id}:${state.mirrored}:${state.sparkStage}`;
+    if (!script) { hideSparks(m); return; }
+    if (m.sparks?.key !== key || m.sparks.body !== body) {
+        const tables = readTrailTables(state.rom, state.sparkStage);
+        const geoms = new Map();
+        for (const id of sparkModels(tables)) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        m.sparks = { key, body, script, tables, geoms, run: null };
+    }
+    const S = m.sparks, step = S.run ? m.tick - S.run.done : 0;
+    if (!S.run || step < 0 || step > TRAIL_CATCH_UP) S.run = sparkRun(m, body, S);
+    runTrailsTo(S.run, m.tick);
+    placeSparkMeshes(m, state.showTrails ? sparkDraws(S.run.rings, cameraYaw()) : []);
+}
+
+/* A run started at frame 1 of the pass on screen, on a stand-in with no
+ * blend or look carried in. */
+function sparkRun(m, body, S) {
+    const stand = { ...body }, mirrored = state.mirrored, motion = m.decoded;
+    return createTrailRun({
+        script: S.script, tables: S.tables, frames: motion.frames, flags: moveFlags(state.rom, motion), mirrored,
+        poseAt: (frame) => poseFighter(state.rom, stand, motion, frame, { mirrored }).pose,
+    }, m.tick - (m.frame - 1));
+}
+
+/* The camera's heading as a board angle: (sin, 0, cos) along its view, in the
+ * board frame, which is the rig's with z the other way. */
+function cameraYaw() {
+    const root = state.viewer.root;
+    const d = state.viewer.camera.getWorldDirection(new THREE.Vector3())
+        .transformDirection(root.matrixWorld.clone().invert());
+    return Math.round((Math.atan2(d.x, -d.z) * 0x8000) / Math.PI) & 0xffff;
+}
+
+/* One mesh per ring slot, built in the rig's scene, each swapping geometry for
+ * the model its spark is on. */
+function placeSparkMeshes(m, draws) {
+    placeEffectPool(m, 'sparkPool', SPARK_POOL, m.sparks.geoms, draws);
+}
+
+/* `size` meshes kept on `holder[key]`, one per draw ({ model, r, t } in the
+ * board frame), each swapping geometry for its draw's model; `place` puts
+ * them where the opponent stands. */
+function placeEffectPool(holder, key, size, geoms, draws, place = null) {
+    if (!geoms.size) return;
+    let pool = holder[key];
+    if (!pool?.length || pool[0].mesh.parent !== state.viewer.root) {
+        const first = geoms.values().next().value;
+        pool = holder[key] = Array.from({ length: size }, () => ({ ...addRigPart(first.decoded, first), model: first.decoded.index }));
+    }
+    pool.forEach((p, i) => {
+        const d = draws[i], g = d && geoms.get(d.model);
+        showPart(p, Boolean(g));
+        if (!g) return;
+        if (p.model !== d.model) {
+            p.model = d.model;
+            p.mesh.geometry = g.mesh;
+            p.mesh.userData.modelIndex = d.model;
+            if (p.lines && g.edges) p.lines.geometry = g.edges;
+        }
+        placePartAt(p, place ? new THREE.Matrix4().fromArray(viewerMatrix(d)).premultiply(place).elements : viewerMatrix(d));
+    });
+}
+
+function hideSparks(m) {
+    for (const p of m.sparkPool ?? []) showPart(p, false);
+}
+
+/*
+ * Fighting Vipers' throw spark (js/fvhitspark.js), on the fighter and on the
+ * opponent, each from the motion it plays: script op 30's flash, at the
+ * slot's point on a stand-in posed with no blend or look carried in, turned
+ * to face the explorer's camera. It shows with the trails. `place` puts the
+ * opponent's where it stands.
+ */
+const HIT_SPARK_POOL = 4;
+
+function placeHitSparks(holder, body, motion, frame, mirrored, place = null) {
+    const kit = hitSparkKit(holder);
+    if (!kit) return;
+    const script = state.showTrails && motion ? hitSparkScript(state.rom, motion.id) : null;
+    const draws = script ? hitSparkDraws(kit.spark, script, frame, {
+        poseAt: (f) => poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose,
+        flags: moveFlags(state.rom, motion), turn: cameraTurn(place),
+    }) : [];
+    if (draws.length || holder.hitSparkPool) placeEffectPool(holder, 'hitSparkPool', HIT_SPARK_POOL, kit.geoms, draws, place);
+}
+
+/* The spark's flipbooks and their models, read once per ROM; none in a game
+ * without op 30's spark. */
+function hitSparkKit(holder) {
+    if (holder.hitSpark?.rom !== state.rom) {
+        const spark = readHitSpark(state.rom), geoms = new Map();
+        for (const id of spark ? hitSparkModels(spark) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.hitSpark = { rom: state.rom, spark, geoms };
+    }
+    return holder.hitSpark.spark ? holder.hitSpark : null;
+}
+
+/*
+ * Fighting Vipers' burst (js/fvburst.js), on the fighter and on the opponent,
+ * each from the motion it plays and the pose it has this frame, turned by the
+ * explorer camera's yaw. `place` puts the opponent's where it stands.
+ */
+const BURST_POOL = 1;
+
+function placeBursts(holder, pose, motion, frame, place = null) {
+    const kit = burstKit(holder);
+    if (!kit) return;
+    const draws = motion ? burstDraws(state.rom, kit.burst, motion, frame, { pose, turn: cameraTurn(place, true) }) : [];
+    if (draws.length || holder.burstPool) placeEffectPool(holder, 'burstPool', BURST_POOL, kit.geoms, draws, place);
+}
+
+/* The burst's table and its models, read once per ROM; none in a game
+ * without it. */
+function burstKit(holder) {
+    if (holder.burst?.rom !== state.rom) {
+        const burst = readBurst(state.rom), geoms = new Map();
+        for (const id of burst ? burstModels(burst) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.burst = { rom: state.rom, burst, geoms };
+    }
+    return holder.burst.burst ? holder.burst : null;
+}
+
+/*
+ * Fighting Vipers' carried item (js/fvitem.js), on the fighter and on the
+ * opponent, each from the motion it plays: the record's model on this
+ * frame's pose, and while it is held the copies from the frames before it,
+ * each on a stand-in posed on its frame. `place` puts the opponent's where
+ * it stands. On a frame that flashes, the item and its copies take the
+ * flash's material, as the body does (0x1A638, 0x1A6EC).
+ */
+const CARRIED_POOL = 5;
+
+function placeCarried(holder, body, pose, motion, frame, mirrored, place = null, flash = null) {
+    const kit = carriedKit(holder, body);
+    if (!kit) {
+        for (const p of holder.carriedPool ?? []) showPart(p, false);
+        return;
+    }
+    const draws = (motion ? carriedDraws(state.rom, kit.carried, motion, frame, {
+        pose, mirrored, poseAt: (f) => poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose,
+    }) : []).map((d) => ({ ...d, model: flashed(d.model, flash) }));
+    for (const d of draws) {
+        if (kit.geoms.has(d.model)) continue;
+        const g = getModel(d.model);
+        if (g) kit.geoms.set(d.model, geomBundle(g));
+    }
+    if (!draws.length) for (const p of holder.carriedPool ?? []) showPart(p, false);
+    else placeEffectPool(holder, 'carriedPool', CARRIED_POOL, kit.geoms, draws, place);
+}
+
+/* The fighter's item records and the models built so far; none in a game
+ * or for a fighter without them. */
+function carriedKit(holder, body) {
+    if (holder.carried?.rom !== state.rom || holder.carried.body !== body) {
+        holder.carried = { rom: state.rom, body, carried: readCarried(state.rom, body), geoms: new Map() };
+    }
+    return holder.carried.carried ? holder.carried : null;
+}
+
+/*
+ * The fighters' floor shadows (js/fightershadow.js), each under the light of
+ * the stage the panel names. `pose` is in the fighter's board frame, the
+ * opponent's too: the light is the stage's, not the figure's own.
+ */
+const SHADOW_POOL = 15 * 2;
+
+function placeShadows(holder, body, pose, motion, frame) {
+    const kit = shadowKit(holder);
+    if (!kit) return;
+    const S = kit.shadows;
+    const setting = shadowSetting(state.rom, S, state.sparkStage, pose[0].t);
+    const index = S.spec.by === 'record' ? body.index : body.char ?? body.index;
+    const flags = moveFlags(state.rom, motion)?.[frame] ?? 0;
+    const draws = setting ? shadowDraws(S, index, pose, setting, flags) : [];
+    placeEffectPool(holder, 'shadowPool', SHADOW_POOL, kit.geoms, draws);
+}
+
+/*
+ * Fighting Vipers' shadows on Bay Side's walls (js/fvwallshadow.js), on the
+ * fighter and on the opponent, each from the motion it plays: lit from the
+ * explorer camera's yaw, as the board lights them from the fight camera's.
+ * `pose` is in the fighter's board frame, the opponent's placed where it
+ * stands (`toBoard`, for its item's pose a frame back). The camera moves
+ * without a new frame, so the draw is kept and run again when it does
+ * (followWallShadows).
+ */
+const WALL_SHADOW_POOL = 15 * 2 + 1 + 15;
+
+function placeWallShadows(holder, body, pose, motion, frame, mirrored, toBoard = (p) => p) {
+    const kit = wallShadowKit(holder);
+    if (!kit) return;
+    const setting = wallSetting(state.rom, kit.walls, state.sparkStage, state.rom.game.rig.shadow?.ring ?? 5);
+    const run = () => {
+        const draws = setting && motion ? wallShadowDraws(kit.walls, body.index, pose, setting, cameraYawAndEye(), {
+            flags: moveFlags(state.rom, motion)?.[frame] ?? 0,
+            broken: brokenSlots(body, state.armour),
+            held: itemHeld(state.rom, motion, frame),
+            mirrored,
+        }, wallItemOf(holder, body, motion, frame, mirrored, toBoard)) : [];
+        placeEffectPool(holder, 'wallShadowPool', WALL_SHADOW_POOL, kit.geoms, draws);
+    };
+    run();
+    holder.wallShadowRun = setting ? run : null;
+}
+
+/* The carried item's matrix a frame back, for the walls; none for a fighter
+ * with no item. */
+function wallItemOf(holder, body, motion, frame, mirrored, toBoard) {
+    const kit = carriedKit(holder, body);
+    if (!kit) return null;
+    const poseAt = (f) => toBoard(poseFighter(state.rom, { ...body }, motion, f, { mirrored }).pose);
+    return wallItem(state.rom, kit.carried, motion, frame, { poseAt, mirrored });
+}
+
+/* The explorer camera in the rig's board frame: its yaw as a 16-bit word
+ * (Ry of it turns +z along the view laid flat, as 0x4800909 by the fight
+ * camera's +0x26 does) and its place. */
+function cameraYawAndEye() {
+    const r = cameraTurn(null, true);
+    const eye = state.viewer.camera.getWorldPosition(new THREE.Vector3()).applyMatrix4(state.viewer.root.matrixWorld.clone().invert());
+    return { yaw: Math.floor(Math.atan2(-r[6], r[8]) * 32768 / Math.PI) & 0xffff, eye: [eye.x, eye.y, -eye.z] };
+}
+
+/* Run the wall shadows again when the camera has moved since they were
+ * placed (the viewer's beforeDraw). */
+let wallCameraKey = '';
+function followWallShadows(camera) {
+    const m = state.motion;
+    /* Only a pool still in the scene: another tab's scene has none. */
+    const runs = [m, m?.rival].filter((h) => h?.wallShadowRun && h.wallShadowPool?.[0]?.mesh.parent === state.viewer.root).map((h) => h.wallShadowRun);
+    if (!runs.length) return;
+    const key = camera.matrixWorld.elements.join(',');
+    if (key === wallCameraKey) return;
+    wallCameraKey = key;
+    for (const run of runs) run();
+}
+
+/* The wall tables and their models, read once per ROM; none in a game
+ * without them. */
+function wallShadowKit(holder) {
+    if (holder.wallShadow?.rom !== state.rom) {
+        const walls = readWallShadows(state.rom), geoms = new Map();
+        for (const id of walls ? wallShadowModels(walls) : []) {
+            const d = id > 0 && getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.wallShadow = { rom: state.rom, walls, geoms };
+    }
+    return holder.wallShadow.walls ? holder.wallShadow : null;
+}
+
+/* The tables and their models, read once per ROM; none in a game without
+ * them. */
+function shadowKit(holder) {
+    if (holder.shadow?.rom !== state.rom) {
+        const shadows = readShadows(state.rom), geoms = new Map();
+        for (const id of shadows ? shadowModels(shadows) : []) {
+            const d = getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.shadow = { rom: state.rom, shadows, geoms };
+    }
+    return holder.shadow.shadows ? holder.shadow : null;
+}
+
+/*
+ * VF2's fighters in the Mirror stage's floor (js/vf2reflection.js): the
+ * record's +0x34 models on the pose reflected through y = 0, and Kage's or
+ * Pai's head piece's own model while the head is in the ring, on a stage the
+ * panel names whose flags have bit 5. `pose` is in the board frame, the
+ * opponent's placed where it stands.
+ */
+const REFLECTION_POOL = 17;
+
+function placeReflection(holder, body, pose) {
+    const kit = reflectionKit(holder, body);
+    if (!kit) return;
+    const piece = () => pieceReflectionDraw(state.rom, headPieceReflection(body, pose), pose);
+    const draws = stageReflects(state.rom, state.sparkStage) ? [...reflectionDraws(kit.models, pose), piece()].filter(Boolean) : [];
+    placeEffectPool(holder, 'reflectionPool', REFLECTION_POOL, kit.geoms, draws);
+}
+
+/* The body's sixteen models and its head piece's, read once per record;
+ * none in a game without them. */
+function reflectionKit(holder, body) {
+    if (holder.reflection?.rom !== state.rom || holder.reflection.root !== body.root) {
+        const models = reflectionModels(state.rom, body), geoms = new Map();
+        for (const id of models ? [...models, ...body.extras?.filter((e) => e.reflection).map((e) => e.reflection) ?? []] : []) {
+            const d = id > 0 && getModel(id);
+            if (d) geoms.set(id, geomBundle(d));
+        }
+        holder.reflection = { rom: state.rom, root: body.root, models, geoms };
+    }
+    return holder.reflection.models ? holder.reflection : null;
+}
+
+/* The camera's turn in the board frame of the figure `place` stands (the
+ * rig's own without), as the pose keeps a turn (each axis's image in turn): a
+ * model turned by it has its +y along the camera's up and its +z along its
+ * view, as 0x2DDE8's turn by the camera's three angles leaves it. */
+function cameraTurn(place = null, yawOnly = false) {
+    const into = state.viewer.root.matrixWorld.clone();
+    if (place) into.multiply(place);
+    into.invert();
+    const cam = state.viewer.camera;
+    const v = cam.getWorldDirection(new THREE.Vector3()).transformDirection(into);
+    const u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.getWorldQuaternion(new THREE.Quaternion())).transformDirection(into);
+    let z = new THREE.Vector3(v.x, v.y, -v.z), y = new THREE.Vector3(u.x, u.y, -u.z);
+    if (yawOnly) [y, z] = yawTurn(y, z);
+    const x = new THREE.Vector3().crossVectors(y, z);
+    return [x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z];
+}
+
+/* The yaw alone of a turn whose y and z images are `y` and `z` (0x4800909
+ * by the camera's +0x26): y stays up and z is the view laid flat, or the up
+ * laid flat when the camera looks straight down. */
+function yawTurn(y, z) {
+    const flat = new THREE.Vector3(z.x, 0, z.z);
+    if (flat.lengthSq() < 1e-8) flat.set(y.x, 0, y.z);
+    return [new THREE.Vector3(0, 1, 0), flat.normalize()];
+}
+
 /* The skin is rebuilt every frame, as the board rebuilds it: its points on
  * the chest side move with the pose. `holder` keeps the skin and its mesh. */
 function placeSkin(holder, matrices, flash = null) {
@@ -3790,6 +4308,34 @@ function placeSkin(holder, matrices, flash = null) {
     placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
+/*
+ * Fighting Vipers' light strobe (js/fvstrobe.js): each fighter drawn by the
+ * light times a scale of its own: its stage's (stageFighterLight), but on the
+ * frames a motion strobes it.
+ * The fighters share the scene's material, so each mesh sets the scale as
+ * it draws and puts 1 back after. In a chain the phase runs on from the
+ * links before; a motion alone starts from the fight's 1.0 on every pass.
+ */
+function strobeFighter(holder, scale) {
+    const meshes = [...holder.parts ?? [], ...holder.extras ?? []].flatMap((p) => p.slots.map((x) => x.mesh));
+    if (holder.skinMesh) meshes.push(holder.skinMesh.mesh);
+    for (const p of holder.osageParts ?? []) if (p) meshes.push(p.mesh);
+    for (const mesh of meshes) {
+        if (mesh.userData.lightScale === undefined) {
+            mesh.onBeforeRender = (r, s, c, g, material) => setLightScale(material, mesh.userData.lightScale);
+            mesh.onAfterRender = (r, s, c, g, material) => setLightScale(material, 1);
+        }
+        mesh.userData.lightScale = scale;
+    }
+}
+
+function setLightScale(material, scale) {
+    const u = material.uniforms?.uLightScale;
+    if (!u || u.value === scale) return;
+    u.value = scale;
+    material.uniformsNeedUpdate = true;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
@@ -3800,12 +4346,22 @@ function poseBodyRig() {
     m.spring = pose.spring;
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
-    placeExtras(m.extras, body, extras ?? [], null, m.flash);
+    placeExtras(m.extras, body, extras ?? [], null, m.flash, pose.shown);
 
     placeSkin(m, matrices, m.flash);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
     launchPendingDebris(m, pose.pose);
+    noteDebrisBodies(m, pose.pose);
     placeDebris(m);
+    placeSparks(m, body);
+    placeHitSparks(m, body, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    placeBursts(m, pose.pose, m.decoded, m.frame);
+    placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2', null, m.flash);
+    placeShadows(m, body, pose.pose, m.decoded, m.frame);
+    placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
+    placeReflection(m, body, pose.pose);
+    const base = stageFighterLight(state.rom, state.sparkStage, body.index);
+    strobeFighter(m, strobeAt(state.rom, m.decoded, m.frame, m.chain ? strobeAfter(state.rom, m.chain.links.slice(0, m.link)) : undefined, base).scale);
 
     if (m.skeleton) {
         const a = m.skeleton.geometry.getAttribute('position');
@@ -4059,6 +4615,7 @@ function renderCharacterSelect() {
             sel.appendChild(opt);
         }
         sel.value = String(state.charIndex);
+        renderRivalSelect();
         return;
     }
     /* The second half is the P2 colours switch's. */
@@ -4069,6 +4626,32 @@ function renderCharacterSelect() {
         sel.appendChild(opt);
     }
     sel.value = String(state.charIndex % P2_HALF);
+}
+
+/* The opponent's roster: the fighter itself first, then everyone. A pick
+ * the roster does not have (another game's) goes back to the fighter. */
+function renderRivalSelect() {
+    const sel = $('#char-rival-who');
+    sel.innerHTML = '';
+    sel.appendChild(Object.assign(el('option'), { value: '', textContent: 'the same fighter' }));
+    for (const b of state.bodies) sel.appendChild(Object.assign(el('option'), { value: String(b.index), textContent: b.name }));
+    if (!state.bodies.some((b) => b.index === state.opponentChar)) state.opponentChar = null;
+    sel.value = state.opponentChar == null ? '' : String(state.opponentChar);
+}
+
+/* What the opponent can play: the reactions only where the game's profile
+ * names its tables. */
+function renderRivalPlays() {
+    const sel = $('#char-rival-plays');
+    const reactions = Boolean(state.rom.game.rig?.reactions);
+    sel.innerHTML = '';
+    for (const r of REACTIONS.filter((r) => reactions || r.category == null)) {
+        sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
+    }
+    if (!reactions) state.opponentPlays = 'same';
+    sel.value = state.opponentPlays;
+    sel.hidden = !reactions;
+    $('#char-rival-note').textContent = '';
 }
 
 /* The roster entry for fighter `base` in the look the P2 switch asks for:
@@ -4298,19 +4881,21 @@ function renderBodyMotionPanel() {
     const sel = $('#motion-select');
     sel.innerHTML = '';
     const { fits, lead, label, every, groups, other } = bodyMotions(body);
-    const group = (label, list) => {
+    /* A group can tag its motions: a fighter's moves carry their input. */
+    const group = (label, list, tag) => {
         if (!list.length) return;
         const g = el('optgroup');
         g.label = label;
         for (const x of list) {
             const o = el('option');
             o.value = `id:${x.index}`;
-            o.textContent = `${x.name} · ${x.frames}f`;
+            const t = tag?.(x);
+            o.textContent = `${x.name} · ${x.frames}f${t ? ` · ${t}` : ''}`;
             g.appendChild(o);
         }
         sel.appendChild(g);
     };
-    if (groups) for (const g of groups) group(`${t(g.label)} (${g.list.length})`, g.list);
+    if (groups) for (const g of groups) group(`${t(g.label)} (${g.list.length})`, g.list, g.tag);
     else group(`${t(label)} (${lead.length})`, lead);
     const rest = every ? t(every) : t('Motions for {n} joints', { n: body.joints });
     const others = other ? t(other) : t('Every other motion for {n} joints', { n: body.joints });
@@ -4335,6 +4920,7 @@ function renderBodyMotionPanel() {
     scrub.disabled = !d;
     $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
+    renderSparkPanel();
     updateMotionFrameReadout();
 }
 
@@ -4411,6 +4997,7 @@ function renderMotionPanel() {
     renderMotionMeta();
     renderStringPanel();
     renderTrailPanel();
+    renderSparkPanel();
     renderExhaustPanel();
     updateMotionFrameReadout();
 }
@@ -4562,6 +5149,36 @@ function renderTrailPanel() {
         + `<br>fades through ${models.join(', ') || '—'}`
         + `<br>bone ${t.bone.toFixed(3)}, skeleton type ${t.skeletonType}`
         + `<br><span id="trail-live"></span>`;
+}
+
+/* Fighting Vipers' move trails: what the motion's op 28s ask for, and the
+ * stage whose models they take. */
+const SPARK_KINDS = [[0x20, 'left foot'], [0x10, 'right foot'], [0x80, 'left hand'], [0x40, 'right hand']];
+function sparkKind(k) {
+    const parts = SPARK_KINDS.filter(([bit]) => k & bit).map(([, name]) => name);
+    if (k & 1 && k & 2) parts.push('waist');
+    else if (k & 1 && k & 4) parts.push('floor, two frames in four');
+    return parts.join(' + ') || 'off';
+}
+
+function renderSparkPanel() {
+    const m = state.motion;
+    const script = state.rom.game.rig?.trails && m.decoded ? trailScript(state.rom, m.decoded.id) : null;
+    /* The stage picks the trails' models, the shadows' light, on FV the
+     * fighters' light and on VF2 the floor's reflection. */
+    const staged = Boolean(state.rom.game.rig?.strobe || state.rom.game.rig?.shadow || script);
+    $('#fight-stage-field').hidden = !staged;
+    if (staged) {
+        const sel = $('#spark-stage');
+        const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
+        sel.innerHTML = Array.from({ length: 12 }, (_, n) => `<option value="${n}">${name(n)}</option>`).join('');
+        sel.value = String(state.sparkStage);
+    }
+    $('#spark-field').hidden = !script;
+    if (!script) return;
+    $('#spark-show').checked = state.showTrails;
+    $('#spark-readout').innerHTML = 'op 28: ' + script.ops
+        .map((o) => `f${o.frame} ${sparkKind(o.kind)}${o.kind & 0xf0 ? `, life ${o.life}` : ''}`).join(' · ');
 }
 
 /* A bouncing chest's spring on this frame. */
@@ -4893,6 +5510,14 @@ function wireOptions() {
         state.showTrails = e.target.checked;
         poseRig();
     });
+    $('#spark-show').addEventListener('change', (e) => {
+        state.showTrails = e.target.checked;
+        poseRig();
+    });
+    $('#spark-stage').addEventListener('change', (e) => {
+        state.sparkStage = +e.target.value;
+        poseRig();
+    });
     $('#exhaust-open').addEventListener('change', (e) => {
         state.jetExhaust = e.target.checked;
         poseRig();
@@ -4902,9 +5527,14 @@ function wireOptions() {
         state.travel = e.target.checked;
         poseRig();
     });
+    $('#char-mirror').addEventListener('change', (e) => {
+        state.mirrored = e.target.checked;
+        poseRig();
+    });
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
         $('#char-behind-field').hidden = !state.opponent;
+        $('#char-rival-opts').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
         renderAnimPanel();
@@ -4916,6 +5546,15 @@ function wireOptions() {
     $('#char-rival-p2').addEventListener('change', (e) => {
         state.opponentP2 = e.target.checked;
         if (state.opponent) rebuildBody({ keepCamera: true });
+    });
+    $('#char-rival-who').addEventListener('change', (e) => {
+        state.opponentChar = e.target.value === '' ? null : +e.target.value;
+        if (state.opponent) rebuildBody({ keepCamera: true });
+    });
+    $('#char-rival-plays').addEventListener('change', (e) => {
+        state.opponentPlays = e.target.value;
+        if (state.opponentPlays === 'same') $('#char-rival-note').textContent = '';
+        poseRig();
     });
     $('#char-p2').addEventListener('change', (e) => {
         state.p2Look = e.target.checked;
@@ -5201,9 +5840,11 @@ function playStageMusic() {
     /* A stage list that is not one entry per stage number says which number
      * the sound tables know it by (js/vf2.js). */
     const slot = stage?.soundSlot ?? stage?.slot;
-    const { code, index } = stage
-        ? stageMusic(state.rom, slot, +$('#music-song').value)
-        : { code: 0, index: -1 };
+    /* A stage whose song the scripts start rather than a table (House of the
+     * Dead's, js/placements.js) carries it. */
+    const { code, index } = !stage ? { code: 0, index: -1 }
+        : stage.song !== undefined ? { code: stage.song, index: -1 }
+        : stageMusic(state.rom, slot, +$('#music-song').value);
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
     if (code === state.music.playing) return;
@@ -5220,7 +5861,17 @@ function playStageSounds(slot) {
     if (!state.rom.game.sound?.ambience || !$('#opt-stage-sfx').checked || slot == null) return;
     if (state.music.sfx?.board !== state.music.board) state.music.sfx = new StageSounds(state.rom, state.music.board);
     /* Fighting Vipers' cues go off on the stage objects' clock. */
-    state.music.sfx.start(slot, () => Math.max(0, state.anim.frame) % FV_ROUND);
+    state.music.sfx.start(slot, () => Math.max(0, state.anim.frame) % FV_ROUND, jetShown);
+}
+
+/* Whether an Airport plane is on the screen at the objects' clock `f`: the
+ * routine's screen test, which the jet cue sits behind, asked of the draw that
+ * carries it (`jetCue`, js/fvobjects.js) with the camera as it stands. */
+function jetShown(f) {
+    const now = Math.max(0, state.anim.frame);
+    const frame = now - (now % FV_ROUND) + f;
+    return (state.anim.entries ?? []).some(({ entry }) =>
+        entry.jetCue && entry.live && !entry.live(frame, liveCamera(now)).hidden);
 }
 
 async function setMusic(on) {
@@ -5277,10 +5928,13 @@ function applyGameFeatures() {
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
-    /* The opponent is VF2's alone. */
+    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
+    $('#char-mirror-field').hidden = !rival;
     $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-rival-opts').hidden = !rival || !state.opponent;
+    renderRivalPlays();
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
@@ -5533,7 +6187,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.viewer.beforeDraw = rankFaceLayers;
+    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); };
     $('#tool-shot').hidden = false;
     $('#tool-export').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);

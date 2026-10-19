@@ -3,8 +3,9 @@
  * A hit that breaks a slot throws that stage's pieces (0x640EDAC's records,
  * readArmourPieces) off it: 0x2D614 gives each a velocity from the hit,
  * 0x2D390 puts it in one of eight shared slots at the broken slot's point, and
- * 0x2CE68 moves it every frame (gravity, a bounce on its floor, the ring's
- * walls, a spin that settles on the record's target angles). 0x2E17C draws it.
+ * 0x2CE68 moves it every frame (out of the fighters' bodies, gravity, a bounce
+ * on its floor, the ring's walls, a spin that settles on the record's target
+ * angles). 0x2E17C draws it.
  * A piece 0x2D390 turns into the flipbook effect instead goes to one of two
  * effect slots (0x2D254), which 0x2D2F4 runs and 0x2E17C draws after them.
  *
@@ -55,6 +56,11 @@ const EFFECT_FRAMES = 54, EFFECT_SPEED = [fromBits(0x3e4ccccd), fromBits(0x3c23d
  * 11 in flight, 12 and 14 spin about X and Z, 19 out of the ring. */
 const FLAG = { one: 1 << 1, three: 1 << 3, rest: 1 << 7, live: 1 << 11, spinX: 1 << 12, spinZ: 1 << 14, out: 1 << 19 };
 
+/* 0x2D218's sounds, picked by the highest of flag bits 28-31 (scanbit), for
+ * the first two floor hits (0x2CFC4). Every record with a model has one bit:
+ * 28, 29 or 31. */
+const LAND_SOUNDS = [0xae1146, 0xae1115, 0xae1128, 0xae111f];
+
 /** 0x2D614's tables and 0x2D390's spins, from the profile's `debris`. */
 export function readDebrisTables(rom, D, dataAt) {
     const list = (addr, n, read) => {
@@ -76,6 +82,7 @@ export function createDebrisSim(centre, flipbook = null) {
     return {
         slots: Array.from({ length: DEBRIS_SLOTS }, () => null),
         effects: Array.from({ length: EFFECT_SLOTS }, () => null), flipbook, frame: 0, centre,
+        cues: [],
     };
 }
 
@@ -120,7 +127,7 @@ export function launchDebris(sim, T, hit, pieces, pose, half) {
             half, model: p.model, slot: p.slot, flags: p.flags | FLAG.live,
             p: at, v: throwOf(T, hit, p), from: at.slice(),
             angles: [short(p.angles[0]), short(p.angles[1]), short(p.angles[2])], targets: p.targets.map(short),
-            spin, weight: p.weight, radius: p.radius, floor: p.floor, frames: 0, bounces: 0,
+            spin, weight: p.weight, radius: p.radius, floor: p.floor, shadow: p.shadow ?? 0, frames: 0, bounces: 0,
         };
     }
 }
@@ -149,27 +156,51 @@ function stepEffect(sim, k) {
     for (let i = 0; i < 3; i++) e.p[i] = f(e.p[i] + e.v[i]);
 }
 
-/* 0x2CF24's fall and bounce. The resting piece's on-screen test (0x316F0,
- * which removes it when it leaves the picture) is not followed. */
-function fall(s) {
+/*
+ * 0x316F0, the resting piece's on-screen test: the piece's point goes to view
+ * space (TGP 0x29) and onto the screen at the focal (0x501084), 496 by 384
+ * about its centre, and its radius (+0x18) with it. It is on screen if any of
+ * four points is strictly inside: the radius above and below the point, or
+ * left and right of it. Behind the eye (z's sign bit) nothing is. `v` is the
+ * view-space point (x right, y up, z ahead), `lens` the screen's edges as x/z
+ * and y/z.
+ */
+export function pieceOnScreen(v, radius, lens) {
+    if (!(v.z > 0)) return false;
+    const ex = lens.x * v.z, ey = lens.y * v.z;
+    const inX = (x) => x > -ex && x < ex, inY = (y) => y > -ey && y < ey;
+    return (inX(v.x) && (inY(v.y - radius) || inY(v.y + radius)))
+        || (inY(v.y) && (inX(v.x - radius) || inX(v.x + radius)));
+}
+
+/* 0x2CF24's fall and bounce. A resting piece with flag bit 3 is asked
+ * 0x316F0's test each frame (unless the finishing blow's +0xA74 is set, which
+ * the explorer never reaches), and off screen it is removed (0x2D100: its
+ * model and flags cleared, so its slot is free); `onScreen` asks it, and with
+ * none every piece stays. The first two floor hits queue the piece's sound
+ * (0x2D218) on `cues`. Returns false for a piece removed. */
+function fall(s, cues, onScreen) {
     const { p, v } = s;
-    if (s.flags & FLAG.rest) return;
+    if (s.flags & FLAG.rest) return !(s.flags & FLAG.three) || !onScreen || onScreen(s);
     v[1] = f(v[1] - GRAVITY);
     v[0] = f(v[0] * DRAG);
     v[2] = f(v[2] * DRAG);
     for (let k = 0; k < 3; k++) p[k] = f(p[k] + v[k]);
     const floor = s.flags & FLAG.out ? f(s.floor + OUT_DROP) : s.floor;
-    if (p[1] > floor) return;
+    if (p[1] > floor) return true;
     s.bounces++;
+    const bits = s.flags >>> 28;
+    if (s.bounces <= 2 && bits) cues.push(LAND_SOUNDS[31 - Math.clz32(bits)]);
     p[1] = f(p[1] - v[1]);
     v[1] = -f(v[1] * f(BOUNCE + f(BOUNCE / s.weight)));
     if (Math.abs(v[1]) > STILL) {
         v[0] = f(v[0] * SKID);
         v[2] = f(v[2] * SKID);
-        return;
+        return true;
     }
     s.flags |= FLAG.rest;
     v.fill(0);
+    return true;
 }
 
 /* The ring's walls, the board's x then z (the frame's z then x), about the
@@ -213,17 +244,119 @@ function turn(s) {
     toward(2, false);
 }
 
-/** One board frame of 0x2CE68 for every piece in flight or at rest. The
- * push out of the fighters' bodies (TGP 0x77) is not followed. */
-export function stepDebris(sim) {
+/*
+ * 0x2CEA0 (epc_oidasi), the push out of the fighters' bodies. Every frame,
+ * before the fall, each piece sends TGP op 0x77 (copro 0x20936) its point and
+ * radius; the copro tests it against player 1's 32 body balls, then, if none
+ * touched, player 2's, and 0x2CEA0 adds 0.16 of the two sums it returns to
+ * x and z. The balls are calc_unit_mat's (0x18304 sends each slot's through
+ * op 0x39, the slot's matrix on the ball's point), table entry i holding ball
+ * 0x292AC[i] and its radius (0x1B90). A body further than 1.4 from entry 13
+ * (ball 3, slot 9) is skipped; otherwise each ball within d <= r + radius adds
+ * (ball - piece) * (1 - q), q the copro's d / (r + radius). Its reciprocal
+ * refines RECIPS three times against the 3.0 the length routine (0x20281)
+ * leaves in F11, not 2.0, so q comes out near 2d / (r + radius): a piece
+ * inside half that is drawn in, one beyond it pushed out.
+ */
+const PUSH = fromBits(0x3e23d70a), BODY_NEAR = fromBits(0x3fb33333), BODY_TEST = 13, BODY_BALLS = 32;
+const NEWTON = f(3);
+/* The SHARC's RECIPS seed by the mantissa's top seven bits (MAME's
+ * recips_mantissa_lookup), shifted down 15. */
+const RECIPS = [
+    255, 252, 248, 244, 240, 236, 232, 228, 224, 222, 218, 214, 212, 208, 204, 202, 198, 194, 192, 188, 186, 182, 180, 178,
+    174, 172, 168, 166, 164, 160, 158, 156, 152, 150, 148, 146, 142, 140, 138, 136, 134, 130, 128, 126, 124, 122, 120, 118,
+    116, 114, 112, 110, 108, 106, 104, 102, 100, 98, 96, 94, 92, 90, 88, 86, 84, 82, 80, 80, 78, 76, 74, 72, 70, 70, 68, 66,
+    64, 62, 62, 60, 58, 56, 56, 54, 52, 50, 50, 48, 46, 46, 44, 42, 40, 40, 38, 36, 36, 34, 32, 32, 30, 30, 28, 26, 26, 24,
+    24, 22, 20, 20, 18, 18, 16, 14, 14, 12, 12, 10, 10, 8, 8, 6, 6, 4, 4, 2, 2, 0,
+];
+
+function recips(x) {
+    const b = bitsOf(x), e = -(((b >>> 23) & 0xff) - 127) - 1;
+    if (e > 125 || e < -126) return fromBits(b & 0x80000000);
+    return fromBits((b & 0x80000000) | ((e + 127) << 23) | (RECIPS[(b & 0x7fffff) >> 16] << 15));
+}
+
+/** The body balls by table entry (0x292AC, `order`): each one's slot, point
+ * in that slot's frame and radius, or null for an entry no slot sends. `B` is
+ * the slots' lists (the profile's shadow `balls`). */
+export function readBodyBalls(rom, order, B, dataAt) {
+    const byte = (a) => { const r = dataAt(rom, a); return r.view.getUint8(r.off); };
+    const real = (a) => { const r = dataAt(rom, a); return r.view.getFloat32(r.off, true); };
+    const slotOf = new Map();
+    for (let s = 1; s < 16; s++) {
+        const n = byte(B.counts + s);
+        for (let k = 0; k < n; k++) slotOf.set(byte(B.lists + B.inline * (s - 1) + k) >> 2, s);
+    }
+    return Array.from({ length: BODY_BALLS }, (_, i) => {
+        const k = rom.mainCpuView.getUint8(order + i);
+        if (!slotOf.has(k)) return null;
+        const at = B.points + 16 * k;
+        return { slot: slotOf.get(k), point: [0, 4, 8].map((o) => real(at + o)), radius: f(real(at + 12)) };
+    });
+}
+
+/** Where a fighter's body balls are on `pose` (board frame): { at, radius }
+ * by table entry. */
+export function bodyBallsAt(balls, pose) {
+    return balls.map((b) => {
+        if (!b) return null;
+        const { r, t } = pose[b.slot], [x, y, z] = b.point;
+        return { at: [0, 1, 2].map((i) => f(r[i] * x + r[3 + i] * y + r[6 + i] * z + t[i])), radius: b.radius };
+    });
+}
+
+/* Copro 0x20955 for one body: adds to `sum`, and the last ball's 1 - q (its
+ * bits, as the copro tests them; 0 for none) says whether one touched. */
+function pushFrom(p, radius, balls, sum) {
+    /* 0x2031F's sum; its square root (0x20281, RSQRTS refined) is taken
+     * exactly. */
+    const length = (e) => {
+        const [x, y, z] = [0, 1, 2].map((i) => f(e[i] - p[i]));
+        return f(Math.sqrt(f(f(f(x * x) + f(y * y)) + f(z * z))));
+    };
+    const test = balls[BODY_TEST];
+    if (!test || length(test.at) > BODY_NEAR) return 0;
+    let hit = 0;
+    for (const b of balls) {
+        if (!b || !bitsOf(b.radius)) continue;
+        const d = length(b.at), reach = f(b.radius + radius);
+        if (d > reach) continue;
+        let r = recips(reach), m = reach, q = d;
+        for (let k = 0; k < 3; k++) {
+            m = f(r * m);
+            q = f(q * r);
+            r = f(NEWTON - m);
+        }
+        const k = f(1 - f(q * r));
+        sum[0] = f(sum[0] + f(f(b.at[0] - p[0]) * k));
+        sum[1] = f(sum[1] + f(f(b.at[2] - p[2]) * k));
+        hit = bitsOf(k);
+    }
+    return hit;
+}
+
+function pushOut(s, bodies) {
+    const sum = [0, 0];
+    for (const balls of bodies) if (balls && pushFrom(s.p, s.radius, balls, sum)) break;
+    s.p[0] = f(s.p[0] + f(PUSH * sum[0]));
+    s.p[2] = f(s.p[2] + f(PUSH * sum[1]));
+}
+
+/** One board frame of 0x2CE68 for every piece in flight or at rest.
+ * `bodies` are the fighters' body balls (bodyBallsAt), player 1's first;
+ * the push is skipped once the finishing blow lands (+0x7D6 bit 0), which
+ * the explorer's fight never reaches. `onScreen(s)` is 0x316F0's test for a
+ * resting piece (pieceOnScreen, on the explorer's own screen). */
+export function stepDebris(sim, bodies = [], onScreen = null) {
     sim.frame++;
-    for (const s of sim.slots) {
-        if (!s?.model) continue;
+    sim.slots.forEach((s, k) => {
+        if (!s?.model) return;
         s.frames++;
-        fall(s);
+        pushOut(s, bodies);
+        if (!fall(s, sim.cues, onScreen)) { sim.slots[k] = null; return; }
         walls(s, sim.centre);
         turn(s);
-    }
+    });
     for (let k = 0; k < EFFECT_SLOTS; k++) stepEffect(sim, k);
 }
 
@@ -241,4 +374,33 @@ export function debrisPlace(s) {
  * always 0. */
 export function effectPlace(e, k) {
     return { r: turnedInOrder([1, 0, 0, 0, 1, 0, 0, 0, 1], [[1, ((EFFECT_SLOTS - k) << 14) - 0x4000]]), t: e.p };
+}
+
+/* 0x78384's floor shadows: from 0x76A70, on a stage whose flags
+ * (0x6442BA8 + 12 x stage) have bit 9 or bit 31, the Factory and Bay Side. */
+const SHADOW_STAGES = (1 << 9) | (1 << 31);
+const SHADOW_ABOVE = fromBits(0x3e99999a), SHADOW_SCALE = fromBits(0x3fa00000);
+
+/** Whether 0x76A70 calls 0x78384 on a stage with these flags. */
+export function debrisShadowsOn(stageFlags) {
+    return (stageFlags & SHADOW_STAGES) !== 0;
+}
+
+/**
+ * 0x78384: under each piece (model +0x22 not 0) at most 0.3 above its floor
+ * (0, or 0x50A010 once out of the ring, the same stand-in fall() drops it
+ * by), the slot's +0x44 laid on that floor: T(x, floor, z) S(1, 0, 1), the
+ * piece's own Y, X and Z turns, then S(1.25). { model, r, t } in the board
+ * frame; the effects get none.
+ */
+export function debrisShadowDraws(sim) {
+    const out = [];
+    for (const s of sim.slots) {
+        if (!s?.model || !s.shadow) continue;
+        const floor = s.flags & FLAG.out ? OUT_DROP : 0;
+        if (f(floor + SHADOW_ABOVE) < s.p[1]) continue;
+        const { r } = debrisPlace(s);
+        out.push({ model: s.shadow, r: r.map((v, i) => (i % 3 === 1 ? 0 : v * SHADOW_SCALE)), t: [s.p[0], floor, s.p[2]] });
+    }
+    return out;
 }

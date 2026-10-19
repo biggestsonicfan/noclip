@@ -2475,7 +2475,8 @@ export function describeOps(ops) {
 
 /* `scenery` is a placement stage's one layer: its draws are all the same kind
  * of thing, a model where the table puts it. `fighters` are the bodies a stage
- * poses with the game's own code (Dead or Alive's attract fight). */
+ * poses with the game's own code (Dead or Alive's attract fight, Virtua
+ * Cop's enemies). */
 export const DISPLAY_LAYER_ORDER =
     ['sky', 'water', 'upper', 'ground', 'floor', 'platform', 'extra', 'cage', 'poles', 'objects', 'scenery',
         'fighters', 'outside', 'inside'];

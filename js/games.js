@@ -746,8 +746,12 @@ const fvipers = {
      *
      * The crouch is adj_taikaku (0x2BF4C), VF2's 0x29414 with other
      * constants: character 9, B.M., stands at 1.1 and 10, Sonic, at 0.56.
+     *
+     * The table's end, where entry 0 points (0x6C01080), is the motions'
+     * names: 1055 more pointers, one per id, into the data ROM (0x2E421CC on)
+     * and the second bank (0x6C95438 on).
      */
-    motionTable: { list: 0x06c00004, count: 1055 },
+    motionTable: { list: 0x06c00004, count: 1055, names: true },
     /*
      * The sway chains (js/osage.js), Sonic The Fighters' records and code on
      * this game's data. The definitions by record, `0x63E34[+0x1B0*4]` at
@@ -829,10 +833,14 @@ const fvipers = {
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
-                 * 0x2D254's effect, 54 models a record (+0x1B0). */
+                 * 0x2D254's effect, 54 models a record (+0x1B0). `gates`
+                 * are the stage flags 0x76A70 tests for their floor
+                 * shadows (0x78384). `bodies` is the program ROM's order
+                 * of the body balls (0x292AC) the push out of the fighters'
+                 * bodies (0x2CEA0) tests; the balls are the shadows'. */
                 debris: {
                     out: 0x064216d0, rise: 0x064216e8, heading: 0x06421700, jitter: 0x06421720, spin: 0x0640f924,
-                    flipbook: 0x06421760,
+                    flipbook: 0x06421760, gates: 0x06442ba8, bodies: 0x000292ac,
                 },
             },
             /* The midriff, record +0x24, and the one a broken chest draws
@@ -843,12 +851,119 @@ const fvipers = {
              * +0x720, which every draw of the fighter tests for the flash
              * (js/vf2fighters.js, flashMaterial). */
             flash: { setups: 0x06411e94 },
+            /* rob_disp's part loop (0x1A02C) draws a part model from `from`
+             * to `to` with material `material` when it does not flash: Jane
+             * player 2's broken chest and its bounce, which take model
+             * 0x62D's material over their own. */
+            recolour: { from: 0x62e, to: 0x64c, material: 0x68cbc },
+            /* Move-script op 18's hand models, 0x640EBF4[record]: four a
+             * hand; js/fighterhands.js. */
+            hands: { table: 0x0640ebf4 },
+            /* Move-script op 16's heads (0x2DDB0), 0x640D31C[op][record]:
+             * a pair of s16 models, of which the explorer reads the first
+             * (the second is the broken helmet's); js/fighterhands.js. */
+            face: { op: 16, table: 0x0640d31c },
         },
+        /* What the one hit plays; js/reactions.js. set_mot_dat's setups
+         * past their 12-byte head, the lengths at 0x1CE86; op 4 (sub_1BB20)
+         * keeps the kind at +7, and the picker (0x26978) reads
+         * 0x641F834[kind], 22 kinds. */
+        reactions: { setups: 0x06411e94, head: 12, lengths: 0x1ce86, ops: 25, strike: 7, table: 0x0641f834, kinds: 22 },
+        /* The move script's op lengths, by the handlers 0x1C24C runs
+         * (table 0x1D028); js/fighterhands.js. */
+        script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 4, 4, 5, 6, 12, 4, 4, 4, 6, 3, 4],
+        /* Script op 28's trails; js/fvtrails.js. 0x7C178's tables by life:
+         * the feet's models by stage (0x500064) and sizes, the hands', the
+         * floor puff's, and the waist's models (one set for every stage). */
+        trails: {
+            op: 28,
+            feet: { models: 0x064445f0, sizes: 0x06444690 },
+            hands: { models: 0x06444430, sizes: 0x06444490 },
+            floor: { models: 0x06444520, sizes: 0x064445c0 },
+            waist: 0x064446c0,
+        },
+        /* Script op 30's throw spark; js/fvhitspark.js. 0x2DB78's flipbooks
+         * for a record with flag bit 8: +0x1E's by age, +0x20's by half. */
+        hitSpark: { op: 30, books: [{ at: 0x064212b4 }, { at: 0x064211e0, halved: true }] },
+        /* 0x21E40's burst; js/fvburst.js. Frames 0..15 of the u16 table
+         * name the models, drawn at 0.5 while +0x720 has `lightBit` or
+         * +0x1A4 has bit `flag`. */
+        burst: { table: 0x06ce35e4, last: 15, scale: 0.5, lightBit: 10, flag: 26 },
+        /* The carried item rob_disp draws (0x1A4B4); js/fvitem.js. Fighter
+         * record +0x2C's item records, `size` bytes each with the mirrored
+         * one `mirror` in, script op 17's byte picks one; `ring` copies. */
+        carried: { op: 17, records: 0x2c, size: 0x70, mirror: 0x38, ring: 4 },
+        /* Each fighter's own light (0x1F1FC); js/fvstrobe.js. +0x720 starts
+         * as the setup's second word (0x1B98C); script ops 25 and 26 set and
+         * clear a bit of it, op 27 sets bit 3 or clears it. While it has
+         * `bits`, or +0x1A4 has bit `flag`, the light strobes. */
+        strobe: {
+            set: 25, clear: 26, bit3: 27, bits: 0x420, flag: 26,
+            /* The scale by record (+0x1B0) where it is not 1.0, by stage
+             * (0x500064), as the scene's start (0x21614, 0x21794) writes
+             * 0x50A0E0, in the board's single-precision bits. */
+            stages: {
+                2: { 17: 0x3f0f5c29, 18: 0x3ef0a3d7 },
+                9: {
+                    1: 0x3f0a3d71, 2: 0x3f0a3d71, 4: 0x3f6b851f, 6: 0x3f5eb852, 8: 0x3f028f5c,
+                    14: 0x3f0a3d71, 15: 0x3f0a3d71, 17: 0x3f07ae14, 18: 0x3f28f5c3, 19: 0x3f11eb85,
+                    21: 0x3f028f5c,
+                },
+            },
+        },
+        /* The floor shadows (js/fightershadow.js): 0x60640's tables by
+         * +0x1B0; the balls the boot (0x1950) copies to 0x506000 and the
+         * coprocessor tests each slot's first of; the light VECTER_X/Y,
+         * copied from the stage record (0x5FA08); the ring 5 (0xB658) and
+         * the ground by stage (0x248FC). The stage flags (0x6442BA8) can
+         * stop them, 0x60B98 makes the test round, and 0x5FA6C lights them
+         * from four lamps 0x60620 at heights 0x6CE35A4 (0x60468). */
+        shadow: {
+            tables: 0x60bc8, count: 26, by: 'record', ring: 5, grounds: 0x06ce3564,
+            leave: { x: 1, z: 2 }, skip: { slot: 9, flags: (1 << 14) | (1 << 16) },
+            balls: { counts: 0x0640e914, lists: 0x0640e89c, inline: 8, points: 0x0640e4fc, first: true },
+            stages: { at: 0x06ce1048, stride: 256, light: 0x08 },
+            gates: 0x06442ba8, round: 0x60b98,
+            lamps: { stages: 0x5fa6c, at: 0x60620, heights: 0x06ce35a4 },
+            /* The flying armour pieces' shadows, 0x608B8 and 0x609B0, which
+             * 0x602F0 goes on to unless the stage has flag bit 9. */
+            pieces: true,
+        },
+        /* The wall shadows (js/fvwallshadow.js): rob_kabe_kage_disp
+         * (0x76944) under stage flag bit 31, the tables by +0x1B0, each
+         * slot's height (0x6443EDC) over the stage's top (0x6CE35A4,
+         * 0x248FC). */
+        wallShadow: { tables: 0x06442c68, count: 26, heights: 0x06443edc, tops: 0x06ce35a4, gates: 0x06442ba8 },
         crouch: { 9: 1.1, 10: 0.56 },
-        look: { own: 0x2000 },
+        /* The move flags (+0x1A4) as the motion sets them; js/vf2fighters.js,
+         * moveFlags. 0x1C180 drops bits 26, 16 and 8 at the second of setup
+         * op 2's frames; script op 13 sets or clears bit 25. */
+        flags: { drop: 0x4010100, op13: 25 },
+        /* The head looks at the other fighter only while +0x1A4 has none of
+         * 0x6C119 (0x2B2FC), else it follows the motion's target, stepping
+         * as far again (`own`). */
+        look: { own: 0x2000, gate: 0x6c119 },
+        /* Which ways a switch blends (js/vf2fighters.js, blendMode): the
+         * setup record's byte +10 (+0x814) and u32 +4 (+0x860), 0x29F50;
+         * setup word bit 18 blends both ways, 19 in only, and +0x1A4 bit 26
+         * both ways where 0x6600 would have it in only. */
+        blendIn: { stance: 10, held: 4, both: 1 << 18, inOnly: 1 << 19, flagsBoth: 1 << 26 },
+        /* The five stance poses a blend out goes to, by action table slot
+         * (0x29EEC). */
+        blendOut: [0, 1, 8, 12, 42],
         note: 'fv',
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The Cells tab (js/cells.js): the tables stageTable.scroll reads the sky
+     * from. dsp_pattern (0x6744) loads off_6450300[g0] and _ScrollCG_Initialize
+     * (0x2934C) off_6450000[g0], neither with a bound, so the CGs run up to
+     * the pattern table and the cells to its terminating zero, 473 of them.
+     * The halfword at 0x02 of a record would pick byte entries where it is 0
+     * (0x677C); none is. Cell 22's pointer, 0x2A32EF0, leads to no record. */
+    cells: {
+        cgTable: 0x06450000, patternTable: 0x06450300, charBytes: 0x100000,
+        cgEntries: 0xc0,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead (prototype) ----------------------------------- */
@@ -1119,9 +1234,8 @@ const hotdp = {
      * of, so a stage carries the sky the chapter turns on while its set is
      * loaded — the courtyard's, and none for the mansion, which is indoors.
      *
-     * The moons (PN_moon, PN_moonb, PN_moonc) are not part of this. They are
-     * flat quads an object handler billboards at the camera, spawned from the
-     * script's own object lists, which are not read.
+     * The moon is not part of this. It is a flat quad, PN_moonc, that a
+     * spawn of class 0x13 turns to the camera (`objects.facing` below).
      */
     sky: { models: 0x840e0, heights: 0x840f0, count: 4, band: 1462, spin: 4 },
     /*
@@ -1138,6 +1252,13 @@ const hotdp = {
         table: 0x84140, stride: 76, model: 0, count: 125, handlers: 0x86990,
         prop: 0x30670, type: 0x24, classes: 0x86c10, generic: 0x2ecc0,
         scale: 0x28,
+        /* The same two second models, drawn by 0x30670 after the prop's own
+         * (0x30C74): PN_sara_dai00a (0x126C) on type 11, and on type 26, while
+         * +0x314 is 0 (the chest unbroken), PN_takara_box01a (0xC7A) moved
+         * (0, 3.5, 2). The routine also draws 0x126C on any prop whose +0x6C
+         * is 12, and no prop the scripts spawn has that; and 0x114A at twice
+         * the size over type 73, the extra plate, which stays out. */
+        seconds: { 11: { model: 0x126c }, 26: { model: 0xc7a, at: [0, 3.5, 2] } },
         /*
          * What takes a prop down again, read in sub_33320, which the prop's
          * handler calls before it draws (see propZones in js/placements.js).
@@ -1157,6 +1278,75 @@ const hotdp = {
         },
         windows: 0x85940,
         sweep: { chapter: 0, section: 7, script: 2, after: 170, spare: 7 },
+        /* Type 14's fish, on 0x312B0: the finished game's 0x3B550
+         * instruction for instruction, with t at +0x2F4, the segment at
+         * +0x2F0, the same six points at 0x85900, and PN_jinmengyo_01
+         * (0x121E, the type's own model) plus +0x50 rem 40, drawn through
+         * 0x35AD0. It closes as a prop does (0x33320). */
+        swimmers: [{ handler: 0x312b0, points: 0x85900, segments: 4, step: 0.01, models: 40 }],
+        /* Type 69, PN_powa00a to 29a on 0x32F30: the finished game's 0x3D860
+         * at the prototype's models (0x935, back to it past 0x950), drawn
+         * through 0x35AD0. It never calls 0x33320; it closes once the camera
+         * frame (0x51E788) passes +0x2F4, which the generic init (0x2EDD8)
+         * sets by section: `until` (see propZones in js/placements.js). */
+        cycles: [{ handler: 0x32f30, last: 0x951, until: { 3: 99, 9: 268, 11: 1048, 12: 1048 } }],
+        /* Type 77, PN_r2_05_kabe01a on 0x33000: the finished game's 0x3D930
+         * on the camera frame (0x51E788). Past 458 it takes
+         * PN_r2_05_kabe_dam01a (0x113F) and throws its pieces (0x30460), left
+         * out; past 723 it closes (0x10D60), never calling 0x33320. */
+        clocked: { handler: 0x33000, until: 723 },
+        /* Type 68, PN_furukagi00a on 0x32E80: counts +0x50 a frame from its
+         * spawn and closes (0x10D60) past 190, never calling 0x33320. Its
+         * swing (+0x34, kicked only past camera frame 593) starts on its
+         * 137th frame, with the camera held at 595; left out. */
+        plain: [{ handler: 0x32e80, types: [68], frames: 190 },
+            /* Types 78 and 79, the halves of a door (PN_r2do_01a and 01b), on
+             * 0x33130: they draw through 0x35AD0 and never close until the
+             * byte 0x51E50E is set, which only enemies' own routines (0x57B90,
+             * 0x57FC0, 0x3A6FC) do; then they fly off and close below y -35.
+             * The explorer opens no enemy, so they stand (`stays`). */
+            { handler: 0x33130, types: [78, 79], stays: true }],
+        /* Class 0x8A's task, 0x2FDD0: the finished game's 0x39830 on the
+         * prototype's table, 0x81448 (see standTable in js/placements.js). */
+        tables: [{ init: 0x2fdd0, at: 0x81448, block: 0x16c, lift: 0x2c }],
+        /* Class 0x93's task, 0x2FA20, which stands a group about its own
+         * place out of a table it picks by chapter: 0x85E10 in chapter 0,
+         * where all but types 3 and 4 get window row 26, and 0x866F0 in
+         * chapter 1 (see standGroup in js/placements.js). */
+        groups: [{ init: 0x2fa20, chapters: [{ at: 0x85e10, count: 15, window: 26, keep: [3, 4] },
+            { at: 0x866f0, count: 12 }] }],
+        /* Class 0x94's task, 0x2F3B0, which stands four models at the places
+         * of 0x85B00 on 0x32110: three gears turning their third angle and
+         * the water looping 0x820 to 0x83D (see standFixed in
+         * js/placements.js). */
+        fixed: [{ init: 0x2f3b0, at: 0x85b00, count: 4, first: 0x820, last: 0x83d,
+            spins: { 0x83e: 0x80, 0x83f: 0x80, 0x840: -0x80 } }],
+        /* Class 0x13's task, 0x27D70, which turns PN_moonc to the camera
+         * at five times its size (see standFacing in js/placements.js). */
+        facing: [{ init: 0x27d70, model: 0x13a2, scale: 5 }],
+    },
+    /*
+     * The prototype's own sound program and samples: a driver of its own
+     * (`sndpgm0.31`) and four 2 MB sample chips, on the same Model 2 board.
+     * The i960 side is the finished game's, at other addresses: 0x11160 queues
+     * a word (while the mode word 0x51F218 is 4 or flag 0x51E49C is set),
+     * 0x11210 writes it to the UART at once, and the stage scripts' opcode 90
+     * (0x51260, entry 90 of the table at 0x94550) queues the word after it.
+     * So js/placements.js reads the songs as it does for the finished game:
+     * 0xA01001 for chapter 1, 0xA01002 for chapter 2.
+     *
+     * The boot (0x10FDC) sends A00001. Every scene change MAME showed in play
+     * queues A00002 and then the effect A01356 (0xAF00), so A00002 is the stop.
+     * (0x1B50C and 0x51590 send A00003 before it; MAME never reached them.)
+     * MAME, a coined game: the title A01000 after the coin, chapter 1's A01001
+     * as its first section starts, 54 s in.
+     */
+    sound: {
+        program: ['sndpgm0.31', 0x30accd2e],
+        samples: [['sound1.32', 0xe0a8dd56], ['sound2.33', 0xa517834f],
+            ['sound3.34', 0xf0c529bb], ['sound4.35', 0x3ad48d53]],
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x02],
     },
     /*
      * `layers`: the rooms and grounds are large faces with smaller ones laid on
@@ -1392,7 +1582,8 @@ const hotdp = {
         callback: {
             bodies: {
                 tom: 2, hand: 6, gman: 14, gmanKihon: 17, haride: 18, staje: 19,
-                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64,
+                spider: 34, samson: 35, sophie: 39, devilon: 59, devilonM: 64, devilonX: null,
+                moody: null, moodyB: null, moodyC: null,
             },
             motions: {
                 gmanDash: 118, soten: 124, handra: 126, pDash: 232, kousya: 244,
@@ -1403,7 +1594,8 @@ const hotdp = {
                 magazine: 1728, gunHand: 1734, kousyaHand: 795, sotenHand: 2445,
                 coat: 162, fingersA: 2452, fingersB: 2493, spiderLegs: 4157,
                 samsonHand: 1300, sophieHead: 1467, sophieBlink: 1468,
-                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886,
+                sophieRun: 1469, devilonWing: 4814, devilonMWing: 1886, devilonXWing: null,
+                moodyCape: null, moodyBCape: null, moodyCCape: null,
             },
         },
     },
@@ -1743,10 +1935,117 @@ const hotdo = {
         table: 0xac2d0, stride: 76, model: 0, count: 125, handlers: 0xaf950,
         prop: 0x3a210, type: 0x24, classes: 0xafdd0, generic: 0x389e0,
         scale: 0x28,
+        /* The second model the shared handler's draw (0x3A800) adds, on the
+         * prop's own matrix, for two types: type 11's plate stands on
+         * PN_sara_dai00a (0x13A0), and type 26's chest takes its lid,
+         * PN_takara_box01a (0xD0D), moved (0, 3.5, 2). Nothing gates either
+         * (see seconds in js/placements.js). */
+        seconds: { 11: { model: 0x13a0 }, 26: { model: 0xd0d, at: [0, 3.5, 2] } },
+        /* Room 4's walls and shutters, types 97 to 101 on one handler; the
+         * first turns 0x80 a frame (see spawnProps in js/placements.js). */
+        room4: { handler: 0x3e510, first: 97, spin: 0x80 },
+        /* The glass cases and the roof pieces, types 30, 31 and 86, which
+         * stand as props until they break (see spawnProps). */
+        cases: { handler: 0x3b050 },
+        /* Type 77, PN_r2_05_kabe01a, which stands as a prop on 0x3D930 until
+         * the zone's clock passes 458 (see spawnProps). */
+        clocked: { handler: 0x3d930 },
+        /* Type 84, PN_niku_001, which stands as a prop on 0x3DE20 until bit 1
+         * or 2 of its flags (+0x58) is set (see spawnProps). */
+        meat: { handler: 0x3de20 },
+        /* The rest of 0x3E180, types 87, 88 and 95, which stand as props;
+         * 95 takes PN_sekom02a in section 3 (see spawnProps). And type 121,
+         * PN_kikai_b on 0x3EB30, which stands as a prop until a shot; the
+         * second pair at a place takes over from the first, so only one is
+         * stood there. Type 67, PN_r2_01_futa on 0x3E010, stands the same
+         * way until a shot. Type 78 on 0x3DA60 is a door in section 1;
+         * anywhere else it closes as a prop does and draws PN_door_n4a in
+         * place of its own model, at 0.9, 1.4 and 1 on the three axes. Type
+         * 68, PN_furukagi00a on 0x3D6E0, stands as a prop until a shot or
+         * the byte 0x51EFB0 swings it. Type 94, PN_r3_01a_mad11a on 0x3E450,
+         * stands as a prop until event flag 0x40, which in chapter 3 only an
+         * object in play sets. */
+        plain: [{ handler: 0x3e180, types: [87, 88] },
+            { handler: 0x3e180, types: [95], sections: { 3: 0x16cf } },
+            { handler: 0x3eb30, types: [121], onePerPlace: true },
+            { handler: 0x3e010, types: [67] },
+            { handler: 0x3da60, types: [78], model: 0x165, axes: [0.9, 1.4, 1], door: 1 },
+            { handler: 0x3d6e0, types: [68] },
+            { handler: 0x3e450, types: [94] }],
+        /* Four props that step their model a frame (see spawnProps): type
+         * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a, type 69
+         * PN_powa00a to 29a and type 93 PN_eneene00a to 34a, each back to its
+         * type's model past `last`. 93 shares 0x3E180 with 87, 88 and 95,
+         * which do other things, so only it is taken. */
+        cycles: [{ handler: 0x3e8b0, last: 0x185c }, { handler: 0x3e8f0, last: 0x1115 },
+            { handler: 0x3d860, last: 0xa22 }, { handler: 0x3e180, last: 0xd7a, types: [93] }],
+        /* Type 96, PN_koba01a, which turns its third angle (+0x34) 0x800 a
+         * frame on 0x3E4A0 while the zone's clock is short of 1440 (see
+         * spawnProps). */
+        spinners: [{ handler: 0x3e4a0, axis: 2, rate: 0x800 }],
+        /* Type 14, PN_jinmengyo_01 on 0x3B550, a fish that swims the four
+         * B-spline segments through the six points at 0xAE7F0, t 0.01 a
+         * frame, and steps through 40 models (see spawnProps). */
+        swimmers: [{ handler: 0x3b550, points: 0xae7f0, segments: 4, step: 0.01, models: 40 }],
+        /* Type 122, whose handler 0x3C5A0 drops one PN_item_life in chapter
+         * 4 and closes (see spawnProps); its own entry in the table is
+         * empty, so the model, scale and lift are the handler's. Type 123's
+         * 0x3C9D0 drops a PN_kinka00a the same way, at y 0.22 (0x51E3C0, 0
+         * there, plus 0.22), on its edge, from yaw 0 and turning 0x1000 a
+         * frame. */
+        items: [{ handler: 0x3c5a0, model: 0x312, scale: 2.2, lift: 2 },
+            { handler: 0x3c9d0, model: 0x3b5, scale: 1.4, y: 0.22, tip: 0x4000, yaw: 0,
+                spin: 0x1000 }],
+        /* Class 131's task, 0x39B50, which stands eight type-51 props in a
+         * row, PN_kenita00a to 07a (see standRow in js/placements.js). x and
+         * y are its immediates 0x44974AEA and 0xC26C0B43; z is the float at
+         * 0xAFBB0 + 4i, less 14 (0x41600000), plus 0x4379BFBE. */
+        rows: [{ init: 0x39b50, type: 51, model: 0x149c, step: 2, count: 8,
+            x: 1210.341064453125, y: -59.0109977722168, z: 0xafbb0, less: 14, plus: 249.74899291992188 }],
+        /* Class 0x8A's task, 0x39830, which stands a room's furniture out of
+         * the table at 0xAA378: a block of 0x16C bytes per spawning type, of
+         * 28-byte entries (see standTable in js/placements.js). */
+        tables: [{ init: 0x39830, at: 0xaa378, block: 0x16c, lift: 0x2c }],
+        /* Classes 0x93 and 0x98, 0x394B0 and 0x395B0, which stand fifteen and
+         * twelve props about their own place out of 0xAED40 and 0xAF620; the
+         * first gives a child with a third turn window row 28 (see standGroup
+         * in js/placements.js). */
+        groups: [{ init: 0x394b0, at: 0xaed40, count: 15, marked: 28 },
+            { init: 0x395b0, at: 0xaf620, count: 12 }],
+        /* Class 0x94's task, 0x38F50, which stands four models at the places
+         * of 0xAEA30 on 0x3C240: PN_haguuu, 01a and 02a turning their third
+         * angle and PN_hagumizu00a to 29a looping (see standFixed in
+         * js/placements.js). */
+        fixed: [{ init: 0x38f50, at: 0xaea30, count: 4, first: 0x8a8, last: 0x8c5,
+            spins: { 0x8c6: 0x80, 0x8c7: 0x80, 0x8c8: -0x80 } }],
+        /* Class 0x13's task, 0x2F740, which turns PN_moon22 to the camera
+         * at five times its size (see standFacing in js/placements.js). */
+        facing: [{ init: 0x2f740, model: 0x14ac, scale: 5 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
      * ranking and the same absent recede. */
+    /*
+     * The sound board is the Model 2 board, its UART at 0x01C80000 on the 2C
+     * (sends queued at 0x154D0 or 0x15540, sent at once by 0x15590). The
+     * samples are two 4 MB chips where the fighting games have four of 2 MB.
+     *
+     * There is no song table: a chapter's stage scripts start its music with
+     * opcode 90, which queues the word after it (js/placements.js), and the
+     * explorer plays the song the scripts have started when each stage's
+     * first zone is made current — 0xA01001 for chapter 1, 0xA01002 for 2.
+     * The boot (0x15344) sends A00001; every scene change (0xD144, 0x15CE0)
+     * clears the queue and sends A00002 and BE5000, which is the stop.
+     * MAME, a coined game: the title A01000 after the coin, chapter 1's
+     * A01001 as its first section starts.
+     */
+    sound: {
+        program: ['epr-19720.31', 0xb367d21d],
+        samples: [['mpr-19721.32', 0xf5d8fa9a], ['mpr-19722.34', 0xa56fa539]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x02, 0xBE, 0x50, 0x00],
+    },
     depth: { recede: 0, nearMin: 0.02, layers: true },
     scenes: null,
     /*
@@ -1821,12 +2120,21 @@ const hotdo = {
          * Three of the prototype's are null because this game has no such body:
          * there is no BO_gman, no BO_handrb and no BO_tarab, and the rules that
          * name them cannot fire. This build's callback is the larger of the two
-         * and may treat bodies of its own apart; those have not been read yet.
+         * (0x9CE50; its body switch at 0x9D240 is `0x9D24C[body - 2]`). Its own
+         * bodies there: BO_devilonx (69) shares BO_devilon's case (0x9DABC),
+         * which takes 0x1401 for body 50 and 0x195F, 6495, PN_devilonx_hane01,
+         * for the other. BO_moody (59, 0x9DFD4), BO_moodyb (70, 0x9E000) and
+         * BO_moodyc (88, 0x9E018) draw, on their role-2 joint, 0x1618, 0x1895
+         * or 0x1A56 plus [0x51EDA0] rem 50 in place of the part's own model:
+         * PN_moody_katar_01-50 and the B and C capes. Bodies 92 and 93 reach
+         * the same runs but have no role-2 joint, so they draw none. Cases for
+         * bodies 48, 60, 64, 76, 78 and 84 have not been read yet.
          */
         callback: {
             bodies: {
                 tom: 2, hand: null, gman: null, gmanKihon: 13, haride: 14, staje: 15,
-                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55,
+                spider: null, samson: 30, sophie: 34, devilon: 50, devilonM: 55, devilonX: 69,
+                moody: 59, moodyB: 70, moodyC: 88,
             },
             motions: {
                 gmanDash: 188, soten: 195, handra: null, pDash: 339, kousya: 360,
@@ -1837,7 +2145,8 @@ const hotdo = {
                 magazine: 1814, gunHand: 1819, kousyaHand: 875, sotenHand: null,
                 coat: 181, fingersA: null, fingersB: null, spiderLegs: null,
                 samsonHand: 1367, sophieHead: 1550, sophieBlink: 1551,
-                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997,
+                sophieRun: 1552, devilonWing: 5121, devilonMWing: 1997, devilonXWing: 6495,
+                moodyCape: 0x1618, moodyBCape: 0x1895, moodyCCape: 0x1A56,
             },
         },
         /* The prototype's bodyMotions, carried over by name. This build's code
@@ -2080,7 +2389,15 @@ const hotdo = {
         ],
         bodyMotionsLabel: 'Played by its routine in the prototype',
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The 2D pictures (js/cells.js): 630 of them at 0xA6580, three pointers
+     * each, tiles, colours and map, Dead or Alive's shape. The draw (0x17D80)
+     * takes the picture's number, finds the first block of the run 0x17B20
+     * gave its slot (0xA9B50, a halfword a picture) and adds it to every
+     * entry, so the group is the block; 0x17CB0 and 0x17C10 load each chunk
+     * of tiles from a block of its own, with its 16 colours. The table ends
+     * where the floats at 0xA8308 start. Colours go through colorxlat. */
+    cells: { pictures: { table: 0xa6580, count: 630 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead (Revision A) ---------------------------------- */
@@ -2167,6 +2484,19 @@ const hotd = {
         ...hotdo.objects,
         table: 0xac2e0, handlers: 0xaf960, prop: 0x3b160,
         classes: 0xafde0, generic: 0x39930,
+        /* Room 4's handler moved with the rest, and this build's program
+         * chips are not to hand to read where to, so it is left out. */
+        room4: null,
+        cases: null,
+        clocked: null,
+        meat: null,
+        plain: null,
+        cycles: null,
+        items: null,
+        rows: null,
+        tables: null,
+        groups: null,
+        seconds: null,
     },
     rig: {
         bodies: {
@@ -2183,6 +2513,9 @@ const hotd = {
         bodyMotions: hotdo.rig.bodyMotions,
         bodyMotionsLabel: hotdo.rig.bodyMotionsLabel,
     },
+    /* Revision A moved its tables, and its picture table has not been found. */
+    cells: undefined,
+    features: { ...hotdo.features, cells: false },
 };
 
 /* ---- Daytona USA --------------------------------------------------------- */
@@ -2332,14 +2665,15 @@ const DAYTONA_CABINET = 1;
  * The sound board, the one the original Model 2 kept from Model 1: a 68000
  * (the program pair, word-swapped as MAME loads it), two MultiPCMs with a
  * pair of sample ROMs each, and a YM3438 — js/sound/sound.js, board 'model1'.
- * Every build but the 1993 one carries these same chips.
+ * Every build carries these same chips but the 1993 one, which has a sound
+ * program of its own.
  *
  * `music` is how start_setting (0x3BF0 in the Saturn-ads build) picks the
  * race's song: `ld 0x28050F0[r3*4], g0` and on to the UART, with r3 the
  * course — unless a VR button is held as the race starts, which picks
  * the song itself: VR1 the first, VR3 the second, VR2 the third, VR4 the
  * fourth, which no course has of its own. The table is at data 0x8050F0 in
- * every build here but the 1993 one, and says 0xAE1007, 0xAE1009, 0xAE1004,
+ * every build here but the 1993 one (program ROM 0x231E70), and says 0xAE1007, 0xAE1009, 0xAE1004,
  * 0xAE100E in all of them.
  *
  * What goes with it, as the game sends it: `boot` is sound_refresh's
@@ -2663,7 +2997,7 @@ const DAYTONA_KINDS_A = {
     0x20948: 'crowd', 0x20a54: 'world', 0x20b08: 'rank', 0x20d34: 'windmill',
     0x20e54: 'jeffry', 0x210a0: 'checkpoint', 0x211fc: 'flags', 0x212a4: 'light',
     0x212e4: 'none', 0x21618: 'runs', 0x21664: 'pylon', 0x21698: 'pylon',
-    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'window', 0x21ef8: 'window',
+    0x216cc: 'pylon', 0x21700: 'pylon', 0x21e40: 'standWindow', 0x21ef8: 'arcadeWindow',
     0x22018: 'world', 0x22080: 'flock', 0x22314: 'birds', 0x224f8: 'bigBird',
     0x22608: 'horse', 0x22a20: 'curtainCall',
 };
@@ -2675,6 +3009,9 @@ const DAYTONA_OBJECTS_A = {
     birds: 0x233b7c, horses: 0x233afc, jeffry: 0x28478a0,
     crowds: [{ list: 0x236e38, count: 12, shown: { road: [0x2f8, 0x33e] } }],
     pylons: { 0x21664: 0x2850ce0, 0x21698: 0x2850cf0, 0x216cc: 0x2850d00, 0x21700: 0x2850cd0 },
+    /* The point each window's reflection is taken against: the lda in its
+     * display routine (Rev A 0x21e88, 0x21f58) — see `window` in js/daytona.js. */
+    windows: { 0x21e40: 0x235bb4, 0x21ef8: 0x222000 },
     shown: { 0x20698: { area: [0x7a, 0x6a] }, 0x20730: { near: [0x99, 0x89] }, 0x22018: { road: [0x208, 0x240] } },
 };
 const DAYTONA_KINDS_SE = {
@@ -2683,7 +3020,7 @@ const DAYTONA_KINDS_SE = {
     0x20948: 'crowd', 0x20a6c: 'world', 0x20b48: 'rank', 0x20dd8: 'windmill',
     0x20ef8: 'jeffry', 0x21144: 'checkpoint', 0x212a0: 'flags', 0x21348: 'light',
     0x213b0: 'none', 0x216e4: 'runs', 0x21730: 'pylon', 0x21764: 'pylon',
-    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'window', 0x21fc4: 'window',
+    0x21798: 'pylon', 0x217cc: 'pylon', 0x21f0c: 'standWindow', 0x21fc4: 'arcadeWindow',
     0x220e4: 'world', 0x2214c: 'flock', 0x223e0: 'birds', 0x225c4: 'bigBird',
     0x226d4: 'horse', 0x22aec: 'curtainCall',
 };
@@ -2701,6 +3038,7 @@ const DAYTONA_OBJECTS_SE = {
         { list: 0x237b24, count: 12, shown: { road: [0x2f8, 0x33e] } },
     ],
     pylons: { 0x21730: 0x2850ce0, 0x21764: 0x2850cf0, 0x21798: 0x2850d00, 0x217cc: 0x2850cd0 },
+    windows: { 0x21f0c: 0x236880, 0x21fc4: 0x2220cc },
 };
 /* The Saturn advertisements set: the Special Edition's routines at the same
  * places, its tables 0x510 on and its pylons' models 0x400 back. */
@@ -2715,6 +3053,7 @@ const DAYTONA_OBJECTS_S = {
         { list: 0x238034, count: 12, shown: { road: [0x2f8, 0x33e] } },
     ],
     pylons: { 0x21730: 0x28508e0, 0x21764: 0x28508f0, 0x21798: 0x2850900, 0x217cc: 0x28508d0 },
+    windows: { 0x21f0c: 0x236d90, 0x21fc4: 0x2220cc },
 };
 
 /*
@@ -2736,7 +3075,7 @@ const DAYTONA_OBJECTS_93 = {
         0x2214c: 'checkpointAt', 0x22264: 'jeffry', 0x22594: 'checkpointAt', 0x22678: 'checkpointAt',
         0x2275c: 'checkpointAt', 0x22840: 'checkpointAt', 0x22c48: 'flags', 0x22cf0: 'light',
         0x22d30: 'none', 0x2302c: 'runs', 0x23078: 'pylon', 0x230ac: 'pylon',
-        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'window', 0x23bc0: 'window',
+        0x230e0: 'pylon', 0x23114: 'pylon', 0x23b08: 'standWindow', 0x23bc0: 'arcadeWindow',
         0x23ce0: 'world', 0x23d48: 'flock', 0x2430c: 'birds', 0x24730: 'bigBird',
         0x24854: 'horse', 0x24cd0: 'curtainCall',
     },
@@ -2759,6 +3098,7 @@ const DAYTONA_OBJECTS_93 = {
     rankBoard: 0x238dc0, rankCars: 0x238dfc,
     windmill: { sails: 0x238eb8, still: [0x288bbe0, 0x288bbf4] },
     birds: 0x2368c0, horses: 0x236840, jeffry: 0x288f614,
+    windows: { 0x23b08: 0x2388f8, 0x23bc0: 0x223cc8 },
     crowds: [{
         /* The plaza's, while the crowd's own block is near. */
         shown: 'near',
@@ -2824,10 +3164,15 @@ const daytona93 = daytonaBuild({
     },
     objects: DAYTONA_OBJECTS_93,
     area: { heading: 0x17658, clip: 0x17150, order: 0x17104 },
-    /* Its own sound program (epr-16489/16490 in MAME), which the dumps this
-     * was worked out on do not carry; its song table is in the program ROM,
-     * at 0x231E70. */
-    sound: null,
+    /* Its own sound program, on the same samples. The song table is in the
+     * program ROM (0x231E70, read at 0x30C8) and holds the same four songs;
+     * the pick, the VR buttons and 0xB70700 after the third are Revision A's,
+     * and so is the boot run (graded in MAME, byte for byte). */
+    sound: {
+        ...DAYTONA_SOUND,
+        program: [['epr-16489.7', 0xc20e543e], ['epr-16490.8', 0xc24edaab]],
+        music: { ...DAYTONA_SOUND.music, region: 'mainCpu', table: 0x31e70 },
+    },
 });
 
 /* What the Revision A program and every build made from it share: the data
@@ -2968,6 +3313,98 @@ const daytonagtx = daytonaBuild({
  *             0x4D1 and `lda 0x28693F0[g0*16]` past it, the second table
  *             starting where the first stops counting (`past`), up to 0x4E2.
  */
+
+/*
+ * Virtua Cop's sound board is Daytona's (js/sound/sound.js, board 'model1')
+ * with its own driver (epr-17170/17171) and samples. The first sample pair is
+ * 1 MB a chip, each at the start of its 2 MB half as MAME loads them.
+ *
+ * There is no song table: the play mode's stage start (0xA464, sub-state 6 of
+ * the table at 0xA6F0) tests the stage byte 0x50F2A8 and sends a constant —
+ * 0xAE1F06 for stage 1, 0xAE1F0C for 2, 0xAE1F07 for 3 — each followed by
+ * 0xBE2101, 0xBE2102 or 0xBE2103. Channel 0x1F is the music; 0xAE1F00 stops
+ * it. `stop` is what the boot (0xA6C) sends: that, then 0x2BB20's run, which
+ * stops channels 0x21 and 0x22 and keys off the rest. MAME, coined and
+ * pinned to each stage, sent exactly these at the stage start (frame 1311).
+ */
+const VCOP_SOUND_STOP = [
+    0xAE, 0x1F, 0x00,
+    0xAE, 0x21, 0x2F, 0xAE, 0x21, 0x30, 0xAE, 0x21, 0x31,
+    0xAE, 0x22, 0x2F, 0xAE, 0x22, 0x30, 0xAE, 0x22, 0x31, 0xAE, 0x22, 0x32,
+    0x8E, 0x2E, 0x60, 0x8E, 0x2F, 0x60,
+];
+const VCOP_SOUND = {
+    board: 'model1',
+    program: [['epr-17170.7', 0x06a38ae2], ['epr-17171.8', 0xb5e436f8]],
+    samples: [
+        ['mpr-17172.32', 0xab22cac3], ['mpr-17173.33', 0x3cb4005c],
+        ['mpr-17174.4', 0xa50369cc], ['mpr-17175.5', 0x9136d43c],
+    ],
+    boot: VCOP_SOUND_STOP,
+    stop: VCOP_SOUND_STOP,
+    songs: [0xAE1F06, 0xAE1F0C, 0xAE1F07],
+    after: { song: { 0: [0xBE, 0x21, 0x01], 1: [0xBE, 0x21, 0x02], 2: [0xBE, 0x21, 0x03] } },
+};
+
+/*
+ * The 2D pictures (js/cells.js): the title, the HUD, the gun and life marks,
+ * the rankings, the stage's sky. The draw is 0x55A0 (0x5610 the same but for
+ * skipping zero entries): the record's address in g0, the tilemap's in g1
+ * and in g2 a halfword it adds to every entry. The record is the width and
+ * the height as halfwords, then halfword entries row by row onto 0x80-byte
+ * tilemap rows. Nothing indexes the records; they lie end to end in two runs
+ * of the data ROM (`records`), some with zero halfwords between them, and a
+ * cell is its place in those runs. Every record a call names is a record
+ * start. The first run starts where the boot palette's runs (0x2801C00) end
+ * and stops at the second palette's (0x28113E0); the second stops at the
+ * pointer 0x28143E0.
+ *
+ * Most calls add 0x8000 (`base`). Bit 15 picks no colour, so a 0 is drawn
+ * the same; bit 14 moves the palette group on by 0x80. `bases` are the
+ * records every call draws with something other than 0x8000. Three records
+ * are drawn both ways and take 0x8000 here: 0x2802A10, 0x2807DC0 and
+ * 0x2808640 with 0xC000 as well, and 0x2812C90 with 0x4000 (0x67080).
+ *
+ * The boot (0x49B0) fills the tile chip once. 0x4A38 copies 0x2400000 into
+ * characters 0x80 to 0x37FF and 0x4AA8 0x28E0000 into 0x3300 to 0x3FFF, each
+ * halfword's bytes swapped. 0x4B10 and 0x4CE0 build the palette: runs from
+ * 0x2801C00 into groups 1 on until 0x7F groups are written, group 0x2B from
+ * 0x2814780, groups 1-0x7F copied to 0x81-0xFF, then 0x2814680 over 0x81-0x83,
+ * 0x28146A0 over 0x84, 0x28148A0 and 0x28148C0 over 0xAE and 0xAF, six runs
+ * from 0x28113E0 into 0x66 on and again into 0xE6 on, and 0x2814940 over
+ * 0xFB-0xFF. 0x5080 also draws a 1-bit font into characters 0-0x7F, which no
+ * record names, so it is left out. The stage start puts the stage's own
+ * sixteen colours (`stages.table`) into group 0x10, the sky's (js/vcopsky.js).
+ * So CG 0 is the boot, and CGs 1 to 3 are the boot with each stage's group.
+ */
+const VCOP_CELLS = {
+    sized: true,
+    records: [[0x028022e8, 0x028113d4], [0x028114d0, 0x028143d4]],
+    base: 0x8000,
+    bases: {
+        [0x028022e8]: 0xc000, [0x02802300]: 0xc000, [0x02807d70]: 0xc000, [0x02807da0]: 0xc000,
+        [0x02802f00]: 0, [0x02803790]: 0, [0x02810c40]: 0, [0x02811150]: 0,
+    },
+    boot: {
+        chars: [[0x02400000, 0x80, 0x3780], [0x028e0000, 0x3300, 0xd00]],
+        palette: [
+            { runs: 0x02801c00, group: 1, until: 0x7f },
+            { colours: 0x02814780, group: 0x2b, groups: 1 },
+            { copy: [1, 0x81, 0x7f] },
+            { colours: 0x02814680, group: 0x81, groups: 3 },
+            { colours: 0x028146a0, group: 0x84, groups: 1 },
+            { colours: 0x028148a0, group: 0xae, groups: 1 },
+            { colours: 0x028148c0, group: 0xaf, groups: 1 },
+            { runs: 0x028113e0, group: 0x66, lists: 6 },
+            { runs: 0x028113e0, group: 0xe6, lists: 6 },
+            { colours: 0x02814940, group: 0xfb, groups: 5 },
+        ],
+        stages: { table: 0x02814990, group: 0x10, count: 3 },
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
 const vcop = {
     ...daytonaBuild({
         id: 'vcop',
@@ -2989,7 +3426,7 @@ const vcop = {
          * (js/vcop.js, railLight). */
         light: [0.140028, -0.700140, 0.700140],
         courses: {},
-        sound: null,
+        sound: VCOP_SOUND,
     }),
     /* Straight after the table, the boot (0x38B58) stores these by hand: the
      * drums' teal over the table's red, and a duller tan. */
@@ -3052,7 +3489,8 @@ const vcop = {
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
     stageTable: { flat: true, segments: { at: 0x28390d0, count: 4 } },
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    cells: VCOP_CELLS,
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Virtua Fighter 2 ----------------------------------------------------- */
@@ -3209,12 +3647,179 @@ const vf2 = {
      * this game's own; js/vf2fighters.js. `standardRig` is the table every
      * fighter is solved on, `fighters` the roster's records. */
     motionTable: { list: 0x2120004, count: 1360 },
+    /*
+     * The sway chains (js/osage.js): Fighting Vipers' code a game earlier,
+     * the same records, and the coprocessor's Fn_osage (0x4A, TGP 0xCFA)
+     * the same keep-out to the float. The definitions by record,
+     * `0x658A4[+0x1B0*4]`, 26 of them; Dural, Mue and Kojacky have none,
+     * nor do their 2P looks. Gravity 0x3B32674F. The wind is 0x654E0's two
+     * entries a record, by 0x500064 as Fighting Vipers' is. Left out: the
+     * tables the game modes 0xE/0xF and a Lau-against-Lau fight switch to
+     * (0x696D4, 0x697E8), and the per-player switch at *0x500814 under
+     * which only Shun's first chain draws, and only with the gourd in hand
+     * (0x64348, 0x65458).
+     */
+    osage: {
+        table: 0x000658a4, count: 26, gravity: 0.002722222125157714, head: 2,
+        wind: {
+            table: 0x000654e0,
+            stages: {
+                0: { angle: 0x8000, entry: 1 }, 1: { angle: 0xf000, entry: 0 },
+                5: { angle: 0xc000, entry: 1 }, 8: { angle: 0x7000, entry: 0 },
+                14: { angle: 0xf000, entry: 0 },
+            },
+        },
+    },
     rig: {
         kind: 'vf2',
         standardRig: 0x296a0,
-        fighters: { records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES },
+        /* The floor shadows (js/fightershadow.js): 0x61BA0's tables by
+         * +0x1B1 mod 13, 0x176A0's balls, the light from the stage records'
+         * +0x70 and +0x72 (0xCE1C), the ring's default half-width (0x50A00C)
+         * and the ground (0x50A010, 0x99CC). */
+        shadow: {
+            tables: 0x61cfc, count: 13, ring: 8, ground: -0.5, leave: { x: 1 },
+            balls: { counts: 0x2007c68, lists: 0x2007bee, points: 0x20078a8 },
+            stages: { at: 0x6ee38, stride: 256, light: 0x70 },
+        },
+        /* The fighters in the Mirror stage's floor (js/vf2reflection.js):
+         * 0x20488 under stage flag bit 5, 0x19C94 from record +0x34; the
+         * head piece's (0x193CC) while the head is at or above the floor
+         * and within the ring (0x50A00C, 8) less 1. */
+        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 }, piece: { ring: 8, less: 1 } },
+        /* The action table is record +0x14 as in Fighting Vipers:
+         * action_init (0x13F1C) puts it at player +0x1A0, and the action
+         * code reads it to +0xA6, 84 motion ids, the stance first. */
+        fighters: {
+            records: 0x200620c, count: 13, p2: 13, names: VF2_NAMES, actions: { at: 0x14, count: 84 },
+            /* The input programs by +0x1B1 (`ld 0x1D1FC[r15*4]` at 0x1BBD4;
+             * the handlers at 0x1D250). Fighting Vipers' opcodes, to 0x33:
+             * 0x32 and 0x33 jump to their u32 while bit 6 of the settings'
+             * byte `[0x50016C]+0x3351` is set and clear, else step 5. MAME's
+             * vf2 has it clear, so 0x33 is the one that jumps. */
+            commands: { table: 0x0001d1fc, isa: { ops: 0x34, jumps: { 0x32: false, 0x33: true }, length: 5 } },
+            /* The hands' 32 shapes each, record +0x3C: slot 5's at +0,
+             * slot 8's at +0x180 (0x19E34); js/fighterhands.js. */
+            hands: { at: 0x3c, other: 0x180, eased: true },
+            /* The face (js/fighterhands.js): script op 16 (0x1B2B0) starts
+             * the chain 0x2006278[op][char], action_init (0x4B5D0) the one
+             * at 0x20062A0[char], and 0x4B640 steps it after the script.
+             * Script op 9 (0x1B05C) sets the voice's time left, +0x770,
+             * from 0x201E498[op][char] when 0x201E44C names a voice; at
+             * `talk.at` left the chain switches to 0x2006278[talk.to]
+             * unless it is already on [talk.keep]'s. The picker's entry
+             * gives its word at `p2` while +0x1B0 is not +0x1B1 (0x4B74C),
+             * player 2's look; +8 under +0x700 bit 4, which the fighter's
+             * load clears (0x1408C) and nothing in a motion sets, is left
+             * out. */
+            face: {
+                op: 16, table: 0x02006278, cold: 0x020062a0, eased: true, p2: 4,
+                talk: { op: 9, voices: 0x0201e44c, times: 0x0201e498, at: 25, keep: 1, to: 2 },
+            },
+            /* Script op 17 (0x1B2D0), on its own frame, sets +0 bit 27 when
+             * its byte is 1 and clears it otherwise; the fighter's load
+             * (0x14098) clears it. While it is set rob_disp's part loop
+             * (0x19530, 0x19544) draws `model` on slot 8, or slot 5 when
+             * mirrored (+0 bit 6, z negated), moved by `offset` and turned
+             * `turn` about Z: Shun's gourd. */
+            item: { op: 17, model: 0x98a, slots: [8, 5], offset: [0.15, 0.01, 0.03], turn: 0x9df0 },
+            /* The midriff, record +0x38: Fighting Vipers' struct, built at
+             * 0x16F3C and drawn on slot 9 at 0x195F8; no broken one. */
+            midriff: { at: 0x38 },
+            /* The same struct's word +0xC: rob_disp (0x19090) draws it on
+             * slot 9 while the waist (+0x1F8) is under `under`, or `bit15`
+             * with move flag 15. Lau's and Shun's differ from slot 9's. */
+            lowHips: { at: 0x38, model: 0xc, under: 0.2, bit15: 0.4 },
+            /* Record +0x40: the fighter's load (0x13FF8) copies its model
+             * to +0x704 and its offset (+0x10) to +0x708, and sets +0x700
+             * bit 0 when the model is not 0. rob_disp's slot 2 (0x19298)
+             * then draws it on the head, moved by the offset and turned Z
+             * then X by `turns`, or by `own[+0x1B0]`'s (0x192F8). Kage's
+             * and Pai's. The struct's +8 (+0x75C) is its reflection's
+             * model, which 0x193CC draws in the Mirror stage's floor. */
+            headPiece: { at: 0x40, offset: 0x10, reflection: 8, turns: [[2, 0x4000], [0, 0x4000]], own: { 6: [[2, 0x4000], [0, 0x8000]] } },
+        },
+        /* What the one hit plays; js/reactions.js. set_mot_dat (0x1A1E4)
+         * reads 0x200D34C[motion] past an 8-byte head with the lengths at
+         * 0x1B7F6 (ops to 0x11); op 4 keeps the kind at +0xA, and the
+         * picker (0x230D4) reads 0x201CCFC[kind], 30 kinds. */
+        reactions: { setups: 0x0200d34c, head: 8, lengths: 0x1b7f6, ops: 0x12, strike: 0xa, table: 0x0201ccfc, kinds: 30 },
+        /* The move script's op lengths, by the handlers 0x1AD5C runs
+         * (table 0x1B910); js/fighterhands.js. */
+        script: [0, 3, 3, 13, 7, 4, 4, 4, 4, 4, 9, 7, 4, 4, 7, 3, 4, 4, 7, 5, 7, 4, 5, 6],
+        /* The move flags as Fighting Vipers', but 0x1AC14 drops bit 28 where
+         * it drops 26, script op 13 is bit 27 (0x1B23C), and set_mot_dat
+         * gives two motions a third frame of their own (0x1A49C, 0x1A4A8). */
+        flags: { drop: 0x10010100, op13: 27, ends: { 0x12e: 0x49, 0x375: 46 } },
+        /* The look's gate, 0x28668. */
+        look: { gate: 0x6c111 },
+        /* The same, 0x27130: the record's byte +6 is +0x814, a word before
+         * with bit 23 does not blend either, and bits 18 and 19 both blend
+         * in only. */
+        blendIn: { stance: 6, before: 1 << 23, inOnly: 3 << 18 },
+        /* The stance poses, 0x270D4. */
+        blendOut: [0, 1, 8, 10, 31],
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The Cells tab (js/cells.js), on Daytona's terms: no pattern table.
+     * The draw (0x8F1C) takes the record's address from an lda or from a
+     * table of absolute pointers, and reads the halfword at 0x02 as Daytona's
+     * does. The records lie end to end in `records`; each run stops at a
+     * strip of frames 0x8FE0 draws one frame of (the timer's digits, the
+     * round marks), whose header has a frame count Daytona's has not, or
+     * where the next words are no record. The loaders are two: 0x23EE8 takes
+     * a CG list and 0x23F30 a palette list, each by its own lda, so a CG is
+     * the pair one routine loads (`cgLists`): the boot pair (through the
+     * pointer at 0x2800000), the stage skies (0x24314, the stage record's
+     * +0x08 and +0x0C, `cgPairs`), the fight's own on top of a sky (0x10838),
+     * and the rest. 0x31A34 loads two: they are two CGs here, the second
+     * under the first. Some lists and records are in the program ROM, named
+     * at their own addresses (`programAt0`). The tile layer goes through
+     * colorxlat as the sky's does. */
+    cells: {
+        records: [
+            [0x13d3c, 0x13f08], [0x345ec, 0x346b6], [0x763f0, 0x76974],
+            [0x2a67d0c, 0x2a67d84], [0x2a67e44, 0x2a67e66], [0x2a6845a, 0x2a69f82],
+            [0x2a6a22e, 0x2a719c2], [0x2a71a4a, 0x2a7905a], [0x2aa8346, 0x2ab03ce],
+            [0x2ab0906, 0x2ab488e], [0x2ab587e, 0x2ab596e], [0x2ab5be6, 0x2ab5d7c],
+        ],
+        cgPairs: [
+            [0x280000c, 'boot'],
+            [0x25034, 'stage 0 sky'],
+            [0x25054, 'stage 1 sky'],
+            [0x25074, 'stage 2 sky'],
+            [0x25094, 'stage 3 sky'],
+            [0x250b4, 'stage 4 sky'],
+            [0x250d4, 'stages 5, 15 sky'],
+            [0x250f4, 'stage 6 sky'],
+            [0x25114, 'stage 7 sky'],
+            [0x25134, 'stage 8 sky'],
+            [0x25154, 'stages 9, 12, 13, 14 sky'],
+            [0x25174, 'stages 10, 11 sky'],
+        ],
+        cgLists: [
+            [0x0001256c, 0x00012520, '0x11B70'],
+            [0x02800380, 0x02805abc, '0xAF54'],
+            [0x02800394, 0x02805890, '0xB424'],
+            [0x02800280, 0x02804160, '0x10388'],
+            [0x000734a4, 0x00073418, 'fight, 0x10838'],
+            [0x028002d4, 0x02805224, '0x2DB94'],
+            [0x028000d0, 0x02800b38, '0x31A34'],
+            [0x00033f1c, 0x00033ef0, '0x31A34, second'],
+            [0x028003b0, 0x02805c28, '0x60624'],
+        ],
+        /* Cells a routine draws straight after it loads a CG: 0x11B70's
+         * (CG 12) at 0xBBF4, 0xAF54's (13) at 0xAF94, 0x2DB94's (17) at
+         * 0x2DC00-0x2DC3C, 0x31A34's (18) at 0x31A8C and 0x60624's (20) at
+         * 0x6064C-0x60688. */
+        screens: [
+            { cg: 12, cells: [0] }, { cg: 13, cells: [260] }, { cg: 17, cells: [152, 155, 156] },
+            { cg: 18, cells: [87] }, { cg: 20, cells: [255, 256, 257, 258] },
+        ],
+        charBytes: 0x80000,
+        colorxlat: true,
+        programAt0: true,
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* Dead or Alive's stage 4 conveyor fix (doab's `doa.fixes`), for a program

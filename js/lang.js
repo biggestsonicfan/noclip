@@ -177,6 +177,7 @@ const JA_PAGE = {
     'char.skel': 'スケルトン',
     'char.squish': 'ハンマーでつぶれた',
     'char.travel': 'ルートの移動',
+    'char.mirror': '左右反転',
     'char.rival': '対戦相手',
     'char.behind': '背後',
     'char.rivalp2': '対戦相手 P2',

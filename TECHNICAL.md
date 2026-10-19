@@ -404,8 +404,26 @@ compares the body number against 2, 34 and 50, which are `BO_tom`, `BO_sophi`
 and `BO_devilon` under the name mapping, and it reaches the two wing beats with
 `lda 0x1401` and `lda 0x7CD` — 5121 and 1997, which are exactly where
 `PN_devilon_hane01` and `PN_devilonm_hane01` sit in this build's model table.
-Its callback is the larger of the two and may treat bodies of its own apart;
-those have not been read yet.
+Its callback (0x9CE50) is the larger of the two and treats bodies of its own
+apart. Its body switch (0x9D240) jumps through `0x9D24C[body - 2]`, and the
+table sends `BO_devilonx` (69) to `BO_devilon`'s case (0x9DABC). On joint 1
+that case draws the part's model and a wing beat, `0x1401` plus the body's
+tick rem 100 for body 50 and `0x195F` plus it for the other: 6495,
+`PN_devilonx_hane01` to `_hane9a`. So `BO_devilonx` beats its own hundred
+wings as the other two do (`devilonX` in the profile; the prototype has no
+such body). The case's other half is left out: while the object's `+0x2F4`,
+which the case counts down, is odd, the part is drawn another way. What sets
+`+0x2F4` was not traced. Read from the ROM, not checked in
+MAME. The three Moodys have a case each: `BO_moody` (59, 0x9DFD4), `BO_moodyb`
+(70, 0x9E000) and `BO_moodyc` (88, 0x9E018) test the joint's role byte for 2
+and, there, draw `0x1618`, `0x1895` or `0x1A56` plus `[0x51EDA0]` rem 50 in
+place of the part's own model, then return: `PN_moody_katar_01` to `_50` and
+the B and C capes, one a vsync off the counter Samson's case reads. On all three
+that is joint 3 (`moodyCape` and the rest in the profile; the prototype has no
+Moody body). Bodies 92 and 93, `BO_moodybb` and `BO_moodycc`, reach the same two
+runs (0x9E030, 0x9E05C) but have no joint with role 2, so they draw no cape.
+Read from the ROM, not checked in MAME. The cases for bodies 48, 60, 64, 76, 78
+and 84 have not been read yet.
 
 #### The bodies were never given their layers
 
@@ -870,9 +888,26 @@ ring's centre:
   `0x70E3C[n]` (the same list 32 behind) at the fighter's waist (`+0x1F4`)
   less 1.5 in y. The stand-in: every 10 s from 1 s, at the origin.
 - **bubbles**, the mirror stage (`0x30CA4`, kind 4): `0x711BC[(c >> 2) & 15]`
-  turned to the yaw (and tilted by pitch / 16, left out), at a point re-taken
-  every 64 frames from a fighter's part, (0.15, 0, -0.03) in its frame. Not
-  drawn while `0x50004C` is 2. The stand-in's part is at (0, 1, 0).
+  turned to the yaw, then about x by the camera's pitch over 16, at a point
+  re-taken every 64 frames from a fighter's part, (0.15, 0, -0.03) in its
+  frame. Not drawn while `0x50004C` is 2. The stand-in's part is at (0, 1, 0).
+  The turns are the camera record's (`g13` is `0x515400`): `+0x26` by
+  `0x36806D6D` unless 0, then `0x10000 - ((+0x24 × 0x4000) >> 18)` by
+  `0x36006C6C` (`0x30DC0`..`0x30E40`). Both are read by `ldos`, which
+  zero-extends (`ldis` is the signed load), so the tilt is
+  `-((pitch & 0xFFFF) >> 4)`: −pitch/16 while the camera looks up, and that
+  less a sixteenth of a turn while it looks down (pitch negative), which is
+  most of a fight. The explorer takes the pitch from its own camera
+  (`cameraOnCourse`, `asin` of the view's y as a board angle) and draws the
+  same turns (`bubbleTilt`, `js/vf2fx.js`).
+  - MAME, attract with `0x500064` held at 10 once the demo picks its stage,
+    a breakpoint at `0x30E18` logging `0x515424` and the tilt: 2929 draws,
+    pitch −8081 to 2691 (1369 up, 1560 down), every tilt equal to
+    `bubbleTilt`'s (e.g. pitch `0x2E0` → `0xFFD2`, `0xFD91` → `0xF027`).
+  - Headless Chrome, stage slot 11 (Mirror) with the switch on, the camera
+    framed from four directions: pitch `0xE000` tilts the bubble's up axis
+    19.69°, `0xF7F5` 21.79°, `0x0BE0` 1.04°, level 0°. No page errors.
+  - The lean: MAME's geometrizer matrix for the bubble (the `0x0B` matrix write before its object in buffer RAM) is a turn about view x by pitch − tilt, both looking down (pitch −3.43°, tilt −22.29°: 18.86°) and up (7.88°, −0.49°: 8.37°), and the explorer's view matrix gives the same (18.85° at −3.43°, 8.46° at 7.97°), so `angX` turns the way `0x36006C6C` does.
 - **stone flies**, the stones (`0x311B8`): below.
 
 - The stones (kind 5): `0x31040` draws the u16 at `0x70CBC`, model `0xEE1`,
@@ -959,14 +994,114 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   count. A motion that loops from its last frame back to its first blends
   into itself (16 of 17 loops captured); one cut short and restarted
   doesn't.
-- **The fight's blend choices**, left out. The blend mode at `+0xBDD` is set
-  from fight flags: none (`+0` bit 26 clear, `+0xC30` bit 23, `+0x814` = 4
-  and others), blend-in (bit 0) and blend-out (bit 1, `+0x1A4` bit 17 for
-  out only). The blend-out starts at frame `len - N` (`+0xBE0`) and fades
-  toward one of five stance poses picked by `+0x814` (`0x2776C`, the
-  character's set at `+0xBD8` + `0x1E0`...`0x5A0`). The mirror flags
-  (`+0xC30` bit 6, `+0x1A4` bit 20) zero objects 0-4. The explorer blends
-  every switch in and none out.
+- **Which ways a switch blends** (`blendMode` in `js/vf2fighters.js`).
+  Set-up (VF2 `0x27130`, FV `0x29F50`) stores a mode at `+0xBDD`: bit 0
+  blends in, bit 1 blends out. The first tests are the fight's and stay left
+  out: `0x508008`, `+0` bit 26 clear and `+0xBE4` = 1 give none (the intro
+  and win poses are the `+0xBE4` ones: the fight sets it the frame they
+  start), as do FV's `+0x720` bit 1. The rest are the motion's, in the
+  game's order:
+  - FV only: none where the record's u32 +4 (`+0x860`) has bit 2;
+  - the new `+0x1A4` (the setup word; set_mot_dat keeps bit 17) with bit 17
+    blends out only;
+  - VF2: a setup word (`+0x804`) with bit 18 or 19 blends in only. FV:
+    bit 18 blends both ways, bit 19 in only;
+  - else none if the word before (`+0xC30`) has bits 15 and 6 both, VF2's
+    has bit 23, or the record's stance byte (`+0x814`: VF2 byte +6, FV byte
+    +10) is 4;
+  - a stance byte of 0x7F blends in only; so does a `+0x1A4` with any of
+    `0x6600`, except that FV blends both ways where it has bit 26 first;
+  - the rest blend both ways.
+  Then: a motion of 2 frames or fewer never blends (`0x271DC`, Blend
+  length). One with setup op 2 (`+0xA00`) whose first frame (`+0x808`)
+  comes after the blend-out would start (`len - N`) does not blend out.
+  The carry: a switch after a blend-out that ran to its end (`+0xBE5` bit 1,
+  with the old mode's bit 1) does not blend in (`0x27218`). Last, unless the
+  mode is out only (`0x27240` skips it), the turn set-up (VF2 `0x2756C`, FV
+  `0x2A308`) cancels the blend, storing 0 again, when the word before and
+  the new `+0x1A4` both have bit 10.
+  A pass of a motion the game loops runs set-up again (`0x1ABE8`) on `+0x1A4`
+  as the last frame left it, so there bits 17 and 10 are that frame's move
+  flags. Checked against every store to `+0xBDD` in the attract mode, under
+  a MAME watchpoint that logs the inputs as the store runs (VF2 and FV, 420
+  seconds each): all 1153 VF2 and 1317 FV set-ups match, both bits, with 481
+  and 601 blending out, 102 and 123 decided by the carry, 21 and 52 by the
+  cancel and 75 and 96 loop passes. Another 292 and 221 were the fight's
+  tests.
+
+  | Switch (unmirrored) | Old code, frame 1 off the motion's own pose | Now |
+  |---|---|---|
+  | VF2 Akira 1285 → hit 251 (bit 17) | hands 0.46/0.31, feet 0.02 (frame 3: 0.34/0.22) | 0 |
+  | FV Grace 224 → hit 306 (bit 17) | waist 8.8°, hands 0.18/0.24, feet 0.10 | 0 |
+  | VF2 Akira 62 → 65 (bit 10) | hands 0.12/0.22, feet 0.05 | 0 |
+  | FV Jane 156 → 155 (bit 10) | hands 0.27/0.48, feet 0.04 | 0 |
+
+  Of the reactions, 42 of VF2's 63 and 35 of FV's 48 no longer blend in.
+- **The blend-out** (`blendOutFor` in `js/vf2fighters.js`). A motion whose
+  mode has bit 1 eases its last N frames (N its blend length) toward a
+  stance pose. Per frame (VF2 `0x28298`, FV `0x2B004`), past `+0xBE0`
+  (`len - N`) the first such frame calls the set-up (VF2 `0x2776C`, FV
+  `0x2A53C`) and sets `+0xBE5` bit 0; frame `from + k` then adds k angle
+  steps and k point steps, and bit 1 is set at k = N - 1 (the carry above).
+  - The set-up samples the motion's last key (`0x28848`), mirrored when the
+    fighter is.
+  - The stance byte (`+0x814`) picks one of five poses: 0, 0x80, 3, 0x83, 4
+    go to `+0x1E0`, `+0x2D0`, `+0x3C0`, `+0x4B0`, `+0x5A0`; any other byte
+    clears the out bit. The poses are filled when the fighter loads (VF2
+    `0x270D4`, FV `0x29EEC`): the first frame, unmirrored, of action table
+    slots 0, 1, 8, 10, 31 (VF2) or 0, 1, 8, 12, 42 (FV) (`rig.blendOut`).
+  - The stance pose is mirrored when the fighter is mirrored XOR the setup
+    word has bit 21.
+  - Where `+0x1A4` has bit 6 the pose is turned about the body by `+0x812`,
+    and `+0x812` is added to the y angles of objects 2, 3 and 4. `+0x812`
+    starts at 0x8000 for a word with bit 6, else 0; setup ops 5, 6 and 7
+    set it from the int16 at op +8, +3 and +1; it is negated when mirrored
+    (VF2 `0x1A3A4`); script op 22 sets it from op +3 and sets bit 6 (VF2
+    `0x1B3D8`, FV `0x1C7AC`).
+  - Angle step: `yxz(E(last)^T E(stance)) >> shift` per object; point step:
+    `(stance - last) >> shift`, x and z measured from the body.
+  Played alone, 814 of VF2's 1359 motions and 649 of FV's 1054 blend out.
+  Checked against MAME's attract mode (per-frame taps on both players, 420
+  seconds each): the steps of all VF2 97 and FV 80 blend-outs the attract
+  ran match, angles and used points (an unused target holds garbage on the
+  board and is skipped).
+
+  | Motion → next (stance pose) | Old code, last frame off the stance | Now |
+  |---|---|---|
+  | VF2 Akira 71 → 1285 | hands 0.00/0.17 (0.02 more each frame from 13) | 0 |
+  | VF2 Akira 71 → 1285, mirrored | hands 0.17/0.00 | 0 |
+  | FV Grace 217 → 224 | waist 0.3°, hands 0.01/0.15 | waist 0, 0.05 all four (the body's own place offset) |
+
+  Frame 1 of 1285 after 71 no longer blends in (the carry).
+- **The blend's first frame is drawn as the fighter is.** Set-up samples the
+  new motion's frame 1 into `0x50E000` with `0x28780`, which mirrors it when
+  `+0` bit 6 is set (`0x28840`). The explorer took the residual from the
+  unmirrored frame, so every switch of a mirrored fighter blended from the
+  wrong side: Akira (VF2) looping stance 1285 mirrored was off by 0.34/0.35 at
+  the hands and 0.39 at the feet on each pass's frame 1, Grace (FV) stance
+  224 by 17.5° at the waist, 0.33/0.38 and 0.38. Both are now exact.
+- **A turn-round switch.** Setup-word bit 20 (`+0x1A4`, kept by set_mot_dat;
+  181 VF2 motions, 108 FV, throws among them, each authored facing
+  the other way) turns the fighter round: op 0's tail (`0x1B444`; FV clears
+  it at `0x1C950`) flips the facing (`+0x26`, `+0x61A`) by 0x8000. Set-up is
+  called after `+0x1A4` is stored (`0x1A0C0`, `0x1A0C8`; FV `0x1B7CC`,
+  `0x1B7D4`), and when the new `+0x1A4` has bit 20, or the word before
+  (`+0xC30`, copied at `0x1A240`; FV `0x1B8FC`) has bit 6, it takes the turn
+  path (`0x27384`-`0x27558`; FV `0x2A1C4`-`0x2A2F4`): objects 0-4 get no
+  step (`0x27660`; FV `0x2A3FC`), and each old point's (x, z) about the body
+  is turned by `E(new 4) (E(old 4) B(old 4))^-1`, the new body's angles
+  (`0x50E030`) and the old as last drawn (`+0x140`, written at `0x285D4`;
+  FV `0x2B214`), height kept, before the point steps are taken. The loop
+  restart (`0xFFFF`, `0x1ABD8`) reloads neither word, so a looping motion
+  turns on each pass only if the motion before its first had bit 6. The
+  explorer blended these like any switch, so the body spun half a turn over
+  the blend: Akira from stance 1285 into motion 16 was 157.5° off at the
+  waist on frame 1 (hands 0.85/0.65, feet 0.75), 22.5° less each frame;
+  Grace from stance 224 into 31, 148.7° (0.68/0.56, 0.71). Now the waist is
+  exact and the points start 0.18/0.38, 0.03 and 0.08/0.18, 0.13 out, the
+  arms' own blend. Throw pairs need no change of place: thrower and victim
+  have bit 20 as 0/1, 1/0 or, for back throws, 0/0, which the shared place
+  already gives.
 - **Head** (`0x2922C`). With the face target in the chest frame as (d0, d1,
   d2): a target behind (d1 < 0) is brought to d1 = 0, and the old yaw is kept
   if it already faces that way within half a unit; yaw = -atan2(d1, d0),
@@ -994,8 +1129,9 @@ What the fight adds (`fight`, filled in frame by frame by `poseFighter`):
   stands its opponent 2 ahead, turned half round: in the fighter's viewer
   frame the opponent's (x, y, z) is (2 - x, y, -z), and the target is the
   opponent's head as (2 - x, y, -z) read in the motions' (z, y, x) order. The
-  opponent is the same fighter on the same motion, a body of its own so it
-  keeps its own playback.
+  opponent is a body of its own so it keeps its own playback: the same
+  fighter on the same motion unless the panel picks another fighter, or a
+  reaction for it to play (see The opponent's reaction below).
 
 **When the game looks.** The store is `stt r12, 0xb0c(g7)` at `0x286A0`, after
 op `0x31806363`. Four branches to `0x286A4` skip it:
@@ -1005,19 +1141,43 @@ op `0x31806363`. Four branches to `0x286A4` skip it:
 - `0x28664`: the fighter's status word `+0 & 0xA00000` is not 0.
 - `0x28678`: the move flags `+0x1A4 & 0x6C111` are not 0.
 
-None of these is in a motion or move record the explorer reads. `0x500034` is
-the round's state, and `+0` is the fighter's status. `+0x1A4` is built while a
-move plays: the move script interpreter at `0x1AD5C` (op table `0x1B910`,
+The first three are not in a motion or move record the explorer reads.
+`0x500034` is the round's state, and `+0` is the fighter's status. The fourth
+is: `+0x1A4` is built while a move plays, from the motion's setup and script
+(see "Which motions leave `+0x1A4` at `0x200`" below, which `moveFlags`
+follows for both games): the move script interpreter at `0x1AD5C` (op table `0x1B910`,
 stepped against the motion frame `+0x1AA`) has ops that set, clear and toggle
 a `+0x1A4` bit named by the op's operand (`0x1AF90`, `0x1AFA8`, `0x1AFC0`).
 Other move code changes bits too (`0x1ACB0`, `0x1B4C8`, `0x18184`), and
 `0x3AC10` restores the word from a RAM snapshot (`0x535000`). Motion 361, for
 one, runs with `+0x1A4 = 0x40061`, so Kage's head keeps the motion's own
-target through it.
+target through it; `moveFlags` gives `0x40061` on all its frames too.
 
-So the explorer does not decide when to look. Its opponent, behind a checkbox
-that is off by default, is looked at on every frame. Where the game keeps the
-motion's own target, that is wrong, by up to 134 degrees in attract mode.
+Fighting Vipers' gate (`0x2B274`-`0x2B310`) is the same with more tests: it
+also skips on `0x50002C` bit 7, on `0x500034` below `0x80` and its own mask
+`0x3B0000`, on `+0` bits 23 and 8, and its move flags mask is `0x6C119`
+(bit 3 added). It sets `+0x7D7` only when it looks (see the Fighting Vipers
+head below).
+
+The explorer takes the move flags' part (`rig.look.gate`, `looksAtOther`):
+on a frame where the motion's flags have a gate bit up, the opponent's head
+is not fed and the head steps toward the motion's own target, at Fighting
+Vipers' own-target speed there. The round and the status it takes as a fight
+under way, the fighter on its feet. Before this it looked at the opponent on
+every frame. Posed in `poseBout` with the opponent ahead, head against the
+same motion posed alone (Node):
+
+| Motion | Frame | Flags | Before | Now |
+|---|---|---|---|---|
+| VF2 Kage 361 (opponent Akira 1) | 9 | `0x40061`, gate closed | 144.805 degrees | 0.000 |
+| FV Grace 19 (opponent Jane 1) | 10 | `0x25`, gate closed (bit 0) | 34.089 degrees | 0.000 |
+| FV Grace 19 | 16 | `0x24`, open | 22.732 degrees | 10.432 |
+
+On FV 19 the gate opens at frame 15, when op 2's third frame drops bit 0,
+and the head starts turning from the motion's own target then, so it is
+further from the opponent than before for some frames (frame 22: 21.358 both
+ways). Residues of 0.01-0.04 degrees on closed frames are float rounding in
+the angle.
 
 **When the chest twists.** The check at `0x29130` reads `+0x1A4`; with a bit
 of 0x16000 set or none of 0x20C, `0x2914C` stores 0 (`stis r11, 0xbe6(g7)` at
@@ -1087,7 +1247,7 @@ board's order at the board's places, each target computed from the explorer's
 own pose of the other fighter. On every frame where the board's `+0xB0C` is
 the other fighter's head, the computed target matches it to 0.00001 (Kage,
 2916-2924). Whether the head looks at the other fighter at all is the fight's
-gate, and the explorer has not got it:
+gate; measured here before the explorer had its move-flag part:
 
 | Face target fed, Kage frame 2940 (motion 361, frame 16) | Head |
 |---|---|
@@ -1111,11 +1271,649 @@ With the board's gate, the head is within 0.008 degrees (Akira's 18 frames
 looking at the other fighter: 0.007), except where a fighter's own blend or
 mirror choice throws the other's target off. Jeffry's 12.6 degrees at 2420 is
 Wolf's mirrored switch, and Akira's 40 degrees at 3630 is Jacky's unblended
-one. Without the gate, `poseBout` looks at the opponent on every frame, and
-in attract mode the head is up to 134 degrees off where the game looks at the
-motion's own target. That is fight state (see When the game looks above), so
-the explorer's opponent is off by default. Across all sixteen slots, 470 of 539 replayed
-frames match. The misses are the fight's blend choices above.
+one. Without the gate, `poseBout` looked at the opponent on every frame, and
+in attract mode the head was up to 134 degrees off where the game looks at the
+motion's own target. It now has the move flags' part of the gate (When the
+game looks, above); the round and status part is fight state, so the
+explorer's opponent is still off by default. Across all sixteen slots, 470 of 539 replayed
+frames match. The misses are the fight's blend choices above (since
+modelled where they are the motion's: Which switches blend in).
+
+#### The midriff and the low hips (record `+0x38`; read from the ROM, the hips checked against MAME)
+
+Every VF2 record points at a struct from `+0x38` that has the same layout as
+Fighting Vipers' midriff (record `+0x24`, see "The midriff" under Fighting
+Vipers' fighters). VF2 uses it in the same way and a little more:
+
+- `0x18FCC`, at the top of every draw, copies its word `+0` into slot 9's
+  model (`+0x64`) and `+4` into slot 1's (`+0x44`). For all 26 records they
+  are the part list's own, so nothing changes.
+- `0x16F3C`, in `calc_unit_mat` right after slot 9's matrix, runs the same
+  instructions as Fighting Vipers' `0x17A30`: invert the hips' matrix, take
+  the chest's (slot 1) into it, carry the 16 ring points at `+0x70`, then
+  write the `+0xD0` links (20 for every record) to polygon RAM.
+- `rob_disp`'s slot 9 entry (`0x195F8`, from the jump table at `0x191D8`)
+  draws it in geometrizer mode 3 with the model named by word `+8` (Akira's
+  is 0x995), with the same player-2 colour offset as Fighting Vipers'
+  `0x1A2D8`. There is no hit flash and no broken one. It is skipped only
+  while `0x500068` bit 25 is set and the fighter's `+0x700` bit 5 is clear,
+  the gate the replay's afterimage draws at `0x18F14` use too. The explorer
+  draws it on every frame.
+- `0x19090`, in the part loop: on slot 9, while the waist (`+0x1F8`, slot
+  0's height) is under 0.2, or under 0.4 when move flag `+0x1A4` bit 15 is
+  set, the model is word `+0xC` instead. Only Lau (0xAC6 → 0xF08, player 2
+  0x2CC → 0xF07) and Shun (0xA2A → 0x1238, player 2 0xD69 → 0x1237) have a
+  different word there. It is the robe lying flat, used while they are down
+  or getting up.
+
+**What the explorer draws.** The profile's `rig.fighters.midriff` (`at:
+0x38`) builds the band with `readMidriff`, as for Fighting Vipers.
+`rig.fighters.lowHips` gives `readLowHips` word `+0xC`, kept only where it
+differs from slot 9's model, and `lowHipsModel` picks it from the posed slot
+0 height (after the crouch) and the motion's move flags. Node, old code
+against new:
+
+- Midriff: old none for every record; now each of the 13 has one (8 chest
+  points). In headless Chrome, Akira 180 frame 13 bends the chest far enough
+  from the hips (the chest's ring moves 0.31 from rest) that the old picture has a hole in
+  the belt at the bend, and the band now fills it.
+- Low hips: Lau 175 frame 10 (waist 0.100) was 0xAC6 and is now 0xF08; Lau
+  169 frame 20 (waist 0.303, flag 15) was 0xAC6 and is now 0xF08, and frame
+  29 (0.606) stays 0xAC6; Shun 175 frame 10 was 0xA2A and is now 0x1238. Lau's
+  stance 1226 (0.950) is unchanged.
+
+MAME attract mode, a breakpoint at `0x190E8` on slot 9 logging the record,
+`+0x1F8`, `+0x1A4` and the model: 11,595 Lau and Shun frames (878 low, 78 of
+those between 0.2 and 0.4 with bit 15) all match the rule. The midriff's
+geometry was not checked against MAME separately; its code is
+instruction for instruction Fighting Vipers' one, which was.
+
+#### Kage's and Pai's head piece (record `+0x40`; read from the ROM, checked against MAME)
+
+VF2 only. The fighter's load (`0x13FF8`) reads the record's pointer `+0x40`
+(a 0x20-byte struct). When its first word is not 0 it copies that model to
+player `+0x704`, words +4, +8 and +0xC to `+0x758`, `+0x75C` and `+0x760`,
+the vector at +0x10 to `+0x708` and the float at +0x1C to `+0x764`, sets
+`+0x700` bit 0 and clears bit 1 and the byte `+0x714`; otherwise it clears
+bit 0. Records with one:
+
+| Record | Who | Model | Offset (`+0x708`) |
+|---|---|---|---|
+| 3 | Kage | 0x988 | (0.0227, 0, −0.176) |
+| 6 | Pai | 0xA7A | (0, 0, −0.2117) |
+| 19 | Pai, player 2 | 0x987 | (0, 0, −0.241) |
+
+Kage's player 2 record (16) has a struct with model 0, so no piece.
+
+rob_disp's part loop sends slot 2 (the head) to `0x19218` after the head's
+own model. While `+0x700` bit 0 is set and `+0x714` is 0 (`0x19298`) it
+translates by `+0x708` (`0x37806F6F`), turns about Z by 0x4000
+(`0x37006E6E`) and about X by 0x4000 (`0x36006C6C`), or by 0x8000 when
+`+0x1B0` is 6 (`0x192F8`; Pai's player 2 look, 19, takes the 0x4000), and
+draws `+0x704` through `0x7C60`. Kage's is the studded band round his hood
+and Pai's the ornament on her bun. Nothing in a motion touches these fields,
+so every motion of either fighter shows it.
+
+**What the explorer draws.** The profile's `rig.fighters.headPiece` gives
+`readHeadPiece` the record field, the offset and the turns. It adds the piece
+to the body's `extras` on slot 2, always shown, placed like the held item.
+Node, old code against new, frame 1: Kage's start motion 990 had no extra
+and now draws 0x988 at (0.301, 1.406, −0.083); Pai 1227 had none and now
+draws 0xA7A at (0.135, 1.467, −0.086). The headless Chrome pictures show the
+band on Kage's hood and the ornament on Pai's bun.
+
+MAME attract mode, a breakpoint on the draw call (`0x193C8`) logging
+`+0x1B0`, the model and `+0x708`, over 240 seconds: 462 draws of 0x988 on
+Kage and 1040 of 0xA7A on Pai, with the offsets above, on their stances and
+moves (Kage's 990 among them).
+
+Left out, all of them fight state:
+
+- The knock-off. Once `+0x700` bit 1 is set, `0x62FB8`, from a hit, steps
+  `+0x714` through 1, 2, 3 as the piece flies (`+0x724`.., `+0x730`..,
+  `+0x73C`..). With bit 3 as well (set at the load for `+0x1B1` = 3, Kage)
+  it swaps the head model (`+0x48`) to 0xAD2, or 0xAC5 for record 16.
+
+**Its reflection (drawn on stages 10 and 11).** An earlier note here had the
+struct's +8 (`+0x75C`) as the piece's floor shadow and fight state. It is
+neither. Straight after the piece (`0x193C8`), `0x193CC` tests the stage
+flags (`0x6EEA0` bit 5, the Mirror floor's), then the head's point `+0x20C`
+(slot 2's, read back as `+0x1F4` is slot 0's): y not below 0, and |x| and
+|z| not past the ring (`0x50A00C`, 8) less 1. If it passes, it pushes, sends
+`0x23804747` (op `0x47`, `Fn_mul_matrix_rev`: current = M · current) with
+the twelve words at `0x501960`, and draws `+0x75C` through the window
+`0x501834`. `0x1E52C` stores M each frame: push, invert (`0x6000C0C`), save
+to inner 0 (`0x43`), pop; push, scale (1, −1, 1), times inner 0 (`0x45`),
+read back (`0x05`) to `0x501960`, pop. So M = camera · S(1, −1, 1) ·
+camera⁻¹, and the draw is the piece's matrix reflected through y = 0, the
+same as the fighters' reflection (`0x20488`, below). The models are cut-down
+copies of the piece, as the body's reflection models are of the body: Kage
+0x988 → 0x260 (672 vertices → 282, same bounds), Pai 0xA7A → 0xD77 (240 →
+96), Pai player 2 (record 19) 0x987 → 0x2FA (303 → 132). The knock-off's
+routine (`0x634C0`) has the same test and draw for a flying piece.
+
+The explorer reads the +8 with the piece (`headPiece.reflection`) and adds
+its draw to the reflection's pool when the stage field names stage 10 or 11,
+placed as the piece is and reflected as the body is. The head bound is
+`reflection.piece` (ring 8, less 1). Node, on Kage's 990, Pai's 1227 and Pai
+player 2's start motion, frame 1: 0x260 at (0.301, −1.406, 0.083) in the
+board frame, 0xD77 at (0.135, −1.467, 0.086), 0x2FA at (0.143, −1.494,
+0.090); with the head moved 7.5 along x or 5 down, none. Other stages and
+fighters draw what they did. Read from the ROM, not checked against MAME:
+the attract never reaches stage 10 or 11.
+
+Fighting Vipers has no counterpart. Its slot 2 case (`0x1A12C`) draws only
+Picky's hair, and its fighter load copies no such struct.
+
+### The opponent's reaction (`js/reactions.js`)
+
+When a move lands, the game picks the motion the one on the end of it plays,
+and Virtua Fighter 2 and Fighting Vipers pick it the same way, at addresses of
+their own (`rig.reactions`):
+
+| | Virtua Fighter 2 | Fighting Vipers |
+|---|---|---|
+| set_mot_dat | `0x1A1E4` | `0x1B880` |
+| setup scripts, head | `0x200D34C`, 8 bytes | `0x6411E94`, 12 bytes |
+| op lengths (program ROM) | `0x1B7F6`, ops to `0x11` | `0x1CE86`, ops to `0x18` |
+| strike's kind (op 4) | `+0xA` | `+7` (`sub_1BB20`) |
+| reaction picker | `0x230D4` | `0x26978` |
+| reaction table | `0x201CCFC`, 30 kinds | `0x641F834`, 22 kinds |
+
+Three setup ops say how a motion hurts. Op 2's three u16s (`+1`, `+3`, `+5`)
+go to `+0x808..+0x80C`, the frames the attack opens, closes and winds down on.
+Op 4, the strike, writes a u16 to `+0x828`: the low byte is the kind of blow,
+bit 15 the side it comes from. Op 5, the throw, writes its u16 at `+1` there
+instead, and the throw code (VF2 `0x14570`, FV `0x13054`) finds it again
+through calc_mht_adr and starts it on the one thrown with command `0x11`: the
+throw motion and the thrown one's are neighbours in the table (FV 31 and 32,
+VF2 15 and 16). Op 5's float at `+4` (`+0x824`) is the reach the throw catches
+within (`0x16634` compares the gap `+0x5F4` against it), 1.2 to 2.7.
+
+The pair are not left where the throw caught them. The thrower's action
+`0x10` (FV `0x1570C`, VF2 `0x15F48`) steps it halfway to the other's place
+every frame while move flag 1 is up, and once the flag drops at `+0x808` it
+copies the other's place (`+0x18..+0x20`, `ldt`) and facing (`+0x26`). The
+thrown one's action `0x11` (FV `0x157F0`) only starts its motion and stops
+it. So both play on one place and facing, and the motions are made for it:
+the thrown one's root starts where the throw holds it (VF2 16 starts 1.4
+ahead, FV's thrower 31 1.79 ahead of its victim's 0.29). The explorer stands a
+thrown opponent on the fighter's own place and facing (`opponentMatrix`,
+`thrown`). Fighting Vipers has 394 strikes and 111 throws, Virtua
+Fighter 2 569 and 112.
+
+Sharing a facing is not all: the one thrown takes the thrower's mirror too.
+Player `+0` bit 6 is not a half turn but a mirror: once a frame is sampled,
+the pose code (VF2 `0x28AF4`, FV `0x2B778`, the same instructions) swaps
+the left and right objects and reflects them (`mirrorSample` in
+js/vf2fighters.js has the list). set_motion flips the bit when the motion
+before ends with move flag 21 set (`0x1B65C`) or the new id has bit 15
+(`0x1B66C`), and `0x184F0` (FV `0x18F14`) keeps `+0` bit 10 as bit 6 xor
+flag 21 on every frame: the way the fighter will stand once its motion ends.
+Each throw start writes the one thrown's bit 6 from the thrower's: bit 10
+(VF2 `0x18C58`, FV `0x19C70`), or bit 6 xor flag 21 (VF2 `0x1461C`, FV
+`0x130D4`). The victim command's bit 15 follows the throw id's, so the two
+stay in step through their set_motions, and the thrown one's own flag 21 is
+cleared first. So both are drawn on one facing and the same side. No throw
+from a stance has flag 21 up when it catches (FV's seven that set it do
+so from frame 40 on, for after the throw), so it is the thrower's mirror
+alone: the explorer's "mirrored" switch mirrors the fighter, and with it a
+thrown opponent. Any other opponent's bit is fight state, and stays clear.
+
+The mirror stops at the sampled frame. The held angles (setup `0x26FAC`
+latches the type-1 float objects into the `0x29724` entries, `+0x140` on)
+are read raw by the aim code at `0x29118`, which has no bit-6 test, so a
+mirrored fighter holds its chest, head and pelvis as the motion gives them,
+as `heldAngles` does. Only the chest twist `+0xBE6` is negated under the
+mirror (`0x29188`, `0x291C4`, `0x29204`), and the explorer has no twist.
+The face target (`+0xB0C`, written at `0x28600`, the opponent's head at
+`0x286A0`) is not mirrored either. The part models keep their slots: each
+pair of left and right parts is a mirror image across the part's own
+sideways axis (x for objects 0, 12 and 15, y for 2, z for the rest), checked
+to 0.001 for Akira, Jacky, Sarah, Kage, Jane, Grace, Honey and Tokio, save
+Jane's forearms (4 and 7, 0.17 and 0.28 apart) and Sarah's and Honey's feet
+(0.03). The swapped, reflected matrices equal the unmirrored ones reflected
+(diag(1, 1, -1)) exactly, so the mirrored fighter is the unmirrored one in a
+mirror; the one thing a side changes is which hand a shape goes to (below).
+
+coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
+and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
+second frame. The explorer plays the reaction from the first such frame
+(`moveFlags`), else from `+0x808`. VF2's strike check (`0x222A8`) has the
+same rule, bit 8 set and bit 1 clear. With VF2's flags stepped too, none of
+its 569 strikes lands on another frame than `+0x808`'s. A throw's motion starts with the throw.
+
+`table[kind]` is forty u32s, five categories of eight. The category is
+attack_hit's callers' `r8`: 0 and 1 the guards, 2 the hit, 3 the counter hit
+(the path with the "counter" string), 4 the knock-down, which writes command
+`0xC000000` where the others write `0xF000000`. Within one, the index adds 4
+if the one hit crouches (`+0x1A4` bit 3), 2 unless it faces the attacker, and
+the blow's side. The low 13 bits are the motion; bit 15 turns the fighter
+round. Fighting Vipers' kind 0 reads guard `0xFA`/`0xF9`, hit
+`0x134`/`0x136`, counter `0x135`/`0x137` and knock-down `0x24D`.
+
+The explorer's opponent stands and faces the fighter, so it takes the
+standing, facing entries. Left out as fight state: the side's other terms
+(both players' `+0` words and the defender's `+0x1A4` bit 21), Virtua Fighter
+2's program-ROM table at `0x23D98` for a defender with bit 25 set, Fighting
+Vipers' `0x26A04`, which swaps `0x24D` for `0x250` when the defender's waist
+is low, and the category 5 entry the pickers index at `0x28`.
+
+While it waits for the blow, the opponent plays its stance, slot 0 of its
+action table (record `+0x14` in both games: VF2's action_init puts it at
+player `+0x1A0` at `0x13F1C`, 84 ids, as FV's does with 55).
+
+### The hands (`js/fighterhands.js`)
+
+Both games shape a fighter's hands from the move script: op 18 is seven
+bytes, `[18, frame u16, hand, shape, end u16]`, run once the motion frame
+(`+0x1AA`) reaches its frame. The script follows the setup ops (op 0 ends
+the setup on itself, op 8 just past it); its op lengths are `rig.script`
+(VF2 interpreter `0x1AD5C`, table `0x1B910`; FV `0x1C24C`, `0x1D028`).
+Virtua Fighter 2 has op 18 in 390 of 1359 motions (shapes 0, 3, 7, 9, 15,
+23, 31), Fighting Vipers in 383 of 1054 (shapes 0-2).
+
+Virtua Fighter 2 eases (`0x1B2F4`). Each hand has six bytes, `+0x6C4` hand 0
+and `+0x6CA` hand 1: count, target, the shape as 8.8, step. With n = end -
+frame > 0 the op sets n + 1 steps of trunc(((shape << 8) - now) / (n + 1));
+otherwise it sets the shape outright with one step left, keeping the old
+step. `0x1B4E8` then steps every hand with steps left, in the same frame.
+Its `be` at `0x1B500` compares against a literal 0 and never branches, so
+an ease ends short (23 to 31 lands on 30) and an outright set still adds the
+stale step; the explorer does the same. When record `+0x3C` (player
+`+0x67C`, `0x13FF4`) is set, the draw (`0x1907C`) asks `0x19E34` for slots
+5 and 8: slot `r5` (5, or 8 when mirrored) takes hand 1's shape (`+0x6CD`)
+and the other hand 0's (`+0x6C7`), & 31, as an index into its table, slot
+5's at `+0`, slot 8's at `+0x180`.
+
+Fighting Vipers sets the model outright (`0x1C718`): `0x640EBF4[record]`
+holds four s16 models per hand, hand * 4 + shape, and the op writes it over
+the part list's (`+0x40`) slot 5 + 3 * hand, unless it is 0. A mirrored
+fighter's hand is turned first (1 to 0, else 1). Shape 0 is the part list's
+own model. FV keeps the eased picker (`0x1AC80`), but the `+0x6AC` that
+turns it on is record `+0x28` (action_init, `0x12624`), 0 in all thirteen
+records.
+
+So the mirror moves shapes, not models: each slot keeps its own table, and
+the two tables are mirror images (every pair checked). Most motions shape
+both hands alike; VF2 Akira 3, 5, 25 or FV Grace 579, 776 do not, and show
+the swap. The throws (VF2 15, FV 31 and 33) shape them alike.
+
+A hand keeps its shape from one motion into the next. MAME watchpoints on
+both fighters' hand bytes over a 100-second attract run catch no writer but
+op 18 (VF2 `0x1B32C`-`0x1B360`, FV `0x1C760`) and VF2's step (`0x1B500`,
+`0x1B514`), and FV's round start (`0x12554`, the part list copied to
+`+0x40`; VF2's `0x13F08` copies it too, but never touches `+0x6C4`). A
+motion's setup resets nothing, and the game copies no hand state from the
+thrower to the one thrown. So:
+
+- VF2's hands start at power on as shape 0 (count, step 0) and are never
+  reset after; a step under way carries on into the next motion. Its draw
+  takes slots 5 and 8 from the table whenever `+0x3C` is set, so the part
+  list's hand models never show (Dural has no table and keeps them).
+- FV's hands start each round as the part list has them, which is shape 0.
+
+What a fighter played before a motion is fight history the explorer cannot
+know, so a motion with nothing live before it starts on the game's cold
+hands: VF2 shape 0, FV the part list's. Only a motion on screen carries
+over. The opponent waits in its stance (itself started cold) until the move
+lands, and its reaction starts from the stance frame shown then, mid-ease
+if it was; a reaction with no stance shown first starts cold. VF2 Akira 4
+shows the difference from starting on the first shape named: its op 18s
+are at frame 20, so frames 1-20 hold shape 0 (it used to show 3 from frame
+1), and the hands ease to 2 by frame 30 (one short of 3). In FV, Grace 302
+holds the part list's hands to frame 9, where they used to be shape 2 from
+frame 1.
+
+No other op touches a hand. Every handler in both tables (VF2's 24, FV's
+31) was read: none but op 18 writes the hand bytes or slots 5 and 8, and the
+rest of what bears on a hand is this.
+
+- **Loops.** When a motion runs past its last frame (VF2 `0x1AB74`, FV
+  `0x1C114`) the game reads `+0x802`, which set_mot_dat clears and setup op
+  1's u16 sets (FV's op 0x13 too): 0 holds the last frame, a motion id
+  starts that motion, and 0xFFFF plays this one again, the frame back to 1
+  and the script back to its start (`+0x6D0`, FV `+0x700`; VF2 `0x1ABD8`, FV
+  `0x1C160`). The hands are left as the pass ended. The explorer plays every
+  motion over and over, so a motion the game loops now starts each pass
+  after the first from the hands the last one ended on (`playedOver` counts
+  the passes, and the opponent's stance and the stance frame it is caught on
+  count their own); any other motion starts each pass as before, since the
+  game never plays it twice running. In VF2, 34 motions loop, and on Akira
+  16 of them show it, its stance (1285) among them: it eases to 31 from
+  frame 1 and back to 15 from frame 80, so from the second pass it sets out
+  from 15, not 0, and frame 10 is shape 19 (it was 7), frame 30 shape 26 (it
+  was 23). The bytes never quite settle (a truncated step leaves a few
+  1/256ths a pass), so every pass is worked out from the one before. An
+  Akira caught on stance frame 11 carries shape 19 into the throw on the
+  second pass, 8 on the first. FV's 15 looping motions with an op 18 all set
+  both hands outright on frame 1, so a loop never shows there: no FV motion
+  differs.
+- **Op 23** (both games) tests `+0x5B8` bit 0 against its byte and, when
+  they match, sets `+0x60C` to 31 and `+0x852`/`+0x853` from the op and
+  returns from the script, past VF2's hand step (`0x1B438` to `0x1B530`), so
+  no hand steps that frame. It is fight state, and it is in no motion with
+  an op 18 (VF2 has it in 28 motions, FV in none).
+- **Slow motion.** VF2 doubles every op's frame when `0x500068` bit 20 is
+  set (`0x1AD80`; op 3 halves its speed under the same bit), but not op 18's
+  end, so an ease would run short there. The explorer has no such state.
+- **The draw.** VF2's slots 5 and 8 come from the table whenever `+0x67C` is
+  set, which only action_init writes; the other swaps in the part loop are
+  slots 12 and 15 (`+0x5F0`, `0x19D28`) and 3 and 6 (`0x19E6C`), not hands.
+  The per-part bytes (`+0x688`, FV `+0x6B8`) are a visibility test of each
+  part's place, not a hand state.
+- **FV armour.** The per-frame part refresh (`0x27528`, `0x27650`) rebuilds
+  every slot from the part list and the broken-armour bits except 2, 5 and 8,
+  so it leaves the hands to op 18. A hit's armour break (`0x2D588`) does
+  write a slot itself, and Jane's armour table (`0x640EDAC`) has slot 5: it
+  gets model 0x2DE, the one all her op 18s write there. A break is fight
+  state the explorer does not model.
+
+### The face (`js/fighterhands.js`)
+
+The head (slot 2, `+0x48`) changes with the move script too: op 16 swaps
+its model, for an expression (eyes shut on a hit, a talking mouth in a win
+pose). Its byte 3 picks a row of a table by fighter. The explorer used to
+draw the part list's head on every frame. Now `handModels` gives slot 2
+alongside 5 and 8. The face carries from one motion into the next, and over
+a loop's passes, the same way the hands do.
+
+- **Fighting Vipers** (`0x2DDB0`) writes the model outright:
+  `0x640D31C[op][record]` points at two s16 models. The game takes the
+  second once the helmet is off (`+0x1F48` bit 2: `bbc 2` on `ldos
+  0x1F48(g7)`, then `ldis (g0)[r4*2]`) and the first otherwise. Only a hit's
+  armour break (`0x2D588`) sets that bit, and the explorer's Armour switch is
+  that break: with the upper half broken, a fighter whose slot 2 has a break
+  entry has the bit (`helmetOff` from `armouredFighter`, the same test as
+  Picky's hair), and op 16 reads the second column. Eight fighters differ
+  there. In rows 0-6 and 9: Grace 194/192, Honey 2553/2551, Bahn 687/31,
+  Picky 895/892, Raxel 1536/699, Sanman 1062/1059, Mahler 1497/3887, B.M.
+  3589/3588; row 8 is each one's next model (Honey's 2552, Picky's 893,
+  Raxel's 700, Sanman's 1060). Before, the stance's frame-1 op put Bahn's,
+  Mahler's and B.M.'s helmets back on over the broken head. Jane, Tokio and
+  Sonic break no helmet and keep the first column. Checked in MAME
+  (`fvipers`, attract, 150 s, bit 2 ORed into `+0x1F48` at `0x2DDB0`, the
+  store logged at `0x2DDD8`): 240 stores, each the second column of the
+  fighter's row, Grace 192, Honey 2551/2552, Bahn 31, Picky 892, Raxel 699,
+  Sanman 1059, Tokio 3017, Jane 488/489. Mahler and B.M. did not come up in
+  attract. Before any op the slot holds the round start's model, the part
+  list's. Nothing else
+  writes `+0x48` but replay save and restore (`0x3C5E8`, `0x3C94C`). The
+  per-frame part refresh skips slot 2, and the face step (`0x4AF18`) works out
+  a model but never stores it. Op 16 is in 285 motions. Every stance
+  starts with row 0 on frame 1, and win and intro poses use row 7 (the
+  part list's head). Jane's stance 904 frame 1 shows 488 (shut eyes, the
+  same mesh as 489 with other UVs); it used to show the part list's 712.
+- **Virtua Fighter 2** (`0x1B2B0`) starts a chain:
+  `0x4B604(0x2006278[op][char])` loads a record (u16 +0 frames, s16 +4 the
+  value aimed at, u32 +8 the model picker, +0x10 the next record; null
+  changes nothing) and leaves the current value (`+0x6A8`) as it was. The
+  face step `0x4B640`, run at `0x14408` after the frame counter and script,
+  counts the frames down by one and moves the value a truncated
+  1/frames-left of the way to the aim (all of it on the last frame). The
+  picker (u16 +2 steps, +4 a table of 16-byte entries, +8 a byte per step)
+  then gives entry `value × steps / 1001`, whose first word goes in `+0x48`.
+  At a record's end the next one loads, and a chain whose frames are 0
+  leaves the model alone. action_init (`0x4B5D0`) zeroes the value and loads
+  the fighter's own chain (`0x20062A0[char]`): one frame at 0, the part
+  list's head. Akira's hit 251 has op 16 row 8 on frame 1 (six frames to
+  1000: 412, 680, 680, 681, 681, 681) and row 9 on frame 7 (15 frames back
+  to 0, so 412 again by frame 20). It used to show 412 throughout. Dural
+  has no tables, so the head never changes.
+- **VF2's player 2 face.** An entry of the picker is four words, and
+  `0x4B74C` takes the second (`addo 4`) while `+0x1B0` is not `+0x1B1`: the
+  record player 2 wears when both pick the same fighter (13 on) against the
+  fighter. With **P2 colours** on, the explorer reads that word. Only Sarah,
+  Kage and Jeffry's pickers have a second word unlike the first: Sarah's
+  stance head is 0x90C rather than 0x1DB, Kage's 0x8DC rather than 0x35, and
+  Jeffry's 0x8CC rather than 0x25, with their eyes and mouths alongside
+  (Sarah's 0xE84/0xE85 for 0xC38/0xC39, Kage's 0xAFA/0xAFB for
+  0xAFE/0xAFF). Before, the face step put player 1's head back on the P2
+  record from the first frame (Sarah P2's 1269 drew 0x1DB, her own part
+  list says 0x90C). Checked in MAME (`vf2`, attract, both players' `+0x1B0`
+  set to `+0x1B1` + 13 from frame 600, a breakpoint at the store `0x4B76C`
+  for 150 s): 0x90C, 0xE84 and 0xE85 on Sarah's record 15, 0x8DC, 0xAFA
+  and 0xAFB on Kage's 16, 0x8CC on Jeffry's 18, and every other fighter's
+  the same models as before the write.
+- **VF2's voice** (op 9, `0x1B05C`) runs only on its own frame. It names a
+  voice by `0x201E44C[op][char]` (0: nothing). If it does, it sets the voice's
+  time left (`+0x770`) to `0x201E498[op][char]`. That counts down by 1 at
+  each frame's start (`0x14358`) and stops at 0. When it reads 25, the
+  face step loads row 2's chain (the talking mouth) unless row 1's is the
+  one running. Both are in the motion, so this is modelled. The op is
+  skipped while the sound sequencer waits (`0x504070`), which is taken as
+  never.
+
+Left out: the record's second value and its picker's id, which only time
+sound requests (`0x4B7B0`, `0x4B7E8`); the picker's +8 column, taken
+under `+0x700` bit 4 (Kage's 0xAD2), which the fighter's load clears
+(`0x1408C`) and no motion sets; the game-mode tests at the top of
+`0x4B640` (attract and the ending scenes); and the scene resets
+(`0x4B5B0`), which are not motions.
+
+### The held item (`js/fighterhands.js`, `js/vf2fighters.js`)
+
+VF2 only: Shun's gourd. Script op 17 (`0x1B2D0`) runs only on its own
+frame (`cmpobne`: `+0x1AA` must equal the op's frame, not just pass it). It
+sets player `+0` bit 27 when its byte is 1 and clears it otherwise. The
+fighter's load (`0x14098`) clears the bit, and nothing else in a motion
+touches it, so it carries into the next motion like the hands do. The
+explorer's cold start has it clear.
+
+While the bit is set, rob_disp's part loop (jump table `0x191D8`, after the
+slot's own model at `0x1918C`) draws one more model:
+
+- slot 8 (`0x19530`) when not mirrored, z = +0.03;
+- slot 5 (`0x19544`) when mirrored (`+0` bit 6), z = −0.03.
+
+Both go on to `0x19554`: translate (0.15, 0.01, z) (`0x37806F6F`), turn
+about Z by `0x9DF0` (`0x37006E6E`), then draw model `0x98A` (116 faces,
+the gourd) through `0x7C60`. The explorer draws the extra only on frames
+where the bit is set.
+
+Motions with op 17: 172 (on at 90, off at 144); 666, 667, 1045 and
+1205–1208 (on at 1); 1172 and 1202 (on at 14, off at 45). Any VF2 motion
+plays on any fighter, so all of them can be opened. Shun 666 frame 1 shows
+the gourd in his hand, and 172 shows it from frame 90 to 143. Before this,
+the explorer drew no gourd at all.
+
+FV's op 17 (`0x1C6E4`) is not the gourd, and it does draw. It picks the
+item record (`+0x784`, from fighter record `+0x2C`) that `rob_disp`
+(`0x1A4B4`) draws on every slot's turn of the part loop. That is Picky's
+board, Raxel's guitar and Bahn's hat: see "The carried item" below. The
+gourd does not take part in it, and FV has no gourd.
+
+Left out: op 14's camera shake (`[0x500814]+0xFC`, the camera, not the
+fighter) and ops 20/21, the command VM's pointer and counter (input).
+
+### The rest of the move script and the setup ops
+
+Every op of the motion's script and setup has now been read for what it
+writes. None of the rest changes a pose, a model or a light on a motion the
+explorer can open. Counted over every motion (VF2 1359, FV 1054):
+
+- Script op 2 (VF2 `0x1ADAC`, 33 motions; FV `0x1C28C`, 4) writes request
+  `0x0D000000` to `+0x198` and 0 to the timer `+0x5DE`. That is the down
+  state (handler `0x157DC`), whose next motion the stick and the timer pick.
+- VF2 op 15 (`0x1B290`, 4) adds one to `+0x69C`, at most 8: a damage scale
+  (`+0x822`) and an AI test (`0x1CE28`). VF2 op 19 (`0x1B368`, 14) sets the
+  timer `+0x5DE`, doubled when `0x500068` has bit 20.
+- Setup ops 3, 9 and 11-14 fill in the hit's data: reach, the launch speed
+  (`+0x5CC`, `+0x81C`), the damage and its scaling by distance (`+0x822`),
+  the knock direction (`+0x844`). The state handlers that read them run on
+  the one hit. Op 10's windows (`+0x838`) and ops 15, 17 and 22 (read later
+  through `calc_mht_adr`, VF2 `0x1AB34`, FV `0x1C0BC`) wait on input or a
+  throw.
+- FV setup op 18 (`+0x864`/`+0x868`/`+0x878`) sets `+0` bit 14 when the
+  opponent is within a range. Op 21 scales the damage by `+0xA20`. Op 23
+  (`+0x87A`) is a late-input window (`0x1D634`). Op 0x13's second motion is
+  taken only once a button has been held `+0x86E` frames (`+0xA1C`,
+  `0x1D4A4`).
+- FV setup op 20 (motion 733 only): at the bit-20 turn the facing is set to
+  `+0x616`, the direction of the opponent, in place of a half turn
+  (`0x1C964`). That depends on where the opponent stands, which is fight
+  state.
+- FV setup op 24 (motion 990, the one 989 throws) moves the catch point in
+  throw kind `0x26` (`0x15C1C`). That handler steers the one thrown toward
+  the thrower by 0.6 of the gap a frame while `+0x1A4` bit 1 is up. Kind
+  `0x26` is the throw of a fighter in the air (`+0` bit 2), and the gap is
+  wherever the fight left them. Once caught, the pair share one place, as
+  the explorer draws them.
+
+### The fighters' shadows (`js/fightershadow.js`)
+
+Both games lay a flat model under each part of a fighter, slid along the
+stage's light onto the floor. Each frame the game sends the coprocessor the
+light's elevation a0 and azimuth a1 (VF2 `0x61684`, FV `0x5FA7C`,
+`Fn_kage_mat`), and it builds three matrices, with r = a1 ^ 0x8000 and g the
+ground's height (`0x50A010`):
+
+- `inner[0]` = Ry(r) S(1, 0, 1) Rx(a0 − 0x4000) Ry(−r), the flattening;
+- `inner[1]` = Ry(r) S(1, 1, 1/sin a0) Ry(−r), for parts over the ring;
+- `inner[2]`, the same moved by Ry(r)·(0, g, −g cot a0), for parts below it.
+
+`Fn_kage_flag` (VF2 `0x61A14`, FV `0x6027C`) slides one test ball per slot
+along the light onto y = 0 (by kx = −sin(a1 + 0x8000) cot a0, kz =
+cos(a1 + 0x8000) cot a0) and sorts the slots into two masks: near if the
+ball is at or above the floor and not past the ring less 0.3, else far if
+not inside the ring plus 0.2; bit 0 takes bit 9's answer. The draw (VF2
+`0x61BA0`, FV `0x60640`) walks the fighter's table, 15 entries of 24 bytes
+(slot, model, flags, offset), and for each slot in a mask draws the model
+on inner[0] · the slot's matrix, moved by the offset when flag bit 2 is
+set, one axis laid flat, then inner[1] (near) or inner[2] (far).
+
+| | VF2 | FV |
+|---|---|---|
+| tables | `0x61CFC`, by `+0x1B1` mod 13 | u32 `[0x60BC8 + 4·+0x1B0]`, 26 (player 2's look 13 on) |
+| test ball | the middle of the slot's list (`0x2007BEE`) | the first; the boot (`0x1950`) copies them to `0x506000`/`0x506200`; slot 0 has no list and uses slot 9's |
+| light | stage record `0x6EE38` + 256·stage, `+0x70`/`+0x72` | VECTER_X/Y, record `0x6CE1048` + 256·stage, `+0x08`/`+0x0A` (`0x5FA08`) |
+| ring | 8 by default (`0x50A00C`) | 5 (`0xB658`) |
+| ground | −0.5 | by stage, f32 `0x6CE3564` (`0x248FC`): −0.2, 0.3, 0, −0.01, … |
+| laid flat | bit 0 the x, else the z | bit 1 the z, else bit 0 the x, else neither (`kage_poly`) |
+
+FV adds, all read from its own tables:
+
+- The stage flags u32 `[0x6442BA8 + 12·stage]`: bit 8 takes the mirror
+  path and draws no shadows; bit 31 waits on the fight's event bits
+  (`0x574004` & 15), clear at every round's start, so Bay Side (stage 5)
+  draws none.
+- A round test on the stages whose byte `[0x60B98 + stage]` is set (0 and
+  4): the distance is 0.70710677 · hypot.
+- Slot 9 is skipped while the move flags (`+0x1A4`) have bits 14 and 16
+  (`0x60690`).
+- The Factory (stage 1, `[0x5FA6C + stage]`) is lit by four lamps
+  (`0x60468`) at (±1, 0), (0, ±1) × the ring (`0x60620`). The one nearest
+  slot 0 (`+0x1F4`) in plan wins, the last on a tie; a1 = 0x8000 − its
+  bearing, a0 = atan2(h, max(ring + 1 − d, 0)) with h = f32
+  `[0x6CE35A4 + 4·stage]`. Its margins are 0.2 wider, and only the near
+  draw is made: the far one waits on `+0xA29`, fight state.
+
+Checked against MAME by dumping the coprocessor's display list and fitting
+each slot's matrix from the part draws (camera = the stage floor model's
+matrix): VF2 attract frame 4900, 4.2e-7 at most; FV attract frames 3600
+(Factory, lamps, player 2's slot 9 skipped), 4800, 5400, 6000 and 6600
+(a part-mask frame), 29 to 30 shadows each, 2.4e-5 at most. A control with
+a1 one step of 0x100 off misses by 3.5. FV frame 4200 misses by 1.7e-3:
+player 2 is in the air at the wall, where `+0x1F4` lags slot 0 by 0.025.
+
+Before, the explorer drew no fighter shadows in either game. Now, e.g.:
+VF2 Akira 1285 frame 1 on stage 1, 15 shadows (0x15B at 1.867, 0, 0.287);
+FV Grace 3 frame 1 on stage 0, light 0xD000/0xF400, ground −0.2, 15 shadows
+(0xE8 at 0.554, 0, 0.315).
+
+Left out:
+
+- the masks are refreshed only on alternate frames per player
+  (`[0x500020]` parity); the explorer refreshes every frame;
+- FV's `name_char_kage_disp` (`+0x2A`) and the extra entry at table + 360,
+  both fight state;
+- FV's flying armour pieces' shadows on the light (`0x608B8`, `0x609B0`,
+  from `0x60350`) are drawn, as is the Factory's and Bay Side's own floor
+  copy: both under "The pieces' floor shadows";
+- stages whose light turns take the record's start (the round's first frame).
+
+### Fighting Vipers' wall shadows (`js/fvwallshadow.js`)
+
+On Bay Side (stage 5) FV also lays each fighter's shadow on the ring's walls:
+`rob_kabe_kage_disp` (`0x76944`), which `camera_control` calls for each player
+just before `rob_disp`. It runs on a stage whose flags u32
+`[0x6442BA8 + 12·stage]` have bit 31; with bit 7 it also needs the fight's
+event bits (`0x574004` & 15) clear. Stage 5's flags are `0x8000028F`.
+
+`rob_kabe_set_matrix` (`0x76A98`) builds two walls from slot 0's point x, z
+(`+0x1F4`), the ring D (`0x50A00C`, 5; record `+4` with flag bit 5) and the
+light's angle a, which is the camera's yaw (`+0x26`; record `+8` with bit 4),
+with 0x4000/0xC000 nudged by one. No wall is built while |x| or |z| ≥ D.
+
+- The z wall is at Zw = ±D, negative when a's bits 15 and 14 differ:
+  - `inner[6]` = T(−x cos(−a) + z sin(−a), 0, 0)·Ry(−a);
+  - `inner[7]` = T(X0, −0.08, Zw)·S(1.7·kz, 1.7, 0), with
+    X0 = x − zs·tan a·(D − zs·z) and kz = min(1/cos a, 3).
+- The x wall is at Xw = ±D, negative when bit 15 is clear:
+  - `inner[4]` = T(0, 0, −x sin b − z cos b)·Ry(b), with b = 0xC000 − a;
+  - `inner[5]` = T(Xw, −0.08, Z0)·S(0, 1.7, 1.7·kx), with
+    Z0 = z − xs·cot a·(D − xs·x) and kx = min(1/sin(a + 0x8000), 3).
+- A cosine (sine) of 0 builds no z (x) wall. The 1.7 comes from
+  `0x50A3D0`, set at boot (`0x7690`).
+
+`0x77AF8` draws the z wall, then the x wall, each on the fighter's 15
+entries of 28 bytes (slot, six models). The tables are
+u32 `[0x6442C68 + 4·+0x1B0]`. For each entry, p = upper·lower·slot matrix:
+
+- An entry is skipped when p.y is above the stage's top (f32
+  `[0x6CE35A4 + 4·stage]`, 3.1 on Bay Side) plus the slot's own (f32
+  `0x6443EDC`; slot 2 −0.1, the rest 0).
+- The z wall takes only a p within D + 0.1 of the ring's middle on both axes.
+  The x wall takes only the slots the z wall did not.
+- p is stored at `0x50F600` by slot. A wall draws nothing while the camera
+  (`+0x18`/`+0x20`) is beyond it.
+- The model is chosen in this order:
+  - slot 9 with p.y ≤ 0.2: `+0x18`;
+  - slots 15/12: 0xBB8/0xBB9, unless move flag 14 or 4 is set;
+  - a broken slot (`+0x1F48`): `+0x10`;
+  - otherwise `+4`, or with the item in hand (`+0` bit 27) `+8`, mirrored
+    too (`+0` bit 6) `+0xC`.
+- The carried item, while it isn't in hand, goes on the first wall that
+  takes its matrix (the ring entry `rob_disp` left the frame before), as entry
+  `[+0x788]`'s `+0x14`, if that wall drew its slot.
+
+`0x7860C` then lays model 0xAB6, a flat strip, under each slot 1..15 lower
+than 0.24 (the feet; `cmpr 0.24, y` / `ble` skips the rest): T(x, 0, z)·Ry(bearing to the stored wall point + 0x8000)·
+S(0.4, 0, 1.15·distance).
+
+The explorer runs all of this on the pose it already has. It uses the explorer
+camera's yaw and place in the board frame as the fight camera's, and runs
+again when the camera moves. Its fighters stand inside the ring and the
+Animation tab has no event bits, so on stage 5 the wall copy shows whenever
+the fighter does. In the game, the camera bits and the event-bit test are
+fight state.
+
+Now, e.g. Grace motion 1 frame 1 on stage 5, camera yaw 0x8000: 15 wall
+draws on the z wall at z = −5 (0xBBC at 0.403, 2.103) and 2 floor streaks
+(the feet). On stage 0 there are none.
+
+Checked against MAME (the shared build, attract Bay Side, frames 16535 to
+16715, both players, 362 passes) with breakpoints after the set-up, on each
+projected point, each draw and each streak:
+
+- The set-up's stored values (X0 `0x50A3EC`, Z0 `0x50A3F4`, kz `0x50A3E8`,
+  kx `0x50A3F0`) agree to 1.3e-3 relative at most, the worst near a = 0x4000,
+  where X0 runs into the hundreds. Both walls' sides agree in every pass.
+- Every projected point of 317 passes agrees to 1e-4. In the other 45 the
+  logged slot points (`+0x1F4`) lag the matrices the coprocessor projected
+  (by up to 0.106), as in the floor shadows' frame 4200; in 27 of them every
+  slot is off by the same height, and the stored set-up still agrees.
+- Which slots each wall takes and draws, and the model of all 5044 draws
+  (0xBB8/0xBB9 included), match in every pass. The streaks' slots match in
+  every pass, and their length matches 1.15 × the logged distance to 4e-7.
+- Not covered by the window: the camera beyond a wall (every wall drew), the
+  item draw, broken or mirrored models, the item in hand, and the streak's
+  angle (the breakpoint read it after it was overwritten).
+
+Left out:
+
+- the event bits (`0x574004`) and the fight camera, which are fight state;
+- a fighter thrown outside the ring, which the explorer never poses.
 
 ### Fighting Vipers' fighters (`js/vf2fighters.js`)
 
@@ -1159,9 +1957,10 @@ part out along the fighter's own skeleton at player `+0x8C`.
   clear, `0x2BE0C` steps the head up to `0x2000` a frame in both yaw and
   pitch, not VF2's `0x800` and `0x400`. So a fighter alone follows its
   motion's own target faster than one looking at an opponent (`rig.look`).
+  Its gate on the move flags is `0x6C119`, VF2's `0x6C111` with bit 3.
 
 Record `+0x24` is the midriff and is drawn (below, "The midriff"; VF2's
-`+0x38` is still not). The special parts `rob_disp` (`0x19F10`) swaps in for
+`+0x38`, the same struct, is too: "The midriff and the low hips"). The special parts `rob_disp` (`0x19F10`) swaps in for
 the chest and hips (`mune_unit_change`, `koshi_unit_change`), broken armour,
 the pieces it throws (with one sample hit) and Picky's hair are drawn, below.
 
@@ -1194,7 +1993,41 @@ its moves, then the rest of what it plays, then every other motion.
   are Sonic The Fighters' (`js/moves.js`): the lengths agree op for op over
   FV's 59 handlers, so the same walk lists every motion a commit names (Jane
   79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
-  are listed by number only.
+  are listed by motion, each under its input, with the motion's own name: entry
+  0 of `offset_list_motions` points at the list's end (`0x6C01080`), and that
+  is 1055 more pointers, a name per id (`DOMI_TA_KAMAE_2` for Jane's stance,
+  `SY_RPU` on down+P, `TA_SYORYU_HNY` for Honey's fwd . back+down . down .
+  fwd+down . fwd+P). Read from the ROM; no word in the program ROM holds its
+  address. The matcher (table `0x1EBE0`,
+  handlers `0x1EC34`) is STF's (`0x1F00C`) instruction for instruction, on
+  the same player fields (`+0x1218`, `+0x1203`, `+0x1242`, the distance at
+  `+0x5F4`), and its input byte (`+0x1200`, from `0x500700`, built from the
+  I/O port at `0x1C00004`) carries the bits MAME's `vf2` ports give it:
+  P 1, K 2, G 4, down 0x10, up 0x20, right 0x40, left 0x80, as STF's
+  `schamp` ports do. So `programMoves` reads the tree `readMoves` reads,
+  without the names: a ground move goes under the plainest input a fighter
+  standing 2 from its opponent reaches it by (a round starts them 2 apart),
+  strings as their presses, and the rest under their input and the bits they
+  need. State bit 18 stays a number: it is STF's hyper. The motion list
+  splits the moves into those two groups (Jane 26 and 52). A string plays
+  only its last motion: the hand-over at the cancel frame (STF's set-up
+  op 2) is not read here yet. The inputs are read from the ROM, not typed
+  in MAME.
+- **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
+  `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
+  and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
+  jumps to its u32 while bit 6 of the settings byte `[0x50016C]+0x3351`
+  (`0x59C351`) is set (`0x32`) or clear (`0x33`), else steps 5. MAME's `vf2`
+  has that byte 0 all through attract, so the walk takes `0x33`'s jump and
+  steps over `0x32` (`commands.isa` in `js/games.js`). Two more roots
+  (`0x3927D`, `0x392B9`) are read instead while the matcher's `r10` has bit 25
+  or 26 set; they are fight state and not listed. Akira lists 69 moves, Jacky
+  78, Shun 76, each under its input as FV's are (Jacky 34 standing, 44 in
+  other situations): throws on G+P, Jacky's P, P, back+P, Lau's P, P, P, K,
+  Pai's P, P, P, down+K. Checked against MAME: 200 s of `vf2` attract with
+  the commits
+  (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
+  Shun, Jacky and Akira, all 43 in that fighter's list.
 - **Hand-overs**: set-up op 1 of a motion's `mot_list` record
   (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
   `0x13`'s two write the motion that plays as this one runs out, `+0x802` and
@@ -1337,7 +2170,30 @@ from it, each bent by its `0x6421700` entry (`js/fvdebris.js`,
   `0x8000` for the first slot and `0x4000` for the second, whatever the
   fighter faces, scale 1, model `+0x1E`, then model `+0x18`, which nothing
   sets, so 0; pop.
-- **The fall (`0x2CF24`).** vy −= 0.005222 (`0x3BAB1F2D`), vx and vz × 0.98,
+- **The push out of the bodies (`0x2CEA0`, `epc_oidasi`).** First, every
+  frame, for every piece with a model, flying or resting, unless either
+  player has `+0x7D6` bit 0 (set by the finishing blow, `0x264FC`, cleared by
+  `action_init`, `0x129F8`): TGP op `0x77` (`0x3B807777`) gets the piece's
+  x, y, z and radius (`+0x18`) and returns two sums, and x += 0.16 × the
+  first, z += 0.16 × the second (`0x3E23D70A`); y is left alone. The copro
+  (FV's own program, `0x20936`; cpres1's `0x77` is another routine) tests
+  player 1's 32 body balls (`0x1403E80`, radii `0x30600`) and, only if none
+  touched, player 2's (`0x1407E80`, `0x30700`). A body whose entry 13 is over
+  1.4 (`0x3FB33333`) from the piece is skipped. For each entry with a radius,
+  d = |ball − piece| and s = its radius + the piece's; within d ≤ s it adds
+  (ball − piece) × (1 − q) to the sums, in x and z, with q the copro's d / s:
+  RECIPS s, refined three times as F4 = F11 − s·F4, with F11 the 3.0 the
+  length routine (`0x20281`, an inverse square root) leaves there instead of
+  2.0. So q comes out near 2d / s: a piece inside s/2 of a ball is drawn in
+  towards it, one between s/2 and s pushed out, and none past s is touched.
+  The balls are `calc_unit_mat`'s: `set_coli_ball_data` (`0x18304`) sends
+  each slot's list (the shadows' lists, `0x640E89C`, counts `0x640E914`)
+  through op `0x39`, the ball's point (`0x640E4FC` + 16k) on the slot's
+  matrix, into table entry `0x182E4[k]`; `send_coli_ball_R` (`0x1B90`, at
+  boot) gives entry i the radius of ball `0x292AC[i]`, so each entry holds
+  one ball and its own radius, the same for every character. Entry 13 is
+  ball 3, the hips (slot 9); entries 30 and 31 have radius 0.
+ (`0x3BAB1F2D`), vx and vz × 0.98,
   then the place moves by the speed. At or under the floor (`+0x40`, 0.5
   lower once out of the ring) the bounce is counted, the y step taken back,
   and vy = −vy × (0.2 + 0.2 / weight). Once |vy| ≤ 0.001 the piece rests
@@ -1363,14 +2219,110 @@ The explorer runs the effect as above (`launchEffect`, `stepEffect` and
 one mesh per effect slot swapping through the 54 frames' geometry
 (`placeEffects` in `js/app.js`).
 
-Not followed: the push out of both fighters' bodies (TGP `0x77`
-`Fn_parts_oidasi`, `0x2CEA0`), the removal of a resting bit-3 piece once it
-is off screen (`0x316F0`), the floor shadow and the sound (flag bits 28 to
-31, `0x2D218`, which `0x2D254` also calls). The pieces are the fighter's
+The explorer runs the push before the fall (`pushOut` in `js/fvdebris.js`)
+against the bodies on screen: `readBodyBalls` reads the table once,
+`bodyBallsAt` places it on the fighter's pose as player 1 and on the
+opponent's, when it is shown, as player 2 (`noteDebrisBodies` in
+`js/app.js`), each frame's pose standing in for `calc_unit_mat`'s. The
+arithmetic is the copro's in single precision, RECIPS's seed table and the
+3.0 included; only the square root is taken exactly. The finishing blow
+never lands, so the push never stops. There is none in VF2, which has no
+armour to throw.
+
+Checked in node: a piece of radius 0.1 level with one ball of 0.148 moves
+−0.0027 at d 0.02, −0.0002 at 0.123, +0.020 at 0.2, +0.036 at 0.24 and not
+at all from 0.248 on, and a body 1.5 away is skipped. In headless Chrome
+(the motion held at the break, the push stepped against the same pieces
+with no bodies): Jane, motion 21, upper half, pieces 715 and 714 are moved
+0.003, 0.022 and 0.026 a frame over the first three frames, then never
+again; they land 0.06 and 0.09 further out than without it. Grace, motion
+360, lower half, with the opponent: her four pieces move up to 0.07 a frame
+over frames 1 to 5 and land 0.04 to 0.19 away from where they would have.
+Not checked against MAME, for the same reason as the shadows: attract never
+breaks armour.
+
+The pieces are the fighter's
 own; the opponent's armour stays whole. They run in board frames of their
 own, so they fly with the motion held as well as playing. Breaking a half
 throws its pieces and effects from the pose on screen at that moment, making
 it whole again takes them back, and another fighter starts with none.
+
+**The landing sound (`0x2D218`; read from the ROM, checked against MAME).**
+On each floor hit `0x2CF24` adds one to the piece's counter (`+0x3C`, zeroed
+at the launch, `0x2D49C`), and while it is 1 or 2 (`0x2CFC0`, `cmpobl 2`)
+calls `0x2D218`. That takes the highest of the flag word's bits 28 to 31
+(`+0x24`, the record's `+0x1C`; `scanbit`) and sends one of four codes
+through `0x41EA4`, the queue the stage sounds go on: `0xAE1146` for bit 28,
+`0xAE1115` for 29, `0xAE1128` for 30 and `0xAE111F` for 31. So a piece sounds
+on its first two touches of the floor and is quiet after, however long it
+skids. Every record with a model has exactly one of the bits: 28 (Jane 2,
+Grace 4, Honey 17, Picky 2, Sanman 2), 29 (most of the rest) or 31 (Jane 1,
+Bahn 3, Picky 1, Raxel 2, Sanman 2, Mahler and B.M. 6 each); none has 30.
+`0x2D254`, the flipbook effect, calls `0x2D214`, the bare `ret` before it,
+not `0x2D218`, so the effect makes no sound. `fall` (`js/fvdebris.js`) puts
+the code on the simulation's `cues` on those two hits, and `sendDebrisCues`
+(`js/app.js`) sends them to the sound board when the music is on.
+
+- Headless Chrome, a stand-in sound board, both halves broken while the
+  stance plays: Jane sends `0xAE1146` four times (two pieces, bit 28),
+  Grace `0xAE1115` eight times (four), Honey `0xAE1146` six times, Bahn
+  `0xAE1115` four times and `0xAE111F` twice (the bit-31 piece), Mahler
+  `0xAE111F` ten times (five). Two a piece, though some pieces touch the
+  floor more than 200 times. No page errors.
+- MAME (`fvipers`, coined game, the player standing still, breakpoints on
+  the floor hit `0x2CFB4`, the call `0x2D23C` and the launch `0x2D414`):
+  35 pieces thrown in 29,000 frames on stage 0, 1454 floor hits.
+  The call came on exactly the hits that took the counter to 1 or 2, 54
+  of them, and never on the other 1400; each sent its piece's code, `0xAE1115`
+  for bit 29 (42) and `0xAE1146` for bit 28 (12). A piece that skidded on
+  the floor for 600 frames sounded on its first two only.
+
+**Off screen, a resting piece is gone (`0x316F0`; read from the ROM,
+checked against MAME).** `0x2CF24` skips the fall for a piece at rest (flag
+bit 7). If its flags also have bit 3, and the finishing blow's
+`mod_fa_effect + 0xA74` is clear (the explorer never reaches it), it stores
+the piece's point at `0x50A2AC` and its radius (`+0x18`, the one the walls and
+the body push use) at `0x50A2FC` and calls `0x316F0`. That sends the point
+through TGP `0x14802929` with the camera matrix current, puts x, y and the
+radius on the screen at the focal `0x501084` (480) over z, and sets one bit of
+`0x50A300` for each of four points strictly inside 496 by 384 about the
+centre: the radius above the point and below it (if x is inside) and left and
+right of it (if y is inside). A z with its sign bit set leaves all four
+clear. With none set, `0x2D100` clears the piece's model (`+0x22`) and flags
+(`+0x24`): the slot is free again (`0x2D390` takes the first with flags 0),
+and the piece is never drawn again, even with the camera back on it. A piece
+in flight, or one at rest without bit 3, is never tested. Most records have
+bits 3 and 1 (bit 3 alone is the flipbook effect). Of the records with a
+model: 7 of Jane's 8, 14 of Grace's 16, 16 of Honey's 17, all but one to
+four of everyone's.
+
+The board asks its fight camera; the Animation tab has none, so
+`stepBodyDebris` (`js/app.js`) asks the explorer's own screen, as the
+Airport planes' test does: `cameraOnCourse().view` puts the piece's point
+into the camera's space (one rigid transform, so the radius needs no scale)
+and `pieceOnScreen` (`js/fvdebris.js`) runs the four tests against the
+window's edges. `fall` returns false for a piece it removes and
+`stepDebris` frees its slot. So turn the view off a piece at rest and it is
+gone. There is none in VF2, which has no armour.
+
+- MAME (`fvipers`, coined game, the player standing still; breakpoints at
+  `0x31740` for the view point, `0x2CF5C` for the result and `0x2D100` for
+  the removal): 41 pieces thrown in 34,000 frames on stage 0,
+  1972 tests of resting pieces, 7 off screen and 7 removals, each right
+  after its failed test, all resting pieces with bit 3 (one of them out of
+  the ring, bit 19). The camera matrix is rigid: in 394 pairs of pieces
+  tested on one frame, the distance between them in view space is the one
+  in the world to 1.3 × 10⁻⁶.
+- Node: `pieceOnScreen`, given each MAME test's view point, radius and the
+  focal's edges (248/480, 192/480), gives the board's answer on every one.
+  Against a single-precision port of `0x31740`..`0x31884`, it differs on 1
+  of 2,000,000 random points, a rounding at an edge.
+- Headless Chrome, both halves broken with the view on the fighter, then
+  turned away: the pieces still flying when it turns away all stay; once
+  at rest, Jane loses both of hers, Grace 2 of 4, Bahn 2 of 3 and Mahler 1
+  of 5, exactly the resting ones with bit 3 (Honey's two with bit 3 were
+  still bouncing). They are still gone when the
+  view comes back. With the view kept on them none goes. No page errors.
 
 **Checked in headless Chrome on the RTX 3070** (Jane and Grace, motions 21
 and 360, each half broken while the motion plays, and Jane with it held):
@@ -1394,6 +2346,98 @@ The launch turn is not measurable against the armour: the piece models do
 not sit on the intact slot model in any quarter turn (mean nearest vertex
 0.04 to 0.08 for all four), so it rests on `0x2E17C`'s order alone. Not
 checked against MAME.
+
+**The pieces' floor shadows (drawn, Factory and Bay Side).** `camera_control`
+calls `0x76A70` (`0x1FC7C`), which calls `0x78384` when the stage flags u32
+`[0x6442BA8 + 12·stage]` have bit 9 or bit 31: stage 1, the Factory
+(`0x20F`), and stage 5, Bay Side (`0x8000028F`). In geometrizer mode 2
+(`0x58F0`) it saves the camera to inner slot 3 (`0x21804343, 3`) and walks the
+eight piece slots, skipping model `+0x22` = 0 (the effects get none). The
+floor is 0, or ground `0x50A010` for a piece out of the ring (bit 19). A piece
+at y ≤ floor + 0.3 (`0x3E99999A`; `cmpr`/`bl` skips only a higher one) gets
+its `+0x44` drawn on
+
+    push; T(x, floor, z); S(1, 0, 1); Ry(+0x1E); Rx(+0x1C); Rz(+0x20);
+    S(1.25) (0x3FA00000); 0x46 3; draw; pop
+
+so the piece's own turns flattened onto the floor, a quarter bigger. Out of
+the ring it goes through the lower window (`0x501844`), as `0x2E17C` draws
+the piece itself. `+0x44` is the break record's `+0x24`, copied at the
+launch (`0x2D48C`): 0xD36 in every record of every fighter, and 0xD38 in
+some of Honey's, Bahn's and Raxel's.
+
+The explorer reads `+0x24` with the record (`readArmourPiece`) and draws
+`debrisShadowDraws` (`js/fvdebris.js`) from the pieces it already flies, on
+the stages `debrisShadowStage` passes. For a piece out of the ring it uses
+the same stand-in for `0x50A010` the fall does (−0.5). Before, it drew none.
+
+Checked in node and in headless Chrome: the gate passes stages 1 and 5 only.
+Jane, motion 21, upper half broken, `SAMPLE_HIT`: 714 gets its shadow on
+frame 59 after the break (y 0.134), 715 on frame 64; they come and go as
+the pieces bounce, and from frame 81 both stay, at rest at y 0.050 and 0.052,
+each with 0xD36 at its own x, z and y = 0. In the page the pool shows the
+same draws on the Factory and Bay Side (one at frame 74, both from 81 on)
+and none on stage 0.
+Not checked against MAME: attract never breaks armour. In the shared build,
+about 29 minutes of attract (over 30,000 frames, through stages 0 to 8 and
+the Factory and Bay Side twice) never reached the launch (`0x2D390`) or
+either of `0x78384`'s draws.
+
+**The pieces' shadows on the light (drawn, every other stage).** The
+fighters' shadow routine `0x602F0`, which `camera_control` calls for each
+player shown (`0x1FC60`, `0x1FC74`), ends in `0x60350`: `call 0x608B8; call
+0x609B0`. It gets there only on a stage that draws the fighters' shadows
+(flags without bit 8, or bit 31 with bit 7 and the event bits up), is not
+the Factory's lamps (`0x5FA6C`: `0x60468` returns on its own path), and,
+after the fighter's own `0x60640` (`+0x2A` = 0), has no flag bit 9
+(`bbs 9, r12, ret` at `0x6034C`). Read for stages 0 to 11: every stage but
+1 (`0x20F`, lamps and bit 9) and 5 (`0x8000028F`, bit 31 and bit 9), so
+it and `0x78384` never meet. Both read the eight shared slots
+(`[0x500844] + 0x88`).
+
+- `0x608B8` latches `+0x24` bit 8 for each slot with a model (`+0x22`):
+  slid along the light to y = 0 by `0x501990`/`0x501994` (Fn_kage_flag's
+  kx, kz), the distance is max(|x|, |z|), or `Fn_get_2d_len` / sqrt 2 on the
+  round stages (`0x60B98`, 0 and 4). Bit 8 is set when y ≥ 0 (an integer
+  test, so −0 is below) and the distance ≤ ring − 0.5 (`0x3F000000`), and
+  cleared when it is ≥ ring + 0.4 (`0x3ECCCCCD`); between, it keeps what it
+  had. No record has bit 8 at the launch.
+- `0x609B0`, in geometrizer mode 2: push, `Fn_load_matrix_inner 0`
+  (inner[0], the flattening), then for each slot with a model:
+
+      push; T(+0x00); Ry(+0x1E); Rx(+0x1C); Rz(+0x20);
+      Fn_kage_leave_x_axis (0x41); Fn_mul_matrix_inner_rev g5 (0x46);
+      draw +0x44; pop
+
+  with g5 = 1 (the ring's floor) when bit 8 is set, else 2 (the ground,
+  `0x50A010`). So it is the fighters' part shadow (inner[1] or inner[2] ·
+  laid flat (inner[0] · piece)) with the piece's own matrix, the same
+  `+0x44` model as `0x78384` (0xD36, or 0xD38), at its own size: no scale
+  and no height test. A piece out of the ring (bit 19) goes through the
+  lower window (`0x501844`), as the piece itself. The effects get none.
+  The table `0x60BA8` it reads by `+0x32` is overwritten by `+0x44` before
+  the draw. Both players' passes draw the same slots, so each shadow is sent
+  twice, to the same place; the explorer draws it once.
+
+The explorer runs `0x608B8` after each board frame of the pieces
+(`latchPieces`) and draws `pieceShadowDraws` (`js/fightershadow.js`) from
+the pieces it already flies, on the stages `pieceShadowSetting` passes, with
+the stage's light and ground as the fighters' shadows take them. The ring
+test is about the pieces' own ring centre (the walls', half the opponent's
+distance ahead), where the fighters' test is about the fighter. Before, it
+drew none there.
+
+Checked in node and headless Chrome, Jane, motion 21, upper half broken,
+`SAMPLE_HIT`: the gate passes stages 0, 2-4 and 6-11. On stage 0 both 715
+and 714 have their shadow from the first frame, on y = 0, slid along the
+light (0.414 a unit of height, `a0` 0xD000) and meeting the piece once it
+rests (at 0.05). On stage 2 (a0 0xEB00, 1.77 a unit) the shadows of the
+pieces at 1.8 to 2.6 lie 3.2 to 4.5 away. Stages 1 and 5 draw `0x78384`'s
+copy only, as before. Honey, motion 360, both halves: the piece that drops
+off the ring to −0.49 stays latched (it lands 4.9 out by the round
+stage's measure, inside the 5.4) and keeps its ring-floor shadow, as the
+ROM's latch would. Not checked against MAME, for the same reason as the
+floor copy: attract never launches a piece.
 
 | Char | Slots that break (base -> broken model) |
 |---|---|
@@ -1676,8 +2720,25 @@ the third it re-runs all three every frame. Then the script after the setup
 (`0x1C24C`, op table `0x1D028`, each op a frame word and run once the motion
 frame reaches it) changes the word: op 5 sets, 6 clears and 7 flips the bit
 named by its operand, op 1 flips bit 21, op 13 sets or clears bit 25, op 22
-sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`). All of it
-runs before `rob_disp`, so the chest sees this frame's word.
+sets bit 6. Bit 20 is cleared when the script has run (`0x1C950`), and in the
+same tail (`0x1C9A4`-`0x1C9FC`) bit 5 is set while the setup word (`+0x804`)
+has bit 7, and bit 7, if set, cleared (the place re-anchored). All of it runs
+before `rob_disp`, so the chest sees this frame's word.
+
+VF2 does the same (`set_mot_dat` `0x1A1E4`, setup ops at +8 with lengths at
+`0x1B7F6`, phase step `0x1AC14`, script `0x1AD5C`, tail `0x1B43C`) with three
+differences, in `rig.flags`: the second frame drops bit 28 where Fighting
+Vipers drops 26, script op 13 is bit 27, and `set_mot_dat` gives motion
+`0x12E` a third frame of `0x49` and `0x375` one of 46 whatever the setup says
+(`0x1A49C`, `0x1A4A8`). Left out: more such frames for `0x12D`, `0x2A1`,
+`0x21A`/`0x21B`, `0x220`, `0x2B9`/`0x2BA`, `0x45F` and the ids at `0x1B9A2`,
+and the bits 4 and 24 `0x1AC14` sets for `0x2DE`, `0x8D`, `0x8B`, `0x99`,
+`0x59` and `0x5B`, all only with a setting in backup RAM (`0x599000+0x3351`)
+on. VF2 script op 3 also sets bit 4 through `0x18B14` with the launch; it is
+left out with the launch itself (the motions carry the arc), as what clears
+it again is the landing, fight state. Bit 4 is in the look's gate, so in the
+five motions with op 3 (110, 742, 743, 804, 1194) the explorer's head may
+look at the opponent in the air where the board's does not.
 
 Stepped that way, 86 of the 1054 motions with a setup run at exactly `0x200`
 from their first frame to their last, and no other motion reaches it on any
@@ -2184,6 +3245,558 @@ draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
 and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
 flashes.
 
+#### Jane's player 2 broken chest takes another material (read from the ROM; not checked against MAME)
+
+Fighting Vipers only. In `rob_disp`'s part loop the model a slot draws is
+settled first: the part list, then the hands, the chest (`0x31888`) and the
+hips (`0x31ADC`). Then, when that model is from 0x62E to 0x64C (`0x1A02C`),
+the draw goes through `0x5BE4` with `g2 = 0x68CBC`. That replaces the
+model's own material pointer (the second word of its table entry) with
+0x68CBC, the material of model 0x62D. The hit flash and blink still come
+first (`1 << 23`, `0x802000`, as in the section above). Only Jane's player
+2 record (13) has models in that range: its broken chest at rest, 0x63D,
+and its 31 bounce models, 0x62E–0x64C. Their own materials share a colour
+word, `…0085`, in 232 of 424 face records. 0x62D's has `…40B3` there. VF2
+has no such test, and no other draw in Fighting Vipers uses the range.
+
+**What the explorer draws** (`partMaterial` in `js/vf2fighters.js`, the
+profile's `rig.fighters.recolour`). `bouncedDraws` keys every part model in
+the range with that material (`model#68cbc`) on frames without a flash. The
+keys are the same ones the flash uses.
+
+Old code against new, Jane with the player 2 look and the Armour switch
+breaking the upper half, motion 904 frame 1:
+
+- Node: slot 1's 0x63D was drawn in its own material; now it is drawn in
+  0x68CBC.
+- Headless Chrome: the old picture gives her broken top yellow; now it is
+  white.
+
+Any motion shows the change, and so does the opponent in player 2's look.
+
+#### Move trails (script op 28; read from the ROM, checked against MAME)
+
+Many Fighting Vipers moves shed a stippled trail off the feet, the hands or
+the waist: Bahn's swing (motion 624), Grace's kick (3), the floor puff of a
+fall (283). It comes from move-script op 28 (`0x1C8CC`, six bytes), which
+writes a kind to `+0xA25` (byte +3, with byte +4 shifted up a nibble) and a
+life to `+0xA24` (byte +5). `set_mot_dat` clears the kind at `0x1B8C0` as a
+motion starts, so a kind holds from its op's frame to the next op 28 or the
+end of the motion; 308 motions carry one. VF2 has no op 28 (its script ops
+stop at 23) and draws no such trail.
+
+The bits of the kind: 0 lets the first ring drop; 1 is the waist and 2 the
+floor; 5 and 4 the left and right foot; 7 and 6 the left and right hand.
+The values the ROM uses (b3/b4/b5 → kind, motions):
+
+| b3/b4/b5 | kind | what | motions |
+|---|---|---|---|
+| 1/1/9 | `0x11` | right foot | 101 (3@1, 86@10) |
+| 3/0/9 | `0x03` | waist | 92 (32@43, 589@141) |
+| 1/2/9 | `0x21` | left foot | 63 (74@2) |
+| 1/3/9, 1/3/10, 1/3/6 | `0x31` | both feet | 45, 3, 1 (624@3, life 6) |
+| 5/0/9 | `0x05` | floor | 3 (283@16, 515@9, 566@14) |
+| 1/4/9 | `0x41` | right hand | 3 (709@20, 710@20, 868@15) |
+| 0/0/9 | 0 | off | 125 |
+
+Every frame `0x7BDC0` (skipped while `0x508000` bit 5 is set) drops sparks
+for both players into two shared rings of sixteen, the first at `*0x500890`
+and the second at `*0x500894`. A drop takes the ring's next slot (byte +0x42
+plus 1, mod 16): the point at +0x74 + 12·slot, the slot's bit in the live
+mask at +0x40, the kind at +0x174 + slot and the life at +0x64 + slot. The
+points are the player's slot translations, `+0x1F4 + 12·slot`, in the
+board's frame.
+
+- `0x7BE10`, the first ring: bit 0 is needed. A kind without bit 1 drops
+  nothing while the frame counter `0x500020` has bit 1, so two frames in
+  four. Bit 1 drops at the body (slot 0) 0.2 lower (`0xBE4CCCCD` added to
+  y); otherwise bit 2 drops at the body's x and z on the floor (y = 0). The
+  life is always 15.
+- `0x7BEDC`, the second ring, in this order: bit 5 at `+0x284` (slot 12, the
+  left foot), bit 4 at `+0x2A8` (slot 15, the right foot), bit 7 at `+0x230`
+  (slot 5, the left hand), bit 6 at `+0x254` (slot 8, the right hand), each
+  with life `+0xA24`. Mirrored (`+0` bit 6), each pair reads the other
+  side's slot. With `+0x1A4` bit 27 the feet's sparks go on the floor (the
+  hands' don't). Nothing drops while the setup word (`+0x804`) has bit 8
+  and `+0x1A4` has bit 2.
+
+Then a task, `0x7C178` (installed by `0x7C140`), ages each ring: a live slot
+takes its life's model and size (+0x44 + 2·slot, +0x134 + 4·slot), loses a
+life, and is freed once the life falls below 0. A free slot's model is 0.
+The tables are indexed by life, the per-stage ones by `0x500064 & 15`:
+
+- bit 2 (floor): model `(*0x6444520[stage])[life]`, 0x453 on every stage;
+  size `0x64445C0[life]` = 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 3, then all but 0.
+- bit 1 (waist): model `0x64446C0[life]`, 0x3A2 at life 15 up to 0x3AD as
+  the life runs out; size 1.
+- bit 6 or 7 (hands): model `(*0x6444430[stage])[life]`, 0xEA4 for the
+  longest lives up to 0xEA9 at life 0, the same on every stage; size `0x6444490[life]` = 0.2.
+- otherwise (feet): model `(*0x64445F0[stage])[life]`: 0x44E/0x44D/0x44C on
+  stage 0, 0x452/0x451/0x450 on stages 2 and 3, 0x449/0x448/0x447 on the
+  rest; size `0x6444690[life]` × 0.35 (`0x3EB33333`), so it grows from
+  0.175 to 1.575 at life 8 and falls back to 0 by life 12.
+
+`0x21FAC`, from the frame's draw list (`0x1FEE8`), draws each slot whose
+model is not 0 as push, translate to its point, scale by its size, turn
+about y by the camera's yaw (`g13+0x26`, and a quarter turn more in the
+second ring), draw, pop. The models are two-face stippled quads (the feet
+and floor), 18-face (hands) and 32-face (waist) shapes.
+
+**Order in a frame, checked in MAME.** Breakpoints on `0x7BDC0`, `0x7C178`,
+`0x21FAC` and `0x1C8CC` in attract mode show, each frame: the script step
+(op 28 included), then the draw (`0x21FAC`), then the drop (`0x7BDC0`), then
+the ageing. So what is drawn on a frame is what the frame before picked: a
+spark dropped on frame n shows from frame n + 1 with its life's model, and
+for life L it is drawn L + 1 times. At the drop, `+0xA25` is set by the op
+28s at or before `+0x1AA`: motion 0x21B's op at frame 7, 0x21C's at 4,
+0x270's at 3, 0x24D's at 141 (and off at 142) and 0x368's at 1 (off at 2)
+all show in the kind the drop reads on exactly that frame. The points are
+that frame's pose: the board's body, hand and foot points at the drop,
+compared without rotation (distances from the body and between pairs) with
+the explorer's pose of Bahn, are off by 0.004 a frame over 93 frames of
+motion 0x129 and by 0.0000 over 29 of 0x13B at the same frame, and by 0.08
+or more a frame earlier or later. `0x500020` counts one a frame.
+
+**What the explorer draws** (`js/fvtrails.js`; `trailScript` in
+`js/vf2fighters.js`, the profile's `rig.trails`; `placeSparks` in
+`js/app.js`). For a Fighting Vipers motion with op 28, the explorer runs
+both rings frame by frame from frame 1 of the pass on screen, on a stand-in
+for the fighter posed with `poseFighter` (no blend or look carried in), with
+the motion's move flags (`moveFlags`), its setup word and the panel's
+mirroring, the display tick as the frame counter. It draws what the frame
+before picked, turned by the explorer camera's heading. The Animation tab's
+"Move trails" field lists the motion's op 28s, switches the trail off with
+the afterimages' switch, and picks the stage whose models the feet take
+(stage 0 by default). Only the fighter's own sparks are drawn: on the board
+the opponent's share the rings, and the opponent in the explorer plays a
+reaction, not a fight. Before this the explorer drew none: on Bahn's 624 it
+now draws 4 sparks on frame 5 (two 0x44E and two 0x44D, both feet) and 12
+on frame 9, gone by frame 17; on Grace's 3, 1 on frame 2 and 10 by frame
+12; on 589, one waist spark from frame 142 (0x3A2) to 157 (0x3AD); on 283,
+the feet's sparks and from frame 18 the floor puff, two frames in four.
+
+#### The throw spark (script op 30; read from the ROM, checked against MAME)
+
+When a throw lands, Fighting Vipers puts a flash and a spray of red shards on
+the thrown fighter's head or arm. It comes from move-script op 30
+(`0x1C93C`, four bytes), which writes byte +3 to `+0xC56`. Only nine motions
+use it, all of them a thrown fighter's: 898, 945, 959, 961, 997, 999, 1031,
+1038 and 1051, whose throwers play 897, 944, 958, 960, 996, 998, 1030, 1037
+and 1050. Each has one op 30, with byte 1 or 2. VF2 has no op 30.
+
+In the same tick, after both players' scripts (`0x1C24C`), `0x278DC` (called
+from `0x24AB8` and `0x24ACC`) does the following:
+
+- It ORs `1 << +0xC56` into `+0x770` and clears `+0xC56`.
+- If `+0x1A4` has bit 16, it stops there. None of the nine motions has that
+  bit on its op 30's frame.
+- Otherwise it sets bit 8 (`0x100`) in the module's `+0xA68` and copies that
+  to `+0x772`.
+- It takes the first free record of five at `*0x500844 + 0x748` (0x34 bytes
+  each) and writes flags `0x101` to it.
+- The record's point is `+0x1F4 + 12 · (+0x770)`. That is the slot the
+  *mask* names, not the bit: byte 1 gives slot 2 (the head) and byte 2 gives
+  slot 4 (the left forearm). The read comes before the tick builds its pose,
+  so it takes the pose of the frame before.
+
+`0x27FE0` clears `+0x770`, `+0x772` and the module word every tick.
+
+`0x2DB78`, the step, picks models for each live record by its age, then adds
+1 to the age. With flag bit 8, two tables apply. Each table is a u32 count,
+a float size, then the models.
+
+- `+0x1E` comes from `0x64212B4`: 15 models, 0x723 to 0x731 (the shards), at
+  size 0.9, indexed by the age.
+- `+0x20` comes from `0x64211E0`: 2 models, 0x733 and 0 (the flash), at
+  size 5.0, indexed by half the age, but only while the age is under 2.
+
+The record is freed once the age reaches the first table's count.
+
+`0x2DDE8`, the draw, runs only while the module's `+0` has bit 31. It pushes,
+translates to the point, scales by the size, then turns by the camera's
+angles: z (`0x5000A0A`, `g13+0x28`), y (`0x4800909`, `+0x26`) and x
+(`0x4000808`, `+0x24`). So each model is a full billboard. Then it draws and
+pops.
+
+**Checked in MAME.** Breakpoints in a fight (`0x50002B` = 3, `0x500031` =
+0xA) give this order each tick: the scripts, the spawn (`0x278DC`), the draw
+(`0x1FEE4` → `0x2DDE8`, then the trails' `0x21FAC`), then the step
+(`0x2DB78`). So an op 30 on frame N shows nothing on N. It draws 0x723 + k
+at 0.9 on frame N + 1 + k (k = 0 to 14), and 0x733 at 5.0 on N + 1 and N + 2.
+The record's point matched the head (slot 2) as logged after the tick
+before.
+
+The fight made one record per op 30. `0x277D4`, a second spawner that picks
+its slot by scanning the mask's bits, runs only behind `0x27428`'s game-mode
+gate, in the round intro, so the explorer leaves it out.
+
+**What the explorer draws** (`js/fvhitspark.js`; `hitSparkScript` in
+`js/vf2fighters.js`, the profile's `rig.hitSpark`; `placeHitSparks` in
+`js/app.js`):
+
+- For each op 30 of the motion on screen, on frames N + 1 to N + 15, it draws
+  the models the age picks. They sit at the slot's point in the pose of
+  frame N − 1, on a stand-in posed with `poseFighter`, and are turned to face
+  the explorer camera.
+- It does this for the fighter playing the motion, and for the opponent when
+  the opponent plays the thrown half of a throw.
+- The afterimages' switch turns it off.
+
+Before this the explorer drew no spark. In Node:
+
+- On 898 (op 30 at frame 80, slot 4) it now draws nothing on frame 80. Frame
+  81 has 0x723 at 0.9 and 0x733 at 5.0, frame 82 has 0x724 and 0x733, frame
+  83 has 0x725 alone, frame 95 has 0x731, and frame 96 has nothing.
+- On 959 (op 30 at 43, slot 2) it draws from frame 44 to 58, at the head.
+
+In headless Chrome:
+
+- Motion 959 on its own draws the spark on frames 44 to 58, and none on 43 or
+  59.
+- Thrower 958 with the opponent playing 959 draws the opponent's 0x723 and
+  0x733 on frame 44, and 0x729 by frame 50.
+
+Left out, because the explorer cannot reach them:
+
+- The hit sparks a landed blow leaves through `+0x704`. They come from the
+  fight's hit test.
+- Op 29, armour damage, and the armour break (`0x2D588`, under "The hands"
+  above). Both are fight state.
+- Op 24, a wall-hit state.
+- The re-anchoring of the place to the fight's history.
+
+#### The light strobe (`+0x720` bits 5 and 10; read from the ROM, checked against MAME)
+
+In some Fighting Vipers motions the light on a fighter flickers: the fighter
+flashes bright, goes dark on the lit side and bright on the other, and back,
+every six frames. Each player is drawn by a light of its own. Before each
+player's `rob_disp` the draw (`0x1FDD0` for P1, `0x1FE44` for P2) sends
+command `0xA0A` with the light vector (`0x50108C`) times that player's scale
+(P1 `0x50109C`, P2 `0x5010A0`), as `0x5010AC` and `0x5010B8`. VF2 has no
+`0xA0A` and no per-player light, so this is Fighting Vipers only.
+
+Each tick `0x1F000` sets the scale:
+
+- First it sets it to `0x50A0E0[fighter]`, which `0x2176C` fills with 1.0
+  for every fighter.
+- Then, at `0x1F1FC` (P1) and `0x1F258` (P2), if the player's `+0x720` has
+  bit 5 or bit 10, or its `+0x1A4` has bit 26, it adds `fround(0.8)` to a
+  phase of the player's own (P1 `0x5010F0`, P2 `0x5010F4`). If the result is
+  above 2.0, the phase becomes -2.0. The scale takes the phase.
+- From 1.0 the scale runs 1.8, -2, -1.2, -0.4, 0.4, 1.2, 2, -2, and so on.
+  Above 1 the lit side is brighter. Below 0 the light comes from the other
+  side, so the shader lights the faces that were dark.
+
+The phase is set to 1.0 only at the fight scene's start (the camera task's
+init, `0x1ED20`, at `0x1ED44`). It steps only on gated frames, and it carries
+on from one motion into the next.
+
+`+0x720` (the same word as `+0x860`) is set by `set_mot_dat` (`0x1B98C`) to
+the setup record's second u32. Script op 25 (`0x1C870`) sets the bit its byte
++3 names, op 26 (`0x1C888`) clears it, and op 27 (`0x1C8A0`) sets bit 3 if
+that byte is 1 and clears it otherwise. Nothing else sets bits 5 or 10. The
+other writers touch bits 6 (the armour), 2 and 3 (landing), or are the
+replay's save and restore.
+
+63 motions have the gate. Examples:
+
+- 551 has bit 5 from its setup, and op 26 on frame 33.
+- 605 to 611 also have `+0x1A4` bit 26 on frames 1 to 25 through 29.
+- 128, 129, 413, 820 to 831 and 864 are gated too.
+- 1017 to 1021 use bit 10.
+
+None of them is a motion the game loops.
+
+**Checked in MAME** (watchpoints on `0x5010A0`, the frame counter `+0x1AA`
+and `+0x720`, in the attract):
+
+- Each tick runs the script, then the light, then the draw. So the gate the
+  script leaves on frame N decides frame N.
+- On the attract's 551, P2's light is 1.8 on frame 1 (the setup's bit 5),
+  steps through frame 32, and is 1.0 on frame 33, where op 26 clears the bit
+  before the light runs.
+- Over a 420-second attract and a second run that forced bit 5 on P1, every
+  one of 1066 gated frames stepped the phase as above, across 551, 605 to 611,
+  659, 691, 981 and others.
+- On the 729 logged frames inside a motion, the explorer's gate agreed with
+  MAME's.
+
+**What the explorer does** (`js/fvstrobe.js`; `lightFlags` in
+`js/vf2fighters.js`; the profile's `rig.strobe`; `strobeFighter` in
+`js/app.js`; the shader's `uLightScale`):
+
+- It follows `+0x720` through the motion's setup word and ops 25 to 27, and
+  `+0x1A4` bit 26 through the motion's flags.
+- It steps the phase from 1.0 on each gated frame, and draws every mesh of the
+  fighter (parts, pads, skin, osage) with the light times the scale. Each mesh
+  sets the shared material's `uLightScale` as it draws and puts back 1 after.
+- The opponent gets its own scale from the motion it plays.
+- In a built string, the phase runs on from the links before.
+- A motion on its own starts from 1.0 on every pass, as a fight would at its
+  start.
+
+Before this every fighter was drawn at scale 1. In Node, on motion 551:
+
+| Frame | Before | Now |
+|------:|-------:|----:|
+| 1     | 1      | 1.8 |
+| 2     | 1      | -2  |
+| 3     | 1      | -1.2|
+| 6     | 1      | 1.2 |
+| 7     | 1      | 2   |
+| 32    | 1      | -2  |
+| 33    | 1      | 1   |
+
+Motion 605 is 0.4 on frame 29 and 2 on 31. VF2 has no such light, so it has
+no case. In headless Chrome, motion 551 frame 2 drawn at -2 differs from the
+same frame at 1 on 1358 pixels (arms and shoulders).
+
+##### The stage's base scale (stages 2 and 9)
+
+A frame with the gate shut is not always drawn at 1.0. The fight's scene
+start (`0x101B4` stores the stage, then `0x21614`) calls `0x21794`. That
+fills `0x50A0E0[0..25]` with 1.0 (`0x2176C`), then on stage 2 or 9 lowers
+some records' entries. `0x1F040` and `0x1F05C` read the entry for each
+player's `+0x1B0`, the record number (13 and up are player 2's look), every
+tick. Only the stage and the record decide it, so there is no fight-state
+test:
+
+| stage | record (`+0x1B0`)            | scale |
+|-------|------------------------------|-------|
+| 2     | 17 Bahn (P2)                 | 0.56  |
+| 2     | 18 Picky (P2)                | 0.47  |
+| 9     | 1 Grace, 2 Honey             | 0.54  |
+| 9     | 4 Bahn                       | 0.92  |
+| 9     | 6 Raxel                      | 0.87  |
+| 9     | 8 Mahler                     | 0.51  |
+| 9     | 14 Grace (P2), 15 Honey (P2) | 0.54  |
+| 9     | 17 Bahn (P2)                 | 0.53  |
+| 9     | 18 Picky (P2)                | 0.66  |
+| 9     | 19 Raxel (P2)                | 0.57  |
+| 9     | 21 Mahler (P2)               | 0.51  |
+
+The game's `rig.strobe.stages` holds these as the board's single-precision
+bits. `stageFighterLight` reads them, and `strobeAt` draws a shut frame at
+that scale instead of 1.0; a strobing frame is still the phase. The Animation
+tab's stage pick (`state.sparkStage`, the trails' `0x500064`) is now shown on
+every FV motion, and it sets both the trails and this light. It is drawn for
+the fighter and for the opponent, each by its own record. On stage 9, Bahn's
+motion 551 is 0.92 on frames 0, 33 and 34, where the old code drew 1.0. Frames
+1 to 32 strobe as before. On stages 0, 1, 3–8 and 10–11 every record stays at
+1.0, so nothing changes there. VF2 has no such light, so it has no case.
+
+Left out:
+
+- Stages 3 and 4 shade by place; no other stage does (the only writers of
+  `0x50109C`/`0x5010A0` are the record table, these two, stage 7's player-2
+  scale from the scene's `+0x313`, and the strobe). Checked in MAME's
+  attract, which fights on both stages:
+  - Stage 4 (`0x21398`): the distance in x/z (coprocessor `0x2B`) from
+    (-2.75, -4.5), turned by `0x50A022`, which turns a step a tick. The
+    scale is 0 within 1.5, rises from 0 to 1.0 between 1.5 and 2.0, and is
+    left alone beyond that. It matched MAME on 896 of 899 samples, the rest
+    one tick out (≤ 0.07). The spot is always 5.27 from the origin, so the
+    explorer's fighter, mirrored or not, and the opponent 2 away never
+    reach it.
+  - Stage 3 (`0x21470`): the scale is 0 while the fighter's z (`+0x1FC`) is
+    *inside* (-47.39, 49.08) plus `[0x543004]+0x20`, and ×1 outside.
+    `[0x543004]` is the stage object at `0x543200`; `+0x20` is its z,
+    which a keyframe path moves (`0x6B168`, then `0x6B248`). At the origin
+    the scale is 0 while that object is near z = 0, for both fighters. The
+    window is 96 wide, so mirroring and the opponent's 2 make no
+    difference. In the attract, MAME showed 0 on attract frames
+    9880–9950 and 38275–38345. Nothing resets the object when the stage
+    starts. On the second visit it still held -1980 from the first, and
+    each pass (about 280 down to -1980) began at a different point, 322
+    and 327 frames into the stage. What starts it was not traced. It is
+    neither the scene's start nor the motion's frame, so this stays out.
+  - `0x214C0` (a further scale by place, into `0x5010E8`) has no caller.
+- Op 14's camera shake (`[0x500814]+0xFC`, damped by ×-0.5 each tick).
+  It moves the fight camera. The Animation tab has no fight camera, only
+  its orbit view, so no motion there can show it.
+- Stage 2's `0x21884` and stages 5 and 7's writes to `0x501022`, and
+  stage 7's player-2 scale from the scene's `+0x313`. These come from
+  scene state that the explorer does not have, and `0x501022` is not this
+  scale.
+- The phase a real fight carries in from motions before the one on screen.
+
+#### The burst (FV, `0x21E40`; read from the ROM, checked against MAME)
+
+`js/fvburst.js`. After both fighters' `rob_disp` (`0x19F10`), FV's draw
+calls `0x21E40` once for P1 (`0x500804`) and once for P2 (`0x500808`).
+Its gate is `+0x720` bit 10 or `+0x1A4` bit 26, and both are words of the
+motion itself (the light word and the move flags). While the gate is set, it
+pushes and translates to `+0x1F4` (slot 0's point). If the motion frame
+`+0x1AA` is ≤ 15, it then turns by the camera's yaw alone (`0x4800909`,
+`g13+0x26`), scales by 0.5 on every axis and draws the model that the u16
+table `0x6CE35E4` names for that frame: `38 37 36 35 34 33 32 31 30 2F 28
+27 26 25 24 23` (frame 0 is never drawn, because frames start at 1). The models are flat
+light-streak starbursts facing -z, and they shrink from ±4.9 (`0x37` at 0.5)
+to ±0.7 (`0x23`). The gate holds on frames 1–15 of motions 605–611, 820–831,
+864 and 1006 (bit 26), and of 1017–1021 (bit 10).
+
+- Node, old code against new: the old code drew nothing. With the new code,
+  605 draws `0x37` on frame 1, `0x33` on 5 and `0x23` on 15, and nothing on 16.
+  1017 draws `0x35` on 3 and `0x28` on 10. 551 and 3 draw nothing. Headless
+  Chrome shows the same models in the pool, and no page errors.
+- MAME attract, with a breakpoint on P1's draw (`0x21EE4`) and `+0x1AA`
+  read at that point: 84 draws in 607, 608, 611 and 864. All 84 used
+  `table[+0x1AA]`, at the translate `+0x1F4`. A poll after each frame
+  predicted 83 of them and missed none. The one it did not predict was
+  a tick where the poll was out of step.
+- The yaw is the explorer's view yaw (`cameraTurn(place, true)`). The
+  Animation tab has no fight camera.
+- VF2 has no counterpart. Its `rob_disp` (`0x18EF8`) has nothing more the
+  explorer can show. What is left there:
+  - the replay ring (`0x548000`, ruled out)
+  - the foot table (`0x19D28`, ruled out)
+  - `0x19E6C`, which has no caller
+  - the knocked-off head piece (`0x62FAC`); the `+0x75C` model, once
+    listed here as a shadow, is the piece's reflection and is drawn (see
+    "Kage's and Pai's head piece")
+  - `+0` bit 25's debug ball (`0x19790`) and the `+0x2A` name characters
+    (`0x198C0`), which are set only by game-mode code
+  - the per-slot culling in `0x19EBC`
+
+#### Virtua Fighter 2's per-frame fighter draw (`0x1D1DC`; read from the ROM)
+
+The caller of `rob_disp` in a fight is `0x1D1DC`. `g13` there is the camera
+task (`[0x500814]`), so its `+0` bits 1 and 2 are "draw player 1 / player 2"
+(set at `0x1D8F4` unless `0x50009C` bit 1 or 2 hides one). Each player is drawn
+twice. The first pass (`0x1DEA8`, `0x1DF0C`) runs with camera `+0xFA` bit 0
+set; the second (`0x1E394`, `0x1E3FC`) runs with it clear. Between them come
+the stage's display lists. What else it draws:
+
+- **The fighters' reflection, `0x20488` (`js/vf2reflection.js`).** On a
+  stage with flag bit 5 (`0x6EEA0`), after the mirror floor (`0x20400`), it
+  pushes a scale of (1, −1, 1) and calls `0x19C94` for each player that is
+  drawn. That routine draws sixteen models from the character record's
+  `+0x34` list (`[+0x190]+0x34`), each on its slot's matrix (command
+  `0x1B803737`, player `+4`, slot × 12). That puts a flipped copy of the
+  fighter under the floor. It is gated on player `+0` bit 7, the same gate
+  `rob_disp` uses, so the copy shows whenever the fighter does. The models
+  are a set of their own (Akira's are `0x997`–`0x9A6`; his body is
+  `0x197`–`0x1A6`). Only stage numbers 10 and 11 have the bit (the Mirror
+  stage, Dural's). Kage's and Pai's head piece has a reflection of its own,
+  drawn from `rob_disp` (`0x193CC`) rather than here; see "Kage's and Pai's
+  head piece".
+
+  The explorer draws it in the Animation tab when the stage field names
+  stage 10 or 11, for the fighter and the opponent. It uses the pose the
+  fighter already has. The slot matrices `0x19C94` multiplies by are stored
+  in the world frame, under the camera, so the copy is that pose reflected
+  through the floor's plane, y = 0: the y row of each rotation and y of each
+  translation negated (determinant −1; the board cull, by face normal,
+  needs no change). A mirrored fighter needs no case of its own: its pose
+  is already mirrored, and the list is read by slot. The hands are the
+  list's own slot 5 and 8 models, not the hand shapes of script op 18,
+  since `0x19C94` reads only the list. The copy has none of the other
+  models or the flash material `rob_disp` adds.
+
+  `0x19C94` skips a part when `0x2069C` finds it outside the fight
+  camera's view. The Animation tab has only its orbit view and no fight
+  camera, so that test is not modelled: every part is drawn, and no camera
+  clip is made up for it.
+
+  MAME's attract mode never shows it. Over 44,000 frames the demo fights'
+  stage number (`0x500064`) went 1 to 9, back to 0, and round again, with
+  3 between some of them. It never reached 10 or 11. So the reflection is
+  read from the ROM and not checked against MAME.
+- Stage pieces, already read for the Stage tab: `0x2173C`/`0x1E52C` (light
+  and floor matrices, no models), `0x1EE34` (fog), `0x20708` (scenery),
+  `0x20400` (mirror floor), `0x20064` and `0x202E8` (the raft), `0x21368`
+  and `0x30500` (by stage flag and kind).
+- `0x61B88`/`0x61AC4`: the floor shadows ("The fighters' floor shadows").
+  With player `+0x2A` set, `0x61AC4` draws one entry of `0x50B100` instead.
+- `0x21864`/`0x21904` (camera `+0` bit 7): 32 models on a 3-unit grid,
+  copied from `0x201EE58` to `0x50B100`. That list is set up when a player's `+0x2A`
+  becomes 1 (`0x53C14`), so it is game mode, like `rob_disp`'s `0x198C0`.
+- `0x56EE0`: model `0x164` at the camera's target, while camera `+0xB0` is 1.
+  Only the `CAMERA_POSITION` debug code (`0x55A18`) sets that.
+- Camera `+0` bit 24 (`0x1E434`): model `0x129` at each player's camera
+  point (`+0x1BC`, `+0x1E4`). Nothing in the program sets that bit with
+  `setbit` or a `0x1000000` constant.
+- `0x6CA84` walks three display tasks; all their handlers are bare `ret`s.
+  `0x21220` is a bare `ret` too.
+- `0x500068` bit 25 sends the whole draw to `0x1E9BC`, the replay.
+
+#### The carried item (FV, `0x1A4B4`; read from the ROM, checked against MAME)
+
+`js/fvitem.js`. Every frame `0x1CB2C` copies an item record into player
+`+0x784`. The record is at fighter record `+0x2C`, plus `0x70 × (+0xAFC − 1)`
+when `+0xAFC` is not 0, plus `0x38` when the fighter is mirrored (`+0` bit 6).
+`0x1CB2C` reads the byte at `[0x50016c]+0x3350`, which would pick `+0x38`'s
+table (Picky's board `0x6D3`). It was 0 for the whole attract and no motion
+sets it, so it is left out.
+
+Script op 17, on its own frame, with a byte other than 0, sets `+0xAFC` to
+that byte and sets `+0` bit 27. A byte of 0 clears both. Loading a fighter
+clears `+0xAFC`, so a motion the explorer plays cold starts on record 0
+with bit 27 clear.
+
+`rob_disp` draws while the record's first model (`+0x78A`) is not 0. It
+draws that model on the record's slot (`+0x788`), moved by `+0x78C` and
+turned Y, X, Z by `+0x79A`, `+0x798` and `+0x79C`. While bit 27 is set it
+uses the second half instead (slot `+0x7A0`, model `+0x7A2`, offset
+`+0x7A4`, turns `+0x7B2`, `+0x7B0` and `+0x7B4`), so the item moves to the
+hand. Before drawing, it steps the ring index `+0xF00` (mod 4; not while
+`0x508000` bit 5 pauses), reads the matrix back into the ring entry at
+`+0xF34 + 0x34 × index`, and sets the entry's `+0x30` while bit 27 is set
+and `+0x1A4` bit 2 is clear. It then draws `+0x7F8` (the record's `+0x34`)
+at every entry whose `+0x30` is set, so up to 4 copies, one of them at
+the item itself.
+
+- Picky: the board `0x2A9` on slot 1. In the hand it is `0x2AA` on slot 5,
+  with copies of `0xAAE`. Mirrored, the hand half is `0x970` on slot 8, and
+  the copies come from the mirrored half's `+0x34`, `0xAAD`.
+- Raxel: the guitar `0x703` on slot 1. In the hand it is `0x704` on slot 5,
+  with copies of `0xAB0`.
+- Bahn: byte 2 (record 1) is `0x707` on slot 5.
+- Everyone else's record 0 has model 0, so they draw nothing.
+- Op 17's motions: 75, 76, 600 and 603 (frames 9–60); 78 (9–150); 89, 412
+  and 816 (7–45); 323 (15–70); 357 (19–75); 413 and 414 (5–47); 452
+  (15–60); 509 (15–45); 601 (5–45); 602 (1–60); byte 2 on frame 1 in 1002,
+  1015, 1025 and 1028.
+- The ring holds only the motion's own frames. A motion played cold starts
+  with an empty ring, and copies left over from the motion before (fight
+  history) are left out.
+- Node, old code against new: the old code drew none of these models. With
+  the new code, Picky motion 1 frame 1 draws `0x2A9` on slot 1, and so does
+  its last frame (60), which has no op 17. Raxel motion 1 frame 1 draws
+  `0x703` on slot 1. Picky 89 frame 7 draws `0x2AA` on slot 5 and one
+  `0xAAE` copy, by frame 9 three, and no board on slot 1. From frame 45 the
+  board is back on slot 1. Mirrored, 89 frame 7 draws `0x970` on slot 8.
+  Bahn 1025 frame 1 draws `0x707` on slot 5. Grace draws nothing. Headless
+  Chrome shows the same models in the pool, and no page errors.
+- MAME attract, with a breakpoint on the draw: Picky's slot 1 is `0x2A9`
+  (`+0xAFC` 0) across many motions, and Raxel's is `0x703` in 928. Picky 413
+  draws `0x2AA` on slot 5 (`+0xAFC` 1) from frame 5, with copies of `0xAAE`.
+  Raxel 1015 draws `0x703` on slot 8 (`+0xAFC` 2), with copy model 0, so no
+  copies. Bahn 1025 draws `0x707` on slot 5 (`+0xAFC` 2).
+  `[0x50016c]+0x3350` stayed 0 throughout.
+- The hit flash ("The hit flash" above) is drawn on the item too. `0x1A4B4`
+  tests it twice, with the body's rule: the item's model at `0x1A638`
+  (`+0x1A4` bit 26 and `+0x1AA` ≤ 4: `set_obj_thd` with `1 << 23`; else
+  `+0x720` bit 2, `+0x1AA` ≤ 4 and odd: `0x802000`; else `set_obj`), and
+  each copy in the ring at `0x1A6EC`, the same test. `+0x1AA` is the
+  fighter's own frame, so the copies flash with the item, not on their own
+  frames. `placeCarried` (`js/app.js`) takes the fighter's `flashMaterial`
+  (the opponent's from the motion it plays) and keys every draw
+  `model#material`, as the parts are.
+  - Headless Chrome: Picky's board (681) and Raxel's guitar (1795) draw
+    from block 0 (`#800000`) on frames 1–4 of 605–611, 820–831, 864 and
+    1006 and as normal from 5; from block 2 (`#802000`) on frames 1 and 3
+    of 706 and 949. Bahn's record 0 has no model, so nothing changes for
+    him. No page errors.
+  - MAME attract, breakpoints on the two `set_obj_thd` calls of the item
+    (`0x1A64C`, `0x1A670`) and the copies' (`0x1A700`, `0x1A724`): Picky
+    draws `0x2A9` with `1 << 23` on frames 1–4 of `0x25F` (607) and `0x263`
+    (611), Raxel `0x703` on frames 1–4 of `0x261` (609) and `0x33E` (830),
+    and player 2's Picky `0x674` the same way. In `0x263` the copies
+    (`0xAAC`, left in the ring by the motion before) flashed on frames 1
+    and 2 with the item. 50,400 frames of attract showed no blink
+    (`0x802000`): 706 and 949 never played with an item on.
+
 ### Dead or Alive's stages (`js/doa.js`, `js/i960.js`)
 
 Dead or Alive keeps no stage records to read. Each stage is a routine, named
@@ -2623,6 +4236,119 @@ those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
 
+### Fighting Vipers' cells (`js/cells.js`)
+
+Sonic The Fighters' two tables a year earlier, at the addresses the stage sky
+already reads (`stageTable.scroll`): `_ScrollCG_Initialize` (`0x2934C`) loads
+`off_6450000[g0]` and `_ScrollColor_Initialize` `off_6450000[g0 + 1]`, and
+`dsp_pattern` (`0x6744`) loads cell `off_6450300[g0]`. Neither routine has
+Sonic The Fighters' bound, so the CG table runs up to the pattern table, 0xC0
+entries or 96 CGs (`cells.cgEntries`), and the cells run to the pattern
+table's terminating zero: 473.
+
+The record is the same: the halfword at 0x00 is added to every entry, rows at
+0x04, columns at 0x08, then the entries, a row 0x80 bytes on in the tilemap.
+One difference: `dsp_pattern` reads the halfword at 0x02 as Daytona's draw
+does, and copies byte entries where it is 0 (`0x677C`). No record has 0
+there, so every cell is halfwords, as the profile reads them. Every record's
+base is 0x8000, the category bit; `dsp_pattern_low` (`0x6708`) draws a cell
+without it, which changes no tile or colour. Cell 22's pointer (`0x2A32EF0`)
+leads to no record (a row count of 0x1020101), so the tab skips it.
+
+472 cells have a CG that writes every character and colour they name. The
+profile has no table of which CG the game uses for which cell, so the tab
+ranks them as it does for an unnamed Sonic The Fighters cell. Where the code
+loads a CG and then draws a cell, the ranking agrees: `0x9F40` loads CG 13
+and `0x9F68` draws cell 93 (the title's backdrop), and `0x8A44` loads CG 55
+before `0x8A6C` draws cell 111. The title's SEGA mark, cell 15, is drawn at
+`0xA004` after CG 13 too, but CG 13 writes none of its tiles, so they are
+already in from an earlier CG; the tab opens it on CG 9, which writes them
+all. The unused cells are not worked out: `cells.unused` is empty.
+
+### Virtua Fighter 2's cells (`js/cells.js`)
+
+Virtua Fighter 2 (Version 2.1) has the same tile chip but neither Sonic The
+Fighters' tables nor Daytona's: the draw, `0x8F1C`, takes the record's
+address in g0 and copies it to the tilemap at g9. The record is Daytona's: a
+halfword at 0x00 added to every entry, a halfword at 0x02 that is 0 for byte
+entries and anything else for halfwords, rows at 0x04, columns at 0x08, the
+entries from 0x0C, a row 0x80 bytes on in the tilemap. Callers name records
+in the program ROM at their own addresses (`0x13D3C`), so the profile sets
+`cells.programAt0` and js/scroll.js reads addresses below 0x200000 there.
+
+There is no list of cells, so `cells.records` holds the runs the game's own
+pointers lead to, records end to end, 12 runs and 268 cells across the
+program and data ROMs. `0x8FE0` draws one frame of a strip (base, mode,
+columns, rows, a frame count, then the frames side by side: the timer's
+digits and the like); those records are not cells and each run stops at one.
+
+The CGs are the two lists `0x23EE8` loads: a CG list of (source,
+destination) pairs, each source a tile count and then 32-byte tiles, and
+`0x23F30`'s palette list of (destination, halfword count, data), ending with
+a destination of 0. They come three ways:
+
+- the boot pair at `0x280000C` (`cells.cgPairs`);
+- the stage skies, which `0x24314` loads from the pair at
+  `0x2502C + n * 32 + 8`: 11 pairs, some shared by more than one stage;
+- the pairs the screens' routines pass straight to the loaders
+  (`cells.cgLists`, named by the routine): `0x11B70`, `0xAF54`, `0xB424`,
+  `0x10388`, the fight's `0x10838`, `0x2DB94`, `0x31A34` (two, one on top of
+  the other) and `0x60624`.
+
+That is 21 CGs, and every cell has one that writes every tile it names. Where
+a routine loads a CG and then draws cells, `cells.screens` opens them on it:
+cell 0 on CG 12, 260 on 13, 152, 155 and 156 on 17, 87 on 18, 255 to 258 on
+20; the ranking puts the same CG first for each. Cell 72 is drawn after CG 14
+is loaded, but CG 14 writes none of its tiles, so it is not paired. The 12
+unused cells (19, 38, 68, 83, 146 to 150, 153, 154, 259) are records no
+aligned word in the program or data ROM points at; some of them show only
+jumbles on every CG listed, so the CG they were made for is not among them.
+
+### Virtua Cop's cells (`js/cells.js`)
+
+Virtua Cop (Revision B) uses the same tile chip with a record of its own:
+u16 columns, u16 rows, then a halfword entry per tile, written onto 0x80-byte
+tilemap rows. This is the shape of Dead or Alive's maps, so `pictureHeader`
+reads both. The draw, `0x55A0`, takes the record in g0, the tilemap address
+in g1, and in g2 a halfword it adds to every entry. `0x5610` is the same but
+skips zero entries. `0x5690` fills; `0x56F0` and `0x5A30` draw text and are not
+cells. The bases the callers pass (`cells.base`, `cells.bases`):
+
+- 0x8000 for most records;
+- 0xC000 only, for 0x28022E8, 0x2802300, 0x2807D70 and 0x2807DA0;
+- 0 for the sky 0x2803790, the sea 0x2802F00, 0x2810C40 and 0x2811150;
+- both 0x8000 and 0xC000 for 0x2802A10, 0x2807DC0 and 0x2808640, and 0x8000
+  and 0x4000 (`0x67080`) for 0x2812C90. The profile keeps 0x8000 for them.
+
+The records lie end to end in two runs, with zero halfwords padding some of
+them out (`cells.sized` skips the padding). [0x28022E8, 0x28113D4) holds 225
+records and starts exactly where the boot palette's 52 runs from 0x2801C00 end.
+[0x28114D0, 0x28143D4) holds 57 more, 282 cells in all. Most callers name a
+record directly with `lda`. `0x6E50` to `0x6E74` read lists at 0x28149C0,
+0x2814A10, 0x2814A20 and 0x2814A30 (a count, then {record, column, row}), and
+`0x59BD4` reads 0x2839830 by stage. Because the displacements are aligned
+words, the unused search works as it does elsewhere: 68 records are named by no
+aligned word in the program or data ROM.
+
+There are no CG lists. The boot, `0x49B0`, fills the chip itself, and
+`cells.boot` repeats it in order:
+
+- characters: `0x4A38` copies 0x2400000 into characters 0x80 to 0x37FF;
+  `0x4AA8` copies 0x28E0000 over 0x3300 to 0x3FFF. Both swap the bytes of each
+  halfword. `0x5080` expands a 1-bit font into characters 0 to 0x7F. No record
+  names 1 to 0x7F and character 0 is blank, so this step is left out;
+- palette: `0x4B10` writes runs from 0x2801C00 (a count, then 16 colours,
+  written that many times) into groups 1 onwards until 0x7F are done. Then
+  0x2814780 goes into group 0x2B, groups 1 to 0x7F are copied to 0x81 to 0xFF,
+  0x2814680 goes into 0x81 to 0x83, 0x28146A0 into 0x84, 0x28148A0 into 0xAE
+  and 0x28148C0 into 0xAF. `0x4CE0` writes the 6 runs at 0x28113E0 into 0x66
+  onwards and again into 0xE6 onwards, and 0x2814940 goes into 0xFB to 0xFF.
+
+The stage start writes 16 colours into group 0x10, the sky's, from the address
+at 0x2814990 + stage × 4. So the Cells tab has four CGs: the boot's, and one per stage with
+that stage's sky colours. Every cell has one that writes every tile it names.
+The colours go through Daytona's colorxlat (`cells.colorxlat`).
+
 ### Dead or Alive's pictures (`js/cells.js`)
 
 The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its
@@ -2645,6 +4371,29 @@ block 0. The pictures are the Tecmo logo and warnings, the profiles and name
 plates, portraits, the stage skies (named from `doa.sky`), the fight's
 messages, fonts, the rankings, endings, staff roll and title logos. The table
 is the same in every build.
+
+### The House of the Dead's cells (`js/cells.js`)
+
+The finished game (`hotdo`) keeps its 2D art in Dead or Alive's shape a year
+early. The table at program 0xA6580 holds 630 entries of three pointers, 12
+bytes each (tiles, colours, map), and ends where the floats at 0xA8308 start.
+The draw (`0x17D80`) takes the tilemap, two bits, the column, the row and the
+picture's number. It reads the picture's slot, a halfword at
+`0xA9B50 + 2 * n`. If the slot is negative, `0x17D50` loads the picture:
+`0x17B20` finds a run of free 128-tile blocks, `0x17CB0` copies each chunk of
+tiles into a block of its own, and `0x17C10` copies that chunk's 16 colours
+into the block's group. The map is the u16 columns and rows and then halfword
+entries; the draw adds `(g1 << 15) + (g2 << 14) + (firstBlock << 7)` to each, so
+the group is the block, as in Dead or Alive. The panel loads each picture from
+block 0, with no other CG under it.
+
+The palette goes through colorxlat, as MAME's `palette_w` sends it. Checked
+against MAME's title frame: cells 38 and 39, drawn at (8, 24), match every
+pixel (27994 and 29517 of them); without colorxlat, 31% match. The pictures
+are reached by number, not by pointer, so there is no unused list.
+
+Revision A (`hotd`) moved its tables, and its picture table has not been found,
+so it has no Cells tab.
 
 ### Polygon decoding (`js/model.js`)
 
@@ -3930,17 +5679,77 @@ draws, whose texture `set_tpd_data` slides by the tangent of the camera's
 bearing off the panel's, a parallax. The board never resets `stage_ypos` but at
 `change_scene`; the viewer starts it over with the objects' clock.
 
+In the fight the shaft is a band, not the whole of it (read from the ROM,
+checked against MAME). Stage 6's branch of `ground_upper_disp` (`0x23ACC`)
+takes `tou_disp_all` (`0x23B2C`) unless the game mode is GAME (`0x50002C` =
+`1 << 0x50002A`, bits 8-9: GAME_INT, GAME_DSP) and the sub-mode is FIGHT_INT
+to JUDGE_DSP (`0x500034` = `1 << 0x500030`, `& 0x3F00`). Then `0x23E08`
+draws instead, with no clip tests and without `tou_disp_all`'s
+`0x23784(0x6CE2C40)` call, which the explorer never drew:
+
+- four wall rows (`0x6CE2654`), from the last one at or below
+  `stage_ypos - 14`, searched from entry 1 and at most to entry 27;
+- two pillar rows (`0x6CE3218`), from the first whose `+0x28` is above
+  `stage_ypos - 42`, at most entry 7.
+
+Each row keeps its side test (`tower_check`, `hashira_check2`). `stage_ypos` is
+`0x50A018`, which `0x1EFC0` steps by 0.017 (the same word the shaft is moved
+down by). The round's intro, the replay and the win draw the whole shaft, and
+so does the attract demo, which runs in mode ADV. The explorer treats the fight as
+under way, so `shaftBand` in `js/fvstages.js` hides every row outside the band
+at the viewer's `stage_ypos`. From inside the shaft the camera now sees four
+wall rows and two pillar rows round the arena, not the whole 224-unit tower.
+
+The check:
+
+- MAME (`fvipers`, coined game, `0x500064` forced to 6, 200 s) took
+  `0x23E08` on every FIGHT_DSP and JUDGE frame, and `tou_disp_all` on the
+  others. The starting rows it picked, logged with `stage_ypos` at the draw,
+  match `shaftBand` on all 2487 draws (`stage_ypos` 3.38 to 26.91, wall
+  rows 0-2, pillar rows 0-1). In 240 s of attract on stage 6, every draw
+  was `tou_disp_all`.
+- In the headless explorer on the City Hall Elevator, from frames 397 to 1135,
+  20 of the 132 shaft draws are shown, at the heights the band gives: rows
+  1-3 and pillar rows 0-1, then rows 1-4 and pillar rows 1-2 once
+  `stage_ypos` passes 14.
+
 The stage music is `level_music_list`'s song, and the stage sounds are
 `sound_queue_output`'s: the loop each stage starts with and, on the Airport and
 the UFO Diner, cues on the objects' clock.
 
+The Airport's jet is set by the planes' routine, behind its screen test, so it
+goes off only if a plane is on the screen on that frame. `0x6B7BC` projects
+four points round the plane, ANDs their outcodes into `r3`, and at `0x6BAE0`
+branches to its end (`0x6C194`) if they are all off one side; only past that
+does it read the objects' clock (`[0x500870]+6`) and, on 448 (`7 << 6`), set
+bit 15 of the sound flags at `[0x50085C]` (`0x6BAF8`), which `sqo_airport`
+turns into `0xAE1159`. Both planes run the routine, so either one on the
+screen sets it; with both off there is no jet that round. The explorer
+already has that test (`planeOnScreen`, the one that hides the planes, their
+shadows and the arena decal), so the decal's draw carries `jetCue`, and the
+stage sounds ask it (`jetShown` in `js/app.js`) on frame 448 with the camera
+as it stands, before sending the cue (`FV_SCREEN_CUES`,
+`js/sound/ambience.js`).
+
+The check:
+
+- MAME (`fvipers`, coined game, `0x500064` set to 3 at `change_scene`'s read
+  of it, `0x21750`, so the fight's objects are the Airport's; the clock put
+  back from 470 to 380 so 448 comes round again under a later fight
+  camera), 36 passes of 448: `0x6BAF8` was reached by exactly the planes
+  whose test passed (`r3` = 0). Both planes on the screen 3 times, only the
+  taxiing one (type 0) 18, only the one taking off (type 1) 6, and neither 9
+  times (`r3` 1, 2, 5 or `0x1F`), with no jet set.
+- Headless explorer on the Airport, camera at the arena turned eight ways at
+  clock 448: two planes carry the gate; turned five and six eighths round
+  neither is on the screen, and the others show one or both. With a stand-in
+  sound board, facing away sends only the stage loop (`0xAE115A`) through
+  frame 481; facing the planes sends the loop and `0xAE1159` at 448 (seen on
+  the first timer tick after it, 453). No page errors.
+
 Left out:
 
-- the per-entry clip tests of the shaft and the panels, which are culls;
-- `tou_disp_easy`, the shaft the board draws instead under a setting not
-  worked out (`dword_50002C` bits 8-9);
-- the Airport jet cue's on-screen test: it plays whether or not the plane is
-  in view.
+- the per-entry clip tests of the shaft and the panels, which are culls.
 
 ### Character rigs (`js/characters.js`, `js/pose.js`)
 
@@ -4173,8 +5982,8 @@ g4` — the base plus 0x2C. Its first word is a model number, and read that way 
 0 to about 122 come out as exactly what a house is full of — `PN_isu` chairs,
 `PN_tabul` tables, `PN_tokei` a clock, `PN_sitai` a corpse, `PN_sara` plates,
 `PN_nabe` pots, `PN_tarun_dam` a breaking barrel, `PN_niku_001` the flesh, and
-at type 59 `PN_moon`, which is the moon the prototype's notes say is billboarded
-at the camera from the script's own object lists.
+at type 59 `PN_moon`. (The moon turned to the camera is another class, 0x13;
+see **Standing the props up**.)
 
 Every type resolves there. The ones that appeared not to were records of another
 class, whose first word was never a type at all.
@@ -4281,16 +6090,584 @@ is a null pointer.
 
 Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
-stands and does nothing else. The rest are their own things: type 97 is a
-distance trigger against a global, drawing nothing, and 98 to 102 switch on
-`type - 98` into four behaviours whose models are room 4's walls and shutters.
-Only the types on the shared handler are stood up, and only for records of the
-generic class. The others are left out rather than guessed at.
+stands and does nothing else. The rest are their own things, and only the types
+on the shared handler are stood up, and only for records of the generic class.
+The others are left out rather than guessed at, but for seventeen handlers.
+
+The first is room 4's walls and shutters: types 97 to 101 (models
+`PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
+the first revision (`hotdo`). Its init clears the byte 0x53E871. Its task closes
+as a prop's does (0x3ED60), switches on `type - 97`, and draws through 0x413B0,
+the prop's own draw command for command: place +0x20, turns +0x2C, +0x30 and
++0x34, scale +0x94, model +0x54. Before the draw:
+
+| type | model | what it does |
+|---|---|---|
+| 97 | `PN_r4_04_00a` | +0x30 (the yaw) += 0x80 every frame; once 0x53E871 is set, y drops 0.4 a frame to 54 |
+| 98 | `PN_r4_04_01a` | once 0x53E871 is set, z rises 0.25 a frame to 2077.6 |
+| 99 | `PN_r4_04_01b` | once 0x53E871 is set, z falls 0.25 a frame to 1977.6 |
+| 100 | `PN_r4_04_02a` | while 0x53E871 is clear and event flag 0x70 (0x51E330) is set, yaw += 0x50 a frame; past 0x9FFF it sets 0x53E871 |
+| 101 | `PN_r4_04_02b` | while 0x53E871 is clear and flag 0x70 is set, yaw -= 0x50 a frame |
+
+Flag 0x70 is one byte of the event flags at 0x51E2C0, which objects set when
+the player sets them off (0x48AC), and two scripts set it with op 88 (0x67830).
+The one at 0xFD1BC is the script that spawns the five, chapter 4's section 4,
+script 1, which the walk reaches: but it comes some 0x5AA camera frames into
+zone 8, after the op 83 and op 84 waits, and the explorer runs no clock inside a
+zone. The one at 0xF94BC is in chapter 3 (section 3, script 11, and section 4,
+script 8), which spawns none of the five. So the explorer stands the five where
+they are spawned, and turns 97 0x80 a frame while animate is ticked; the gate
+opening after the flag is left out. Chapter 4's section 4,
+script 1 spawns them (records 0xFD8D0 to 0xFD990), and so does the attract
+demo's. Checked in MAME (`hotdo`, attract, a breakpoint on 0x413B0 for these
+types): all five drawn 1448 frames each at their records' places and turns,
+97's yaw stepping 0x80 a frame from 0x80, and flag 0x70 never set. Revision A
+moved the handler, and its program chips are not to hand, so its profile leaves
+these out. The prototype's table stops at 77 types and has no such handler.
+
+The second is the glass cases and the roof pieces: types 30 and 31 (both
+`PN_case00a`, 0x13CD) and 86 (`PN_s3_rf_kop01a`, 0x1922, scale 0.7) share the
+handler 0x3B050. Its task closes as a prop's does (0x3ED60) and draws through
+0x413B0 with the model and scale 0x417F0 gave them, so standing they are props.
+Each watches an event flag: 31 flag 5, 30 flag 6, and 86 one of 0x50 to 0x54,
+picked by its x (505, 515, 532, 549, 557.9). Once its flag is set it throws
+shards (0x3F210) and draws its second model: 30 `PN_case01a` (0x13CE), 31
+`PN_case02a` (0x13CF), 86 `PN_s3_rf_kop_dam01a` (0x1923). Flags 5 and 6 are set
+by an object (0x90848), never by a script. Chapter 3 spawns the roof pieces in
+zone 14, and script op 88 sets 0x52 to 0x54 later in that zone; 0x50 and 0x51
+come only from shots. The explorer runs no clock inside a zone, so all seven
+stand as they are spawned and the break is left out. The cases are chapter 2's
+section 5 and 6 records 0xEF000 and 0xEF030 (Stage 2 · set 7); the roof pieces
+are chapter 3's section 3 and 4 records 0xF9A80 to 0xF9B40 (Stage 3 · set 9).
+Checked in MAME (`hotdo`, the attract demo's scene table at 0xAB0D0 pointed at
+each scene, a breakpoint on 0x413B0 for these types): both cases drawn 1000
+frames each at (902.5, -5.2, 435.2) and (902.5, -5.2, 461.2), turns 0 and
+0xC000; all five roof pieces drawn at their records' places, turn 0, scale 0.7,
+for 31800 frames into section 5 with their flags clear, so the demo never breaks
+them. Revision A's profile leaves them out, as it does room 4's; the prototype
+has no such handler.
+
+The third and fourth are two props that animate: type 104 on 0x3E8B0 and type
+108 on 0x3E8F0. Each closes as a prop's does (0x3ED60), adds one to the model
+at +0x54 and draws through 0x413B0. 104 goes back to 0x1859 once the model it
+stepped from is past 0x185B, so it loops `PN_kakaaa01a` to `04a` (0x1859 to
+0x185C), four frames; 108 goes back to 0x10E4 past 0x1114, so it loops
+`PN_pushukeke00a` to `49a` (0x10E4 to 0x1115), fifty. Nothing stops them,
+so the explorer steps them a model a frame while animate is ticked. Chapter 4's
+section 0, script 1 spawns two 108s (records 0xFBF80 and 0xFBFB0, Stage 4 ·
+set 4: steam rising from a vent), and sections 2 and 3, script 2 spawn five
+104s (0xFCB00 to 0xFCBC0, Stage 4 · set 9: flames standing on the floor's
+lit pads). Checked in MAME (`hotdo`, the attract scene table pointed at chapter
+4's sections 0 and 2, a breakpoint on 0x413B0 for these types): the two 108s
+drawn at (-1.5, 18, -15) and (-1, 24, 74) and the five 104s at x -126, y 0, z
+1461.4 to 1866.0, all turned 0 at scale 1, as the explorer has them. Every
+draw is the model before it plus one, wrapping where the handlers say, over
+1619 draws of each 108 and 1062 of each 104; the five 104s keep in step.
+The 108s do not start together: after 0x417F0, the spawn's per-type cases
+(0x38A1C) give type 0x6C the number 0x33B00 returns, rem 49 (0x38AE4), added to
+its model, so each steam starts somewhere in its loop. In MAME both spawns write
+0x10E4 and the store at 0x38AF8 then makes one 0x10E4 and the other 0x110E; another run gave
+them 8 apart. Type 0x68 has no case there, so the five 104s all start from
+0x1859, as drawn. The explorer has no such number to take, so it starts both
+108s from the type's model, in step.
+
+The fifth is type 69 on 0x3D860, which steps +0x54 the same way, back to 0xA06
+once the model it stepped from is past 0xA21: it loops `PN_powa00a` to `29a`
+(0xA06 to 0xA22), twenty-nine frames, and draws through 0x413B0. It does not
+close as a prop does. It closes (0x150D0) once the zone's clock at 0x51E51C
+passes the float at +0x30C, which the spawn's per-type cases set by section
+(0x38A7C): 99 in section 3, 268 in 9, 1048 in 11 and 12. Those are the sections
+that spawn one: chapter 1's section 3, script 5 (record 0xE1750), section 9,
+script 7 (0xE69E0) and the script sections 11 and 12 share (0xE7FD0), all in
+Stage 1 · set 1. The explorer runs no clock inside a zone, so the three stand
+and loop as spawned, while animate is ticked. Checked in MAME (`hotdo`, the
+attract scene table pointed at chapter 1's sections 3, 9 and 11, a breakpoint
+on 0x413B0 for type 69): each drawn at its record's place, (18, -23, -576),
+(-126.6, -73, -91.7) and (-343, -76.5, 537), turn 0, scale 1, for 68, 503 and
+177 frames, every draw the model before it plus one and wrapping at 0xA22, until
+the clock passed 99, 268 and 1048 and the task closed. The board's first draw
+is 0xA07, the handler having stepped once; the explorer's is the type's model.
+
+The sixth is type 96 on 0x3E4A0, `PN_koba01a` (0x15C2), a fan. It closes as a
+prop's does (0x3ED60) and draws through 0x413B0 with the type's model, but
+first turns its third angle: +0x34 += +0x31C. While the zone's clock (0x51E51C)
+is short of 1440 it sets +0x31C to 0x800; after that, an object standing past
+x 500 takes 4 off it a frame until it stops, and one short of 500 keeps
+turning. The spawn's per-type cases (0x38A1C) have none for it. Chapter 3's
+section 1, script 8 spawns two (records 0xF7000 and 0xF7030, Stage 3 · set 8),
+at x 443.7 and 545.7, the second a turn of 0x2000 on. The explorer runs no
+clock inside a zone, so both turn 0x800 a frame while animate is ticked, as
+they do from their spawn; the second's slowing down is left out. Checked in
+MAME (`hotdo`): the attract demo's path through that section never runs
+script 8, so with the scene table pointed at chapter 3's section 1 and the
+section's script 1 read as script 8 (0xF5BC4), a breakpoint on 0x413B0 for type
+96 showed both at (443.7, -240.7, 850) and (545.7, -240.7, 850), scale 1, the
+third angle 0x2000 apart and 0x800 more on every one of 1226 draws, the clock
+going from 731 to 870. The board's first draw is the record's turn plus 0x800,
+the handler having turned once; the explorer's is the record's turn.
+
+The seventh is type 77 on 0x3D930, `PN_r2_05_kabe01a` (0x1236), a wall. It
+does not close as a prop does. It draws through 0x413B0 with the type's model,
+and only the zone's clock (0x51E51C) changes it: once the clock passes 458 a
+model still 0x1236 becomes `PN_r2_05_kabe_dam01a` (0x1237) and 0x39E10 throws
+its pieces, and once the clock passes 723 it closes (0x150D0). Chapter 2's
+section 12, script 2 (0xF19A8) spawns one, record 0xF27A0, Stage 2 · set 5.
+The explorer runs no clock inside a zone, so it stands whole as spawned; the
+break and the close are left out. Checked in MAME (`hotdo`, the attract scene
+table pointed at chapter 2's section 12, a breakpoint on 0x413B0 for type 77):
+drawn 1389 times at (405.7, -82.2, 33.7), turn 0, scale 1, as 0x1236, until
+the clock reached 459; then 0x1237 with twelve pieces (0x122A to 0x1235) flying
+from it, which closed at 701, and the wall itself at 724.
+
+The prototype (`hotdp`) has the same wall, type 77 on 0x33000, at its own
+models: `PN_r2_05_kabe01a` (0x113E, the type's own) and `PN_r2_05_kabe_dam01a`
+(0x113F), drawn through 0x35AD0. It takes the finished game's two numbers off
+the camera frame (0x51E788) rather than the zone's clock: past 458 a model
+still 0x113E becomes 0x113F and 0x30460 throws its pieces, and past 723 it
+closes (0x10D60). It never calls 0x33320, and the generic init (0x2EDD8) has a
+case for type 69 only. The camera frame is the clock `propZones` runs, so the
+wall keeps the zones it is drawn in, up to 723, as the prototype's `PN_powa`
+do. Chapter 2's section 12 spawns the only one, record 0xF11A0, at the finished
+game's place, (405.7, -82.2, 33.7), turn 0, scale 1. It is drawn in zones 29
+and 31, whole; the break and the pieces are left out. Stage 2 · set 5 goes
+from 10 props to 11, and `hotdp` set props from 111 to 112. Read from the ROM,
+not checked in MAME.
+
+The eighth is type 84 on 0x3DE20, `PN_niku_001` (0x11B1), a body hanging on a
+rope. It closes as a prop's does (0x3ED60) and draws through 0x413B0 with the
+type's model. Once bit 1 or 2 of its flags word (+0x58) is set while it shows
+0x11B1, it queues the type's sound (0x154D0), calls 0x429A0 and takes 0x11B2;
+from there it steps a model a frame through `PN_niku_120` (0x1228) and then
+stands at 0x11B1 again. What sets those bits is not traced, and MAME's attract
+demo never sets them, so it stands at 0x11B1 and the animation is left out.
+Chapter 2's section 12, script 3 (0xF1A6C), the one after the wall's, spawns
+two, records 0xF2980 and 0xF29B0 (Stage 2 · set 5). Checked in MAME (`hotdo`,
+the attract scene table pointed at chapter 2's section 12, a breakpoint on
+0x413B0 for type 84): both drawn 2128 times as 0x11B1 at (338.5, -95.3, 69) and (332.5, -91.3,
+61), turns 0xB000 and 0xD000, scale 1, the flags word 0x1401 throughout, until
+both closed as props do at clock 750.
+
+The ninth is type 93 on 0x3E180, `PN_eneene00a` (0xD58). The handler is shared
+with types 87, 88 and 95, which stand as props (below). For 93 it closes
+as a prop's does (0x3ED60), and closes (0x150D0) once the zone's clock
+(0x51E51C) reaches 430; then it steps +0x54 back to 0xD58 once the model it
+stepped from is past 0xD79, so it loops `PN_eneene00a` to `34a` (0xD58 to
+0xD7A), thirty-five frames, and draws through 0x413B0. Chapter 4's record
+0xFC010 spawns one, Stage 4 · set 4. The explorer runs no clock inside a zone,
+so it loops as spawned while animate is ticked, and the close is left out.
+Checked in MAME (`hotdo`, the attract scene table pointed at chapter 4's
+section 0, a breakpoint on 0x413B0 for type 93): drawn 2075 times at (0, 18.9,
+0.5), turn 0, scale 1, every draw the model before it plus one and wrapping at
+0xD7A, the clock going from 197 to 429, and closed as the clock reached 430.
+The board's first draw is 0xD59, the handler having stepped once; the
+explorer's is the type's model.
+
+The other three on 0x3E180 are props. All three close as props do (0x3ED60)
+and draw the type's model through 0x413B0. Type 95 (`PN_sekom01a`, 0x16CE)
+also closes (0x150D0) once the zone's clock passes 601 while the section
+byte (0x51F350) is 0, or 338 while it is 3, and in section 3 it takes
+`PN_sekom02a` (0x16CF) before it draws. For types 87 (`PN_st3_card01a`,
+0x16D0) and 88 (`PN_sousa00a`, 0x1120), a model of 0x1120, so 88's, becomes
+0x1121 (`PN_sousa01a`) once the clock passes 311, and once a shot sets bit 1
+or 2 of +0x58 they queue the type's sound and are shaken by 0x33B00's numbers
+for 20 frames. 0x41890, called
+after the draw, clears those bits every frame. Chapter 3's section 0, script
+6 (0xF4194) spawns an 87 and a 95 (records 0xF57C0 and 0xF57F0), and section
+3 a 95 (0xF8F70), all Stage 3 · set 8. Chapter 4's section 0 spawns an 88
+(0xFBFE0), Stage 4 · set 4. The explorer stands all four as spawned, the
+third 95 as `PN_sekom02a`, the section that spawns it being the walk's own.
+The clock and the shots are left out. Checked in MAME (`hotdo`, the attract
+scene table pointed at each section, a breakpoint on both draws in
+0x3E180): in chapter 3's section 0, with script 1 pointed at script 6 because
+the demo does not reach it, the 87 at (-39, -24.7, 209), turn 0, and the 95
+as 0x16CE at (-38, -16.7, 209), turns 0, 0xA000 and 0x1300, each drawn 4022
+times; in section 3 the 95 as 0x16CF at (348.5, -183.5, 1010), turn 0x4000,
+1619 times; in chapter 4's section 0 the 88 as 0x1120 at (-87.7, 5, 325.9),
+turn 0, its clock closing before 311. All at scale 1. The demo's player
+shoots the 88, so MAME's draws are shaken about that place; the explorer
+draws it still.
+
+The tenth is type 122 on 0x3C5A0, whose own entry in the object table is
+empty (`PN_space`, scale 0). It is the routine a shot prop calls to drop a
+life (0x3A700), run as a task: it opens an item on 0x3C310 with
+`PN_item_life` (0x312) at +0x54, scale 2.2, the spawner's x and z, its y
+less the type's floor offset plus 2, and of its angles only +0x30. Outside
+chapter 4 it then turns the item to face the camera; in chapter 4 (0x51F351
+= 3) it keeps the record's yaw and closes its own task, so each record drops
+one item. The item closes as a prop's does (0x3ED60) and draws every frame
+until a shot sets bit 28 of +0x58; then it blinks and closes 120 frames on,
+which the explorer, with no shots, leaves out. Chapter 4's records 0xFCD00,
+0xFCD90, 0xFCE80 and 0xFCEB0 stand four, Stage 4 · set 9. Checked in MAME
+(`hotdo`, the attract scene table pointed at chapter 4's section 3, a
+breakpoint on the item's draw at 0x3C570): drawn at (-163, 2, 1574.3) and
+(-162.6, 2, 1550.5) turned 0x4000, (-84.2, 2, 1457.8) and (-91.7, 2,
+1451.3) turned 0xC000, scale 2.2, 580 frames each until they closed with
+the props at clock 580; the attract player shot the first, which blinked
+and closed at 253.
+
+The eleventh is type 123 on 0x3C9D0, whose entry is empty too. It drops a coin
+the same way: an item on 0x3C730 with `PN_kinka00a` (0x3B5, a disc of radius
+0.55) at +0x54, scale 1.4, the spawner's x and z, y the float at `0x51E3C0`
+plus 0.22, +0x2C 0x4000 and +0x30 and +0x34 0. In chapter 4 it closes its own
+task. The coin closes as a prop does (0x3ED60) and, until a shot sets bit 28 of
++0x58, adds 0x1000 to +0x30 every frame and draws: 0x15 with +0x30, then 0x14
+with +0x2C, which is the explorer's yaw then pitch, so it stands on its edge
+and spins about the upright. It then draws the model a second time after
+command 0x77 and calls to 0x2320 and 0x1A80; the explorer draws it once. A shot
+sets bit 28, and the coin stops turning and closes 180 frames on; that is left
+out. Chapter 4's records 0xFCCD8, 0xFCD60, 0xFCDF0, 0xFCE20 and 0xFCE50 stand
+five, Stage 4 · set 9, each at yaw 0 whatever its record's, turning 0x1000 a
+frame in step while animate is ticked. Checked in MAME (`hotdo`, the attract
+scene table pointed at chapter 4's section 3, a breakpoint on the coin's draw
+at 0x3C95C): all five drawn 580 times at the records' x and z, y 0.22 (the
+float at `0x51E3C0` was 0), +0x2C 0x4000, scale 1.4, +0x30 stepping 0x1000 a
+draw in step from 0x1000, until they closed with the props at clock 580. The
+board's first draw is 0x1000 on, the coin having turned once; the explorer's is
+0. The coin's lower 0.55 is below y 0. The board draws it whole over the floor
+(MAME's snapshots show it whole), because it sorts polygons rather than testing
+depth. The explorer's depth buffer hides that part (see `ZSORT_RECEDE` in
+`js/viewer.js`). Type 124 on 0x3CBE0 opens a type-91 object on 0x41A60 and
+stays out.
+
+The twelfth is type 121 on 0x3EB30, `PN_kikai_b` (0x15BE), scale 1. Its
+init closes the task at once if its event flag is already up: 0x56
+(0x51E316), or 0x55 (0x51E315) when bit 5 of +0x58 is set, where 0x55 at 1
+drops a life (0x3C5A0) first. A camera window (+0x64 not 0) skips the test.
+Then it closes as a prop does (0x3ED60) and draws through 0x413B0 until a shot
+sets bit 1 or 2 of +0x58, when it breaks and sets its flag (0x55 to 1 with bit
+5, else 0x56 to 1). Only this handler and the life item (0x3C3D4, 0x55 to 2)
+write those two flags; no script does. Chapter 3's section 0 spawns two in
+script 8 (0xF59E0, 0xF5A40) with window row 0x1F of 0xAE830, `0x159, 0xFFFF`,
+which closes them at 0x159 on the zone's clock, and two in script 10 (0xF5A10,
+0xF5A70) at the same places, yaw 0x3000 and scale: the same two machines,
+handed to objects that know whether the first were shot. The explorer stands
+one at each place, (227.9, -24.7, 131) and (231.7, -24.7, 137.5), Stage 3 ·
+set 8, which goes from 43 props to 45; `hotdo` set props go from 205 to 207.
+The shot and the life are left out. Read from the ROM, not checked in MAME.
+
+The thirteenth is type 67 on 0x3E010, `PN_r2_01_futa` (0x514), scale 1, a lid
+held down by chains. The generic init (0x389E0) has no case for it. Each frame
+it closes as a prop does (0x3ED60), draws its current model through 0x413B0
+and offers itself as a target (0x41890, 0x44530). Only once a shot sets bit 1
+or 2 of +0x58 (with bit 0, the shootable bit, up) does it step through its
+entry's list, `PN_r2_02_futa` and `PN_r2_03_futa`, open the two halves
+`PN_r2_04a_futa` and `PN_r2_04b_futa` as tasks of their own (0x41360, on
+0x41F70) and set 0x51EBF0. Chapter 2's section 0 (list 0xEC380) spawns one,
+record 0xEC720, at (28.4, -6.8, 0.4), yaw 0x4000. The explorer stands it there,
+Stage 2 · set 5, which goes from 19 props to 20; `hotdo` set props go from 207
+to 208. The shot and the break are left out. Read from the ROM, not checked in
+MAME.
+
+The fourteenth is type 78 on 0x3DA60, whose entry names `PN_r2do_01a`
+(0x51A), scale 1. While the section byte (0x51F350) is 1 it is a door: once
+event flag 0x0E (0x51E2CE) is up it sets its swing and hands itself to
+0x3DC40. In any other section it closes as a prop does (0x3ED60) and then
+issues 0x413B0's commands itself, with two changes: the model is
+`PN_door_n4a` (0x165), not +0x54, and the scale command takes 0.9, 1.4 and
+1.0 for x, y and z, not +0x94 three times. The spawn's per-type cases
+(0x38A1C) have none for it. Chapter 2's section 9 (list 0xF00B4) spawns the
+only one, record 0xF05A0, at (1263.8, -65.5, 295.5), yaw 0x4000. So it stands
+there as `PN_door_n4a`, stretched, Stage 2 · set 7, which goes from 8 props
+to 9; `hotdo` set props go from 208 to 209. No section 1 spawns one, so the
+door and its flag are left out. Read from the ROM, not checked in MAME.
+
+The fifteenth is type 14 on 0x3B550, `PN_jinmengyo_01` (0x1352), scale 0.3,
+a fish with a man's face. Its record stands at the origin, because the
+handler places it itself. Each frame it closes as a prop does (0x3ED60),
+then puts the fish at t along segment s (+0x2F8) of a uniform quadratic
+B-spline through the twelve-byte points at 0xAE7F0: 0.5(1-t)², t(1-t)+0.5
+and 0.5t² of points s, s+1 and s+2. t (+0x30C) goes up 0.01 a frame, and
+past 1 it goes back to 0 and s to the next segment, back to 0 past 3. The
+six points end on the first two again, so the path closes, and in single
+precision it comes round every 404 frames. The step from the last place goes
+to coprocessor function 0x0F (`0xF0F`), which hands back the pitch, put in
++0x2C, and the heading, put negated in +0x30; on a frame where t has just
+come back to 0.01 the old angles are kept. It draws through 0x413B0 only
+while +0x2F0 is set and +0x2E6 is clear, as 0x417F0 leaves them, with model
+0x1352 plus +0x50 rem 40, +0x50 counting its draws: `PN_jinmengyo_01` to
+`_40`. The spawn's per-type cases (0x38A1C) have none for it, and no flag,
+shot or clock reaches it. Chapter 2's section 4, script 6 (0xEE49C) spawns
+the only one, record 0xEEB00. It swims in a fish tank, Stage 2 ·
+set 6, which goes from 20 props to 21; `hotdo` set props go from 209 to 210.
+The explorer works the handler's arithmetic in single precision, and the
+coprocessor's angles with `atan2`, and steps it a frame while animate is
+ticked. Checked in MAME (`hotdo`, the attract scene table pointed at chapter
+2's section 4, a breakpoint on the fish's draw at 0x3B758): 727 draws, every
+place the explorer's to the bit, every model the same, and every angle within
+2 of 0x10000. The board's first draw has angles 0, and so has the explorer's.
+
+The prototype (`hotdp`) has the same fish, on 0x312B0. That handler is 0x3B550
+instruction for instruction, with its own field offsets: t at +0x2F4, the
+segment at +0x2F0, and the draw flags at +0x2E8 and +0x2E0. The six points at
+0x85900 are 0xAE7F0's, float for float. The model is `PN_jinmengyo_01`
+(0x121E, the type's own) plus +0x50 rem 40, `_01` to `_40`, at the type's
+scale, 0.3. It closes as the prototype's props do (0x33320) and draws through
+0x35AD0. That routine sends 0x413B0's commands in the same order: the place,
+the three turns, and the scale (+0x90 here) on all three axes. It also loads a
+light from 0x52A2B0 by +0x68, which the explorer does not read. Chapter 2's
+section 4 spawns the only one, record 0xED950, at the origin. It is drawn in
+zones 14 and 15 with the tank's other pieces. Stage 2 · set 6 goes from 18
+props to 19, and `hotdp` set props from 107 to 108. Read from the ROM, not
+checked in MAME.
+
+The prototype's three `PN_powa` are type 69 on 0x32F30, 0x3D860's loop at
+the prototype's models: +0x54 steps a frame, back to 0x935 (`PN_powa00a`) once
+the model it stepped from is past 0x950, so `00a` to `29a` again, at the
+type's scale, 1, drawn through 0x35AD0. It does not call 0x33320. It closes
+(0x10D60) once the camera frame (0x51E788, the float the sweep above compares
+with 170) passes the float at +0x2F4, which the generic init sets by section
+(0x2EDD8): 99 in section 3, 268 in 9, 1048 in 11 and 12, the finished game's
+numbers. That is the clock `propZones` runs, so each keeps the zones it is
+drawn in rather than the prop rules: chapter 1's section 3 (record 0xE1600,
+zone 7), section 9 (0xE6050, zone 15) and section 12 (0xE7470, zone 20), at
+the finished game's three places. Stage 1 · set 1 goes from 31 props to 34,
+and `hotdp` set props from 108 to 111. Read from the ROM, not checked in MAME.
+
+The sixteenth is type 68 on 0x3D6E0, `PN_furukagi00a` (0xBA5), scale 1. It
+does not close as a prop does: once the zone's clock (0x51E51C) passes 521 it
+counts +0x50 up a frame, and past 226 queues a sound and closes (0x150D0).
+Each frame it draws through 0x413B0 with the type's model, and offers itself
+as a target (0x41890). It swings once a shot sets bit 1 or 2 of +0x58, or
+once the byte 0x51EFB0 has stayed 1 for 45 frames (+0x2EC counting from -14):
+it then sets bit 28 of +0x58, and each frame sets +0x34 to +0x31C times what
+the coprocessor hands back for +0x320, which goes up 0x1000 a frame; +0x31C
+starts at 0x1200 and loses 0x100 each time +0x320 passes 0xFFFE, and at 0 bit
+28 clears and the swing stops. 0x51EFB0 is a word many
+routines write, and the explorer opens none of them, nor any shot. The
+spawn's per-type cases (0x38A1C) have none for it. Chapter 1's section 13
+spawns the only one, record 0xE92C0, at (133.83, 42.5, 358.8), yaw 0x4000.
+So it stands there still, Stage 1 · set 3, which goes from 43 props to 44;
+`hotdo` set props go from 218 to 219. The swing and the close are left out.
+Checked in MAME (`hotdo`, the attract scene table at 0xAB0D0 pointed at
+chapter 1's section 13, a breakpoint on the draw at 0x3D844): drawn 1409
+times as 0xBA5 at the record's place, turns 0, 0x4000 and 0, scale 1, flags
+0x1401 throughout, the clock going from 292 to 589. 0x51EFB0 was 1 on the
+last 33 draws, too few to start the swing, and the run ended before the close.
+
+The prototype (`hotdp`) has its own type 68 on 0x32E80, `PN_furukagi00a`
+(0x1AA, the type's own), scale 1, drawn through 0x35AD0. It never calls
+0x33320, and it does not wait on a clock: from its spawn it counts +0x50 up a
+frame, and past 190 (0xBE) it queues a sound and closes (0x10D60). It has no
+shot and no 0x51EFB0. Its swing is a spring on +0x34, +0x304 its speed: each
+frame +0x34 takes the speed and the speed loses a tenth of +0x34. The spring
+is kicked (+0x34 to 0, the speed to 0x400) only once the camera frame
+(0x51E788) is past 593 and +0x2E4, which the generic init (0x2EDD8) sets to
+the script index, has counted past 55 from there, and again each 32 frames
+after. Chapter 1's section 8, script 7 spawns the only one, record 0xE8620,
+at the finished game's place, (133.83, 42.5, 358.8), turn 0x4000 in yaw
+only, so +0x34 and the speed start at 0 and it stands still until kicked.
+The close is `lda 0xBE, g3` and `cmpible g4, g3` at 0x32E90: +0x50, counted
+up first, past 190 closes it, on its 191st frame. The walk `propZones` runs
+has the spawn at camera frame 506, the camera then plays 507 to 595 over the
+object's first 89 frames, and the script's op 81 waits 220 frames with nothing
+queued, the camera held at 595. So frame 191 lands at camera frame 595, in
+that wait, before op 20 makes zone 36 current. It keeps the zones its 190
+frames are drawn in (`frames`): zone 35. With the camera at 594 from its 88th
+frame and +0x2E4 starting at 7, the spring is kicked on its 137th and 169th
+frames, so on the board it swings for its last 54; the explorer stands it
+still throughout, and the swing is left out. Stage 1 · set 3 goes from 45
+props to 46, and `hotdp` set props from 112 to 113. Read from the ROM, not
+checked in MAME.
+
+The prototype (`hotdp`) also stands types 78 and 79 on 0x33130, the two halves
+of a door: `PN_r2do_01a` (0x4DA) and `PN_r2do_01b` (0x4DE), the types' own
+models, scale 1. Each frame the handler reads the byte 0x51E50E; while it is
+0 it draws through 0x35AD0 and does nothing else, never calling 0x33320. Once
+it is set, the half takes a push (+0x74, +0x78, +0x7C) and a spin (+0x2E4,
++0x2E8), one way for 0x4DA and the other for 0x4DE, queues a sound and goes
+over to 0x331E0, which moves it, takes 0.1 off its rise each frame, draws it
+every other frame and closes it (0x10D60) once y is below -35. Only three routines write
+0x51E50E: two states of an enemy's action table at 0x94830 (0x57B90 and
+0x57FC0, dispatched by 0x568B0 on +0x5C) and 0x3A6FC. No script op does.
+Chapter 2's section 1 spawns the pair, records 0xEBBE0 and 0xEBC10, at
+(256.71, -6.76, ±10.39), turned 0. The explorer opens no enemy, so they stand
+shut and never close (`stays`): the walk credits them every zone from their
+spawn to the chapter's end, which in Stage 2 · set 5 is zones 2, 3, 40, 41,
+29 and 31. The burst is left out. Stage 2 · set 5 goes from 11 props to 13,
+and `hotdp` set props from 113 to 115. Read from the ROM, not checked in MAME.
+
+The seventeenth is type 94 on 0x3E450, `PN_r3_01a_mad11a` (0x166F), scale 1,
+a window pane. It closes as a prop does (0x3ED60) and draws through 0x413B0
+with the type's model. Once the byte 0x51E300 (event flag 0x40) is set while
+it shows 0x166F, it queues 0xA01101, throws its pieces (0x411F0) and takes
+`PN_r3_01a_mad12a` (0x1670) for good. The spawn's per-type cases (0x38A1C)
+have none for it. Only two things write that flag: a chapter 1 script (op 88
+at 0xE96B0), and an object's step at 0x47900 after a coprocessor distance
+test: 0x47740, which 0x46ED4 calls on a state in +0x66, in the step of a task
+that 0x46010 opens (the init of entry 0x27A in the table at 0xC9784). The
+section start (0x21650) clears the event flags (0x67480) after it starts the
+section's script, so chapter 1's flag is gone by chapter 3. Chapter 3's
+section 0, script 4 (0xF3F90) spawns the only one, record 0xF5820, at (-30.6,
+2.2, 93.7), turned 0. The explorer opens no such object, so it stands whole
+there, Stage 3 · set 8, which goes from 45 props to 46; `hotdo` set props go
+from 270 to 271. The break is left out. Read from the ROM, not checked in
+MAME.
+
+The walk reaches three more types on handlers of their own, and none is
+stood. Type 64 on 0x3D6A0 is `PN_space` and draws nothing: it closes as a
+prop does and offers itself as a target (0x41890). Type 83 on 0x3DEB0
+(`PN_kyochuub06a`, 0x11AA) draws through 0x413B0, but the spawn's case for it
+(0x38AD0) sets a step of 1 and a hold of 5, so it never stands: it rocks
+0x11AA, 0x11AB, 0x11AA, 0x11A9, and each hold at 0x11A9 after the first is 3
+plus 0x33B00's number rem 21. Type 120 on 0x3E930 (`PN_kami00a`) closes
+itself unless the byte 0x51F111 is 3, which the boot fills from 0x1F050 with
+the settings (0x13D2C).
+
+One spawn class stands props of its own. A record's first word picks the task
+the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
+is not the generic object: it opens eight tasks on the shared prop handler
+0x3A210, gives each type 51 and runs 0x417F0 on it (so the type's scale, 1,
+and +0x2EC the script index), then sets model 0x149C + 2i, `PN_kenita00a` to
+`07a`, x 1210.341 and y -59.011 (its immediates 0x44974AEA and 0xC26C0B43), and
+z the float at 0xAFBB0 + 4i less 14 plus 249.749, and copies its own +0x70
+(the life) and +0x64 (the window) to each. Then it closes its own task. The
+record's place and turns are not read, so the eight stand in a row, unturned,
+and close as a prop on that record would. Chapter 2's section 9 spawns the
+only one, record 0xF0570, in spawn list 0xF00B4. Stage 2 · set 7
+goes from 9 props to 17; `hotdo` set props go from 210 to 218. The explorer
+stands them in `standRow` (`js/placements.js`, the profile's `rows`). The
+handler's shot and break are left out, as for every prop. Checked in MAME
+(`hotdo`, the attract scene table pointed at chapter 2's section 9, a
+breakpoint in 0x3A210 for type 51): the init ran once with life 3 and no
+window, and all eight were drawn 342 times each, every model and place the
+explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
+
+Class 0x8A stands a room's furniture out of a table. Its task, 0x39830
+(`hotdo`; 0x2FDD0 in `hotdp`), reads the block of 0x16C bytes at 0xAA378
+(`hotdp` 0x81448) picked by the record's type, 28-byte entries until one whose
+word is -1: +0x00 the type (a halfword), +0x04/+0x08/+0x0C x, y and z, and
++0x10/+0x14/+0x18 the turns, which go to +0x2C/+0x30/+0x34. For each it opens a
+task on the shared prop handler (0x3A210; `hotdp` 0x30670), runs 0x417F0 for the
+type's model and scale, adds the type's +0x2C offset to y, and copies the
+record's +0x70 and +0x64 (`hotdp` +0x6C and +0x64), so each closes as a prop on
+that record would. The record's own place is not read. Chapter 1's section 8,
+which section 13 shares, spawns two: `hotdo` records 0xE91A0 (type 54, 8 props:
+a jar, two chairs, a table, a bookcase, two cups and a pot) and 0xE91D0 (type
+55, 11 props: a lamp, three bookcases, two chests, two chairs, a table and two
+cups); `hotdp` records 0xE8500 and 0xE8530, the same layout, in zones 35 and
+35-36. Stage 1 · set 3 goes from 44 props to 63 in `hotdo` and from 46 to 65 in
+`hotdp`; set props go from 219 to 238 and from 115 to 134. The explorer stands
+them in `standTable` (`js/placements.js`, the profile's `tables`). Left out:
+bit 30 (unbreakable), which every type but 2, 3, 34, 35 and 43 is given, and
+the bookcases at x 82.9 and 97.3 also when event flag 35 or 36 is set; and the
+shot and break, as for every prop. Its two chests (type 26) take the lid the
+plain draw adds (see below). Read from the ROM, not checked in MAME.
+
+The plain draw adds a second model to two types. After the prop's own model,
+the shared handler's draw (0x3A800, reached by every standing prop on
+0x3A210) switches on the type, on the same matrix:
+
+```
+ld   0x54(r4), g0       ; the prop's own model
+call 0x14120
+ldis 0xCC(r4), g4
+lda  0x13A0, g0         ; type 11: PN_sara_dai00a
+call 0x14120
+...                     ; type 26: translate (0, 3.5, 2.0) (0x9001212)
+lda  0xD0D, g0          ; and PN_takara_box01a
+call 0x14120
+```
+
+Type 11 is `PN_sara01a`, a plate, and 0x13A0 its stand; type 26 is
+`PN_takara_box01b`, a chest, and 0xD0D its lid, 3.5 up and 2 along the chest's
+own z. No flag, clock or shot gates either. The prototype's 0x30670 does the
+same after its draw (0x30C74): `PN_sara_dai00a` (0x126C) on type 11, and
+`PN_takara_box01a` (0xC7A) moved (0, 3.5, 2) on type 26 while +0x314 is 0, the
+chest unbroken, which it always is here. It also draws 0x126C on any prop whose
++0x6C (the record's life) is 12, which no spawned prop has, and 0x114A at
+twice the size over type 73, which stays out with the finished game's 0x1241.
+The explorer draws the second model with its prop (`seconds` and `withSecond`
+in `js/placements.js`, the profile's `seconds`): the two chests of class 0x8A's
+second table, Stage 1 · set 3, and chapter 2's one type-11 plate, at (618,
+-9.6, 348), scale 1.2, Stage 2 · set 6, in both builds. Prop counts do not
+change; each build draws three models more. Revision A's profile leaves them
+out. Read from the ROM, not checked in MAME.
+
+Classes 0x93 and 0x98 each stand a fixed group of props about their own place.
+Their tasks, 0x394B0 and 0x395B0 (`hotdo`), open 15 and 12 tasks, on handlers
+0x3A9C0 and 0x3ACF0, from the 28-byte entries at 0xAED40 and 0xAF620: +0x00 the
+type (a halfword), run through 0x417F0 for its model and scale; the spawner's
+place plus +0x04/+0x08/+0x0C; the spawner's turns plus +0x10/+0x14/+0x18; the
+spawner's +0x70 and +0x64 copied. No -1 ends the list, and no +0x2C offset is
+added. Class 0x93 also sets bit 30 on type 4, and a child whose third turn
+comes out nonzero gets a third turn of 0 and window row 28; five of its entries
+carry a 1 there. Both handlers set or clear bit 30 by the zone's clock and
+otherwise close and draw as the plain prop does: place, turns, scale +0x94 and
+model +0x54. 0x3ACF0 also draws 0x1241 at twice the size over type 73: left
+out. Each spawns once. 0x93 at 0xE4980 is
+chapter 1's section 6 (Stage 1 · set 3), at (109.5, 0, 200): a laid table,
+`PN_tabul_02a` with six `PN_isu_02a`, six `PN_sara03a`, `PN_kabin_01a` and
+`PN_honeatama`. 0x98 at 0xF27D0 is chapter 2's section 12 (Stage 2 · set 5), at
+the origin: three `PN_maru_01a`, the middle one `PN_fruit_01a` instead, six
+`PN_sara03ab` and three `PN_syokudai01a`.
+
+The prototype has one routine for both, class 0x93's 0x2FA20. It picks its
+table by the chapter number (0x51E4C0): 15 entries at 0x85E10 in chapter 0, 12
+at 0x866F0 in chapter 1. The places and types are the same, except a third type
+73 where the finished game has its 85, and no third turn is set. Its children
+run the plain prop handler (0x30670), and in chapter 0 all but types 3 and 4
+get window row 26. Its records are 0xE4340 and 0xF11D0, in the same sets, and
+stand in zones 28-29 and 31. The explorer stands both in `standGroup`
+(`js/placements.js`, the profile's `groups`). Stage 1 · set 3 goes from 63
+props to 78 in `hotdo` and from 65 to 80 in `hotdp`; Stage 2 · set 5 from 20 to
+32 and from 13 to 25. Read from the ROM, not checked in MAME.
+
+Class 0x94 stands models of its own at places of its own. Its routine, 0x38F50
+(`hotdo`; 0x2F3B0 in the prototype), opens four tasks on 0x3C240 (0x32110) from
+the 28-byte entries at 0xAEA30 (0x85B00), then closes itself. Each child runs
+0x417F0 for the record's type, then overwrites the model with the entry's +0x00,
+which is a model, not a type. It copies the spawner's +0x70, sets scale 1.0 and
+takes +0x04/+0x08/+0x0C as its place and +0x10/+0x14/+0x18 as its turns. The
+record's own place and turns are not read. The handler closes as a prop does.
+Before the draw it works on the model it holds: `PN_haguuu` and `PN_haguuu01a`
+(0x8C6, 0x8C7) add 0x80 to the third turn every frame, `PN_haguuu02a` (0x8C8)
+takes 0x80 off it, and any other model steps one, going back to `PN_hagumizu00a`
+(0x8A8) once it is past 0x8C4, so the water's 30 frames loop. The prototype does
+the same with its own models (0x83E-0x840; 0x820-0x83D). The one record of the
+class, 0xE7030 (0xE6660), is chapter 1's section 10 (Stage 1 · set 1): three
+gears and the running water, at the same places in both builds, with all turns
+0. The first gear's turn is also stored for another object at 0x53E4C0. Around
+the water's draw, a block of 32 words at 0x7A0 is rescaled by 0xC8/256 and sent
+to the coprocessor. The explorer follows neither. The explorer stands the four
+in `standFixed` (`js/placements.js`, the profile's `fixed`), the gears as `spin`
+and the water as a `cycle`. Revision A is not covered: its profile has no
+groups either. Read from the ROM, not checked in MAME.
+
+Class 0x13 is a second moon, not the type-59 `PN_moon` prop: one flat quad
+turned to the camera. Its task, 0x2F740 (`hotdo`; 0x27D70 in the prototype),
+sets its own model, `PN_moon22` (0x14AC; the prototype's `PN_moonc`, 0x13A2),
+and every frame sends the camera's place (0x51EBD0) less its own (+0x20) to
+the coprocessor's 0xF0F, which returns the vector's heading (kept at +0x30)
+and then its pitch (+0x2C):
+
+```
+ldq  0x51EBD0, g0        ; the camera
+ld   0x20(r4), g4 ...    ; less the moon's place
+lda  0xF0F, r5
+st   r5, 0x8800F0
+st   g6/g5/g4, 0x884000  ; the vector
+ld   0x884000, g4        ; heading -> +0x30
+ld   0x884000, g0        ; pitch   -> +0x2C
+```
+
+A pitch past a right angle either way is taken from 0x8000 and the heading
+turned half round. The draw is the prop's commands with its own numbers: the
+place, the heading (0xA801515), the pitch less 0x4000 (0xA001414), the
+record's third angle (0xB001616) and scale 5.0 (0x40A00000) on every axis.
+It never calls `sub_33320`; it closes only when byte 0x51E3BD (0x51E5FD) is
+1, which no store in either program names, so it stays up to the chapter's
+end. The one record of the class, 0xF3D70 (0xF23C0), stands at (2550, 1120,
+-425) in Stage 2 · set 7, which now stands 18 props in the finished game
+(17 before) and 4 in the prototype (3), where it is drawn from zone 22 on.
+The explorer stands it in `standFacing` (`js/placements.js`, the profile's
+`facing`) as a `live` draw that works the same heading and pitch from its own
+camera each frame. Read from the ROM, not checked in MAME.
 
 They come out as their own layer, so they can be switched off and so the camera
-frames the room rather than them. The first chapter stands 31 in the courtyard
-and 43 in the mansion; the prototype, whose table is the same one 78 types long,
-stands 31 and 45.
+frames the room rather than them. The first chapter stands 38 in the courtyard
+and 78 in the mansion (44 before class 0x8A's furniture, 63 before class 0x93's
+table); the prototype, whose table is the same one 78 types long, stands 38
+and 80 (46, 65).
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for
@@ -4351,7 +6728,7 @@ interpreter's clock over the scripts:
 
 Scripts that pass in the same frame count as one change, as they do on the
 board. The Zone picker draws only those props, and "every zone at once" draws
-all of them. In Stage 1, set 1, zone 1 keeps 2 of the set's 31 props, zone 3
+all of them. In Stage 1, set 1, zone 1 keeps 2 of the set's 34 props, zone 3
 none, and zone 14 keeps 17. The finished game's profiles carry none of these
 fields, so it still draws every prop in every zone.
 
@@ -4450,11 +6827,10 @@ lists of that body's `_DD` models — `dog_akos_DD`, `ff_mune_DD`, `hyum_kao_DD`
 ends in -1, but only its first 94 entries name anything: 94 is the body count,
 and 94 to 189 all point at lists of nothing.
 
-The enemy waves are their own tables. **0xAED40** and **0xAF620** hold 28-byte
-records whose first halfword is a *body* index and whose next three floats are a
-position — 0xAED40 is six of `BO_ebita`, one of `BO_ebitb` and three of
-`BO_tetuman`; 0xAF620 is six of `BO_boss4` with `BO_mummy2c`, `BO_burnerb` and
-`BO_hiru_b` behind them, which is a boss fight written out.
+**0xAED40** and **0xAF620** were once read here as enemy waves, their first
+halfwords taken for body indices. They are not: the routines that read them,
+classes 0x93 and 0x98, take that halfword as an object type and stand props
+(see class 0x93 and 0x98 above).
 
 Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
 and `sub_3B1A0` several more, which is what a table of furniture should look
@@ -4483,9 +6859,10 @@ instructions. The flesh burst is `sub_425C0` on `sub_43F20`. Only the chunks
 loop; the other two are one-shots that call the task-close themselves at the top
 of the run.
 
-Three more tables turned up on the way and are not read: **0xAA378**, **0xAED40**
-and **0xAF620**, all indexed with a 28-byte stride whose first halfword is an
-object type, which is what a wave of spawns would look like.
+Three more tables turned up on the way: **0xAA378**, **0xAED40** and
+**0xAF620**, all indexed with a 28-byte stride whose first halfword is an object
+type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
+and 0x98's groups (see above).
 
 ## Animation
 
@@ -4835,6 +7212,52 @@ above the floor. A low motion keeps the chains calm for that reason. Any other
 stage blows only in modes 16 and 17, from the side `0x500065` names, and never
 on Grace. The explorer leaves that case out. The Animation tab's sway panel has
 a wind picker for the five stages.
+
+#### Virtua Fighter 2
+
+VF2 has the same chains a game earlier. Its handler table at `0x64524` (MATRIX
+`0x64864`, COLI `0x64E5C`, ETC `0x65318`, TSUKENE `0x64CA0`, OSAGE `0x651BC`)
+writes the same records, and the size table at `0x640C0` is FV's. `0x65384`
+sends the stream as command `0x4A` and reads it back through `0x653D4`. On
+Model 2A the coprocessor is the TGP, and the game uploads its program. There
+`0x4A` jumps to `0xCFA`, which runs the record table at `0xD08`, and the
+segment's keep-out at `0xDF2`-`0xEAE` is `keepOut` in `js/osage.js` branch for
+branch.
+
+The table at `0x658A4` has 26 records, like FV's: the 13 characters and their
+P2 looks. Dural, Mue and Kojacky have none. Akira has his headband tails and
+belt, Jacky fifteen strands of hair, Sarah her ponytail and earrings, Pai her
+braid. Lion has his straps and hair. Shun has the gourd on his belt (bone 9)
+and his hair. Gravity is `0x3B32674F`, `0.0027222`. The wind is FV's code on
+`0x654E0`'s entries:
+
+| stage | angle | entry |
+|-------|-------|-------|
+| 0 | `0x8000` | 1 |
+| 1 | `0xF000` | 0 |
+| 5 | `0xC000` | 1 |
+| 8 | `0x7000` | 0 |
+| 14 | `0xF000` | 0 |
+
+The explorer leaves out:
+
+- Game modes `0xE`/`0xF` (`0x50002B`) swap in the table at `0x696D4` for the
+  player `0x50004C` doesn't name.
+- A Lau-against-Lau fight in mode 2 picks from `0x697E8`.
+- The replay draws the segment's `+0x20` model.
+- A per-player switch, bit 1 or 2 of the word `0x500814` points at, hides every
+  chain (`0x64348`). With Shun's gourd in hand (`+0` bit 27, script op 17), it
+  instead draws only his first chain, the gourd's (`0x65458` stops at the
+  record `0x69520`).
+
+The TGP was graded in MAME (`vf2`, 60 s of attract). Every `0x4A` command's
+stream was taken in bufferram as the i960 issued it and after the readback,
+and the TGP's own copy of each COLI was taken at `0xD27`. Then `runCoprocessor`
+ran each stream: 43,136 segments over Akira, Sarah, Kage, Lau, Jeffry, Pai,
+Wolf, Shun and Lion. The worst point was 2.0e-6 (Shun), and under 2e-7 for the
+rest. The TGP's COLI copy is needed because the bufferram copy is not final when
+the command is sent. Pai's sphere centre (word 5) still read 0 there, while the
+TGP read 0.2409. With the bufferram limits the same check is off by up to 0.08.
 
 ### Tails' tails
 
@@ -5891,7 +8314,10 @@ pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
 pointing at it). The wasm is committed because the site has no build step; a
 change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
-build is from `c4ed74f`.
+build is from `c4ed74f`; the current one is from `f797c4b`, which has the
+68000 fix The House of the Dead's driver needs (below). The build stubs out
+`clock_gettime`: the board times its own work for m2-hle2's status display,
+which a page never reads, and libc's clock would have the module import WASI.
 
 ### Virtua Fighter 2's stage sounds (`js/sound/ambience.js`)
 
@@ -5961,9 +8387,166 @@ What goes with a song is what the game sends with it: `0xB70700` after the
 third (the routine's `cmpi r3, 2`), and `0xBE1700`, `0xBE1900` after every one
 (the race's scene set-up, 0x23E74). To stop a song the page sends what
 `sound_refresh` does, `0xF8F8FF`, and then the settings the boot path sends
-after it (the run at 0x19958); the same bytes open the board. Two more
-four-song tables follow the same pick later in a race (data `0x280EEB8` and
-`0x2810D58` in Revision A); they are not offered here.
+after it (the run at 0x19958); the same bytes open the board.
 
-The 1993 build has its own sound program (`epr-16489`/`16490`), which the
-dumps this was worked out on do not carry, so it has no music switch.
+Two more four-song tables are read with the same pick, `0x501A98` (data
+`0x280EEB8`: `0xAE1006`, `0xAE100A`, `0xAE1003`, `0xAE1011`; data `0x2810D58`:
+`0xAE100C`, `0xAE100D`, `0xAE100B`, `0xAE1012`, in Revision A), but only after
+the race is won. The game's state byte `0x5010A4` (dispatch table 0x1994, with
+`0x501090 = 1 << state`) goes from the race, 22, to 23 only when the car
+finishes (0x4234, after the time is shown). State 23 starts the task at 0x23D80,
+which sends the first table's song. Then come 24 and 27, and 27's step into 28
+(0x4C50) starts the task at 0x245A4, which sends the second table's song and
+`0xAE211C` while `0x501090` still has bit 27 set. State 28 runs for 1600 frames
+and then goes to 25. A race that runs out of time goes 22, 25, 26, 29, 30 and
+never reaches these states. MAME (`daytona`, coined, no input, 240 s) confirms it:
+the only songs sent are `0xAE1007` for the race and `0xAE1002` after time runs out (state 26).
+The explorer has no race to finish, so these songs are not offered.
+
+The 1993 build has its own sound program (`epr-16489`/`16490`) on the same
+four sample chips. Its race start (0x3008) is Revision A's: the same pick by
+course or held VR button (stored at `0x501A94`), the same table, read at
+0x30C8 from program ROM `0x231E70`, and `0xB70700` after the third song unless
+Start is held (the raw input word `0x53E120`, bit 4). It sends `0xBE1A10`
+just before the song, as Revision A does elsewhere in its race set-up (0x3804).
+The boot run is byte for byte the one above: MAME (`daytona93`, 120 s of
+attract) sent exactly those bytes, then `0xAE1008` and `0xBE1700`, `0xBE1900`.
+So the page plays it the same way with the build's own program. Played through
+`model1` natively from the same bytes, the four songs follow Revision A's
+program's loudness envelopes at 0.98 to 1.00 (quarter-second windows), at
+about half the level: that is how this program mixes them. A `daytona93.zip`
+without the two chips loads as before; switching the music on says which chip
+is missing.
+
+### Virtua Cop's music
+
+Virtua Cop is on the same board as Daytona, with its own driver (`epr-17170`/
+`17171`) and four sample chips (`mpr-17172` to `17175`). The first pair is
+1 MB a chip, and MAME loads each at the start of its 2 MB half, which is where
+the page puts every chip anyway.
+
+It has no song table. The play mode's stage start (0xA464, sub-state 6 of the
+table at 0xA6F0) tests the stage byte `0x50F2A8` and sends a constant:
+`0xAE1F06` for stage 1, `0xAE1F0C` for stage 2, `0xAE1F07` for stage 3, each
+followed by `0xBE2101`, `0xBE2102` or `0xBE2103`. Channel 0x1F is the music,
+and `0xAE1F00` stops it. To stop a song the page sends what the boot (0xA6C)
+sends: that, then the run at 0x2BB20, which stops channels 0x21 and 0x22 and
+keys off the rest. The same bytes open the board. A game spec's `songs` gives
+each stage its code when there is no table to read it from.
+
+**Graded against MAME.** MAME (`vcop`, the shared build) was coined and held
+to each stage with a breakpoint on the stage start that sets `0x50F2A8`.
+Before the song it sent only `0xAE1F00`, and at the stage start (frame 1311)
+exactly the bytes above. Every byte it wrote to the UART was then replayed
+at the same times through `model1` natively. Over stage 1's song the loudness
+envelope follows MAME's at a correlation of 0.963 in 50 ms windows and 0.997
+in quarter-second ones, at no offset and the same level to within 1%. In the
+page, all three stages play at an RMS of about 2,700–5,500.
+
+### Virtua Cop's enemies
+
+The enemies are not objects. `0x2864860[stage]` lists a stage's sections,
+each the rail counts its waves start at (ending at -1). 0x141D0 starts the
+next wave when the rail's count (`0x50F490`) reaches it. A wave's enemies are
+the 0x2C-byte records at `0x282C2D0[stage][section][wave]`, ending at a zero
+first byte: kind (+0, 4 is a wait with no one in it), position (+4), turn
+about Y in tenths of a degree (+0x10), body (+0x13, `0x281EDF0`), script
+(+0x14, `0x2820D40`), the object it stands on (+0x18, -1 none) and its group
+(+0x1E). 0x13A90 puts each in one of nine slots at `0x50F510`, 0x9F4 bytes
+each.
+
+The explorer does not copy any of this. For each record it runs the game's own
+code in `doaMachine` (`js/doa.js`): the boot's pose copy (0x23090), the spawn,
+then the enemy task 0x14AD0 once. The task reads the script's first step
+(0x14118), plays the motion (0x1EAD0), builds a matrix per joint (0x1F258)
+and draws a model on each (0x21A70), with shadow 0xAC under it (0x21C10). The
+copro calls it makes are recorded as the draws. Two things the interpreters
+lacked were added: the i960's `cpysre` (0x6E2), and Virtua Cop's copro
+command 0x03, a divide, passed in as an extra command so Dead or Alive's
+table is unchanged. All of a stage's enemies take about a second, so they are
+built the first time a stage's objects are asked for.
+
+The joints are left out of the stage's face layering (`layered: false`, see
+`js/layers.js`). Enemies of different waves stand on the same spots, and
+pairing all their faces turned a stage switch into minutes. The shadow lies
+on the ground and stays in.
+
+Waves whose first record has bit 0x20 go to 0x708C0 instead; stage 2's last
+section has one, and it is left out. So are the 22 records standing on an
+object: they move in the object's frame, on its own clock. Everything after
+the first frame goes by the clock and the player's shots, which the explorer
+does not have.
+
+**Graded against MAME.** MAME (`vcop`, the shared build) was coined, with a
+Lua tap dumping each new slot. Stage 1's first record, and the first record
+of the fourth table entry, which MAME played next, both match the explorer's
+run to 7.6e-6 over all sixteen joint matrices, on the first frame. The later dumps in that run were taken after the slot had already
+played tens of frames, so they were not compared. All the drawn models are
+ROM models below 0x4D2; none is built in RAM.
+
+### The House of the Dead's music
+
+The finished House of the Dead (`hotd`, `hotdo`) is a Model 2C game on the
+Model 2 board, the SCSP board the fighting games use, with its own driver
+(`epr-19720`) and two sample chips of 4 MB each (`mpr-19721`, `mpr-19722`).
+A game spec's `sampleChip` gives that spacing; the default is 2 MB.
+
+The i960 sends through a queue: 0x154D0 adds a command (only while the mode
+byte `0x51EE14` is 4 or 5, or flag `0x51F341` is set), 0x15540 drains it, and
+0x15590 writes the UART. The boot (0x15344) sends `A0 00 01`. Every scene change
+(0xD144, 0x15CE0) clears the queue (0x15630) and then sends `A0 00 02`, `BE 50
+00`, which is what the page sends to stop a song.
+
+There is no song table. The stage scripts at 0xE0000 start the music
+themselves. Op 90 (its handler is 0x67860, entry 90 of the table at 0xC6500)
+puts the word after the opcode in the queue. Most of these words are sound
+effects. Those on channel 0x10, `A0 10 xx`, are the music; the `A0 11 xx`
+ones are jingles (`A0 11 02` on a death). The sound test's list at 0xA8CD4
+holds `A0 10 00` (the title) to `A0 10 0E`, and these jingles.
+`readPlacementStages` keeps the song the walk has started when a set's first
+zone is made current. If none has started yet, it keeps the first song started
+while that set is up: a chapter's first section makes its zone current before
+it starts the song. The "all placements" entry takes the song of its widest
+set. That gives chapter 1 `A0 10 01`, chapter 2 `A0 10 02`, chapter 3
+`A0 10 08` and chapter 4 `A0 10 0E`.
+
+**A 68000 bug, fixed in m2-hle2.** The first native runs were silent or
+clipped. m2-hle2's 68000 decoded `and.l Dn,<ea>` in group C as `exg`, and this
+driver is the first to use that instruction. m2-hle2 fixed it in `e3205e3`;
+`board.wasm` is now built from `f797c4b`, which includes it. The other games
+play as they did before (checked in the page on Sonic The Fighters, Fighting
+Vipers, Virtua Fighter 2 and Dead or Alive).
+
+**Graded against MAME.** MAME (`hotdo`) was coined into chapter 1 with a Lua
+tap logging every UART byte at its emulated time. Those bytes were then
+replayed at the same times through the board natively. Over chapter 1's song
+(35–59 s), the loudness envelope follows MAME's at a correlation of 0.993 in
+50 ms windows and 0.996 in quarter-second ones, at no offset and within 1% of
+its level. Over the title song (15–33 s) the correlations are 0.998 and 0.999,
+within 3.3% of its level. The driver listens from reset, so the spec has no
+`warmup`. Chapters 3 and 4 are read from the scripts but were not played in
+MAME. In the page, every stage of the four chapters plays at an RMS of about
+200–1,400.
+
+**The prototype's own.** `hotdp` has a sound program of its own
+(`sndpgm0.31`) and four 2 MB sample chips (`sound1.32`–`sound4.35`), on the same
+board. Its i960 side is the finished game's at other addresses: 0x11160 queues a
+word (while the mode word `0x51F218` is 4, or flag `0x51E49C` is set), 0x11210
+writes one to the UART at once, and the boot (0x10FDC) sends `A0 00 01`. The
+stage scripts' op 90 is entry 90 of the table at 0x94550 (0x51260) and queues
+the word after it, so the same walk reads the songs: chapter 1 `A0 10 01`,
+chapter 2 `A0 10 02`. The scripts also start `A0 10 04` and `A0 10 05`, in
+sections no stage opens with. Every scene change MAME showed in play queues `A0
+00 02` and then the effect `A0 13 56` (0xAF00); `A0 00 02` is the stop. (0x1B50C
+and 0x51590 send `A0 00 03` before it, but MAME never reached them in play.)
+
+Graded the same way as the finished game. MAME (`hotdp`) was coined, and a tap
+logged every UART byte for 100 s: the title `A0 10 00` at 15.8 s, then chapter 1's
+`A0 10 01` at 54.0 s as its first section starts. Those bytes were replayed at
+the same times through the board natively (m2-hle2 `f797c4b`, the build of
+`board.wasm`). Over the title (16–34 s) the loudness envelope follows MAME's at
+0.994 in 50 ms windows and 0.999 in quarter-second ones. Over chapter 1's song
+(54.5–76 s) it follows at 0.994 and 0.998. Both are within 3% of MAME's level.
+Chapter 2's song is read from the scripts and was not played in MAME. In the
+page, the four Stage 1 entries play `A0 10 01` and the four Stage 2 entries play
+`A0 10 02`, at an RMS of about 270–1,000.

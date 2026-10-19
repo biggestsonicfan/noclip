@@ -11,7 +11,7 @@ views below are its. *Fighting Vipers* has stages, models and motions — see
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
-stages and its models — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
+stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive).
 
@@ -105,7 +105,7 @@ per cent of one core. See [Music](TECHNICAL.md#music-jssound).
 ## Fighting Vipers
 
 Drop `fvipers.zip` and the explorer loads *Fighting Vipers* instead, with the
-Stages, Models and Animation tabs — sixteen arenas and 5413 table entries, 3601 of which
+Stages, Models, Animation and Cells tabs — sixteen arenas and 5413 table entries, 3601 of which
 carry geometry, textured and lit from the ROM.
 
 It works because the two games are built on the same Sega library, and that went
@@ -144,8 +144,29 @@ for what each routine draws and what is left out.
 
 The Animation tab poses the fighters: Fighting Vipers' pose and draw routines
 are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
-motions. The stages carry their names, from the sound test's song list, and
+motions, with the same opponent, which can play the game's reaction to the
+fighter's strike or throw. Each fighter's moves are listed under the input
+that does them, read from its input program the way Sonic the Fighters' are
+(*fwd+down . fwd+P*, the strings as their presses, *P , P , K*), and the ones
+a fighter standing in front of its opponent does not reach that way say what
+they need. They play one at a time: a string is listed by the motion its last
+press plays, and the strings themselves are not played yet. Each move and
+motion carries the name the motion table keeps for it beside its number
+(*motion 21 AK_TA_KAMAE*, *TA_SYORYU_HNY*); the CPU opponent's names for the
+moves are not found. With the **Armour** switch's
+upper half broken, a helmet that comes off stays off: the face a move changes
+to is the bare-headed one the game's table gives (Bahn, Picky, Mahler and five
+others). The stages carry their names, from the sound test's song list, and
 play their music and stage sounds on the emulated sound board.
+
+The **Cells** tab has the game's 2D pictures, from the same two tables the stage
+skies come from: 473 cells, the title's backdrop and SEGA mark, the game-over
+picture and the Fighting Vipers logo among them, each opened on a CG that writes
+every tile it names (472 have one; cell 22's pointer leads to no record). The
+game's own pairs agree where its code loads a CG and draws a cell straight
+after: the title's backdrop, cell 93, on CG 13, and cell 111 on CG 55. The cells
+the game never draws are not marked yet, so searching for `unused` lists none.
+See [Fighting Vipers' cells](TECHNICAL.md#fighting-vipers-cells-jscellsjs).
 
 ## Daytona USA
 
@@ -173,7 +194,8 @@ course plays the song its race starts with, on Daytona's own sound board — the
 68000 driver, two MultiPCMs and a YM3438, emulated in the page. The game lets
 the player pick the song by holding a VR button as the race starts, and a
 fourth song is only reachable that way; the **Song** list under the switch is
-the same choice. Every build but the 1993 one has it. See [Daytona USA's
+the same choice. Every build has it; the 1993 one plays on its own sound
+program, which its `daytona93.zip` carries. See [Daytona USA's
 music](TECHNICAL.md#daytona-usas-music-the-model-1-sound-board).
 
 The **Cells** tab is here too, in every build: the title, the course and car
@@ -375,20 +397,32 @@ of the window also stops on its ellipse, as it does on the board.
 flag `gear_select` sets when a button is held at the transmission select,
 which `entry_car_event_open` reads to enter no rival cars — time attack. So a
 picker on the Stages panel draws a course as a race, in attract mode (which
-differs only in the windmill: in a race it shows on a stretch of road, in
-attract mode while its block is in view), in time attack — six more flocks of
+differs in the windmill: in a race it shows on a stretch of road, in attract
+mode while its block is in view; and in the windows below, which hold still),
+in time attack — six more flocks of
 gulls that grow as the race goes on, a third group over the first, and the rank
 board showing your own number — or in the ending, with the third group of gulls
 and the horses' curtain call.
 
+**Windows.** The grandstand's glass and the covered walkway's each carry 64
+frames of reflected sky, and the board picks one every frame by where the car
+stands, so the reflection slides as you drive past. The grandstand's frame is
+the heading from a point behind it to the car (TGP function 0x0F); the
+walkway's is how high a point 220 up stands from the car, by its distance
+across the ground (functions 0x43 and 0x0A). In the explorer the camera is the
+car. In attract mode the board's car stays at (0, 0), so the frame holds:
+27 on the grandstand, 57 on the walkway. Checked in MAME, with the car's place
+swapped for random ones as the board read it: the grandstand matched on all
+156 frames drawn, the walkway on 119 of 121, and the two misses sit within
+0.006 of a frame's edge, the TGP's own arctangent. The walkway's routine has a
+second point, which it takes when a flag bit no MAME run set is on; that case is
+left out.
+
 What is left out: the cones stand where they are placed and are not knocked
 flying, stood on the road the course draws rather than on the collision
 polygons the board asks the TGP about, which are in its own ROM and not read;
-the Jeffry statue's turn, which the board saves for a player who stops beside
-it and presses the view button; and the reflections in the grandstand's glass
-and the covered walkway's — 64 frames of sky each, picked by where the car
-stands — which show their first, since the TGP functions that choose one are
-not ported.
+and the Jeffry statue's turn, which the board saves for a player who stops
+beside it and presses the view button.
 
 ### The sky
 
@@ -431,7 +465,7 @@ upload of 1007.
 
 ## Virtua Cop
 
-`vcop.zip` (Revision B) loads with both tabs. Virtua Cop is Daytona USA's
+`vcop.zip` (Revision B) loads with the Stages, Models and Cells tabs. Virtua Cop is Daytona USA's
 library a year on — the texture-bank upload, the colorxlat and luma builds and
 the material upload are Daytona's routines instruction for instruction, with
 their tables moved into the data ROM — so it is a Daytona profile with its own
@@ -451,17 +485,48 @@ and its colours, as the stage start lays them down ([`js/vcopsky.js`](js/vcopsky
 The objects layer holds what stands in a stage besides its pieces — cars, vans,
 drums, crates, glass — from a second per-segment table, each object built from
 its type's parts at their offsets, and objects that ride on others under them.
-Breakables stand whole; the glints on car glass, which follow the camera, are
-left out. The boot sets ten palette entries by hand after loading the table —
+Breakables stand whole. The cars' windows reflect the sky, and the reflection
+slides as the camera turns: each window's routine slides its texture points by
+the camera's yaw and pitch every frame, and the explorer slides them by its own
+camera, as the routine would (checked against the points MAME uploads). The boot sets ten palette entries by hand after loading the table —
 the drums' teal among them — and the explorer does the same.
 
-Not read yet: the enemies (they come from another system than the objects), the
-models the game builds in RAM at run time (entries 0x4D2 on: shadows and a few
-effects), and the light, which is still Daytona USA's.
+The stages have their music: tick **music** on the Stages tab and each stage
+plays the song the game starts it with, on the game's own sound board, the same
+board as Daytona USA's, with Virtua Cop's driver and samples. See [Virtua Cop's
+music](TECHNICAL.md#virtua-cops-music).
+
+The light is the game's own: each stage's light table, by how far along the
+rail the eye is, and out of play the fixed light 0x1E1C8 sets.
+
+The enemies stand where each wave puts them, on the **fighters** layer, in the
+pose of the first frame the board draws them: the explorer runs the game's own
+spawn and enemy task for each one, and the joints match MAME's to 1e-5. Each
+comes up with the segment its wave starts on. Enemies standing on a moving
+object are left out. See [Virtua Cop's enemies](TECHNICAL.md#virtua-cops-enemies).
+
+The game builds no models in RAM. Entries 0x4D2 on (crate shadows, the WHARF
+sign, the stage 3 panels) are ROM meshes in a second table at 0x8693F0, and the
+explorer draws them. In MAME, on all three stages, every object the board draws
+points at polygon ROM, and the game never writes polygons into RAM.
+
+The **Cells** tab has the game's 2D art: the title logos, the instruction
+panels in Japanese and English, the detective badge, CONTINUE?, GAME OVER,
+RELOAD, the stage select, NAME ENTRY and RANKING, the boss lines, the
+AM2 and SEGA logos, the EPA notice, and the fonts. There are 282 cells, each drawn
+on the CGs the game builds: the boot's (its tiles, its palette in the order the
+boot writes it) and one for each stage, which puts that stage's sky colours in
+the sky's group. Every cell has a CG that writes every tile it names. No aligned
+word in the program or data ROM names 68 of them, so they are marked unused,
+and searching for `unused` lists only those. The cells are records in the
+data ROM: columns, rows, then a halfword per tile. The draw adds a halfword
+to every entry: 0x8000 for most of them, 0xC000 for some, and 0 for the sky
+and the sea. See `VCOP_CELLS` in [`js/games.js`](js/games.js) and [Virtua
+Cop's cells](TECHNICAL.md#virtua-cops-cells-jscellsjs).
 
 ## Virtua Fighter 2
 
-`vf2.zip` (Version 2.1) loads with both tabs. Virtua Fighter 2 is AM2's library
+`vf2.zip` (Version 2.1) loads with the Stages, Models, Animation and Cells tabs. Virtua Fighter 2 is AM2's library
 the year before Fighting Vipers: the model table, the face palette and the
 colour uploads are at the same addresses, and what moved is in the program ROM,
 each number read off the instruction that uses it ([`js/games.js`](js/games.js)).
@@ -474,7 +539,9 @@ second set of lists. As in Fighting Vipers, the pieces are modelled where they
 stand, so a stage is its lists drawn at the origin; the ring floor is the one
 piece scaled, by the operator's ring size (8, the default). The raft is drawn
 whole, as it floats before a fighter nears its edge, and Dural's stage has its
-mirror floor.
+mirror floor. With that stage picked under **Fought on** in the Animation tab,
+the fighters show in the floor, and Kage's hood band and Pai's ornament show in
+it with them, each in the cut-down model the game keeps for its reflection.
 
 The **music** switch plays the stage's song on the emulated sound board, the
 same board as Sonic the Fighters'. Beside it, **stage sounds** plays what the
@@ -500,21 +567,71 @@ the strongest. The bubbles rising from a fighter are left out with the fighters.
 The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
 Jeffry, Pai, Wolf, Shun, Dural and Lion, named from the game's own tables —
 each on its own texture sets, with a **P2 colours** switch for the look player
-2 wears when both pick the same fighter (Akira's white gi among them) — and
+2 wears when both pick the same fighter (Akira's white gi among them, and
+Sarah's, Kage's and Jeffry's own faces, which the game's face step picks for
+that look) — and
 every one of the
 1359 motions in the game's table plays on any of them
-([`js/vf2fighters.js`](js/vf2fighters.js)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+([`js/vf2fighters.js`](js/vf2fighters.js)). Each fighter's list opens on its
+moves, the motions its own input program can start, as Fighting Vipers' does
+([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)),
+each under its input: Jacky's *P , P , back+P*, Pai's *P , P , P , down+K*,
+the throws on *G+P*. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
 crouches as the game crouches it, all checked against the board. An opponent
-(off by default) can stand where a round starts the other fighter: the same
-fighter on the same motion, with each head turning toward the other's on every
-frame. The game turns the head only when fight state allows, which the explorer
+(off by default) can stand where a round starts the other fighter, with each
+head turning toward the other's on every frame. It is the same fighter unless
+the panel picks another, and it plays the fighter's motion or the **reaction**
+the game would give it: the hit, counter hit, guard or knock-down motion the
+fighter's strike calls for, from the frame the strike lands, or the motion of
+the one thrown with a throw ([The opponent's reaction](TECHNICAL.md#the-opponents-reaction-jsreactionsjs)). The game turns the head only when fight state allows, which the explorer
 does not track, so with the opponent on, a head can be wrong. The chest's
 twist toward the opponent is left out: the move record says when it may run,
 but the branches that then hold it at 0 (`0x29198`, `0x291B0`) test the angle
 to the face target `+0xB0C`, which the fight writes.
+
+The **Cells** tab has the game's 2D pictures: 268 cells on 21 CGs, the title
+logo, the player select with its portraits, the profiles, the ranking
+certificates, the fight's messages, the staff roll and the screens the test
+menu draws among them. There is no table of cells: the draw takes the
+record's address, as Daytona's does, so a cell is a record in the runs the
+game's own pointers lead to, and a CG is a pair of lists one routine loads
+(the boot pair, the stage skies, and the screens' own). Every cell has a CG
+that writes every tile it names, and where the code loads a CG and draws a
+cell straight after (the title, the player select, the test screens) the tab
+opens it on that CG. Searching for `unused` lists the 12 records nothing in
+the program or data ROM points at. The timer's digits and the other strips
+of frames are drawn by another routine a frame at a time, and are left out.
+See [Virtua Fighter 2's cells](TECHNICAL.md#virtua-fighter-2s-cells-jscellsjs).
+
+### What each game has
+
+The games share one explorer, but not every feature reaches every game: some
+need a table found in that game's ROM first. Where they stand:
+
+| | Sonic the Fighters | Fighting Vipers | Virtua Fighter 2 | Dead or Alive |
+|---|---|---|---|---|
+| Opponent, picked from the roster | | yes | yes | |
+| Opponent plays the reaction | | yes | yes | |
+| Mirrored fighter, and the one it throws | | yes | yes | |
+| Hand shapes from the move script | | yes | yes | |
+| Moves by input | yes | yes | yes | |
+| Strings played | yes | | | |
+| Fighter's own motions grouped | yes | yes | yes | |
+| Sway chains | yes | yes | yes | |
+| Hit flash | | yes | | |
+| Afterimages | yes | | | |
+| Stage sounds | | yes | yes | |
+| Cells tab | yes | yes | yes | yes |
+
+The rest are the next ones to do: an opponent for Sonic the Fighters (its
+characters are posed through a rig of their own) and Dead or Alive (whose
+fight code already runs both players), stage sounds for Sonic the Fighters
+and Dead or Alive, and playing Fighting Vipers' and Virtua Fighter 2's
+strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
+draw goes through `0x7C60` with the colour left as it is.
 
 ## Dead or Alive
 
@@ -605,8 +722,8 @@ For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version
-wants `daytona93.zip` for the ten chips it has of its own and `daytona.zip` for
-the rest, which MAME keeps in the parent. Member names are matched by checksum
+wants `daytona93.zip` for the ten chips it has of its own (twelve, with its
+sound program, which the music needs) and `daytona.zip` for the rest, which MAME keeps in the parent. Member names are matched by checksum
 where the label does not match, so a set spelling those chips the way an older
 MAME did — `epr-16526.8` for `mpr-16526.8`, `.23` for `.ic23` — loads just the
 same.
@@ -623,7 +740,9 @@ each drawn with the textures and palette of the chapter that draws it, across
 thirteen texture sets against the prototype's eleven, and its four chapters come
 out as eighteen stages — every zone a chapter's scripts reach while one texture
 set is loaded, plus the whole of each chapter's table, with its 94 enemy bodies
-playing the 674 motions baked for their joint counts.
+playing the 674 motions baked for their joint counts. `BO_devilonx` beats its
+own hundred wings (`PN_devilonx_hane01` on), as the game's draw callback gives
+it `BO_devilon`'s case.
 
 A stage opens in the first zone its scripts make current, and the **Zone**
 picker steps through the rest in the order the scripts reach them. That is what
@@ -632,6 +751,75 @@ current. The tables hold several versions of one piece at one spot (the
 mansion's front with its doors shut, nearer, and open), and each zone lists
 one of them. "Every zone at once" draws all the zones together, versions and
 all, so they overlap where they share a spot.
+
+The props the scripts spawn stand in their rooms on the **objects** layer. In
+`hotdo` that includes chapter 4's gate (room 4's walls and shutters), standing
+as it does before the player opens it, its top piece turning as the board turns
+it. Chapter 2's two glass cases and chapter 3's five roof pieces stand there
+too, whole. Chapter 4's steam vents and floor flames are props that loop
+their models, and so are chapter 1's three `PN_powa` props and chapter 4's
+`PN_eneene` prop; they loop here while animate is ticked. Chapter 3's two
+fans spin while animate is ticked, as they do once spawned, and chapter 2's
+breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
+hang still. Chapter 3's `PN_st3_card01a`, `PN_sekom01a` and `PN_sekom02a`
+and chapter 4's `PN_sousa00a` stand as props, and so do chapter 3's two
+`PN_kikai_b` machines and chapter 2's chained lid (`PN_r2_01_futa`), until a
+shot breaks them. Chapter 3's window pane (`PN_r3_01a_mad11a`) stands whole,
+as it does until something in play breaks it.
+Chapter 2's section 9 stands a door (`PN_door_n4a`), drawn taller and
+narrower than its model, as the board draws it there.
+A fish with a man's face (`PN_jinmengyo`) swims its loop in chapter 2's fish
+tank while animate is ticked, along the path the board gives it. The prototype
+(`hotdp`) has the same fish in the same tank, and it swims there too.
+Its chapter 1 has the three `PN_powa` too, looping in the zones the board
+draws them in.
+Its chapter 2 has the breaking wall too, standing whole in the zones the board
+draws it in.
+In chapter 2's section 9, one spawn stands a row of eight props of
+its own (`PN_kenita00a` to `07a`), where the board puts them.
+In chapter 1's section 8, two spawns stand a room's furniture out of a
+table (chairs, tables, cups, a pot, bookcases, a lamp and chests), in both
+builds.
+The two chests there wear their lids, and chapter 2's plate (Stage 2 · set 6)
+stands on its stand, as the props' own draw adds them, in both builds.
+Chapter 1's section 6 lays a dining table (a table, six chairs, six plates, a
+vase and a skull) and chapter 2's section 12 a banquet (three round tables,
+plates, fruit and candlesticks), each one spawn standing a group of props
+about its own place, in both builds.
+In chapter 1's section 10, one spawn stands three gears (`PN_haguuu`, `01a`
+and `02a`) and running water (`PN_hagumizu00a` to `29a`) at places of its own,
+in both builds. The gears turn and the water loops while animate is ticked.
+Chapter 2's moon (`PN_moon22`; the prototype's `PN_moonc`) stands in the sky
+of Stage 2 · set 7 at five times its size and turns to face the camera every
+frame, as its routine turns it to the board's, in both builds.
+Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
+until a shot or the game swings it. The prototype stands it at the same place,
+still, in the zone its section 8 draws it in before it closes; the swing it
+starts just before then is left out.
+The prototype's chapter 2 also stands a double door in its section 1
+(`PN_r2do_01a` and `01b`), shut, as the board draws it until an enemy bursts
+it open; the explorer opens no enemy, so the burst is left out.
+Chapter 4's four life items stand in their corridor, as they do
+until a shot takes them, and five gold coins spin on its floor while animate
+is ticked. Opening the gate, breaking the cases, pieces and wall, closing the
+`PN_powa` and `PN_eneene` props, swinging `PN_furukagi00a` and slowing the
+second fan wait on flags that shots set or on the zone's own clock, so those
+are left out, and so is the bodies' animation, which waits on two bits of
+their own flags.
+
+The finished game's stages have their music too: tick **music** on the Stages
+tab and each chapter plays the song its own scripts start, on the game's Model 2
+sound board with its driver and samples. See [The House of the Dead's
+music](TECHNICAL.md#the-house-of-the-deads-music). The prototype (`hotdp`) plays
+its own: its own sound program and samples, and the songs its own scripts start
+for its two chapters.
+
+`hotdo` has a **Cells** tab too: its 630 pictures, the title logo's layers, the
+EPA notice, the house map, the weak-point cards, the colour bars and FREE PLAY
+among them. Each picture brings its own tiles and colours, as Dead or Alive's
+do. Revision A moved the table, and it has not been found yet, so `hotd` has
+no Cells tab. See [The House of the Dead's
+cells](TECHNICAL.md#the-house-of-the-deads-cells-jscellsjs).
 
 A merged archive carrying the parent and its clones together works too, and
 loads as the parent: the chips at the top level are the parent's, and the ones

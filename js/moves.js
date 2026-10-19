@@ -103,8 +103,9 @@ const baseIndex = (charIndex) => (charIndex >= MIRROR_BASE ? charIndex - MIRROR_
  * under the cursor holds forward, back or neither, which is recorded as a test
  * of that one sample.
  */
-function readTable(m, dv, start) {
+function readTable(m, dv, start, isa = null) {
     const out = [];
+    const ops = isa?.ops ?? OP_LENGTH.length;
     const u8 = (a) => m[a], u16 = (a) => dv.getUint16(a, true), u32 = (a) => dv.getUint32(a, true);
     const inRom = (a) => a > 0 && a + 16 < m.length;
     for (let h = start; inRom(h) && m[h] === HEADER; h += HEADER_LENGTH) {
@@ -119,7 +120,7 @@ function readTable(m, dv, start) {
                 if (seen.has(here)) break;
                 seen.add(here);
                 const op = u8(a);
-                if (op >= OP_LENGTH.length) break;
+                if (op >= ops) break;
                 if (op === OP_EXACT_NEW || op === OP_EXACT || op === OP_SUBSET) {
                     let mask = u8(a + 1);
                     if (u8(a + 2) & 1) mask |= FWD;
@@ -150,6 +151,12 @@ function readTable(m, dv, start) {
                     stack.push({ a: u32(a + 1), dirs, guards, follow, wait, depth: depth + 1 });
                 } else if (op === OP_JUMP || op === OP_NATIVE_JUMP) {
                     a = u32(a + 1);
+                    continue;
+                } else if (isa?.jumps?.[op] !== undefined) {
+                    /* A jump on the operator's setting; `jumps` says whether
+                     * it is taken as the machine is set by default. */
+                    if (isa.jumps[op]) { a = u32(a + 1); continue; }
+                    a += isa.length;
                     continue;
                 } else if (op === OP_BRANCH) {
                     const ways = [[1, { op, mask: FWD, here: true }],
@@ -307,13 +314,13 @@ function shortName(name) {
  *   " , ") and the CPU table's name where one lands on it.
  */
 /* The table at `root` and every follow-up table its entries reach, by address. */
-function readTables(m, dv, root) {
+function readTables(m, dv, root, isa = null) {
     const tables = new Map();
     const todo = [root];
     while (todo.length) {
         const a = todo.pop();
         if (tables.has(a) || !a || a >= m.length) continue;
-        const es = readTable(m, dv, a);
+        const es = readTable(m, dv, a, isa);
         tables.set(a, es);
         for (const e of es) if (e.follow && !tables.has(e.follow)) todo.push(e.follow);
     }
@@ -324,41 +331,42 @@ function readTables(m, dv, root) {
  * Every motion an input program commits to, in any situation, in the order
  * the tables are walked: the root's entries first, then the follow-ups'.
  * Fighting Vipers' matcher is this one at other addresses, with the same
- * opcodes and lengths, so this needs only the program's address.
+ * opcodes and lengths, so this needs only the program's address. Virtua
+ * Fighter 2's stops at op `0x33`, and its last two are jumps on a setting
+ * the others do not test: `isa` (`{ops, jumps, length}`) says so.
  * @returns {number[]} the commits' low sixteen bits, each once
  */
-export function commandMotions(rom, root) {
+export function commandMotions(rom, root, isa = null) {
     const m = rom.maincpu;
     if (!root || root >= m.length || m[root] !== HEADER) return [];
     const out = new Set();
-    for (const es of readTables(m, rom.mainCpuView, root).values()) for (const e of es) out.add(e.motion);
+    for (const es of readTables(m, rom.mainCpuView, root, isa).values()) for (const e of es) out.add(e.motion);
     return [...out];
 }
 
-export function readMoves(rom, charIndex) {
-    const m = rom.maincpu, dv = rom.mainCpuView;
-    const base = baseIndex(charIndex);
-    if (base >= 24) return null;
-    const root = dv.getUint32(progAddr(rom, MOVESET_ARRAY) + base * 4, true);
+/**
+ * The moves of an input program read the way `readMoves` reads Sonic the
+ * Fighters', without names: Fighting Vipers' and Virtua Fighter 2's matchers
+ * are this one, handler for handler, over the same player fields, and their
+ * inputs carry the same bits (MAME's `vf2` and `schamp` ports: P 1, K 2, G 4,
+ * down, up, right and left 0x10 to 0x80). Neither game's CPU name table is
+ * found, so the moves go by motion (Fighting Vipers' named from its motion
+ * table, js/vf2fighters.js readMotionNames). A round starts the fighters 2 apart in
+ * both, the distance `standing` reads a move at.
+ * @returns {null | {root:number, tables:Map<number, object[]>, moves:object[]}}
+ */
+export function programMoves(rom, root, isa = null) {
+    const m = rom.maincpu;
     if (!root || root >= m.length || m[root] !== HEADER) return null;
+    const tables = readTables(m, rom.mainCpuView, root, isa);
+    return { root, tables, moves: groundMoves(tables, root) };
+}
 
-    const tables = readTables(m, dv, root);
-
-    /* Name the entries by typing the CPU's scripts into the tree. A script
-     * that jumps before its first press is an air attack, which this ground
-     * reading has no business naming. */
-    for (const cpu of readCpuMoves(rom, base)) {
-        const ps = presses(cpu.steps);
-        if (!ps.length || ps[0].hist.some((d) => d & UP)) continue;
-        let table = root, e = null;
-        for (const press of ps) {
-            e = pick(tables.get(table) ?? [], press);
-            if (!e) break;
-            table = e.follow;
-        }
-        if (e && !e.name) Object.assign(e, { name: shortName(cpu.name), damage: cpu.damage });
-    }
-
+/*
+ * The ground-context moves of a program, one row per motion, each under the
+ * plainest input a standing fighter reaches it by.
+ */
+function groundMoves(tables, root) {
     /* Which entries a standing fighter actually gets for their own input: type
      * the input an entry spells and see whether the table lands on it, or on
      * something ahead of it in the engine's order. */
@@ -399,7 +407,34 @@ export function readMoves(rom, charIndex) {
             if (e.follow) queue.push({ table: e.follow, path: steps, ok: reachable, cost: cost(steps) });
         }
     }
-    const moves = order.map((id) => best.get(id));
+    return order.map((id) => best.get(id));
+}
+
+export function readMoves(rom, charIndex) {
+    const m = rom.maincpu, dv = rom.mainCpuView;
+    const base = baseIndex(charIndex);
+    if (base >= 24) return null;
+    const root = dv.getUint32(progAddr(rom, MOVESET_ARRAY) + base * 4, true);
+    if (!root || root >= m.length || m[root] !== HEADER) return null;
+
+    const tables = readTables(m, dv, root);
+
+    /* Name the entries by typing the CPU's scripts into the tree. A script
+     * that jumps before its first press is an air attack, which this ground
+     * reading has no business naming. */
+    for (const cpu of readCpuMoves(rom, base)) {
+        const ps = presses(cpu.steps);
+        if (!ps.length || ps[0].hist.some((d) => d & UP)) continue;
+        let table = root, e = null;
+        for (const press of ps) {
+            e = pick(tables.get(table) ?? [], press);
+            if (!e) break;
+            table = e.follow;
+        }
+        if (e && !e.name) Object.assign(e, { name: shortName(cpu.name), damage: cpu.damage });
+    }
+
+    const moves = groundMoves(tables, root);
     /* The name is the one the CPU's input landed on this very entry, or else
      * the one whose input is plainest among the entries that play the motion. */
     const names = new Map();
@@ -425,10 +460,11 @@ export function spellMove(mv) {
 }
 
 /* The conditions an entry needs beyond the stick, as the matcher tests them.
- * The bits are the game's; what most of them mean is not read yet. */
-export function spellGuards(e) {
+ * The bits are the game's; what most of them mean is not read yet. State bit
+ * 18 is Sonic the Fighters' hyper; `hyper: false` leaves it a number. */
+export function spellGuards(e, { hyper = true } = {}) {
     return e.guards.filter(([g]) => !g.endsWith('_clear')).map(([g, v]) => {
-        if (g === 'state_set' && v === HYPER_BIT) return 'hyper';
+        if (hyper && g === 'state_set' && v === HYPER_BIT) return 'hyper';
         if (g === 'nearer_than') return `nearer than ${v.toFixed(1)}`;
         if (g === 'further_than') return `further than ${v.toFixed(1)}`;
         if (g === 'vs') return 'against some fighters';

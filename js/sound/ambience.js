@@ -88,12 +88,15 @@ const PLAYERS = {
  * cue fires on, and the command. sqo_ufo (0x42140): trailer_cont (0x6D15C) sets
  * the drive-by at 360 and 2300 and the truck stop on at 640 and off at 960, and
  * the passing truck's int (0x6DA28) the drive-by at 1039. sqo_airport (0x42180):
- * the planes set the jet at 448 (0x6BAF8), when the plane is on the screen.
+ * the planes set the jet at 448 (0x6BAF8), when the plane is on the screen:
+ * the routine's screen test (0x6BAE0) skips the cue with the draw, so
+ * `shown(frame)` decides it.
  */
 const FV_CUES = {
     0x42140: new Map([[360, 0xae1126], [640, 0xae113b], [960, 0xae113c], [1039, 0xae1126], [2300, 0xae1126]]),
     0x42180: new Map([[448, 0xae1159]]),
 };
+const FV_SCREEN_CUES = new Set([0xae1159]);
 
 /**
  * The stage sounds of one stage, sent to a running board.
@@ -119,12 +122,14 @@ export class StageSounds {
     }
 
     /* The scene and the round start: the two one-shots, then the player.
-     * `clock` is the stage objects' frame, which Fighting Vipers' cues fire on. */
-    start(stage, clock = null) {
+     * `clock` is the stage objects' frame, which Fighting Vipers' cues fire on;
+     * `shown(frame)` whether the object that sets a screen-tested cue is on
+     * the screen on that frame. */
+    start(stage, clock = null, shown = null) {
         this.stop();
         const A = this.spec;
         if (A.kind === 'fv') {
-            this.startFv(stage, clock);
+            this.startFv(stage, clock, shown);
             return;
         }
         this.send(this.code(A.scene, stage));
@@ -152,7 +157,7 @@ export class StageSounds {
         }, FRAME_MS);
     }
 
-    startFv(stage, clock) {
+    startFv(stage, clock, shown) {
         const A = this.spec;
         if (stage >= A.count) return;
         const view = this.rom.mainDataView;
@@ -164,7 +169,11 @@ export class StageSounds {
             const now = clock();
             /* Back past a cue — the clock went round — starts the count again. */
             if (now < last) last = now - 1;
-            for (let f = Math.max(last + 1, now - MAX_CATCH_UP); f <= now; f++) this.send(cues.get(f) ?? 0);
+            for (let f = Math.max(last + 1, now - MAX_CATCH_UP); f <= now; f++) {
+                const code = cues.get(f) ?? 0;
+                if (FV_SCREEN_CUES.has(code) && shown && !shown(f)) continue;
+                this.send(code);
+            }
             last = now;
         }, FRAME_MS);
     }

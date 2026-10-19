@@ -354,7 +354,7 @@ export function poseBody(body, motion, frame, { travel = false } = {}) {
 /* The roles the callback switches on, which are the board library's and do not
  * move. The bodies, motions and models it names do move — they are indices into
  * three tables that renumber between builds — so those come off the profile. */
-const ROLE_HEAD = 1, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROLE_HIPS = 9;
+const ROLE_HEAD = 1, ROLE_CAPE = 2, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROLE_HIPS = 9;
 
 /**
  * The models the game draws on each part this frame, as sub_764C0 picks them.
@@ -372,7 +372,12 @@ const ROLE_HEAD = 1, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE_CHEST = 8, ROL
  *   Samson               his right hand, swapped every vsync for PN_samson_ter2
  *   Sophie               her head: eyes shut three vsyncs in ninety, or a run
  *                        of PN_sofatama_CT through MO_s_tatiaga
- *   the two Devilons     a hundred-model wing beat, drawn with the chest
+ *   the Devilons         a hundred-model wing beat, drawn with the chest; the
+ *                        finished game's BO_devilonx shares BO_devilon's case
+ *                        and beats PN_devilonx_hane01-9a
+ *   the Moodys           the finished game's BO_moody, BO_moodyb and
+ *                        BO_moodyc draw a cape on their role-2 joint in place
+ *                        of its model, PN_*_katar_01-50, one a vsync
  *
  * The muzzle flashes of the firing motions are left out: they are drawn along
  * a matrix sub_FE90 keeps, not along the part.
@@ -445,6 +450,12 @@ export function partDraws(rom, body, motion, frame, tick) {
         }
         if (is(BD.devilon) && p.joint === 1 && MD.devilonWing != null) return [...own, MD.devilonWing + (tick % 100)];
         if (is(BD.devilonM) && p.joint === 1 && MD.devilonMWing != null) return [...own, MD.devilonMWing + (tick % 100)];
+        if (is(BD.devilonX) && p.joint === 1 && MD.devilonXWing != null) return [...own, MD.devilonXWing + (tick % 100)];
+        if (role === ROLE_CAPE) {
+            if (is(BD.moody) && MD.moodyCape != null) return [MD.moodyCape + (tick % 50)];
+            if (is(BD.moodyB) && MD.moodyBCape != null) return [MD.moodyBCape + (tick % 50)];
+            if (is(BD.moodyC) && MD.moodyCCape != null) return [MD.moodyCCape + (tick % 50)];
+        }
         return own;
     });
 }
