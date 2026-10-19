@@ -452,7 +452,10 @@ export const DEFAULT = 'en';
 /* Other names a visit may give a language: ?lang=jp is Japanese, as on m2-hle2. */
 const ALIASES = { jp: 'ja' };
 
-const asked = new URLSearchParams(location.search).get('lang');
+/* Node (m2-hle2's graders import romset.js, which imports this) has no page:
+ * there the text stays English and nothing below touches a document. */
+const onPage = typeof document !== 'undefined';
+const asked = onPage ? new URLSearchParams(location.search).get('lang') : null;
 export const lang = LANGS[ALIASES[asked] ?? asked] ? (ALIASES[asked] ?? asked) : DEFAULT;
 
 const fill = (s, vars) => (vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : s);
@@ -506,10 +509,12 @@ function wireSwitch() {
     box.hidden = false;
 }
 
-document.documentElement.lang = lang;
-if (lang !== DEFAULT) {
-    apply();
-    const title = LANGS[lang].page['doc.title'];
-    if (title) document.title = title;
+if (onPage) {
+    document.documentElement.lang = lang;
+    if (lang !== DEFAULT) {
+        apply();
+        const title = LANGS[lang].page['doc.title'];
+        if (title) document.title = title;
+    }
+    wireSwitch();
 }
-wireSwitch();
