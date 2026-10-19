@@ -6515,10 +6515,40 @@ adds for type 11 (0x13A0, `PN_sara_dai00a`) and type 26 (0xD0D,
 `PN_takara_box01a`, moved by (0, 3.5, 2)), as for generic props. Read from the
 ROM, not checked in MAME.
 
+Classes 0x93 and 0x98 each stand a fixed group of props about their own place.
+Their tasks, 0x394B0 and 0x395B0 (`hotdo`), open 15 and 12 tasks, on handlers
+0x3A9C0 and 0x3ACF0, from the 28-byte entries at 0xAED40 and 0xAF620: +0x00 the
+type (a halfword), run through 0x417F0 for its model and scale; the spawner's
+place plus +0x04/+0x08/+0x0C; the spawner's turns plus +0x10/+0x14/+0x18; the
+spawner's +0x70 and +0x64 copied. No -1 ends the list, and no +0x2C offset is
+added. Class 0x93 also sets bit 30 on type 4, and a child whose third turn
+comes out nonzero gets a third turn of 0 and window row 28; five of its entries
+carry a 1 there. Both handlers set or clear bit 30 by the zone's clock and
+otherwise close and draw as the plain prop does: place, turns, scale +0x94 and
+model +0x54. 0x3ACF0 also draws 0x1241 at twice the size over type 73: left
+out, like the plain draw's second models. Each spawns once. 0x93 at 0xE4980 is
+chapter 1's section 6 (Stage 1 · set 3), at (109.5, 0, 200): a laid table,
+`PN_tabul_02a` with six `PN_isu_02a`, six `PN_sara03a`, `PN_kabin_01a` and
+`PN_honeatama`. 0x98 at 0xF27D0 is chapter 2's section 12 (Stage 2 · set 5), at
+the origin: three `PN_maru_01a`, the middle one `PN_fruit_01a` instead, six
+`PN_sara03ab` and three `PN_syokudai01a`.
+
+The prototype has one routine for both, class 0x93's 0x2FA20. It picks its
+table by the chapter number (0x51E4C0): 15 entries at 0x85E10 in chapter 0, 12
+at 0x866F0 in chapter 1. The places and types are the same, except a third type
+73 where the finished game has its 85, and no third turn is set. Its children
+run the plain prop handler (0x30670), and in chapter 0 all but types 3 and 4
+get window row 26. Its records are 0xE4340 and 0xF11D0, in the same sets, and
+stand in zones 28-29 and 31. The explorer stands both in `standGroup`
+(`js/placements.js`, the profile's `groups`). Stage 1 · set 3 goes from 63
+props to 78 in `hotdo` and from 65 to 80 in `hotdp`; Stage 2 · set 5 from 20 to
+32 and from 13 to 25. Read from the ROM, not checked in MAME.
+
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 34 in the courtyard
-and 63 in the mansion (44 before class 0x8A's furniture); the prototype, whose
-table is the same one 78 types long, stands 34 and 65 (46).
+and 78 in the mansion (44 before class 0x8A's furniture, 63 before class 0x93's
+table); the prototype, whose table is the same one 78 types long, stands 34
+and 80 (46, 65).
 
 The prototype's table was found by its own shape and then held against the
 finished game's: **73 of the 77 types both carry name the same model, type for
@@ -6678,11 +6708,10 @@ lists of that body's `_DD` models — `dog_akos_DD`, `ff_mune_DD`, `hyum_kao_DD`
 ends in -1, but only its first 94 entries name anything: 94 is the body count,
 and 94 to 189 all point at lists of nothing.
 
-The enemy waves are their own tables. **0xAED40** and **0xAF620** hold 28-byte
-records whose first halfword is a *body* index and whose next three floats are a
-position — 0xAED40 is six of `BO_ebita`, one of `BO_ebitb` and three of
-`BO_tetuman`; 0xAF620 is six of `BO_boss4` with `BO_mummy2c`, `BO_burnerb` and
-`BO_hiru_b` behind them, which is a boss fight written out.
+**0xAED40** and **0xAF620** were once read here as enemy waves, their first
+halfwords taken for body indices. They are not: the routines that read them,
+classes 0x93 and 0x98, take that halfword as an object type and stand props
+(see class 0x93 and 0x98 above).
 
 Most of the 125 entries are one of two routines: `sub_3A210` takes 77 of them
 and `sub_3B1A0` several more, which is what a table of furniture should look
@@ -6713,8 +6742,8 @@ of the run.
 
 Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 **0xAF620**, all indexed with a 28-byte stride whose first halfword is an object
-type. 0xAA378 is class 0x8A's furniture (see above); the other two are not
-read.
+type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
+and 0x98's groups (see above).
 
 ## Animation
 

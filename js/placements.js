@@ -122,8 +122,9 @@ function walkScript(rom, at, visit) {
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
  * all but those on sixteen handlers, which are read below, one class that
- * stands a row of props (see standRow) and one that stands a table of them
- * (see standTable).
+ * stands a row of props (see standRow), one that stands a table of them
+ * (see standTable) and two that stand a fixed group of them about their own
+ * place (see standGroup).
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
  * share one handler, 0x3E510 in the first revision. Its init clears the byte
@@ -316,7 +317,7 @@ function walkScript(rom, at, visit) {
  * Records are keyed by their own address, because a script listed by two
  * sections is walked twice and would otherwise stand its props up twice.
  */
-function spawnProps(rom, at, set, out, section) {
+function spawnProps(rom, at, set, out, section, chapter) {
     const O = rom.game.objects;
     if (!O) return;
     const dv = rom.mainCpuView;
@@ -343,6 +344,9 @@ function spawnProps(rom, at, set, out, section) {
         /* And one that stands a room's furniture out of a table. */
         const table = O.tables?.find((r) => r.init === opens);
         if (table) { standTable(rom, rec, table, set, out); continue; }
+        /* And the two that stand a group about their own place. */
+        const group = O.groups?.find((r) => r.init === opens);
+        if (group) { standGroup(rom, rec, group, set, out, chapter); continue; }
         if (opens !== O.generic) continue;
         const type = rom.maincpu[rec + O.type];
         if (!(type > 0 && type < O.count)) continue;
@@ -506,6 +510,75 @@ function standTable(rom, rec, table, set, out) {
 }
 
 /*
+ * Two spawn classes that stand a fixed group of props about their own place,
+ * out of a table of 28-byte entries: classes 0x93 and 0x98 in the finished
+ * game (0x394B0 and 0x395B0), whose fifteen and twelve entries are at 0xAED40
+ * and 0xAF620. For each, the routine opens a task, on 0x3A9C0 or 0x3ACF0, and
+ *
+ *     ldos 0xAED40[i*28], g4   ; +0x00 the entry's own type
+ *     call 0x417F0             ; that type's model and scale
+ *     ldos 0x70(r6), g4        ; the spawner's life and window, copied
+ *     ld   0x20(r6), g4        ; the spawner's place
+ *     ld   0x4(r4), g5         ; plus the entry's +0x04, +0x08, +0x0C
+ *     ld   0x2C(r6), g4        ; the spawner's turns
+ *     ld   0x10(r4), g5        ; plus the entry's +0x10, +0x14, +0x18
+ *
+ * for i 0 to 14 (0 to 11 for 0x395B0), then closes its own task. The class
+ * 0x93 routine also gives a child whose third turn comes out nonzero a third
+ * turn of 0 and window row 28; five of the 0xAED40 entries carry a 1 there
+ * for that. The two handlers draw as the plain prop draw does: the place at
+ * +0x20, the three turns, the scale at +0x94, the model at +0x54, under
+ * the same life and window closes. Neither adds the type's +0x2C offset.
+ * Each also marks its child unbreakable (+0x58 bit 30) over a stretch of the
+ * zone's clock, which only changes whether a shot breaks it. 0x3ACF0 draws a
+ * second model over type 73 (0x1241 at twice the size), as the plain draw
+ * does for types 11 and 26: left out here as there. Each class spawns once:
+ * 0x93 at 0xE4980 (Stage 1 set 3, at (109.5, 0, 200)), a laid table —
+ * PN_tabul_02a, six PN_isu_02a chairs, six PN_sara03a plates, PN_kabin_01a
+ * and PN_honeatama — and 0x98 at 0xF27D0 (Stage 2 set 5, at the origin),
+ * three PN_maru_01a tables (the middle one PN_fruit_01a instead), six
+ * PN_sara03ab and three PN_syokudai01a.
+ *
+ * The prototype has one routine for both, class 0x93's 0x2FA20. It picks the
+ * table by the chapter number (0x51E4C0): fifteen entries at 0x85E10 in
+ * chapter 0 and twelve at 0x866F0 in chapter 1: the same places and types,
+ * but a third type 73 where the finished game has its 85, and no third turn
+ * set. Its records are 0xE4340 and 0xF11D0, in the same sets. Its
+ * children run the plain prop handler (0x30670); in chapter 0 all but types
+ * 3 and 4 get window row 26.
+ */
+function standGroup(rom, rec, group, set, out, chapter) {
+    const O = rom.game.objects;
+    const dv = rom.mainCpuView;
+    if (out.has(`${rec}:0`)) return;
+    const g = group.chapters ? group.chapters[chapter] : group;
+    if (!g) return;
+    const place = [8, 12, 16].map((o) => dv.getFloat32(rec + o, true));
+    const turns = [20, 24, 28].map((o) => dv.getUint32(rec + o, true));
+    for (let i = 0; i < g.count; i++) {
+        const at = g.at + i * 28;
+        if (!inRom(rom, at, 28)) break;
+        const type = dv.getUint16(at, true);
+        if (!(type > 0 && type < O.count)) continue;
+        const entry = O.table + type * O.stride;
+        const model = dv.getUint32(entry + O.model, true);
+        if (!model || model >= rom.game.modelTable.count) continue;
+        const scale = dv.getFloat32(entry + O.scale, true);
+        const turn = [16, 20, 24].map((o, k) => (turns[k] + dv.getUint32(at + o, true)) >>> 0);
+        const marked = g.marked != null && turn[2] !== 0;
+        if (marked) turn[2] = 0;
+        const window = marked ? g.marked : g.window != null && !g.keep.includes(type) ? g.window : null;
+        out.set(`${rec}:${i}`, {
+            rec, type, model, set, scale: scale > 0 ? scale : 1,
+            pos: place.map((v, k) => Math.fround(v + dv.getFloat32(at + 4 + k * 4, true))),
+            turn: turn.map((v) => v & 0xffff),
+            /* A window row of its own, in place of the record's. */
+            ...(window != null ? { window } : {}),
+        });
+    }
+}
+
+/*
  * Which zones each prop is drawn in, by running the board's clock over the
  * scripts.
  *
@@ -660,32 +733,42 @@ function propZones(rom, chapter, sections, props) {
         return null;
     }
 
+    /* The props each record stands, one of each window row of their own (see
+     * standGroup); the rest keep the record's. */
+    const kinds = new Map();
+    for (const [key, o] of props) {
+        const rec = o.rec ?? key;
+        if (!kinds.has(rec)) kinds.set(rec, new Map());
+        if (!kinds.get(rec).has(o.window)) kinds.get(rec).set(o.window, o);
+    }
+
     scripts.forEach((list, s) => list.forEach((ops, i) => ops.forEach(([op, p], e) => {
         const form = SPAWN_OPS.has(op) && O.spawns[op];
         if (!form) return;
         for (let q = p + 4; inRom(rom, q); q += 4) {
             const rec = dv.getUint32(q, true);
             if (rec === END) break;
-            const prop = props.get(rec) ?? props.get(`${rec}:0`);
-            if (!prop) continue;
-            if (!out.has(rec)) out.set(rec, new Set());
-            const row = form.window != null ? rom.maincpu[rec + form.window] : 0;
-            const window = [];
-            for (let k = 0; row && k < 8; k++) {
-                window.push(dv.getUint16(O.windows + row * 16 + k * 2, true));
-                if (window[k] === WINDOW_END) break;
+            for (const [own, prop] of kinds.get(rec) ?? []) {
+                const key = own == null ? rec : `${rec}@${own}`;
+                if (!out.has(key)) out.set(key, new Set());
+                const row = own ?? (form.window != null ? rom.maincpu[rec + form.window] : 0);
+                const window = [];
+                for (let k = 0; row && k < 8; k++) {
+                    window.push(dv.getUint16(O.windows + row * 16 + k * 2, true));
+                    if (window[k] === WINDOW_END) break;
+                }
+                /* The interpreter as it stands at the spawn, then the object. */
+                const c = run(s, 0, 0, { zone: null, frame: 0, queue: [] }, null, [i, e]);
+                run(s, i, e + 1, c, {
+                    rec: key, type: prop.type, life: dv.getInt16(rec + form.life, true),
+                    seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
+                    ...(prop.frames ? { frames: prop.frames, n: 0 } : {}),
+                    ...(prop.stays ? { stays: true } : {}),
+                    ...(prop.until ? {
+                        until: typeof prop.until === 'number' ? prop.until : prop.until[s] ?? 0,
+                    } : {}),
+                });
             }
-            /* The interpreter as it stands at the spawn, then the object. */
-            const c = run(s, 0, 0, { zone: null, frame: 0, queue: [] }, null, [i, e]);
-            run(s, i, e + 1, c, {
-                rec, type: prop.type, life: dv.getInt16(rec + form.life, true),
-                seen: i, count: 0, drawn: true, window: row ? window : null, w: 0,
-                ...(prop.frames ? { frames: prop.frames, n: 0 } : {}),
-                ...(prop.stays ? { stays: true } : {}),
-                ...(prop.until ? {
-                    until: typeof prop.until === 'number' ? prop.until : prop.until[s] ?? 0,
-                } : {}),
-            });
         }
     })));
     return out;
@@ -976,7 +1059,7 @@ export function readPlacementStages(rom) {
                         }
                         return;
                     }
-                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props, number); return; }
+                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props, number, chapter); return; }
                     if (op !== OP_ZONE) return;
                     if (!groups.has(set)) {
                         groups.set(set, {
@@ -1000,7 +1083,11 @@ export function readPlacementStages(rom) {
 
         /* And which zones each prop is drawn in, for the zone picker. */
         const lives = propZones(rom, chapter, sections, props);
-        if (lives) for (const [rec, o] of props) o.zones = lives.get(o.rec ?? rec) ?? new Set();
+        if (lives) {
+            for (const [rec, o] of props) {
+                o.zones = lives.get(o.window == null ? o.rec ?? rec : `${o.rec}@${o.window}`) ?? new Set();
+            }
+        }
 
         /* Which zones list each placement, over every zone the chapter reaches. */
         const zonesOf = new Map();

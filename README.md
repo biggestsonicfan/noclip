@@ -771,6 +771,10 @@ its own (`PN_kenita00a` to `07a`), where the board puts them.
 In chapter 1's section 8, two spawns stand a room's furniture out of a
 table (chairs, tables, cups, a pot, bookcases, a lamp and chests), in both
 builds.
+Chapter 1's section 6 lays a dining table (a table, six chairs, six plates, a
+vase and a skull) and chapter 2's section 12 a banquet (three round tables,
+plates, fruit and candlesticks), each one spawn standing a group of props
+about its own place, in both builds.
 Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
 until a shot or the game swings it. The prototype stands it at the same place,
 still, in the zone its section 8 draws it in before it closes; the swing it

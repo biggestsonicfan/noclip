@@ -1299,6 +1299,12 @@ const hotdp = {
         /* Class 0x8A's task, 0x2FDD0: the finished game's 0x39830 on the
          * prototype's table, 0x81448 (see standTable in js/placements.js). */
         tables: [{ init: 0x2fdd0, at: 0x81448, block: 0x16c, lift: 0x2c }],
+        /* Class 0x93's task, 0x2FA20, which stands a group about its own
+         * place out of a table it picks by chapter: 0x85E10 in chapter 0,
+         * where all but types 3 and 4 get window row 26, and 0x866F0 in
+         * chapter 1 (see standGroup in js/placements.js). */
+        groups: [{ init: 0x2fa20, chapters: [{ at: 0x85e10, count: 15, window: 26, keep: [3, 4] },
+            { at: 0x866f0, count: 12 }] }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
@@ -1970,6 +1976,12 @@ const hotdo = {
          * the table at 0xAA378: a block of 0x16C bytes per spawning type, of
          * 28-byte entries (see standTable in js/placements.js). */
         tables: [{ init: 0x39830, at: 0xaa378, block: 0x16c, lift: 0x2c }],
+        /* Classes 0x93 and 0x98, 0x394B0 and 0x395B0, which stand fifteen and
+         * twelve props about their own place out of 0xAED40 and 0xAF620; the
+         * first gives a child with a third turn window row 28 (see standGroup
+         * in js/placements.js). */
+        groups: [{ init: 0x394b0, at: 0xaed40, count: 15, marked: 28 },
+            { init: 0x395b0, at: 0xaf620, count: 12 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
@@ -2438,6 +2450,7 @@ const hotd = {
         items: null,
         rows: null,
         tables: null,
+        groups: null,
     },
     rig: {
         bodies: {
