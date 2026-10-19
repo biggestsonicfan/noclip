@@ -758,7 +758,8 @@ breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
 hang still. Chapter 3's `PN_st3_card01a`, `PN_sekom01a` and `PN_sekom02a`
 and chapter 4's `PN_sousa00a` stand as props, and so do chapter 3's two
 `PN_kikai_b` machines and chapter 2's chained lid (`PN_r2_01_futa`), until a
-shot breaks them.
+shot breaks them. Chapter 3's window pane (`PN_r3_01a_mad11a`) stands whole,
+as it does until something in play breaks it.
 Chapter 2's section 9 stands a door (`PN_door_n4a`), drawn taller and
 narrower than its model, as the board draws it there.
 A fish with a man's face (`PN_jinmengyo`) swims its loop in chapter 2's fish

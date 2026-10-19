@@ -6092,7 +6092,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for sixteen handlers.
+The others are left out rather than guessed at, but for seventeen handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6485,6 +6485,33 @@ shut and never close (`stays`): the walk credits them every zone from their
 spawn to the chapter's end, which in Stage 2 · set 5 is zones 2, 3, 40, 41,
 29 and 31. The burst is left out. Stage 2 · set 5 goes from 11 props to 13,
 and `hotdp` set props from 113 to 115. Read from the ROM, not checked in MAME.
+
+The seventeenth is type 94 on 0x3E450, `PN_r3_01a_mad11a` (0x166F), scale 1,
+a window pane. It closes as a prop does (0x3ED60) and draws through 0x413B0
+with the type's model. Once the byte 0x51E300 (event flag 0x40) is set while
+it shows 0x166F, it queues 0xA01101, throws its pieces (0x411F0) and takes
+`PN_r3_01a_mad12a` (0x1670) for good. The spawn's per-type cases (0x38A1C)
+have none for it. Only two things write that flag: a chapter 1 script (op 88
+at 0xE96B0), and an object's step at 0x47900 after a coprocessor distance
+test: 0x47740, which 0x46ED4 calls on a state in +0x66, in the step of a task
+that 0x46010 opens (the init of entry 0x27A in the table at 0xC9784). The
+section start (0x21650) clears the event flags (0x67480) after it starts the
+section's script, so chapter 1's flag is gone by chapter 3. Chapter 3's
+section 0, script 4 (0xF3F90) spawns the only one, record 0xF5820, at (-30.6,
+2.2, 93.7), turned 0. The explorer opens no such object, so it stands whole
+there, Stage 3 · set 8, which goes from 45 props to 46; `hotdo` set props go
+from 270 to 271. The break is left out. Read from the ROM, not checked in
+MAME.
+
+The walk reaches three more types on handlers of their own, and none is
+stood. Type 64 on 0x3D6A0 is `PN_space` and draws nothing: it closes as a
+prop does and offers itself as a target (0x41890). Type 83 on 0x3DEB0
+(`PN_kyochuub06a`, 0x11AA) draws through 0x413B0, but the spawn's case for it
+(0x38AD0) sets a step of 1 and a hold of 5, so it never stands: it rocks
+0x11AA, 0x11AB, 0x11AA, 0x11A9, and each hold at 0x11A9 after the first is 3
+plus 0x33B00's number rem 21. Type 120 on 0x3E930 (`PN_kami00a`) closes
+itself unless the byte 0x51F111 is 3, which the boot fills from 0x1F050 with
+the settings (0x13D2C).
 
 One spawn class stands props of its own. A record's first word picks the task
 the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
