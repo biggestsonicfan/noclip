@@ -414,8 +414,16 @@ wings as the other two do (`devilonX` in the profile; the prototype has no
 such body). The case's other half is left out: while the object's `+0x2F4`,
 which the case counts down, is odd, the part is drawn another way. What sets
 `+0x2F4` was not traced. Read from the ROM, not checked in
-MAME. The cases for bodies 48, 59, 60, 64, 70, 76, 78, 84, 88, 92 and 93 have
-not been read yet.
+MAME. The three Moodys have a case each: `BO_moody` (59, 0x9DFD4), `BO_moodyb`
+(70, 0x9E000) and `BO_moodyc` (88, 0x9E018) test the joint's role byte for 2
+and, there, draw `0x1618`, `0x1895` or `0x1A56` plus `[0x51EDA0]` rem 50 in
+place of the part's own model, then return: `PN_moody_katar_01` to `_50` and
+the B and C capes, one a vsync off the counter Samson's case reads. On all three
+that is joint 3 (`moodyCape` and the rest in the profile; the prototype has no
+Moody body). Bodies 92 and 93, `BO_moodybb` and `BO_moodycc`, reach the same two
+runs (0x9E030, 0x9E05C) but have no joint with role 2, so they draw no cape.
+Read from the ROM, not checked in MAME. The cases for bodies 48, 60, 64, 76, 78
+and 84 have not been read yet.
 
 #### The bodies were never given their layers
 
