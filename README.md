@@ -145,7 +145,13 @@ for what each routine draws and what is left out.
 The Animation tab poses the fighters: Fighting Vipers' pose and draw routines
 are Virtua Fighter 2's, so the same rig reads its fourteen records and 1054
 motions, with the same opponent, which can play the game's reaction to the
-fighter's strike or throw. The stages carry their names, from the sound test's song list, and
+fighter's strike or throw. Each fighter's moves are listed under the input
+that does them, read from its input program the way Sonic the Fighters' are
+(*fwd+down . fwd+P*, the strings as their presses, *P , P , K*), and the ones
+a fighter standing in front of its opponent does not reach that way say what
+they need. They play one at a time: a string is listed by the motion its last
+press plays, and the strings themselves are not played yet. The game's names
+for its moves are not found, so they go by number. The stages carry their names, from the sound test's song list, and
 play their music and stage sounds on the emulated sound board.
 
 The **Cells** tab has the game's 2D pictures, from the same two tables the stage
@@ -559,7 +565,9 @@ every one of the
 1359 motions in the game's table plays on any of them
 ([`js/vf2fighters.js`](js/vf2fighters.js)). Each fighter's list opens on its
 moves, the motions its own input program can start, as Fighting Vipers' does
-([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)). The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)),
+each under its input: Jacky's *P , P , back+P*, Pai's *P , P , P , down+K*,
+the throws on *G+P*. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
@@ -600,7 +608,8 @@ need a table found in that game's ROM first. Where they stand:
 | Opponent plays the reaction | | yes | yes | |
 | Mirrored fighter, and the one it throws | | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
-| Moves and strings by input | yes | moves | moves | |
+| Moves by input | yes | yes | yes | |
+| Strings played | yes | | | |
 | Fighter's own motions grouped | yes | yes | yes | |
 | Sway chains | yes | yes | yes | |
 | Hit flash | | yes | | |
@@ -610,8 +619,9 @@ need a table found in that game's ROM first. Where they stand:
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
-fight code already runs both players), and stage sounds for Sonic the Fighters
-and Dead or Alive. Virtua Fighter 2 has no hit flash to show: every fighter
+fight code already runs both players), stage sounds for Sonic the Fighters
+and Dead or Alive, and playing Fighting Vipers' and Virtua Fighter 2's
+strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
 draw goes through `0x7C60` with the colour left as it is.
 
 ## Dead or Alive

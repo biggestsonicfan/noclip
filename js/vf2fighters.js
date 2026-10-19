@@ -85,7 +85,7 @@ import { buildPose, poseMatrices, viewerMatrix, turnedBy, turnedInOrder, SLOT_CO
 import { decodeMotion, sampleMotion, resolveData } from './motion.js';
 import { readModelEntry } from './romset.js';
 import { readDebrisTables, readBodyBalls, debrisShadowsOn } from './fvdebris.js';
-import { commandMotions } from './moves.js';
+import { commandMotions, programMoves, spellMove, spellGuards } from './moves.js';
 import { handModels, handsAt, itemAt, gameLoops } from './fighterhands.js';
 import { setupWord } from './reactions.js';
 
@@ -180,6 +180,7 @@ function readFighter(rom, F, record, char) {
         start: actions[0] ?? -1,
         actions,
         commands: F.commands ? readCommands(rom, F.commands, char) : [],
+        inputs: F.commands ? readInputs(rom, F.commands, char) : null,
         poses: F.poses ? readPoses(rom, F.poses, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
@@ -837,6 +838,29 @@ function readCommands(rom, C, char) {
 }
 
 /*
+ * The input each move is typed with, by motion: the same tree read as Sonic
+ * the Fighters' moves are (js/moves.js, programMoves), each ground move under
+ * the plainest input a standing fighter reaches it by, strings as their
+ * presses. A move the standing fighter does not reach that way keeps its
+ * input and the bits it needs. Moves of another context (the high byte of a
+ * table's key) have none.
+ */
+function readInputs(rom, C, char) {
+    const at = C.table + char * 4;
+    if (at + 4 > rom.maincpu.length) return null;
+    const moves = programMoves(rom, rom.mainCpuView.getUint32(at, true), C.isa);
+    if (!moves) return null;
+    const out = new Map();
+    for (const mv of moves.moves) {
+        const id = mv.motion & MOTION_ID;
+        if (out.has(id)) continue;
+        const needs = mv.reachable ? '' : spellGuards(mv.entry, { hyper: false }) || 'other situations';
+        out.set(id, { input: spellMove(mv), needs, standing: mv.reachable });
+    }
+    return out;
+}
+
+/*
  * The poses round flow and the attract mode give a fighter, by +0x1B1. At
  * round start 0xC77C commands `intro`'s u16; the win pick 0x3CCB8 takes one
  * of `wins`' four u16 tables, by the button held or the time and life left;
@@ -872,6 +896,23 @@ function scriptRows(rom, at, size, frame) {
     }
 }
 
+/* The moves: those a standing fighter does by the buttons, each with its
+ * input, then the rest of what the input program commits to, with the input
+ * and the bits it needs where the ground tables have one. */
+function inputGroups(body, own) {
+    const I = body.inputs;
+    if (!I) return [{ label: 'Its moves, by the input table', list: own(body.commands) }];
+    const tag = (m) => {
+        const x = I.get(m.index);
+        return x && [x.input, x.needs].filter(Boolean).join(' · ');
+    };
+    const standing = [...I].filter(([, x]) => x.standing).map(([id]) => id);
+    return [
+        { label: 'Its moves — standing, by the buttons', list: own(standing), tag },
+        { label: 'Its moves in other situations', list: own(body.commands), tag },
+    ];
+}
+
 /**
  * The stance, then the fighter's moves, then the rest of its action table,
  * what those hand over to, its round and attract poses, then every other
@@ -885,7 +926,7 @@ export function fighterMotionList(rom, body, motions) {
     const own = (ids) => ids.map((id) => motions[id]).filter((m) => m && !taken.has(m) && taken.add(m));
     const groups = [
         { label: 'Idle', list: own(body.actions.slice(0, 1)) },
-        { label: 'Its moves, by the input table', list: own(body.commands) },
+        ...inputGroups(body, own),
         { label: 'The rest of its action table', list: own(body.actions) },
     ];
     const H = rom.game.rig.fighters.handover;

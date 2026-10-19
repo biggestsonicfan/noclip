@@ -1924,7 +1924,21 @@ its moves, then the rest of what it plays, then every other motion.
   are Sonic The Fighters' (`js/moves.js`): the lengths agree op for op over
   FV's 59 handlers, so the same walk lists every motion a commit names (Jane
   79, Honey 87, Sonic 45). The CPU's name table is not found yet, so the moves
-  are listed by number only.
+  are listed by number, each under its input. The matcher (table `0x1EBE0`,
+  handlers `0x1EC34`) is STF's (`0x1F00C`) instruction for instruction, on
+  the same player fields (`+0x1218`, `+0x1203`, `+0x1242`, the distance at
+  `+0x5F4`), and its input byte (`+0x1200`, from `0x500700`, built from the
+  I/O port at `0x1C00004`) carries the bits MAME's `vf2` ports give it:
+  P 1, K 2, G 4, down 0x10, up 0x20, right 0x40, left 0x80, as STF's
+  `schamp` ports do. So `programMoves` reads the tree `readMoves` reads,
+  without the names: a ground move goes under the plainest input a fighter
+  standing 2 from its opponent reaches it by (a round starts them 2 apart),
+  strings as their presses, and the rest under their input and the bits they
+  need. State bit 18 stays a number: it is STF's hyper. The motion list
+  splits the moves into those two groups (Jane 26 and 52). A string plays
+  only its last motion: the hand-over at the cancel frame (STF's set-up
+  op 2) is not read here yet. The inputs are read from the ROM, not typed
+  in MAME.
 - **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
   `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
   and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
@@ -1934,7 +1948,10 @@ its moves, then the rest of what it plays, then every other motion.
   steps over `0x32` (`commands.isa` in `js/games.js`). Two more roots
   (`0x3927D`, `0x392B9`) are read instead while the matcher's `r10` has bit 25
   or 26 set; they are fight state and not listed. Akira lists 69 moves, Jacky
-  78, Shun 76. Checked against MAME: 200 s of `vf2` attract with the commits
+  78, Shun 76, each under its input as FV's are (Jacky 34 standing, 44 in
+  other situations): throws on G+P, Jacky's P, P, back+P, Lau's P, P, P, K,
+  Pai's P, P, P, down+K. Checked against MAME: 200 s of `vf2` attract with
+  the commits
   (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
   Shun, Jacky and Akira, all 43 in that fighter's list.
 - **Hand-overs**: set-up op 1 of a motion's `mot_list` record

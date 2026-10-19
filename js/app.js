@@ -3350,7 +3350,9 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.charIndex = body.char ?? body.index;
     state.character = body;
     const m = state.motion;
-    /* A body has no input tables, so no moves and no strings. */
+    /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
+     * are in its motion list with their inputs (fighterMotionList); the
+     * string panel is Sonic the Fighters'. */
     m.moves = null;
     $('#string-field').hidden = true;
     /* Start on the motion the game starts the body on, or another its
@@ -4878,19 +4880,21 @@ function renderBodyMotionPanel() {
     const sel = $('#motion-select');
     sel.innerHTML = '';
     const { fits, lead, label, every, groups, other } = bodyMotions(body);
-    const group = (label, list) => {
+    /* A group can tag its motions: a fighter's moves carry their input. */
+    const group = (label, list, tag) => {
         if (!list.length) return;
         const g = el('optgroup');
         g.label = label;
         for (const x of list) {
             const o = el('option');
             o.value = `id:${x.index}`;
-            o.textContent = `${x.name} · ${x.frames}f`;
+            const t = tag?.(x);
+            o.textContent = `${x.name} · ${x.frames}f${t ? ` · ${t}` : ''}`;
             g.appendChild(o);
         }
         sel.appendChild(g);
     };
-    if (groups) for (const g of groups) group(`${g.label} (${g.list.length})`, g.list);
+    if (groups) for (const g of groups) group(`${g.label} (${g.list.length})`, g.list, g.tag);
     else group(`${label} (${lead.length})`, lead);
     const rest = every ?? `Motions for ${body.joints} joints`;
     const others = other ?? `Every other motion for ${body.joints} joints`;
