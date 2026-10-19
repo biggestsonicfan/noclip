@@ -204,12 +204,22 @@ function walkScript(rom, at, visit) {
  * frame and stands at 001 again. What sets those bits is not traced; MAME's
  * attract demo never does, so chapter 2's two (Stage 2 set 5) stand at 001.
  *
- * Type 93 (PN_eneene00a) is one of four on 0x3E180; the others, 87, 88 and
- * 95, do other things and are left out. It closes as a prop does (0x3ED60),
- * steps +0x54 back to 0xD58 once the model it stepped from is past 0xD79, so
- * PN_eneene00a to 34a, thirty-five, and draws through 0x413B0. It also closes
- * once the zone's clock (0x51E51C) reaches 430, which the explorer, with no
- * clock inside a zone, leaves out: chapter 4's one (Stage 4 set 4) loops.
+ * Type 93 (PN_eneene00a) is one of four on 0x3E180. It closes as a prop does
+ * (0x3ED60), steps +0x54 back to 0xD58 once the model it stepped from is past
+ * 0xD79, so PN_eneene00a to 34a, thirty-five, and draws through 0x413B0. It
+ * also closes once the zone's clock (0x51E51C) reaches 430, which the
+ * explorer, with no clock inside a zone, leaves out: chapter 4's one (Stage 4
+ * set 4) loops.
+ *
+ * The other three on 0x3E180 stand as props. 95 (PN_sekom01a) draws through
+ * 0x413B0 and closes once the zone's clock passes 601 in section 0
+ * (0x51F350), or 338 in section 3, where it takes PN_sekom02a (0x16CF)
+ * instead. 87 (PN_st3_card01a) and 88 (PN_sousa00a) draw through 0x413B0
+ * and close as props do; past 311 on the clock 88 takes PN_sousa01a, and
+ * once a shot sets bit 1 or 2 of +0x58 (0x41890 clears them every frame)
+ * either is thrown about by 0x33B00's numbers for 20 frames. The clock and
+ * the shots are left out: chapter 3's three (Stage 3 set 8) and chapter 4's
+ * one (Stage 4 set 4) stand as spawned.
  *
  * Type 122 is not a prop but an item's spawner: its handler, 0x3C5A0, is
  * the routine a shot prop calls to drop a life (0x3A700), and it opens an
@@ -235,7 +245,7 @@ function walkScript(rom, at, visit) {
  * Records are keyed by their own address, because a script listed by two
  * sections is walked twice and would otherwise stand its props up twice.
  */
-function spawnProps(rom, at, set, out) {
+function spawnProps(rom, at, set, out, section) {
     const O = rom.game.objects;
     if (!O) return;
     const dv = rom.mainCpuView;
@@ -266,8 +276,11 @@ function spawnProps(rom, at, set, out) {
         const cycle = O.cycles?.find((c) => c.handler === handler && (!c.types || c.types.includes(type)));
         const spinner = O.spinners?.find((c) => c.handler === handler);
         const item = O.items?.find((c) => c.handler === handler);
-        if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item) continue;
-        const model = item ? item.model : dv.getUint32(O.table + type * O.stride + O.model, true);
+        const plain = O.plain?.find((c) => c.handler === handler && c.types.includes(type));
+        if (handler !== O.prop && !room4 && !cases && !clocked && !meat && !cycle && !spinner && !item
+            && !plain) continue;
+        const model = item ? item.model : plain?.sections?.[section]
+            ?? dv.getUint32(O.table + type * O.stride + O.model, true);
         if (!model || model >= rom.game.modelTable.count) continue;
         /* The size it is drawn at: the handler loads the type's float at
          * +0x28 into the task and hands it to the draw on all three axes --
@@ -719,7 +732,7 @@ export function readPlacementStages(rom) {
                         }
                         return;
                     }
-                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props); return; }
+                    if (SPAWN_OPS.has(op)) { spawnProps(rom, p, set, props, number); return; }
                     if (op !== OP_ZONE) return;
                     if (!groups.has(set)) {
                         groups.set(set, {

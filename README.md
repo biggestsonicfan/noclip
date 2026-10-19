@@ -697,7 +697,9 @@ their models, and so are chapter 1's three `PN_powa` props and chapter 4's
 `PN_eneene` prop; they loop here while animate is ticked. Chapter 3's two
 fans spin while animate is ticked, as they do once spawned, and chapter 2's
 breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
-hang still. Chapter 4's four life items stand in their corridor, as they do
+hang still. Chapter 3's `PN_st3_card01a`, `PN_sekom01a` and `PN_sekom02a`
+and chapter 4's `PN_sousa00a` stand as props.
+Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the
 `PN_powa` and `PN_eneene` props and slowing the second fan wait on flags that

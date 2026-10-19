@@ -6004,7 +6004,7 @@ the attract scene table pointed at chapter 2's section 12, a breakpoint on
 both closed as props do at clock 750.
 
 The ninth is type 93 on 0x3E180, `PN_eneene00a` (0xD58). The handler is shared
-with types 87, 88 and 95, which do other things and stay out. For 93 it closes
+with types 87, 88 and 95, which stand as props (below). For 93 it closes
 as a prop's does (0x3ED60), and closes (0x150D0) once the zone's clock
 (0x51E51C) reaches 430; then it steps +0x54 back to 0xD58 once the model it
 stepped from is past 0xD79, so it loops `PN_eneene00a` to `34a` (0xD58 to
@@ -6017,6 +6017,31 @@ section 0, a breakpoint on 0x413B0 for type 93): drawn 2075 times at (0, 18.9,
 0xD7A, the clock going from 197 to 429, and closed as the clock reached 430.
 The board's first draw is 0xD59, the handler having stepped once; the
 explorer's is the type's model.
+
+The other three on 0x3E180 are props. All three close as props do (0x3ED60)
+and draw the type's model through 0x413B0. Type 95 (`PN_sekom01a`, 0x16CE)
+also closes (0x150D0) once the zone's clock passes 601 while the section
+byte (0x51F350) is 0, or 338 while it is 3, and in section 3 it takes
+`PN_sekom02a` (0x16CF) before it draws. For types 87 (`PN_st3_card01a`,
+0x16D0) and 88 (`PN_sousa00a`, 0x1120), a model of 0x1120, so 88's, becomes
+0x1121 (`PN_sousa01a`) once the clock passes 311, and once a shot sets bit 1
+or 2 of +0x58 they queue the type's sound and are shaken by 0x33B00's numbers
+for 20 frames. 0x41890, called
+after the draw, clears those bits every frame. Chapter 3's section 0, script
+6 (0xF4194) spawns an 87 and a 95 (records 0xF57C0 and 0xF57F0), and section
+3 a 95 (0xF8F70), all Stage 3 · set 8. Chapter 4's section 0 spawns an 88
+(0xFBFE0), Stage 4 · set 4. The explorer stands all four as spawned, the
+third 95 as `PN_sekom02a`, the section that spawns it being the walk's own.
+The clock and the shots are left out. Checked in MAME (`hotdo`, the attract
+scene table pointed at each section, a breakpoint on both draws in
+0x3E180): in chapter 3's section 0, with script 1 pointed at script 6 because
+the demo does not reach it, the 87 at (-39, -24.7, 209), turn 0, and the 95
+as 0x16CE at (-38, -16.7, 209), turns 0, 0xA000 and 0x1300, each drawn 4022
+times; in section 3 the 95 as 0x16CF at (348.5, -183.5, 1010), turn 0x4000,
+1619 times; in chapter 4's section 0 the 88 as 0x1120 at (-87.7, 5, 325.9),
+turn 0, its clock closing before 311. All at scale 1. The demo's player
+shoots the 88, so MAME's draws are shaken about that place; the explorer
+draws it still.
 
 The tenth is type 122 on 0x3C5A0, whose own entry in the object table is
 empty (`PN_space`, scale 0). It is the routine a shot prop calls to drop a

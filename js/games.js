@@ -1879,6 +1879,10 @@ const hotdo = {
         /* Type 84, PN_niku_001, which stands as a prop on 0x3DE20 until bit 1
          * or 2 of its flags (+0x58) is set (see spawnProps). */
         meat: { handler: 0x3de20 },
+        /* The rest of 0x3E180, types 87, 88 and 95, which stand as props;
+         * 95 takes PN_sekom02a in section 3 (see spawnProps). */
+        plain: [{ handler: 0x3e180, types: [87, 88] },
+            { handler: 0x3e180, types: [95], sections: { 3: 0x16cf } }],
         /* Four props that step their model a frame (see spawnProps): type
          * 104 PN_kakaaa01a to 04a, type 108 PN_pushukeke00a to 49a, type 69
          * PN_powa00a to 29a and type 93 PN_eneene00a to 34a, each back to its
@@ -2350,6 +2354,7 @@ const hotd = {
         cases: null,
         clocked: null,
         meat: null,
+        plain: null,
         cycles: null,
         items: null,
     },
