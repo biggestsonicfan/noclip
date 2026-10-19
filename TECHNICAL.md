@@ -4376,6 +4376,105 @@ plates, portraits, the stage skies (named from `doa.sky`), the fight's
 messages, fonts, the rankings, endings, staff roll and title logos. The table
 is the same in every build.
 
+### Virtual-On (`js/von.js`, the `vonj` profile in `js/games.js`)
+
+Cyber Troopers Virtual-On is a Model 2B game like Sonic the Fighters, but it
+keeps none of the tables the others do. The tables below were found with
+MAME (`vonj`): Lua taps on the copro and geometrizer ports, and the texture
+RAM, colorxlat and luma RAM saved at each field's start, then compared with
+what the explorer builds from the ROMs. The routine names are the ones in
+rokuYAMP's `docs/von-rom-symbols.md`. Addresses are `vonj`'s; `vonu` has its
+program tables 0x610 to 0xC30 further on, and the profile lists its own.
+
+`vonj.zip` holds only the program pair (`epr-18664b.15`, `epr-18665b.16`);
+the second program megabyte and the data, polygon and texture ROMs come from
+the parent `von.zip`, as MAME loads them. The loader finds each chip by CRC,
+so the two zips can be dropped together.
+
+**Models.** There is no model table. Each piece is sent to the geometrizer
+as an object: command 1 (`0x800010`), then three words to `0x804000`, the
+texture point pointer, the header pointer and the mesh pointer. So
+`scanModelTable` (`js/romset.js`) makes a table, one entry a mesh. The
+meshes lie end to end from polygon word 0 (40-byte records up to one whose
+attribute word, at +24, has its low two bits clear; the next mesh starts 3
+words before that record ends), up to the 0xFFFFFFFF fill at word 0x3EE7F1:
+7097 meshes, all of which decode (569,414 triangles). The data and program
+ROMs keep many of the triples as aligned runs of three words, so the scan
+looks there for (tpa, tha, 0x800000 | mesh start) with the first two under
+0x800000. 5860 meshes have one, and the 2166 MAME's attract draws all agree.
+A scan of the code's immediates for the rest was too noisy to use. The other
+1237 are chained from the mesh before: their points start where its headers
+end, and their headers where their own points end. That holds for 92% of
+the pairs that both have a triple. The triples the stage code sends are
+exact, so `addModelTriples` puts them in over the chained ones and chains
+again; that fixes models 1331, 1430 and 1431, whose chained pointers were 8
+bytes out.
+
+**Textures.** `LoadTextureLZ` (0x281F0) unpacks banks with an LZ routine at
+0x27E50 (a 0xFEE window). The boot bank starts at data 0xC00008, and the
+other banks are listed at program 0x280C0. Each unpacked halfword goes to
+the same place in one of the two texture sheets: the first 0x60000 go to
+the first sheet, and past that the 512-byte table at 0x27C50 (read at
+0x2801C) picks the sheet by the low and high byte of the index. The mip
+levels live on the other sheet. A field loads the boot bank, bank 0, then
+its own bank, from the table at 0xC8ED0 (one u32 a field, read at 0xC8FB4:
+0, 0, 2, 1, 2, 1, 3, 3, 4, 4, 4, 4, 4, 4). Field 13 loads none and keeps
+what was there before; in MAME's attract that is field 3's bank 1, so the
+explorer gives it bank 0 (`keepBank0`). Fields 0, 2, 3, 4 and 5 match MAME's
+texture RAM byte for byte.
+
+**Palette.** The boot copies the face palette out of the program ROM; the
+`ldos` at 0x29A98 points at it (0xF48D0). Entries 8-31 are cycled by the
+records at data 0xBF83C4 (a shift, a mask and a pointer to the colours);
+the explorer shows the first colour of each.
+
+**Luma.** `MakeRGBTable` (0x28840) writes two grey ramps of 128, then 0x2080
+bytes from data 0xFB1D10 at entry 0x800. It matches MAME exactly.
+
+**Colorxlat.** `MakeRampIntensityTable` (0xE1E00) builds a grey curve, and
+`RampSet` (0xE2330), through `SetRampRGB_TBL` (0xE1F20), `_URA` (0xE1FB0)
+and `_BOTH` (0xE2040), puts rows of 64 RGB triples into it. The rows every
+field has, and each field's own, are listed in the profile (`colors.von`)
+as row number and source address; `InitRampSet` (0xE2130) loads them. The
+robots' rows (1, 3 for player 1; 5, 7 for player 2) come from
+`SetRoboRamp` (0xE2120) and the table at 0x142E94, by robot and costume.
+The explorer's grey curve is the game's with a gamma of 0.55. Against
+MAME's captures the only rows that differ are the robots' (which depend on
+the attract's picks) and leftovers in the back half from the field before.
+
+**Lighting.** `TGPInitialFunc` (0x294B0) uploads 32 material slots of 8
+bytes from 0x293B0 with geometry function 6 (0x292D8). Each field's light
+is three floats at 0x142FD4 + 12 * field, which `initField` stores at
+0xC9030 into `g_light` (0x577100). Field 0's is (-0.296198, -0.5,
+-0.813798), and the Models tab uses it.
+
+**Stages.** The field number is at 0x5770F0. The table at 0xC8E10 has three
+routines a field: the one `initField` (0xC8FA0) calls once, the floor's,
+which `execFieldFloor` (0xC8F10) calls each frame with the frame count
+(0x577114), and the rest's, which `execField` (0xC8F60) calls. `js/von.js`
+runs them on `js/i960.js` with the copro and geometrizer of `js/doa.js`,
+for two frames, and keeps the last frame's draws. The copro takes the same
+commands as Dead or Alive's (5 push, 6 pop, 0x12 translate, 0x14-0x16
+turns) and two more:
+
+- 0x3A, with one word, the geometrizer list address (0x802008): the copro
+  writes its matrix into the list, and the pieces after it draw under it;
+- 0x2A, with one float, a scale on all three axes. Fields 3 and 4 draw their
+  floors (0xC6EB0, 0xC7120) at 2.
+
+No other command comes up. The pieces each field draws: 0: 4, 1: 19, 2: 2,
+3: 4, 4: 10, 5: 4, 6: 5, 7: 10, 8: 6, 9: 7, 10: 10; 11 and 12 draw nothing,
+and 13 runs 10's routines, so it is left out. The names are the strings the
+fight's start prints, 18 bytes each, from `lda 0x21060[field * 18]`
+(0x21EE4): Airport, Death Trap, Waterfront, Green Hills, Ruins, Space Dock,
+Moon Base, Flooded City, Nirvana and Secret Base.
+
+What this leaves out: Green Hills draws its sky and no floor, Space Dock
+and Moon Base only a few small pieces, Nirvana a tube and Flooded City a
+plane and its backdrop. The rest of those fields is probably drawn by code
+that follows the camera or culls, which is not run. The robots are not
+posed.
+
 ### The House of the Dead's cells (`js/cells.js`)
 
 The finished game (`hotdo`) keeps its 2D art in Dead or Alive's shape a year
