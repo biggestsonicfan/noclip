@@ -4210,6 +4210,51 @@ unused cells (19, 38, 68, 83, 146 to 150, 153, 154, 259) are records no
 aligned word in the program or data ROM points at; some of them show only
 jumbles on every CG listed, so the CG they were made for is not among them.
 
+### Virtua Cop's cells (`js/cells.js`)
+
+Virtua Cop (Revision B) uses the same tile chip with a record of its own:
+u16 columns, u16 rows, then a halfword entry per tile, written onto 0x80-byte
+tilemap rows. This is the shape of Dead or Alive's maps, so `pictureHeader`
+reads both. The draw, `0x55A0`, takes the record in g0, the tilemap address
+in g1, and in g2 a halfword it adds to every entry. `0x5610` is the same but
+skips zero entries. `0x5690` fills; `0x56F0` and `0x5A30` draw text and are not
+cells. The bases the callers pass (`cells.base`, `cells.bases`):
+
+- 0x8000 for most records;
+- 0xC000 only, for 0x28022E8, 0x2802300, 0x2807D70 and 0x2807DA0;
+- 0 for the sky 0x2803790, the sea 0x2802F00, 0x2810C40 and 0x2811150;
+- both 0x8000 and 0xC000 for 0x2802A10, 0x2807DC0 and 0x2808640, and 0x8000
+  and 0x4000 (`0x67080`) for 0x2812C90. The profile keeps 0x8000 for them.
+
+The records lie end to end in two runs, with zero halfwords padding some of
+them out (`cells.sized` skips the padding). [0x28022E8, 0x28113D4) holds 225
+records and starts exactly where the boot palette's 52 runs from 0x2801C00 end.
+[0x28114D0, 0x28143D4) holds 57 more, 282 cells in all. Most callers name a
+record directly with `lda`. `0x6E50` to `0x6E74` read lists at 0x28149C0,
+0x2814A10, 0x2814A20 and 0x2814A30 (a count, then {record, column, row}), and
+`0x59BD4` reads 0x2839830 by stage. Because the displacements are aligned
+words, the unused search works as it does elsewhere: 68 records are named by no
+aligned word in the program or data ROM.
+
+There are no CG lists. The boot, `0x49B0`, fills the chip itself, and
+`cells.boot` repeats it in order:
+
+- characters: `0x4A38` copies 0x2400000 into characters 0x80 to 0x37FF;
+  `0x4AA8` copies 0x28E0000 over 0x3300 to 0x3FFF. Both swap the bytes of each
+  halfword. `0x5080` expands a 1-bit font into characters 0 to 0x7F. No record
+  names 1 to 0x7F and character 0 is blank, so this step is left out;
+- palette: `0x4B10` writes runs from 0x2801C00 (a count, then 16 colours,
+  written that many times) into groups 1 onwards until 0x7F are done. Then
+  0x2814780 goes into group 0x2B, groups 1 to 0x7F are copied to 0x81 to 0xFF,
+  0x2814680 goes into 0x81 to 0x83, 0x28146A0 into 0x84, 0x28148A0 into 0xAE
+  and 0x28148C0 into 0xAF. `0x4CE0` writes the 6 runs at 0x28113E0 into 0x66
+  onwards and again into 0xE6 onwards, and 0x2814940 goes into 0xFB to 0xFF.
+
+The stage start writes 16 colours into group 0x10, the sky's, from the address
+at 0x2814990 + stage × 4. So the Cells tab has four CGs: the boot's, and one per stage with
+that stage's sky colours. Every cell has one that writes every tile it names.
+The colours go through Daytona's colorxlat (`cells.colorxlat`).
+
 ### Dead or Alive's pictures (`js/cells.js`)
 
 The 2D art is not Sonic The Fighters' cells and CGs: each picture brings its

@@ -3226,6 +3226,65 @@ const VCOP_SOUND = {
     after: { song: { 0: [0xBE, 0x21, 0x01], 1: [0xBE, 0x21, 0x02], 2: [0xBE, 0x21, 0x03] } },
 };
 
+/*
+ * The 2D pictures (js/cells.js): the title, the HUD, the gun and life marks,
+ * the rankings, the stage's sky. The draw is 0x55A0 (0x5610 the same but for
+ * skipping zero entries): the record's address in g0, the tilemap's in g1
+ * and in g2 a halfword it adds to every entry. The record is the width and
+ * the height as halfwords, then halfword entries row by row onto 0x80-byte
+ * tilemap rows. Nothing indexes the records; they lie end to end in two runs
+ * of the data ROM (`records`), some with zero halfwords between them, and a
+ * cell is its place in those runs. Every record a call names is a record
+ * start. The first run starts where the boot palette's runs (0x2801C00) end
+ * and stops at the second palette's (0x28113E0); the second stops at the
+ * pointer 0x28143E0.
+ *
+ * Most calls add 0x8000 (`base`). Bit 15 picks no colour, so a 0 is drawn
+ * the same; bit 14 moves the palette group on by 0x80. `bases` are the
+ * records every call draws with something other than 0x8000. Three records
+ * are drawn both ways and take 0x8000 here: 0x2802A10, 0x2807DC0 and
+ * 0x2808640 with 0xC000 as well, and 0x2812C90 with 0x4000 (0x67080).
+ *
+ * The boot (0x49B0) fills the tile chip once. 0x4A38 copies 0x2400000 into
+ * characters 0x80 to 0x37FF and 0x4AA8 0x28E0000 into 0x3300 to 0x3FFF, each
+ * halfword's bytes swapped. 0x4B10 and 0x4CE0 build the palette: runs from
+ * 0x2801C00 into groups 1 on until 0x7F groups are written, group 0x2B from
+ * 0x2814780, groups 1-0x7F copied to 0x81-0xFF, then 0x2814680 over 0x81-0x83,
+ * 0x28146A0 over 0x84, 0x28148A0 and 0x28148C0 over 0xAE and 0xAF, six runs
+ * from 0x28113E0 into 0x66 on and again into 0xE6 on, and 0x2814940 over
+ * 0xFB-0xFF. 0x5080 also draws a 1-bit font into characters 0-0x7F, which no
+ * record names, so it is left out. The stage start puts the stage's own
+ * sixteen colours (`stages.table`) into group 0x10, the sky's (js/vcopsky.js).
+ * So CG 0 is the boot, and CGs 1 to 3 are the boot with each stage's group.
+ */
+const VCOP_CELLS = {
+    sized: true,
+    records: [[0x028022e8, 0x028113d4], [0x028114d0, 0x028143d4]],
+    base: 0x8000,
+    bases: {
+        [0x028022e8]: 0xc000, [0x02802300]: 0xc000, [0x02807d70]: 0xc000, [0x02807da0]: 0xc000,
+        [0x02802f00]: 0, [0x02803790]: 0, [0x02810c40]: 0, [0x02811150]: 0,
+    },
+    boot: {
+        chars: [[0x02400000, 0x80, 0x3780], [0x028e0000, 0x3300, 0xd00]],
+        palette: [
+            { runs: 0x02801c00, group: 1, until: 0x7f },
+            { colours: 0x02814780, group: 0x2b, groups: 1 },
+            { copy: [1, 0x81, 0x7f] },
+            { colours: 0x02814680, group: 0x81, groups: 3 },
+            { colours: 0x028146a0, group: 0x84, groups: 1 },
+            { colours: 0x028148a0, group: 0xae, groups: 1 },
+            { colours: 0x028148c0, group: 0xaf, groups: 1 },
+            { runs: 0x028113e0, group: 0x66, lists: 6 },
+            { runs: 0x028113e0, group: 0xe6, lists: 6 },
+            { colours: 0x02814940, group: 0xfb, groups: 5 },
+        ],
+        stages: { table: 0x02814990, group: 0x10, count: 3 },
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
 const vcop = {
     ...daytonaBuild({
         id: 'vcop',
@@ -3310,7 +3369,8 @@ const vcop = {
     patches: [],
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
     stageTable: { flat: true, segments: { at: 0x28390d0, count: 4 } },
-    features: { stages: true, characters: false, motions: false, bodies: false },
+    cells: VCOP_CELLS,
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Virtua Fighter 2 ----------------------------------------------------- */

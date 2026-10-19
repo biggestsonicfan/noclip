@@ -11,7 +11,7 @@ views below are its. *Fighting Vipers* has stages, models and motions — see
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
-stages and its models — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
+stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive).
 
@@ -454,7 +454,7 @@ upload of 1007.
 
 ## Virtua Cop
 
-`vcop.zip` (Revision B) loads with both tabs. Virtua Cop is Daytona USA's
+`vcop.zip` (Revision B) loads with the Stages, Models and Cells tabs. Virtua Cop is Daytona USA's
 library a year on — the texture-bank upload, the colorxlat and luma builds and
 the material upload are Daytona's routines instruction for instruction, with
 their tables moved into the data ROM — so it is a Daytona profile with its own
@@ -498,6 +498,20 @@ The game builds no models in RAM. Entries 0x4D2 on (crate shadows, the WHARF
 sign, the stage 3 panels) are ROM meshes in a second table at 0x8693F0, and the
 explorer draws them. In MAME, on all three stages, every object the board draws
 points at polygon ROM, and the game never writes polygons into RAM.
+
+The **Cells** tab has the game's 2D art: the title logos, the instruction
+panels in Japanese and English, the detective badge, CONTINUE?, GAME OVER,
+RELOAD, the stage select, NAME ENTRY and RANKING, the boss lines, the
+AM2 and SEGA logos, the EPA notice, and the fonts. There are 282 cells, each drawn
+on the CGs the game builds: the boot's (its tiles, its palette in the order the
+boot writes it) and one for each stage, which puts that stage's sky colours in
+the sky's group. Every cell has a CG that writes every tile it names. No aligned
+word in the program or data ROM names 68 of them, so they are marked unused,
+and searching for `unused` lists only those. The cells are records in the
+data ROM: columns, rows, then a halfword per tile. The draw adds a halfword
+to every entry: 0x8000 for most of them, 0xC000 for some, and 0 for the sky
+and the sea. See `VCOP_CELLS` in [`js/games.js`](js/games.js) and [Virtua
+Cop's cells](TECHNICAL.md#virtua-cops-cells-jscellsjs).
 
 ## Virtua Fighter 2
 
