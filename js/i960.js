@@ -117,8 +117,9 @@ const REAL = {
     0x6c2: { kind: 'toi', f: Math.trunc }, 0x6c3: { kind: 'toi', long: true, f: Math.trunc },
     0x6c9: { kind: 'un', f: (a) => a }, 0x6d9: { kind: 'un', long: true, f: (a) => a },
     0x6e1: { kind: 'un', long: true, f: (a) => a }, 0x6e9: { kind: 'un', long: true, f: (a) => a },
-    /* cpysre: src1's size, under the sign src2 does not have. */
-    0x6e2: { kind: 'bin', long: true, f: (a, b) => (b < 0 || Object.is(b, -0) ? Math.abs(a) : -Math.abs(a)) },
+    /* cpysre: src1's size under src2's sign (MAME i960.cpp, `t2f >= 0.0`). The
+     * compiler's fabs is cpysre x, 0f0.0. cpyrsre (0x6e3) is the reversed one. */
+    0x6e2: { kind: 'bin', long: true, f: (a, b) => (b >= 0 ? Math.abs(a) : -Math.abs(a)) },
     0x78b: { kind: 'bin', f: (a, b) => b / a }, 0x79b: { kind: 'bin', long: true, f: (a, b) => b / a },
     0x78c: { kind: 'bin', f: (a, b) => b * a }, 0x79c: { kind: 'bin', long: true, f: (a, b) => b * a },
     0x78d: { kind: 'bin', f: (a, b) => b - a }, 0x79d: { kind: 'bin', long: true, f: (a, b) => b - a },
