@@ -473,7 +473,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         tx = 0; ty = 0; tw = 0; th = 32;
         lumaBase = -1;
         faceFlags = 0;
-        let textured = false;
+        let textured = false, untexTrans = false;
         rgb[0] = 0.7; rgb[1] = 0.7; rgb[2] = 0.7;
 
         if (haveMat) {
@@ -489,9 +489,11 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                 lumaBase = (th1 & 0xff) << 7;
                 textured = (th0 & 0x4000) !== 0;
                 /* Bits 14 and 13 select the renderer: textured, and
-                 * transparent. Sonic The Fighters never uses the untextured
-                 * transparent one, which the board would not draw at all. */
+                 * transparent. The untextured transparent one draws nothing
+                 * (model2rd.ipp: "if it's translucent, there's nothing to
+                 * render"); its face still sets the z the next one may take. */
                 if (textured && (th0 & 0x2000) !== 0) faceFlags |= 1;
+                untexTrans = !textured && (th0 & 0x2000) !== 0;
                 if (th0 & 0x8000) faceFlags |= 2;
                 const texw = 32 << (th0 & 7);
                 const texh = 32 << ((th0 >> 3) & 7);
@@ -605,6 +607,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         faceFlags |= zMode << 5;
         if (((att[fi] >>> 17) & 1) || !faceN) faceFlags |= 128;
         facePt = hasC ? C : A;
+        if (untexTrans) continue;
 
         if (triCnt || !hasC || !hasD) {
             if (hasC) {
