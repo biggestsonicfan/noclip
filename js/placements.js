@@ -1412,6 +1412,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         ...(d.extra ? { extra: d.extra } : {}),
         ...(d.unless ? { unless: d.unless } : {}),
         ...(d.live ? { live: d.live } : {}),
+        /* Out of the face layering: Sega Rally's sky, a dome 400000 across. */
+        ...(d.layered === false ? { layered: false } : {}),
         /* A draw that carries its own transform keeps it — Virtua Cop's,
          * three turns each (js/vcop.js). */
         ops: d.ops ?? [['t', [d.pos[0], d.pos[1], -d.pos[2]]],
