@@ -303,7 +303,7 @@ const JA_PAGE = {
     'tool.report.title': 'この瞬間の様子を集めてコピーし、新しい issue を開きます（issue は英語でお願いします）',
     'tool.shot': 'ビューのスクリーンショットを保存',
     'tool.export.title': 'ビューにあるモデルを、このフレームで .glb としてエクスポート'
-        + '（Blender：ファイル &gt; インポート &gt; glTF 2.0）',
+        + '（Blender：ファイル &gt; インポート &gt; glTF 2.0。色を見るには Z &gt; マテリアルプレビュー）',
     'tool.export': 'ビューにあるモデルを .glb としてエクスポート',
     'tool.repo': 'GitHub のリポジトリ',
 };
