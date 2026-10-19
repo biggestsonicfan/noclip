@@ -92,6 +92,15 @@ const COMPARES = {
     0x5a7: (a, b) => [compare(a | 0, b | 0), b - 1],
 };
 
+/* Round to nearest, ties to even: the i960's default rounding mode (AC bits
+ * 30-31 clear), as m2-hle2's `i960_round_ac`. Math.round sends ties up. */
+const roundEven = (v) => { const r = Math.round(v); return r - v === 0.5 && r % 2 !== 0 ? r - 1 : r; };
+
+/* A real converted to a word: out of range (or NaN) gives the integer
+ * indefinite, 0x80000000, not the low bits. */
+const toWord = (v) => (v > -2147483649 && v < 2147483648 ? v | 0 : 0x80000000);
+const toLong = (v) => (v >= -(2 ** 63) && v < 2 ** 63 ? BigInt.asUintN(64, BigInt(v)) : 1n << 63n);
+
 /* Branch masks: the low three bits of a conditional op. */
 const taken = (cc, mask) => (mask ? (cc & mask) !== 0 : cc === 0);
 
@@ -107,13 +116,13 @@ const REAL = {
     0x684: { kind: 'cmp' }, 0x685: { kind: 'cmp' },
     0x694: { kind: 'cmp', long: true }, 0x695: { kind: 'cmp', long: true },
     0x688: { kind: 'un', f: Math.sqrt }, 0x698: { kind: 'un', long: true, f: Math.sqrt },
-    0x68b: { kind: 'un', f: Math.round }, 0x69b: { kind: 'un', long: true, f: Math.round },
+    0x68b: { kind: 'un', f: roundEven }, 0x69b: { kind: 'un', long: true, f: roundEven },
     0x68c: { kind: 'un', f: Math.sin }, 0x69c: { kind: 'un', long: true, f: Math.sin },
     0x68d: { kind: 'un', f: Math.cos }, 0x69d: { kind: 'un', long: true, f: Math.cos },
     0x68e: { kind: 'un', f: Math.tan }, 0x69e: { kind: 'un', long: true, f: Math.tan },
     0x680: { kind: 'bin', f: (a, b) => Math.atan2(b, a) },
     0x690: { kind: 'bin', long: true, f: (a, b) => Math.atan2(b, a) },
-    0x6c0: { kind: 'toi', f: Math.round }, 0x6c1: { kind: 'toi', long: true, f: Math.round },
+    0x6c0: { kind: 'toi', f: roundEven }, 0x6c1: { kind: 'toi', long: true, f: roundEven },
     0x6c2: { kind: 'toi', f: Math.trunc }, 0x6c3: { kind: 'toi', long: true, f: Math.trunc },
     0x6c9: { kind: 'un', f: (a) => a }, 0x6d9: { kind: 'un', long: true, f: (a) => a },
     0x6e1: { kind: 'un', long: true, f: (a) => a }, 0x6e9: { kind: 'un', long: true, f: (a) => a },
@@ -285,13 +294,26 @@ export class I960 {
             this.r[dst] = Number(p & 0xffffffffn);
             this.r[dst + 1] = Number(p >> 32n);
         } else if (opc === 0x645 || opc === 0x654 || opc === 0x655 || opc === 0x66b || opc === 0x66c
-            || opc === 0x66d || opc === 0x66f || opc === 0x5b0 || opc === 0x5b2) {
-            /* Process controls, trace marks and the carry ops: nothing here needs them. */
-            if (opc === 0x5b0) this.r[dst] = b + a;
-            if (opc === 0x5b2) this.r[dst] = b - a - 1;
+            || opc === 0x66d || opc === 0x66f) {
+            /* Process controls and trace marks: nothing here needs them. */
+        } else if (opc === 0x5b0 || opc === 0x5b2) {
+            this.carryOp(opc, a, b, dst);
         } else {
             this.unknown(ip, w);
         }
+    }
+
+    /* addc and subc take the carry in, cc bit 1, and leave the carry out
+     * there and the overflow in bit 0 (MAME i960.cpp: addc keeps bit 2, subc
+     * clears it). subc is src2 + ~src1 + carry. */
+    carryOp(opc, a, b, dst) {
+        const sub = opc === 0x5b2;
+        const t1 = (sub ? ~a : a) >>> 0, t2 = b >>> 0;
+        const res = t2 + t1 + ((this.cc >>> 1) & 1);
+        const r = res >>> 0;
+        this.r[dst] = r;
+        const ovf = sub ? ((t2 ^ a) & (t2 ^ r)) >>> 31 : ((r ^ a) & (r ^ t2)) >>> 31;
+        this.cc = (sub ? 0 : this.cc & 4) | (res > 0xffffffff ? 2 : 0) | ovf;
     }
 
     scanBits(opc, a, dst) {
@@ -332,10 +354,10 @@ export class I960 {
         if (R.kind === 'toi') {
             const v = R.f(this.realIn(s1, m1, long));
             if (long) {
-                const big = BigInt.asUintN(64, BigInt(Number.isFinite(v) ? v : 0));
+                const big = toLong(v);
                 this.r[dst] = Number(big & 0xffffffffn);
                 this.r[dst + 1] = Number(big >> 32n);
-            } else this.r[dst] = v | 0;
+            } else this.r[dst] = toWord(v);
             return;
         }
         const a = this.realIn(s1, m1, long);
