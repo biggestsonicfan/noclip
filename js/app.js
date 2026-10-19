@@ -4,6 +4,7 @@
 
 import { loadRomSet, meshOffsetOf, readModelEntry, readModelName, setRomPatches } from './romset.js';
 import { GAMES } from './games.js';
+import { t } from './lang.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
 import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, BOARD_H, BOARD_FOCAL } from './skyeye.js';
@@ -304,8 +305,8 @@ async function bootWithBuffers(buffers) {
      * has — but the view is that build's and means nothing against another. */
     if (state.link && state.link.game !== state.rom.game.id) {
         const want = GAMES.find((g) => g.id === state.link.game)?.name ?? state.link.game;
-        showLinkNote(`The link was for ${want}, but these zips are ${state.rom.game.name} — `
-            + `opened on the default view instead.`);
+        showLinkNote(t('The link was for {want}, but these zips are {game} — opened on the default view instead.',
+            { want, game: state.rom.game.name }));
         state.link = null;
     }
     /* Kept separate from the ROM decode: a failure in here is a renderer
@@ -313,7 +314,7 @@ async function bootWithBuffers(buffers) {
     try {
         start();
     } catch (err) {
-        return failToLoad(err, 'the ROM set loaded, but the 3D view could not start');
+        return failToLoad(err, t('the ROM set loaded, but the 3D view could not start'));
     }
 }
 
@@ -329,16 +330,14 @@ async function bootWithBuffers(buffers) {
  */
 function romHint(err) {
     if (err.prepared) {
-        return `the set is the right one; the viewer has its chip list but not yet `
-            + `what it needs to draw it`;
+        return t('the set is the right one; the viewer has its chip list but not yet what it needs to draw it');
     }
     if (err.game) {
-        return `that chip is in another zip of this set — a MAME clone carries only `
-            + `the chips that are its own and keeps the rest in the parent, so drop `
-            + `the parent's zip on as well`;
+        return t('that chip is in another zip of this set — a MAME clone carries only the chips that are its own '
+            + 'and keeps the rest in the parent, so drop the parent\'s zip on as well');
     }
-    return `check that these are the ROM zips of a game the viewer knows: `
-        + `${GAMES.map((g) => g.name).join(', ')}`;
+    return t('check that these are the ROM zips of a game the viewer knows: {games}',
+        { games: GAMES.map((g) => g.name).join(', ') });
 }
 
 /*
@@ -452,14 +451,14 @@ function failToLoad(err, hint) {
     console.error(err);
     $('#loader').hidden = false;
     $('#app').hidden = true;
-    $('#loader-error').textContent = `${err.message || err} — ${hint}.`;
+    $('#loader-error').textContent = `${t(err.message || String(err))} — ${hint}.`;
     $('#loader-error').hidden = false;
     $('#loader-progress').hidden = true;
     $('#loader-bar').style.width = '0';
 }
 
 async function readRomFiles(zips) {
-    setStatus(`reading ${zips.map((f) => f.name).join(', ')}…`, 0);
+    setStatus(t('reading {files}…', { files: zips.map((f) => f.name).join(', ') }), 0);
     /* Kept for a bug report: which archives a set was assembled out of is
      * half of what it takes to reproduce one. Names and sizes only — a
      * File gives no path, and none of the bytes are held here. */
@@ -467,7 +466,7 @@ async function readRomFiles(zips) {
     try {
         bootWithBuffers(await Promise.all(zips.map((f) => f.arrayBuffer())));
     } catch (err) {
-        failToLoad(err, 'the file could not be read');
+        failToLoad(err, t('the file could not be read'));
     }
 }
 
@@ -488,13 +487,13 @@ function routeDroppedFiles(files) {
          * bypasses it, so the gate is checked here too. */
         if (!$('#loader-ack').checked) {
             $('#loader-error').textContent =
-                'Tick the acknowledgement above before loading a ROM set.';
+                t('Tick the acknowledgement above before loading a ROM set.');
             $('#loader-error').hidden = false;
             return;
         }
         if (zips.length) readRomFiles(zips);
         else {
-            $('#loader-error').textContent = 'That is not a .zip — drop the ROM set archive.';
+            $('#loader-error').textContent = t('That is not a .zip — drop the ROM set archive.');
             $('#loader-error').hidden = false;
         }
         return;
@@ -504,7 +503,7 @@ function routeDroppedFiles(files) {
     if (zips.length && !rest.length) {
         /* Re-initialising the whole viewer in place is more trouble than it is
          * worth; a reload is one keystroke. */
-        $('#tex-status').textContent = 'ROM set already loaded — reload the page to switch it.';
+        $('#tex-status').textContent = t('ROM set already loaded — reload the page to switch it.');
     }
 }
 
@@ -628,7 +627,7 @@ function useRomTexram(texSets, fighters) {
 
     const status = $('#tex-status');
     if (status) {
-        status.textContent = `sheets unpacked from ROM (sets ${texSets.join(', ')})`;
+        status.textContent = t('sheets unpacked from ROM (sets {sets})', { sets: texSets.join(', ') });
         status.title = 'js/texture.js — the game\'s own unpack routines, ported';
     }
 }
@@ -727,7 +726,7 @@ async function loadTexramFiles(files) {
     const bins = [...files].filter((f) => !f.name.toLowerCase().endsWith('.zip'));
     if (!bins.length) return;
     const status = $('#tex-status');
-    status.textContent = 'decoding sheets…';
+    status.textContent = t('decoding sheets…');
     try {
         const parts = classifyDump(bins);
         const read = async (f) => (f ? new Uint8Array(await f.arrayBuffer()) : null);
@@ -738,9 +737,8 @@ async function loadTexramFiles(files) {
          * failing, so say so instead of reporting a successful load of
          * nothing. */
         if (!(s0?.length >= SHEET_BYTES) && !(s1?.length >= SHEET_BYTES)) {
-            status.textContent =
-                `no 1 MB texture sheet among those ${bins.length} file(s) — ` +
-                'expected texram0 / texram1';
+            status.textContent = t('no 1 MB texture sheet among those {n} file(s) — expected texram0 / texram1',
+                { n: bins.length });
             return;
         }
 
@@ -764,12 +762,12 @@ async function loadTexramFiles(files) {
 
         $('#tex-drop').classList.add('loaded');
         status.textContent = state.lutsPinned
-            ? `atlas + colour tables from the dump (${loaded.length} files)`
-            : `atlas from the dump, colour tables still built from ROM`;
+            ? t('atlas + colour tables from the dump ({n} files)', { n: loaded.length })
+            : t('atlas from the dump, colour tables still built from ROM');
         status.title = loaded.join(', ');
     } catch (err) {
         console.error(err);
-        status.textContent = `could not read that dump: ${err.message || err}`;
+        status.textContent = t('could not read that dump: {err}', { err: err.message || err });
     }
 }
 
@@ -810,8 +808,8 @@ function renderStageExtras(stage) {
     for (const x of stage.extras ?? []) {
         const row = el('label', 'layer', `<input type="checkbox" ${extraOn(stage, x.key) ? 'checked' : ''}>
              <span></span>`);
-        row.title = x.title;
-        row.querySelector('span').textContent = x.label;
+        row.title = t(x.title);
+        row.querySelector('span').textContent = t(x.label);
         row.querySelector('input').addEventListener('change', (e) => {
             state.extraOn[x.key] = e.target.checked;
             loadStage(state.stageIndex, { keepCamera: true, keepClock: true });
@@ -1359,9 +1357,10 @@ function useModelScene(idx, fighter = modelFighter(idx)) {
             const status = $('#tex-status');
             const why = describeTextureGuess(guess);
             if (status && guess.how === 'untextured') {
-                status.textContent = 'the model samples no texture';
+                status.textContent = t('the model samples no texture');
             } else if (status && set != null) {
-                status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
+                status.textContent = why ? t('sheets unpacked from ROM ({why})', { why })
+                    : t('sheets unpacked from ROM (set {set})', { set });
             }
         }
         /* Where one set number is the sheets, the palette and the colour tables
@@ -1718,7 +1717,7 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
     if (partSets.size) {
         const status = $('#tex-status');
         const sets = [...partSets].sort((a, b) => a - b).join(', ');
-        if (status) status.textContent = `sheets unpacked from ROM (sets ${sets}, one per part)`;
+        if (status) status.textContent = t('sheets unpacked from ROM (sets {sets}, one per part)', { sets });
     }
     applyFaceLayers(layered);
     applyWireVisibility();
@@ -3390,7 +3389,7 @@ function useDoaFighterScene(body) {
     useRomTexram([A.stage], fighters);
     useRomColorLuts({ texSet: [A.stage, A.stage], tint: [1, 1, 1], fighters });
     const status = $('#tex-status');
-    if (status) status.textContent = `sheets unpacked from ROM (${body.name}'s, and stage ${A.stage}'s set)`;
+    if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
 function bodySceneModel(body) {
@@ -4423,18 +4422,18 @@ function renderStagePanel(stage, counts, totals, list) {
     /* A stage built from placements has no record fields to show, and says what
      * it was assembled from instead. */
     $('#stage-meta').innerHTML = stage.meta ? `
-        ${stage.meta.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('')}
-        <span>draws</span><b>${list.length}</b>
-        <span>triangles</span><b>${totalTris.toLocaleString()}</b>
+        ${stage.meta.map(([k, v]) => `<span>${t(k)}</span><b>${v}</b>`).join('')}
+        <span>${t('draws')}</span><b>${list.length}</b>
+        <span>${t('triangles')}</span><b>${totalTris.toLocaleString()}</b>
     ` : `
         <span>stage_NUM</span><b>${stage.num}</b>
         <span>flags</span><b>0x${stage.flags.toString(16).toUpperCase()}</b>
-        <span>floor size</span><b>${stage.floorSize.toFixed(3)}</b>
-        <span>texture set</span><b>${stage.texSet[0]}</b>
-        <span>colour block</span><b>${stage.texSet[1]}</b>
-        <span>brightness</span><b>${stage.bright.toFixed(2)}</b>
-        <span>draws</span><b>${list.length}</b>
-        <span>triangles</span><b>${totalTris.toLocaleString()}</b>
+        <span>${t('floor size')}</span><b>${stage.floorSize.toFixed(3)}</b>
+        <span>${t('texture set')}</span><b>${stage.texSet[0]}</b>
+        <span>${t('colour block')}</span><b>${stage.texSet[1]}</b>
+        <span>${t('brightness')}</span><b>${stage.bright.toFixed(2)}</b>
+        <span>${t('draws')}</span><b>${list.length}</b>
+        <span>${t('triangles')}</span><b>${totalTris.toLocaleString()}</b>
     `;
 
     /* Only a stage with a prologue has two framings to choose between; on the
@@ -4449,12 +4448,12 @@ function renderStagePanel(stage, counts, totals, list) {
     if (views) {
         const viewSelect = $('#view-select');
         viewSelect.innerHTML = '';
-        for (const [value, label] of views) viewSelect.add(new Option(label, value));
+        for (const [value, label] of views) viewSelect.add(new Option(t(label), value));
         viewSelect.value = stageView(stage);
-        $('#view-label').textContent = stage.zones ? 'Zone' : 'Blocks drawn';
+        $('#view-label').textContent = t(stage.zones ? 'Zone' : 'Blocks drawn');
     }
     if (rides) {
-        $('#ride-label').textContent = (!stage.flat && RIDE_LABEL[stage.slot]) || 'ride the arena';
+        $('#ride-label').textContent = t((!stage.flat && RIDE_LABEL[stage.slot]) || 'ride the arena');
         $('#opt-ride').checked = state.rideStage;
     }
 
@@ -4465,7 +4464,7 @@ function renderStagePanel(stage, counts, totals, list) {
         const on = state.layerOn[key] !== false;
         const row = el('label', 'layer',
             `<input type="checkbox" ${on ? 'checked' : ''}>
-             <span>${key}</span><span class="n">${counts[key]}/${totals[key]}</span>`);
+             <span>${t(key)}</span><span class="n">${counts[key]}/${totals[key]}</span>`);
         row.querySelector('input').addEventListener('change', (e) => {
             state.layerOn[key] = e.target.checked;
             for (const o of state.viewer.root.children) {
@@ -4479,7 +4478,7 @@ function renderStagePanel(stage, counts, totals, list) {
 
     const parts = $('#stage-parts');
     parts.innerHTML = '';
-    $('#stage-part-count').textContent = `${list.length} draws`;
+    $('#stage-part-count').textContent = t('{n} draws', { n: list.length });
     for (const entry of list) {
         const d = getModel(entry.model);
         const xform = describeOps(opsAt(entry, 0));
@@ -4517,7 +4516,7 @@ function renderModelList() {
         if (needle && !(readModelName(state.rom, i) ?? '').toLowerCase().includes(needle)) continue;
         rows.push(i);
     }
-    $('#model-count').textContent = `${rows.length} shown of ${modelCount()} table entries`;
+    $('#model-count').textContent = t('{shown} shown of {n} table entries', { shown: rows.length, n: modelCount() });
 
     list.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -4785,7 +4784,7 @@ function renderOsageWind() {
     $('#osage-wind-field').hidden = !stages.length;
     if (!stages.length) return;
     const name = (n) => state.stages?.find((st) => st.slot === n)?.name ?? `stage ${n}`;
-    sel.innerHTML = [['', 'no wind'], ...stages.map((n) => [n, `${name(n)}'s`])]
+    sel.innerHTML = [['', t('no wind')], ...stages.map((n) => [n, t('{stage}\'s', { stage: name(n) })])]
         .map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
     sel.value = state.osageWind ?? '';
 }
@@ -4896,10 +4895,10 @@ function renderBodyMotionPanel() {
         }
         sel.appendChild(g);
     };
-    if (groups) for (const g of groups) group(`${g.label} (${g.list.length})`, g.list, g.tag);
-    else group(`${label} (${lead.length})`, lead);
-    const rest = every ?? `Motions for ${body.joints} joints`;
-    const others = other ?? `Every other motion for ${body.joints} joints`;
+    if (groups) for (const g of groups) group(`${t(g.label)} (${g.list.length})`, g.list, g.tag);
+    else group(`${t(label)} (${lead.length})`, lead);
+    const rest = every ? t(every) : t('Motions for {n} joints', { n: body.joints });
+    const others = other ? t(other) : t('Every other motion for {n} joints', { n: body.joints });
     group(lead.length ? `${others} (${fits.length - lead.length})`
         : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
     if (m.decoded) sel.value = `id:${m.decoded.index}`;
@@ -4919,7 +4918,7 @@ function renderBodyMotionPanel() {
     scrub.max = String(d ? d.frames : 1);
     scrub.value = String(m.frame);
     scrub.disabled = !d;
-    $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
+    $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
     renderSparkPanel();
     updateMotionFrameReadout();
@@ -4945,7 +4944,7 @@ function renderMotionPanel() {
     for (const [label, want] of [['Moves — standing, by the buttons', true],
         ['Moves in other situations', false]]) {
         const group = el('optgroup');
-        group.label = label;
+        group.label = t(label);
         moves.forEach((mv, i) => {
             if (mv.reachable !== want) return;
             const o = el('option');
@@ -4959,13 +4958,13 @@ function renderMotionPanel() {
     if (m.chain && !chosen) {
         const o = el('option');
         o.value = 'chain';
-        o.textContent = `A string of ${m.chain.links.length} — built below`;
+        o.textContent = t('A string of {n} — built below', { n: m.chain.links.length });
         sel.insertBefore(o, sel.firstChild);
         chosen = 'chain';
     }
 
     const actions = el('optgroup');
-    actions.label = 'This fighter\'s action slots';
+    actions.label = t('This fighter\'s action slots');
     for (let i = 0; i < ACTION_SLOT_COUNT; i++) {
         const id = c.motions[i];
         const d = decodeMotion(state.rom, id);
@@ -4978,7 +4977,7 @@ function renderMotionPanel() {
     sel.appendChild(actions);
 
     const all = el('optgroup');
-    all.label = `Every motion in the table (${m.list.length})`;
+    all.label = t('Every motion in the table ({n})', { n: m.list.length });
     for (const e of m.list) {
         const o = el('option');
         o.value = `id:${e.id}`;
@@ -4993,7 +4992,7 @@ function renderMotionPanel() {
     scrub.max = String(m.chain ? m.chain.total : d ? d.frames : 1);
     scrub.value = String(scrubValue(m));
     scrub.disabled = !d;
-    $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
+    $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
     renderMotionMeta();
     renderStringPanel();
@@ -5068,7 +5067,7 @@ function renderStringPanel() {
         });
         list.appendChild(chip);
     });
-    if (!links.length) list.innerHTML = '<span class="dim">Pick a move above, then add to it.</span>';
+    if (!links.length) list.innerHTML = `<span class="dim">${t('Pick a move above, then add to it.')}</span>`;
 
     const next = $('#string-next');
     next.innerHTML = '';
@@ -5087,7 +5086,7 @@ function renderStringPanel() {
     add.innerHTML = '';
     const head = el('option');
     head.value = '';
-    head.textContent = links.length ? 'then, once free, any move…' : 'start with any move…';
+    head.textContent = t(links.length ? 'then, once free, any move…' : 'start with any move…');
     add.appendChild(head);
     m.moves.moves.forEach((mv, i) => {
         if (!mv.reachable) return;
@@ -5273,7 +5272,7 @@ function renderCellList() {
         shown++;
     }
     list.appendChild(frag);
-    $('#cell-count').textContent = `${shown} shown of ${n} cells`;
+    $('#cell-count').textContent = t('{shown} shown of {n} cells', { shown, n });
     if (single && +single[1] <= hi) selectCell(+single[1]);
 }
 
@@ -5292,13 +5291,13 @@ function selectCell(idx, { cg = -1 } = {}) {
     const sel = $('#cell-cg');
     sel.innerHTML = '';
     const draws = document.createElement('optgroup');
-    draws.label = 'Draw this cell';
+    draws.label = t('Draw this cell');
     for (const r of ranks) {
         const label = cgLabel(state.rom, r.cg);
         draws.appendChild(new Option(r.cover === 1 ? label : `${label} ${Math.round(r.cover * 100)}%`, r.cg));
     }
     const rest = document.createElement('optgroup');
-    rest.label = 'Others';
+    rest.label = t('Others');
     for (let g = 0; g < cgCount(state.rom); g++) {
         if (!ranks.some((r) => r.cg === g)) rest.appendChild(new Option(cgLabel(state.rom, g), g));
     }
@@ -5320,7 +5319,7 @@ function drawCell() {
     const info = $('#cell-info');
     if (!pic) {
         canvas.width = canvas.height = 1;
-        info.textContent = `cell ${c.index} has no tiles`;
+        info.textContent = t('cell {n} has no tiles', { n: c.index });
         updateHud();
         return;
     }
@@ -5347,7 +5346,7 @@ function updateHud() {
     let label;
     if (state.tab === 'stage') {
         const st = state.stages[state.stageIndex];
-        label = `<b>${st?.name ?? ''}</b> · stage slot ${state.stageIndex}`;
+        label = `<b>${st?.name ?? ''}</b> · ${t('stage slot {n}', { n: state.stageIndex })}`;
     } else if (state.tab === 'model') {
         label = `<b>model ${state.modelIndex}</b>`;
     } else if (state.tab === 'cell') {
@@ -5366,8 +5365,8 @@ function updateHud() {
     }
     /* The pace shows only once it has been turned away from the arena's. */
     const pace = v.fly.speedScale === 1 ? '' : ` · speed ×${+v.fly.speedScale.toFixed(3)}`;
-    $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? `noclip camera${pace}` : 'orbit camera'}`
-        + (v.mode === 'orbit' ? ` · ${isMobile() ? 'tap' : 'click'} a part to identify it` : '');
+    $('#hud').innerHTML = `${label} · ${v.mode === 'fly' ? `${t('noclip camera')}${pace}` : t('orbit camera')}`
+        + (v.mode === 'orbit' ? ` · ${t(isMobile() ? 'tap a part to identify it' : 'click a part to identify it')}` : '');
 }
 
 /* ---- Picking -------------------------------------------------------------- */
@@ -5482,7 +5481,7 @@ function wireOptions() {
     /* Which of the game's states a Daytona course is drawn in — see MODES in
      * js/daytona.js. */
     const modeSelect = $('#mode-select');
-    for (const [value, label] of OBJECT_MODES) modeSelect.add(new Option(label, value));
+    for (const [value, label] of OBJECT_MODES) modeSelect.add(new Option(t(label), value));
     modeSelect.value = state.objectMode;
     modeSelect.addEventListener('change', (e) => {
         state.objectMode = e.target.value;
@@ -5614,12 +5613,12 @@ function wireOptions() {
          * wherever a scrub left it rather than jumping. The counter is where a
          * scrub left the frame too, so neither the pose nor the tails move. */
         if (m.playing) m.start = performance.now() - (m.tick / GAME_HZ) * 1000;
-        $('#motion-play').textContent = m.playing ? 'Pause' : 'Play';
+        $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     });
     $('#motion-frame').addEventListener('input', (e) => {
         const m = state.motion;
         m.playing = false;
-        $('#motion-play').textContent = 'Play';
+        $('#motion-play').textContent = t('Play');
         /* A scrub is a step of the whole clock, not just of the motion: moving
          * one frame on moves Tails' tails one entry on with it. */
         const link = m.link;
@@ -5744,12 +5743,12 @@ function renderTextureSetPicker() {
     sel.innerHTML = '';
     const auto = el('option');
     auto.value = 'auto';
-    auto.textContent = 'From the model (auto)';
+    auto.textContent = t('From the model (auto)');
     sel.appendChild(auto);
     for (let s = 0; s < state.rom.game.texture.sets; s++) {
         const o = el('option');
         o.value = String(s);
-        o.textContent = `set ${s}`;
+        o.textContent = t('set {n}', { n: s });
         sel.appendChild(o);
     }
     sel.value = 'auto';
@@ -5851,7 +5850,7 @@ function playStageMusic() {
     if (code === state.music.playing) return;
     state.music.playing = code;
     state.music.board.play(code, index);
-    $('#music-status').textContent = code ? songName(code) : 'no music of its own';
+    $('#music-status').textContent = code ? songName(code) : t('no music of its own');
     playStageSounds(slot);
 }
 
@@ -5895,7 +5894,7 @@ async function setMusic(on) {
         await board.start(state.rom, (msg) => { status.textContent = msg; });
     } catch (err) {
         console.error('sound board:', err);
-        status.textContent = `could not start: ${err.message}`;
+        status.textContent = t('could not start: {err}', { err: err.message });
         if (state.music.board === board) state.music.board = null;
         state.music.on = false;
         $('#opt-music').checked = false;
@@ -5919,14 +5918,14 @@ async function setMusic(on) {
 function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
-    document.title = `${state.rom.game.name} — 3D Explorer`;
+    document.title = t('{game} — 3D Explorer', { game: state.rom.game.name });
     const on = { stage: f.stages, model: true, anim: (f.characters && f.motions) || Boolean(f.bodies),
         cell: Boolean(f.cells) };
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
     const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
-    $('#char-label').textContent = bodies && !solved ? 'Body' : 'Fighter';
+    $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved;
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
@@ -5957,7 +5956,7 @@ function applyGameFeatures() {
     for (const [i, c] of (cabinets ?? []).entries()) {
         const o = el('option');
         o.value = String(i);
-        o.textContent = c.same ? `${c.name} (same colours as ${c.same})` : c.name;
+        o.textContent = c.same ? t('{name} (same colours as {same})', { name: c.name, same: c.same }) : c.name;
         cab.appendChild(o);
     }
     if (cabinets) cab.value = String(state.rom.cabinet ?? colors.cabinet);
@@ -6216,7 +6215,7 @@ function start() {
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;
-            $('#stats').textContent = `${s.drawCalls} draws · ${s.triangles.toLocaleString()} tris`;
+            $('#stats').textContent = t('{draws} draws · {tris} tris', { draws: s.drawCalls, tris: s.triangles.toLocaleString() });
         }
         requestAnimationFrame(tick);
     };

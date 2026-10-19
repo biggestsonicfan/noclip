@@ -695,6 +695,12 @@ narrow desktop window keeps its sidebar; `?mobile` and `?desktop` on the URL
 force one or the other, and the link at the foot of the panel switches in place
 without dropping the ROM.
 
+The page is in Japanese with `?lang=ja` (or `?lang=jp`, as on the m2-hle2
+arcade site), and in English without it; the link by the GitHub button
+switches. The game's own names — stages, fighters, models, motions — stay as
+the ROM and the reading of it give them. The words are in `js/lang.js`, which
+says how to add a language.
+
 Sonic The Fighters comes in two builds, and the viewer reads both: Sonic The
 Fighters itself (`sfight`, program EPROMs `epr-19001`–`epr-19004`) and the
 export build, Sonic Championship (`schamp`, `epr-19141`–`epr-19144`), MAME's
@@ -884,9 +890,10 @@ It wants Chrome or Edge (`$CHROME` names one) and ffmpeg with libx264. The ROM
 set goes to the page through its file input and nowhere else; the script's own
 server refuses a `.zip` like `serve.mjs` does. The clips are pictures of what
 the explorer draws, not the ROM's bytes: nothing in them loads back into it.
-Sonic The Fighters and the House of the Dead prototype have clips so far;
-Daytona USA, the finished House of the Dead and Fighting Vipers have shot tables
-still to be written on a machine with those sets.
+Every game has clips, the experimental ones too. Virtua Cop's ride its rail
+(the script's `rail(n)`, off the stage's `railPath`), since that is where the
+game puts its camera. Re-record them all when the explorer draws something
+differently, so the reel shows what a set turns into today.
 
 ## Reporting something wrong
 
@@ -946,10 +953,32 @@ The board has no RGB textures to hand over (a face names a 4-bit tile, a luma
 band, a material slot and a palette row, and the fill path turns those into a
 colour with the light in it), so the export runs the fill shader once more into
 a texture sheet: each face gets a cell of its own, drawn flat at a pixel to a
-texel, with this frame's palette and light, and its UVs point at that cell. The
-material is unlit, so what Blender shows is what the view showed, lighting
-included. A half-transparent (checker) face comes out at half alpha. The sky
-panorama and the scroll layers are not models and are not in it.
+texel, with this frame's palette and light, and its UVs point at that cell. A
+face that repeats its tile (grass, water, a wall's bricks) is baked as one
+period of it, an image of its own that Blender repeats, so it keeps every texel
+however large the face is. The material is unlit, so what Blender shows is what
+the view showed, lighting included. A cut-out face is alpha-clipped and a
+half-transparent (checker) one comes out at half alpha. A face the board draws
+from one side only is one-sided in Blender too (backface culling), and every
+face is wound and has its normal toward the side the board shows. A face laid
+on another in the same plane (a decal, a shoe's strap) is lifted a hair off it,
+toward the camera, in the order the view drew them. The sky panorama and the
+scroll layers are not models and are not in it.
+
+To see the colours the explorer shows in Blender:
+
+- set **Render > Color Management > View Transform** to **Standard**: the
+  default, AgX, shifts every colour (blue goes toward green);
+- in Solid mode pick **Flat** lighting and **Texture** colour; in Material
+  Preview or EEVEE the material is already unlit;
+- Cycles ignores backface culling, so the hidden sides of one-sided faces show
+  there: use EEVEE or Material Preview to see what the board shows;
+- if a decal flickers far off, raise the camera's **Clip Start**.
+
+What the board's painter's sort decides does not carry over: a face it draws
+over one that is in front of it (a South Island pillar's yellow top) is behind
+it in Blender, and two half-transparent faces in one plane (the sea's two
+layers) both show, where the board shows the top one.
 
 ### The game's own camera (Sonic the Fighters)
 

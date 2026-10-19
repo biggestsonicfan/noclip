@@ -439,6 +439,14 @@ const FRAG_SHADER = /* glsl */`
         vec3 n = uPlaneNormals > 0.5 ? normalize(vNormal) : vNormal;
         float dotl = dot(n, uLight) * uLightScale;
         float dotp = dot(normalize(vViewNormal), vFacePt);
+#ifdef BAKE
+        // The export's face is seen from wherever Blender stands, and the
+        // board only ever shows a one-sided face from the front, so it is lit
+        // as seen from the front. A two-sided one keeps the side the view's
+        // camera sees it from: it has one colour in the export, and that is
+        // the one on screen.
+        if (((int(vFlags + 0.5) >> 7) & 1) == 0) dotp = 1.0;
+#endif
         float luminance = (dotl * dotp < 0.0) ? 0.0 : abs(dotl);
         vec2 m = uMaterial[int(vMaterial + 0.5)];
         return floor(clamp(luminance * m.x + m.y, 0.0, 255.0));
@@ -921,6 +929,8 @@ export function createModelMaterial() {
  * screen. What only means anything through a camera is left out: the depth
  * passes, the board's front/back test, which keeps a face the camera happens
  * to see from behind, and the fog, which belongs to the view, not the model.
+ * The light still needs the draw's own matrix and the view's camera, so the
+ * bake draws each part with both (see bakeSheet).
  */
 export function createBakeMaterial(source) {
     const defines = { ...(source.defines ?? {}), BAKE: '' };

@@ -340,6 +340,7 @@ main:has(#cell-view:not([hidden])) :is(#fly-hint, #touch-fly) { display: none; }
     text-decoration: none; white-space: nowrap;
 }
 #tools [hidden] { display: none; }
+#tools #tool-lang:not([hidden]) { display: contents; }
 #tools #tool-shot, #tools #tool-export { padding: 6px 9px; }
 #tools button:disabled { opacity: 0.5; cursor: progress; }
 #tools button:hover, #tools a:hover { color: var(--text); border-color: var(--accent-dim); }
