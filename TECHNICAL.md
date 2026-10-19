@@ -5862,7 +5862,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for ten handlers.
+The others are left out rather than guessed at, but for eleven handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6034,8 +6034,31 @@ breakpoint on the item's draw at 0x3C570): drawn at (-163, 2, 1574.3) and
 (-162.6, 2, 1550.5) turned 0x4000, (-84.2, 2, 1457.8) and (-91.7, 2,
 1451.3) turned 0xC000, scale 2.2, 580 frames each until they closed with
 the props at clock 580; the attract player shot the first, which blinked
-and closed at 253. Types 123 and 124 drop other things on 0x3C9D0 and
-0x3CBE0 and stay out.
+and closed at 253.
+
+The eleventh is type 123 on 0x3C9D0, whose entry is empty too. It drops a coin
+the same way: an item on 0x3C730 with `PN_kinka00a` (0x3B5, a disc of radius
+0.55) at +0x54, scale 1.4, the spawner's x and z, y the float at `0x51E3C0`
+plus 0.22, +0x2C 0x4000 and +0x30 and +0x34 0. In chapter 4 it closes its own
+task. The coin closes as a prop does (0x3ED60) and, until a shot sets bit 28 of
++0x58, adds 0x1000 to +0x30 every frame and draws: 0x15 with +0x30, then 0x14
+with +0x2C, which is the explorer's yaw then pitch, so it stands on its edge
+and spins about the upright. It then draws the model a second time after
+command 0x77 and calls to 0x2320 and 0x1A80; the explorer draws it once. A shot
+sets bit 28, and the coin stops turning and closes 180 frames on; that is left
+out. Chapter 4's records 0xFCCD8, 0xFCD60, 0xFCDF0, 0xFCE20 and 0xFCE50 stand
+five, Stage 4 · set 9, each at yaw 0 whatever its record's, turning 0x1000 a
+frame in step while animate is ticked. Checked in MAME (`hotdo`, the attract
+scene table pointed at chapter 4's section 3, a breakpoint on the coin's draw
+at 0x3C95C): all five drawn 580 times at the records' x and z, y 0.22 (the
+float at `0x51E3C0` was 0), +0x2C 0x4000, scale 1.4, +0x30 stepping 0x1000 a
+draw in step from 0x1000, until they closed with the props at clock 580. The
+board's first draw is 0x1000 on, the coin having turned once; the explorer's is
+0. The coin's lower 0.55 is below y 0. The board draws it whole over the floor
+(MAME's snapshots show it whole), because it sorts polygons rather than testing
+depth. The explorer's depth buffer hides that part (see `ZSORT_RECEDE` in
+`js/viewer.js`). Type 124 on 0x3CBE0 opens a type-91 object on 0x41A60 and
+stays out.
 
 They come out as their own layer, so they can be switched off and so the camera
 frames the room rather than them. The first chapter stands 31 in the courtyard

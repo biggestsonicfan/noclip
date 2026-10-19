@@ -222,6 +222,13 @@ function walkScript(rom, at, visit) {
  * 120 frames on, which the explorer, with no shots, leaves out. Chapter 4's
  * four (Stage 4 set 9) stand here.
  *
+ * Type 123 drops a coin the same way: its handler, 0x3C9D0, opens a task on
+ * 0x3C730 with PN_kinka00a (0x3B5), scale 1.4, the spawner's x and z, y the
+ * float at 0x51E3C0 plus 0.22, +0x2C 0x4000 (on its edge) and the yaw at 0,
+ * and in chapter 4 closes its own task. The coin closes as a prop does and
+ * turns its yaw 0x1000 a frame until a shot sets bit 28 of +0x58 (left out).
+ * Chapter 4's five (Stage 4 set 9) spin here while animate is ticked.
+ *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.
  *
@@ -279,16 +286,20 @@ function spawnProps(rom, at, set, out) {
             model,
             set,
             scale: scale > 0 ? scale : 1,
-            pos: [dv.getFloat32(rec + 8, true), dv.getFloat32(rec + 12, true) + (item?.lift ?? 0),
+            pos: [dv.getFloat32(rec + 8, true),
+                item?.y ?? dv.getFloat32(rec + 12, true) + (item?.lift ?? 0),
                 dv.getFloat32(rec + 16, true)],
-            /* An item keeps only the record's yaw (see above). */
-            turn: [item ? 0 : dv.getUint32(rec + 20, true) & 0xffff,
-                dv.getUint32(rec + 24, true) & 0xffff,
+            /* An item keeps only the record's yaw (see above); a coin starts
+             * at yaw 0, tipped on its edge. */
+            turn: [item ? item.tip ?? 0 : dv.getUint32(rec + 20, true) & 0xffff,
+                item?.yaw ?? dv.getUint32(rec + 24, true) & 0xffff,
                 item ? 0 : dv.getUint32(rec + 28, true) & 0xffff],
             /* Room 4's first piece turns on its own (see above). */
             ...(room4 && type === O.room4.first ? { spin: O.room4.spin } : {}),
             /* And type 96 turns its third (see above). */
             ...(spinner ? { spin: spinner.rate, spinAxis: spinner.axis } : {}),
+            /* And a coin its yaw (see above). */
+            ...(item?.spin ? { spin: item.spin } : {}),
             /* And these two step their model (see above). */
             ...(cycle && cycle.last >= model ? {
                 cycle: Array.from({ length: cycle.last - model + 1 }, (_, i) => model + i),

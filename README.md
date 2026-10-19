@@ -698,7 +698,8 @@ their models, and so are chapter 1's three `PN_powa` props and chapter 4's
 fans spin while animate is ticked, as they do once spawned, and chapter 2's
 breaking wall stands whole, and two hanging bodies (`PN_niku_001`) beside it
 hang still. Chapter 4's four life items stand in their corridor, as they do
-until a shot takes them. Opening the gate, breaking the cases, pieces and wall, closing the
+until a shot takes them, and five gold coins spin on its floor while animate
+is ticked. Opening the gate, breaking the cases, pieces and wall, closing the
 `PN_powa` and `PN_eneene` props and slowing the second fan wait on flags that
 shots set or on the zone's own clock, so those are left out, and so is the
 bodies' animation, which waits on two bits of their own flags.

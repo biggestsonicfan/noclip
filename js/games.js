@@ -1892,8 +1892,13 @@ const hotdo = {
         spinners: [{ handler: 0x3e4a0, axis: 2, rate: 0x800 }],
         /* Type 122, whose handler 0x3C5A0 drops one PN_item_life in chapter
          * 4 and closes (see spawnProps); its own entry in the table is
-         * empty, so the model, scale and lift are the handler's. */
-        items: [{ handler: 0x3c5a0, model: 0x312, scale: 2.2, lift: 2 }],
+         * empty, so the model, scale and lift are the handler's. Type 123's
+         * 0x3C9D0 drops a PN_kinka00a the same way, at y 0.22 (0x51E3C0, 0
+         * there, plus 0.22), on its edge, from yaw 0 and turning 0x1000 a
+         * frame. */
+        items: [{ handler: 0x3c5a0, model: 0x312, scale: 2.2, lift: 2 },
+            { handler: 0x3c9d0, model: 0x3b5, scale: 1.4, y: 0.22, tip: 0x4000, yaw: 0,
+                spin: 0x1000 }],
     },
     /* Its rooms are built the same way the prototype's are, large faces with
      * smaller ones laid on them in the same plane, so they want the same
