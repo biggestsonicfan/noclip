@@ -6305,6 +6305,20 @@ ticked. Checked in MAME (`hotdo`, the attract scene table pointed at chapter
 place the explorer's to the bit, every model the same, and every angle within
 2 of 0x10000. The board's first draw has angles 0, and so has the explorer's.
 
+The prototype (`hotdp`) has the same fish, on 0x312B0. That handler is 0x3B550
+instruction for instruction, with its own field offsets: t at +0x2F4, the
+segment at +0x2F0, and the draw flags at +0x2E8 and +0x2E0. The six points at
+0x85900 are 0xAE7F0's, float for float. The model is `PN_jinmengyo_01`
+(0x121E, the type's own) plus +0x50 rem 40, `_01` to `_40`, at the type's
+scale, 0.3. It closes as the prototype's props do (0x33320) and draws through
+0x35AD0. That routine sends 0x413B0's commands in the same order: the place,
+the three turns, and the scale (+0x90 here) on all three axes. It also loads a
+light from 0x52A2B0 by +0x68, which the explorer does not read. Chapter 2's
+section 4 spawns the only one, record 0xED950, at the origin. It is drawn in
+zones 14 and 15 with the tank's other pieces. Stage 2 · set 6 goes from 18
+props to 19, and `hotdp` set props from 107 to 108. Read from the ROM, not
+checked in MAME.
+
 The sixteenth is type 68 on 0x3D6E0, `PN_furukagi00a` (0xBA5), scale 1. It
 does not close as a prop does: once the zone's clock (0x51E51C) passes 521 it
 counts +0x50 up a frame, and past 226 queues a sound and closes (0x150D0).

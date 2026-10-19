@@ -281,7 +281,9 @@ function walkScript(rom, at, visit) {
  * and +0x30 the negated heading, kept from the frame before when t has
  * just started again. It draws PN_jinmengyo_01 plus +0x50 rem 40, +0x50
  * counting draws, through 0x413B0. Chapter 2's section 4, script 6 spawns
- * the only one (0xEEB00, Stage 2 set 6).
+ * the only one (0xEEB00, Stage 2 set 6). The prototype's 0x312B0 is the
+ * same routine on its own offsets and the same points (at 0x85900); its
+ * only one is 0xED950, in its own Stage 2 set 6.
  *
  * Type 0 is nothing at all — its entry names PN_space and its handler slot is a
  * null pointer — so the table's own shape excludes it.

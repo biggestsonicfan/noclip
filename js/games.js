@@ -1268,6 +1268,12 @@ const hotdp = {
         },
         windows: 0x85940,
         sweep: { chapter: 0, section: 7, script: 2, after: 170, spare: 7 },
+        /* Type 14's fish, on 0x312B0: the finished game's 0x3B550
+         * instruction for instruction, with t at +0x2F4, the segment at
+         * +0x2F0, the same six points at 0x85900, and PN_jinmengyo_01
+         * (0x121E, the type's own model) plus +0x50 rem 40, drawn through
+         * 0x35AD0. It closes as a prop does (0x33320). */
+        swimmers: [{ handler: 0x312b0, points: 0x85900, segments: 4, step: 0.01, models: 40 }],
     },
     /*
      * The prototype's own sound program and samples: a driver of its own
