@@ -4340,12 +4340,157 @@ const doaae = relocateDoa(doaa, {
     program: DOAAE_PROGRAM,
 });
 
+/*
+ * Cyber Troopers Virtual-On (Model 2B, Japan, Revision B). MAME's `vonj` is a
+ * clone of `von`: its zip holds the program pair and takes the rest from the
+ * parent's (MAME model2.cpp, ROM_START( vonj )). Routine names are the ones in
+ * rokuYAMP's docs/von-rom-symbols.md.
+ */
+const VON_CHIPS = {
+    mainData: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18648.11', 0x2edbe489, 'mpr-18649.12', 0xe68c5aa6],
+            [0x800000, 'mpr-18650.9', 0x89a855b9, 'mpr-18651.10', 0xf4c23107],
+        ],
+    },
+    polygons: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18654.17', 0x6a0caf29, 'mpr-18655.21', 0xa4293e78],
+            [0x800000, 'mpr-18656.18', 0xb4f51e76, 'mpr-18657.22', 0xa9be4674],
+        ],
+    },
+    /* The texture point and header streams the object triples point at. */
+    textures: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18660.27', 0xe53663e5, 'mpr-18658.25', 0x3d0fcd01],
+            [0x800000, 'mpr-18661.28', 0x52b50410, 'mpr-18659.26', 0x27aa8ae2],
+        ],
+    },
+};
+
+const vonj = {
+    id: 'vonj',
+    name: 'Cyber Troopers Virtual-On (Japan, Revision B)',
+    identify: ['epr-18664b.15', 'epr-18665b.16'],
+    identifyCrc: [0x27d0172c, 0x2f0142ee],
+    regions: {
+        /* The second megabyte is the data pair every build shares. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-18664b.15', 0x27d0172c, 'epr-18665b.16', 0x2f0142ee],
+                [0x100000, 'epr-18666.13', 0x66edb432, 'epr-18667.14', 0xb593d31f],
+            ],
+        },
+        ...VON_CHIPS,
+    },
+    /* No table: the program and data ROMs hold the object triples it sends
+     * (js/romset.js scanModelTable), one model a mesh. */
+    modelTable: {
+        scan: { sources: [['mainData', 0, 0x1000000], ['maincpu', 0, 0x200000]] },
+        count: 7097,
+    },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /*
+     * The boot copies the face palette out of the program ROM (`tables`
+     * names the `ldos` operand at 0x29A98 that points at it, 0xF48D0). The 24
+     * entries from 8 on are the ones the game cycles (data 0xBF83C4, records
+     * of a shift, a mask and a pointer to the colours); still, they hold the
+     * first colour of each.
+     */
+    palette: { tables: 0x29a9c, sets: 1, split: 0, cycles: { table: 0xbf83c4, first: 8, count: 24 } },
+    /* LZ banks, a full sheet each (js/texture.js buildVonTexram). A set is a
+     * field: 0-9 the ten stages, 10-13 the rest (title, select, ending). */
+    texture: {
+        raw: {
+            layout: 'von', boot: 0xc00008, banks: 0x280c0, deal: 0x27c50, fieldBanks: 0xc8ed0,
+            keepBank0: [13],
+        },
+        sets: 14,
+        residentSet: null,
+        defaultSet: 0,
+        mips: true,
+    },
+    /* Luma: two grey ramps of 128 (0x28548), then 0x2080 bytes from data
+     * 0xFB1D10 at entry 0x800. Colorxlat: js/colors.js buildVonColorxlat.
+     * Both match MAME's RAM after each field's start. */
+    colors: {
+        luma: { data: 0xfb1d10, bytes: 0x2080, at: 0x800, ramps: 2 },
+        von: {
+            gamma: 0.55,
+            rows: [
+                [1, 0x2fb3d90], [3, 0x2fb3e50], [5, 0x2fb4990], [7, 0x2fb4a50], [9, 0x2fb7510],
+                [11, 0x2fb75d0], [13, 0x2fb7690], [15, 0x2fb7750], [17, 0x2fb7810], [19, 0x2fb7990],
+                [21, 0x2fb6cd0], [25, 0x2fb7e10], [27, 0x2bfed8c], [29, 0x2fb6fd0],
+            ],
+            fields: [
+                [[11, 0x2fb75d0], [21, 0x2fb5b90], [23, 0x2fb5c50], [25, 0x2fb5d10]],
+                [[11, 0x2fb75d0]],
+                [[11, 0x2fb75d0], [21, 0x2fb5dd0], [23, 0x2fb5e90], [25, 0x2fb5f50], [27, 0x2fb6010], [29, 0x2fb60d0]],
+                [[11, 0x2fb75d0], [21, 0x2fb6190], [23, 0x2fb6250], [25, 0x2fb6310], [27, 0x2fb63d0], [29, 0x2fb6490]],
+                [[11, 0x2fb75d0], [23, 0x2fb6550], [25, 0x2fb6610], [27, 0x2fb66d0], [29, 0x2fb6790]],
+                [[11, 0x2fb75d0], [23, 0x2fb6850], [25, 0x2fb6910], [27, 0x2fb69d0], [29, 0x2fb6a90]],
+                [[11, 0x2fb75d0], [27, 0x2fb6b50], [29, 0x2fb6c10]],
+                [[11, 0x2fb75d0], [21, 0x2fb6cd0], [23, 0x2fb6d90], [25, 0x2fb6e50], [27, 0x2fb6f10], [29, 0x2fb6fd0]],
+                [[11, 0x2fb75d0]],
+                [[11, 0x2fb75d0], [29, 0x2fb7450]],
+                [[25, 0x143704], [27, 0x1437c4], [29, 0x2fb8590]],
+                [[1, 0x2fb4e10, true], [3, 0x2fb4ed0, true]],
+                [[21, 0x2fb6cd0], [25, 0x2fb7e10], [27, 0x2bfed8c], [29, 0x2fb6fd0]],
+                [[11, 0x2fb75d0, true], [1, 0x2fb7a50, true], [3, 0x2fb7b10, true], [5, 0x2fb7bd0, true],
+                    [7, 0x2fb7c90, true], [21, 0x2fb6cd0, true], [25, 0x2fb7e10, true], [27, 0x2bfed8c, true],
+                    [29, 0x2fb6fd0, true]],
+            ],
+            robots: { table: 0x142e94, rows: [[1, 3], [5, 7]] },
+        },
+    },
+    /* The boot uploads 32 material slots from program 0x293B0 (geometry
+     * function 6, 0x292D8); each field sets its light from 0x142FD4 + 12 *
+     * field (initField, stored at 0xC9030). The model view takes field 0's. */
+    lighting: {
+        light: [-0.296198, -0.5, -0.813798],
+        materials: { at: 0x293b0, count: 32 },
+    },
+    von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
+    stageTable: { von: true, flat: true },
+    scenes: null,
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/* The US build (`vonu`, von.zip's vo-prog0.usa and vo-prog1.usa, which MAME
+ * calls epr-18828b.15 and epr-18829b.16). Its program moves the tables by
+ * 0x610 to 0xC30; the second megabyte and the data ROMs are the same. */
+const vonu = {
+    ...vonj,
+    id: 'vonu',
+    name: 'Cyber Troopers Virtual-On (USA, Revision B)',
+    identify: ['epr-18828b.15', 'epr-18829b.16'],
+    identifyCrc: [0x6499cc59, 0x0053b10f],
+    regions: {
+        ...vonj.regions,
+        maincpu: {
+            ...vonj.regions.maincpu,
+            parts: [
+                [0x000000, 'epr-18828b.15', 0x6499cc59, 'epr-18829b.16', 0x0053b10f],
+                vonj.regions.maincpu.parts[1],
+            ],
+        },
+    },
+    palette: { ...vonj.palette, tables: 0x2a6ac },
+    texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
+    lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
+    von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
-    doa, doab, doaa, doaab, doaae];
+    doa, doab, doaa, doaab, doaae, vonj, vonu];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
