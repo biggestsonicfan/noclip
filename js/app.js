@@ -9,11 +9,13 @@ import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
 import { boardCamera, placeFromBoard, describeBoardCamera, BOARD_FOV, BOARD_W, BOARD_H, BOARD_FOCAL } from './skyeye.js';
 import { decodeModel } from './model.js';
-import { readStageTable, readCourseStages, stageLight, gameLighting } from './stages.js';
+import { readStageTable, readCourseStages, readRallyStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
+import { readDynamcopStages } from './dynamcop.js';
+import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -945,7 +947,7 @@ function describeTextureGuess(g) {
     case 'boot': return state.rom.game.texture.raw?.layout === 'airwlkrs'
         ? `${sets}: the boot pages, which every court has`
         : state.rom.game.texture.raw
-        ? 'sheet 1 only, the bank boot loads for every course'
+        ? `sheet ${state.rom.game.texture.raw.layout === 'srallyc' ? 0 : 1} only, the bank boot loads for every course`
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
     case 'only': return `${sets}: the only texture RAM the game loads`;
@@ -6005,15 +6007,24 @@ function loadGameContent() {
     const on = applyGameFeatures();
     resetMusic();
     if (on.stage) {
-        /* Four shapes of stage data: a record per arena, a placement
-         * table per chapter, Daytona USA's grid of blocks and Virtua Cop's
-         * segments. */
+        /* The shapes of stage data: a record per arena, a placement
+         * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
+         * segments, Virtua Fighter 2's, and what Dead or Alive's and
+         * Virtual-On's own code places, run on js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
+        else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
+        else if (T.von) {
+            /* It also puts right model entries, so nothing decoded before
+             * it stands. */
+            state.stages = readVonStages(state.rom);
+            state.modelCache.clear();
+        }
         else if (T.placements) state.stages = readPlacementStages(state.rom);
+        else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

@@ -4240,6 +4240,231 @@ those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
 
+### Sega Rally Championship (`js/games.js`, `readRallyStages` in `js/stages.js`)
+
+The method is Daytona's and Virtua Cop's: run the game on a board that can be
+watched, find the routine that writes each table, and read the table that
+routine reads. m2-hle2 ran the attract mode, with save states taken on the
+desert, the mountain and the forest, and its memory dumps of texture RAM,
+palette RAM, colorxlat and lumaram are what everything below is checked
+against. MAME's Lua read taps answered the one question the dumps cannot,
+which models a course draws.
+
+The program copies ROM 0x1000-0x61000 to RAM 0x5A0000 at boot and runs from
+there, so a code or table address in RAM is the ROM's plus 0x59F000.
+
+**The model table.** The TGP's draw command is four words on its FIFO at
+0x804000, and every draw routine loads them with `ldq 0x2864B40[g5*16]`
+(0x23CEC is one of 34 such sites). That is main_data 0x864B40: 1508 entries of
+16 bytes, (tpa, tha, oba, count), in order through the ROMs, up to the
+"CGM 1.0 " block at 0x86A980. Only entry 0 is empty, so there are no bank
+separators. All 1508 decode: 146558 faces, 129983 of them textured.
+
+**The palette.** A watch on palette RAM stops in the boot routine at 0x267B0,
+which reads a count, `ldos 0x5FB89C` (ROM 0x5C89C), and copies that many
+halfwords from ROM 0x5C89E to 0x1802000, colorbase 0. The count is 541; the
+highest colour any face names is 538. The dumps on the three courses match it
+with no differences and nothing written past it, so the courses do not change
+it.
+
+**The sheets.** Texture RAM is written by 0x3940, which deals a bank out of
+the data ROM (bank n at main_data 0x200000 + n * 0x100000) by a run table at
+0x3880: seven groups of eight halfwords, a repeat count and runs, each run
+copied to one cursor while the other skips the same length, and the cursors
+swapped after each (`uploadSrallycBank` in `js/texture.js`). The boot uploads
+bank 0 with flag 0, which puts its full-size area on sheet 0; a course
+uploads `bankTable[variant]` from 0x3DCF0, (2, 3, 4, 5), with flag 1, which
+puts it on sheet 1. The variant is work RAM 0x214354. Built that way, both
+sheets match the dumps byte for byte on all three courses. So a model that
+samples only sheet 0 is the boot bank's, on every course, and one that
+samples sheet 1 takes its course's bank: 671 and 668 models, and 169 are
+untextured.
+
+**colorxlat and lumaram.** Both are built by code, as Dead or Alive's are, so
+they come from running it on the i960 interpreter (`runColorRoutines` in
+`js/colors.js`): 0x5A2C80 then 0x5A3350 fill colorxlat at 0x1810000, and
+0x5A3590 writes lumaram a byte every 4 bytes from 0x12800000. Only 256 luma
+entries are set, two bands at lumabase 0 and 128, the only two any face uses.
+Both match the dumps byte for byte and are the same on every course; the run
+takes about 50 ms.
+
+**Materials and light.** 0x4AC0 sends the scene's setup: the window
+(function 3), the focal length, 350 by 350 (function 9), and the materials,
+`mov 22, g1; lda 0x5A39C0, g2; bal 0x4958`, 22 (parameter, 1.0) pairs at ROM
+0x49C0 sent as function 6. The light is function 0xA. The attract scenes send
+a world light of (-0.707, -0.707, 0.707) through the TGP into camera space
+before it (0x13914, 0x17450, 0x1F858, 0x4AC34); the profile negates Z, as
+Daytona's does.
+
+**The courses.** A MAME tap on reads of the model table (0x2864B40-0x286A97F),
+reinstalled every 30 frames, logged the entries each course reads: 937-998 on
+the desert, 1135-1195 on the mountain, 1257-1318 on the forest, besides the
+cars. Those numbers are in the program ROM as runs of words, and a search for
+pointers to them finds the table they hang from. 0x3BCC0 draws the course near
+the camera:
+
+    lda  (g0)[g0*2], g0         ; course * 3
+    lda  0x5DCA00[g0*4], r6     ; its record, ROM 0x3DA00
+    ld   0x4(r6), g0
+    call 0x3B200                ; the segment the camera is in
+
+and 0x3BD90 is the same with 0x5DCA60 (ROM 0x3DA60), the low-detail copy. A
+record is three words: a header, [0, sky, 999, sky], a pointer into the data
+ROM that 0x3B200 walks (the course's path; not read), and the segment list,
+a model number a word. Four records are courses, in the order of the texture
+variants: the desert (937-996, sky 997), the mountain (1135-1194, sky 1195),
+the forest (1259-1318, sky 1257) and the fourth (1379-1438, sky 1439), which
+the attract mode never draws. The fifth repeats the desert, and the last three
+are a one-model scene (818). The low-detail lists are 1000-1059, 1197-1256,
+1319-1378 and 1441-1500: the same ground in a tenth of the faces.
+
+A course is 60 segments. The mountain's and the forest's lists end with a 0
+there; the desert's and the fourth's run straight on into their low-detail
+lists, which is why the reader stops at 60. A segment is drawn with no
+matrix: model 1269, a stretch of the forest, has its vertices out at x 74
+and z 400. So the geometry is in world space and a course is its list drawn
+where it lies, as Daytona's blocks are (`stageTable.flat`). The sky is a dome
+up to 400000 across and is kept out of the face layering
+(`layered: false`), whose grid of 32-unit cells it would fill.
+
+The fourth course is taken to be Lakeside, the secret one: it is the last
+record, bank 5, and its trees are autumn colours. The courses' names are not
+in the ROM.
+
+Checked against MAME: the Castrol Celica (model 110) in snapshot colours, the
+forest's banks and trees, and the mountain's sky with the snowy range MAME
+shows behind the stone wall. Not right yet: the car windows are black, where
+MAME draws dark glass, and what is under the sky beyond a course is left
+black.
+
+Not read: the course paths, the cars' places, the trackside objects, and the
+CGM blocks in the data ROM, which the dumps show change nothing in palette
+RAM on these three courses.
+
+### Dynamite Cop (`js/dynamcop.js`)
+
+All five builds share the data, polygon and texture chips and the program's
+upper pair. Only the lower pair differs, so that is what `identifyCrc`
+checks. The 2B and 2C zips call it `progrom0.15` and `progrom1.16`. The
+tables below were read off the 2A export build (`dynamcop`) first: MAME, the
+shared build, with Lua dumps of palette, colorxlat, luma and texture RAM at
+three attract scenes, and the program's set loaders. The other builds'
+addresses were found by searching each program for the same table bytes.
+The 2B and 2C programs keep the same tables in another order.
+
+| table | dynamcop | dyndeka2 | dynamcopb | dyndeka2b | dynamcopc |
+|---|---|---|---|---|---|
+| bank table | 0x429D0 | 0x429D0 | 0x10D30 | 0x10D30 | 0x42FC0 |
+| palette tables | 0x42840 | 0x42840 | 0x10BA0 | 0x10BA0 | 0x42E30 |
+| palette top | 0x428E0 | 0x428E0 | 0x10C40 | 0x10C40 | 0x42ED0 |
+| palette extra | 0x42920 | 0x42920 | 0x10C80 | 0x10C80 | 0x42F10 |
+| ramps | 0x42930 | 0x42930 | 0x10C90 | 0x10C90 | 0x42F20 |
+| luma (0x7F80 bytes) | 0x36B40 | 0x36B40 | 0x4EA0 | 0x4EA0 | 0x37130 |
+| curve weights | 0x70270 | 0x70260 | 0x191E0 | 0x191D0 | 0x70A20 |
+| boot rectangles | 0xE4390 | 0xE4380 | 0xFA5B0 | 0xFA5A0 | 0xF4AB0 |
+| stage blocks | 0xE4440 | 0xE4430 | 0xD5CA0 | 0xD5C90 | 0xF4B60 |
+| enemy flags | 0x756B0 | 0x756A0 | 0x62330 | 0x62320 | 0x75EF0 |
+| materials (31 x 8) | 0x6ECC0 | 0x6ECB0 | 0x17C40 | 0x17C30 | 0x6F3B0 |
+| missions | 0xE9A70 | 0xE9A60 | 0xF9370 | 0xF9360 | 0xFA190 |
+
+The function addresses below are the 2A export build's.
+
+**Sets.** The game numbers 25 sets. Set 0 is boot, sets 1-13 are stages and
+14-24 are enemy sets (enemy n is set 14 + n). Boot loads with 0x7D450, a
+stage with 0x7D3F0 or 0x7D490, an enemy set with 0x7D420 or 0x7D4D0. Each
+loader is handed the set number and every table it reads is a pointer array
+indexed by it. RAM 0x543024 holds the loaded stage, 0x543028 and 0x54302C the
+two enemy sets. The two enemy sets always have opposite flags in the enemy
+flag table, and the flag picks which half of texture RAM and of the palette
+each one takes. So a scene is a stage and an enemy pair, and the explorer
+turns a set number into one (`dynamcopScene`). A stage is shown with enemy 0
+and its partner; an enemy set with stage 1.
+
+**Models.** The model table is at data 0xD40000 (i960 0x2D40000): 19432
+entries of 16 bytes, The House of the Dead's layout. Fifty empty entries
+split it into 51 banks: two copies of 25, one bank per set. Copy 1's banks
+start at 0, 4000, 4370, 4419, 4853, 5264, 5335, 5621, 5908, 5971, 6184, 6333,
+6436, 6984 (sets 0-13) and 7072, 7192, 7525, 7630, 7769, 7901, 8489, 8777,
+8860, 9116, 9702 (sets 14-24). Copy 2 starts at 9716. Its enemy banks name
+their texture records 4 MB lower in the texture ROMs than copy 1's. The
+explorer draws copy 2's banks under the same sets as copy 1's, which is not
+checked: what loads copy 2 was not found.
+
+**Texture RAM** (`buildDynamcopTexram`). `bankTable[set]` is a data address.
+XTRA_DATA (0x06000000) is data from 0x1000000 on, so set 5's bank at
+0x06755500 is data 0x1755500. Boot's bank (0x978C0) is packed with Gage's
+byte pair encoding and laid out by the boot rectangles (24 bytes each:
+sheet, word offset, x0, y0, x1, y1; -1 ends it). A stage bank (0x6F9E0) is
+0xAAA00 raw bytes: full size onto sheet 1 and its mips dealt between the two
+sheets. An enemy bank (0x6F8D0) is 0x55500 bytes into the mip rectangles the
+stage leaves free. 0x6FF60 copies the rectangles and 0x6F9A0 clears the far
+sheet's mip corner. 0x97D10 then puts the stage's eight 64x64 blocks from
+the stage block table onto sheet 0, as in The House of the Dead. Against
+MAME's texture RAM in three attract scenes, sheet 1 matches exactly. Sheet 0
+matches outside the eight block places, which on the board still hold the
+blocks of every stage played before.
+
+**Palette** (`dynamcopPalette` in `js/dynamcop.js`). Each table is a count
+and that many BGR555 colours. In the order boot and the loaders write them:
+the boot table up from 0, `top[0]` down from 1023, `extra` (its first 50 down
+from 983, the rest down from 873), the stage's table up from 400, its `top`
+down from 933, and each enemy's table up from 550 (flag 0) or 600 (flag 1).
+Against MAME's palette RAM, the entries that differ are 446-484, 583-587 and
+637-643, which hold colours of sets loaded earlier in the attract that the
+current set's shorter tables do not overwrite, and 684, 925 and 1013-1023,
+which the game changes while it runs.
+
+**Colours.** Luma RAM is 0x7F80 bytes of the program ROM, copied by 0x70EB0.
+The colour curve is The House of the Dead's with other weights (0.7, then
+0.85) and fifteen ramps over the odd rows 1-29, with no gain: the first
+eleven from boot's list, the last four from the stage's. Both match MAME's
+RAM in all three scenes but for row 17, which the game animates.
+
+**Lighting.** Boot uploads 31 material slots of 8 bytes from the material
+table with 0x6EE74, the same call as The House of the Dead's. The table is
+HOTD's but for slots 4 and 13, and the first 248 bytes are the same in all
+five builds. The light vector and the plane normals are HOTD's, not read
+from this program.
+
+**Stages** (`readDynamcopStages`). The game builds its display list in
+buffer RAM at 0x900000: per object a matrix, `00800101` and the model table
+entry. Breakpoints on that showed the scenery comes from object records, not
+from walking the banks. 0x2B960 (and 0x2B9F0) starts an area. The mission
+table is twelve pointers, three per value of 0x51F4A0 (0-3), picked by
+0x51F49C (0-2): `missions + 12 * [0x51F4A0] + 4 * [0x51F49C]`. Each
+points at a run of area descriptors, 40 bytes each, and the area number is
+0x51F4A4. Word +0x10 of a descriptor is its object list, 32-byte records:
+
+| offset | | |
+|---|---|---|
+| +0x00 | byte | stored to the object's +0x50 |
+| +0x02 | s16 | model, an index into the whole table |
+| +0x04 | 3 floats | x, y, z |
+| +0x10 | s16 | yaw, 0x4000 a quarter turn |
+| +0x14 | u32 | type; the list ends at the first 0 after the first record |
+
+The first record sets the area up (0x1D970, by its type). The others are
+spawned through 0x1D9A0[type]. Type 2 (0x1F0D0, task 0x1DFD0) is the room:
+its model goes to the object's +0x4C and its position to +0x30-0x38. The
+other types were not traced one by one. They are props, the sea and sky
+(model 4334, turned four ways, and 4367 at y -19, the sea's plane) and the
+things cut scenes move. The explorer draws type 2 as scenery and the rest as
+objects, each where its record puts it and turned by its yaw.
+
+The runs have no count. A run ends where the next one starts, and the last
+ends at the mission table; a descriptor whose list is outside 0x1D0000-
+0x200000 is past the end. That gives 424 areas, 280 different lists, and 279
+with something in them: the runs share many lists.
+Each area is one room in its own frame, round the origin. The explorer lists
+each list once, under the first entry that reaches it, named "Course m-v,
+area a" after its place in the table (what the two indices mean in the game
+was not worked out). An area is drawn under the set most of its models'
+banks belong to (boot's models do not count); a model from an enemy bank is
+drawn under its own set. In the attract, 0x51F4A0, 0x51F49C and 0x51F4A4 are
+0, 0 and 28 at frame 2700, and "Course 1-1, area 28" in the explorer is the
+cabin MAME shows then: the double doors, bed, desk and wall lamp, in the
+same colours.
+
 ### Fighting Vipers' cells (`js/cells.js`)
 
 Sonic The Fighters' two tables a year earlier, at the addresses the stage sky
@@ -4375,6 +4600,105 @@ block 0. The pictures are the Tecmo logo and warnings, the profiles and name
 plates, portraits, the stage skies (named from `doa.sky`), the fight's
 messages, fonts, the rankings, endings, staff roll and title logos. The table
 is the same in every build.
+
+### Virtual-On (`js/von.js`, the `vonj` profile in `js/games.js`)
+
+Cyber Troopers Virtual-On is a Model 2B game like Sonic the Fighters, but it
+keeps none of the tables the others do. The tables below were found with
+MAME (`vonj`): Lua taps on the copro and geometrizer ports, and the texture
+RAM, colorxlat and luma RAM saved at each field's start, then compared with
+what the explorer builds from the ROMs. The routine names are the ones in
+rokuYAMP's `docs/von-rom-symbols.md`. Addresses are `vonj`'s; `vonu` has its
+program tables 0x610 to 0xC30 further on, and the profile lists its own.
+
+`vonj.zip` holds only the program pair (`epr-18664b.15`, `epr-18665b.16`);
+the second program megabyte and the data, polygon and texture ROMs come from
+the parent `von.zip`, as MAME loads them. The loader finds each chip by CRC,
+so the two zips can be dropped together.
+
+**Models.** There is no model table. Each piece is sent to the geometrizer
+as an object: command 1 (`0x800010`), then three words to `0x804000`, the
+texture point pointer, the header pointer and the mesh pointer. So
+`scanModelTable` (`js/romset.js`) makes a table, one entry a mesh. The
+meshes lie end to end from polygon word 0 (40-byte records up to one whose
+attribute word, at +24, has its low two bits clear; the next mesh starts 3
+words before that record ends), up to the 0xFFFFFFFF fill at word 0x3EE7F1:
+7097 meshes, all of which decode (569,414 triangles). The data and program
+ROMs keep many of the triples as aligned runs of three words, so the scan
+looks there for (tpa, tha, 0x800000 | mesh start) with the first two under
+0x800000. 5860 meshes have one, and the 2166 MAME's attract draws all agree.
+A scan of the code's immediates for the rest was too noisy to use. The other
+1237 are chained from the mesh before: their points start where its headers
+end, and their headers where their own points end. That holds for 92% of
+the pairs that both have a triple. The triples the stage code sends are
+exact, so `addModelTriples` puts them in over the chained ones and chains
+again; that fixes models 1331, 1430 and 1431, whose chained pointers were 8
+bytes out.
+
+**Textures.** `LoadTextureLZ` (0x281F0) unpacks banks with an LZ routine at
+0x27E50 (a 0xFEE window). The boot bank starts at data 0xC00008, and the
+other banks are listed at program 0x280C0. Each unpacked halfword goes to
+the same place in one of the two texture sheets: the first 0x60000 go to
+the first sheet, and past that the 512-byte table at 0x27C50 (read at
+0x2801C) picks the sheet by the low and high byte of the index. The mip
+levels live on the other sheet. A field loads the boot bank, bank 0, then
+its own bank, from the table at 0xC8ED0 (one u32 a field, read at 0xC8FB4:
+0, 0, 2, 1, 2, 1, 3, 3, 4, 4, 4, 4, 4, 4). Field 13 loads none and keeps
+what was there before; in MAME's attract that is field 3's bank 1, so the
+explorer gives it bank 0 (`keepBank0`). Fields 0, 2, 3, 4 and 5 match MAME's
+texture RAM byte for byte.
+
+**Palette.** The boot copies the face palette out of the program ROM; the
+`ldos` at 0x29A98 points at it (0xF48D0). Entries 8-31 are cycled by the
+records at data 0xBF83C4 (a shift, a mask and a pointer to the colours);
+the explorer shows the first colour of each.
+
+**Luma.** `MakeRGBTable` (0x28840) writes two grey ramps of 128, then 0x2080
+bytes from data 0xFB1D10 at entry 0x800. It matches MAME exactly.
+
+**Colorxlat.** `MakeRampIntensityTable` (0xE1E00) builds a grey curve, and
+`RampSet` (0xE2330), through `SetRampRGB_TBL` (0xE1F20), `_URA` (0xE1FB0)
+and `_BOTH` (0xE2040), puts rows of 64 RGB triples into it. The rows every
+field has, and each field's own, are listed in the profile (`colors.von`)
+as row number and source address; `InitRampSet` (0xE2130) loads them. The
+robots' rows (1, 3 for player 1; 5, 7 for player 2) come from
+`SetRoboRamp` (0xE2120) and the table at 0x142E94, by robot and costume.
+The explorer's grey curve is the game's with a gamma of 0.55. Against
+MAME's captures the only rows that differ are the robots' (which depend on
+the attract's picks) and leftovers in the back half from the field before.
+
+**Lighting.** `TGPInitialFunc` (0x294B0) uploads 32 material slots of 8
+bytes from 0x293B0 with geometry function 6 (0x292D8). Each field's light
+is three floats at 0x142FD4 + 12 * field, which `initField` stores at
+0xC9030 into `g_light` (0x577100). Field 0's is (-0.296198, -0.5,
+-0.813798), and the Models tab uses it.
+
+**Stages.** The field number is at 0x5770F0. The table at 0xC8E10 has three
+routines a field: the one `initField` (0xC8FA0) calls once, the floor's,
+which `execFieldFloor` (0xC8F10) calls each frame with the frame count
+(0x577114), and the rest's, which `execField` (0xC8F60) calls. `js/von.js`
+runs them on `js/i960.js` with the copro and geometrizer of `js/doa.js`,
+for two frames, and keeps the last frame's draws. The copro takes the same
+commands as Dead or Alive's (5 push, 6 pop, 0x12 translate, 0x14-0x16
+turns) and two more:
+
+- 0x3A, with one word, the geometrizer list address (0x802008): the copro
+  writes its matrix into the list, and the pieces after it draw under it;
+- 0x2A, with one float, a scale on all three axes. Fields 3 and 4 draw their
+  floors (0xC6EB0, 0xC7120) at 2.
+
+No other command comes up. The pieces each field draws: 0: 4, 1: 19, 2: 2,
+3: 4, 4: 10, 5: 4, 6: 5, 7: 10, 8: 6, 9: 7, 10: 10; 11 and 12 draw nothing,
+and 13 runs 10's routines, so it is left out. The names are the strings the
+fight's start prints, 18 bytes each, from `lda 0x21060[field * 18]`
+(0x21EE4): Airport, Death Trap, Waterfront, Green Hills, Ruins, Space Dock,
+Moon Base, Flooded City, Nirvana and Secret Base.
+
+What this leaves out: Green Hills draws its sky and no floor, Space Dock
+and Moon Base only a few small pieces, Nirvana a tube and Flooded City a
+plane and its backdrop. The rest of those fields is probably drawn by code
+that follows the camera or culls, which is not run. The robots are not
+posed.
 
 ### The House of the Dead's cells (`js/cells.js`)
 

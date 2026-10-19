@@ -13,7 +13,13 @@ trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
-[Dead or Alive](#dead-or-alive). Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
+[Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
+courses and its models — see [Sega Rally Championship](#sega-rally-championship).
+*Cyber Troopers Virtual-On* has its models and its ten stages, some of them
+only in part — see [Virtual-On](#virtual-on).
+*Dynamite Cop* has its models and the rooms
+of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
+Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
 [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
@@ -680,6 +686,94 @@ fight's messages and fonts, the rankings, the endings, the staff roll and the
 title logos. Tecmo's format is not Sega's: each picture brings its own tiles
 and colours, so each cell opens on a CG of its own with the same number (see
 [TECHNICAL.md](TECHNICAL.md#dead-or-alives-pictures-jscellsjs)).
+
+## Sega Rally Championship
+
+`srallyc.zip` (Revision C, Model 2A) loads with the Stages and Models tabs.
+It is on the same board as Virtua Cop and Dead or Alive's 2A builds, and the
+program is built the way Daytona USA's is: the sheets are raw in the data ROM,
+there is no depth buffer, and a course's models are already in world space.
+
+The **Models** tab has the whole model table, 1508 entries: the Toyota Celica
+and the Lancia Delta in every livery, the four courses' track segments in
+their near and far versions, and their skies. The textures are the boot bank and the course's bank, copied into
+texture RAM in the order the game copies them, and match the board's texture
+RAM byte for byte on the desert, the mountain and the forest. The palette and
+the colour and luma tables are the game's own, made by running its routines
+(the luma one included), and match MAME's dumps the same way. A course model
+opens on its course's bank; a model on the course sheet that no course list
+names, a car for one, opens on the desert's, and the **Texture set** list picks
+another.
+
+The **Stages** tab has the four courses: Desert, Mountain, Forest and
+Lakeside, each its 60 segments and its sky, read from the course records the
+game draws them from. Lakeside is the fourth record, which the attract mode
+does not show; its bank and its autumn trees say it is the secret course. The
+segments drawn are the near ones; the low-detail copy the game draws further
+off is listed in the stage's details.
+
+Not read yet: the low-detail copy as a view of its own, the trackside objects
+and the cars' places on the grid, and the ground beyond the course, which the
+explorer leaves black. The car windows are black, where MAME draws them as
+dark glass. MAME's other Sega Rally builds are not added.
+
+## Virtual-On
+
+Two builds load: `vonj` (Japan, Revision B) and `vonu` (USA, Revision B).
+MAME's `vonj.zip` holds only the program pair, so drop it with the parent
+`von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
+`vonu` by itself. The export `von` and the relay build `vonr` have programs
+of their own that were not to hand, so they are not detected yet. The
+Stages and Models tabs work; there are no fighters, cells or sounds.
+
+The game has no model table of its own: every piece is a triple of pointers
+built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
+them, and takes the triples the stage code sends as the right ones where they
+differ. Textures are unpacked from the ROM as the game unpacks them, bank by
+bank, with their smaller levels, and match MAME's texture RAM byte for byte.
+The colours are the game's own ramps, and the stages light as the game does.
+
+Each stage is a "field" with three routines: one that sets it up, one that
+draws the floor and one that draws the rest. As with Dead or Alive, the
+explorer runs them on its i960 interpreter and keeps what they draw. The ten
+stages have the names the game prints (Airport, Death Trap, Waterfront and
+on), and field 10 is the one the title draws.
+
+What is still missing:
+
+- Some stages are only partly there. Airport, Death Trap, Waterfront, Secret
+  Base and field 10 look like the game's arenas. Green Hills shows its sky and
+  no floor, Space Dock and Moon Base only a few small pieces, Nirvana a long
+  tube, and Flooded City a plane and its backdrop. The rest is probably
+  drawn by code that follows the camera, which the explorer does not run.
+- The Virtuaroids are in the Models tab as parts, in their base colours: the
+  colours each one wears are set when a player picks it, and the tab picks
+  none. They are not posed.
+
+## Dynamite Cop
+
+All five builds MAME has load: `dynamcop.zip` (export, Model 2A),
+`dyndeka2.zip` (Japan, 2A), `dynmcopb.zip` and `dyndek2b.zip` (the same two on
+2B) and `dynmcopc.zip` (USA, 2C). The clones need `dynamcop.zip` beside them.
+A merged set, or several zips dropped at once, opens as the 2A export build,
+and the Build list at the top of the sidebar picks another.
+
+The **Models** tab has all 19432 entries of the model table, each with the
+textures and colours of the scene that loads it: the stage it belongs to, or
+for an enemy's model, that enemy's set.
+
+The **Stages** tab has 279 areas, one room each, from the game's own object
+lists. Each is assembled as the game places it: the room, its props and the
+sea and sky round it, under the stage's textures and colours. The areas are
+named by their place in the game's table ("Course 1-1, area 28" is the
+cruise ship cabin of the attract, and matches MAME there). Six areas are
+mostly an enemy set's models; they are drawn under that set, which brings
+stage 1 with it, and look wrong in places. What the table's indices mean in the
+game, which areas a mission plays in which order, and the enemies standing in
+each room are not read yet; nor is the second copy of the model table, whose
+models are drawn under the first copy's sets unchecked. The light comes from
+The House of the Dead's settings. See
+[TECHNICAL.md](TECHNICAL.md#dynamite-cop-jsdynamcopjs).
 
 ## Air Walkers
 
