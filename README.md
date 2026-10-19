@@ -754,12 +754,15 @@ A fish with a man's face (`PN_jinmengyo`) swims its loop in chapter 2's fish
 tank while animate is ticked, along the path the board gives it.
 In chapter 2's section 9, one spawn stands a row of eight props of
 its own (`PN_kenita00a` to `07a`), where the board puts them.
+Chapter 1's section 13 stands `PN_furukagi00a` still, as the board draws it
+until a shot or the game swings it.
 Chapter 4's four life items stand in their corridor, as they do
 until a shot takes them, and five gold coins spin on its floor while animate
 is ticked. Opening the gate, breaking the cases, pieces and wall, closing the
-`PN_powa` and `PN_eneene` props and slowing the second fan wait on flags that
-shots set or on the zone's own clock, so those are left out, and so is the
-bodies' animation, which waits on two bits of their own flags.
+`PN_powa` and `PN_eneene` props, swinging `PN_furukagi00a` and slowing the
+second fan wait on flags that shots set or on the zone's own clock, so those
+are left out, and so is the bodies' animation, which waits on two bits of
+their own flags.
 
 The finished game's stages have their music too: tick **music** on the Stages
 tab and each chapter plays the song its own scripts start, on the game's Model 2

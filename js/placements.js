@@ -121,7 +121,7 @@ function walkScript(rom, at, visit) {
  * Each type also has a handler, and 77 of the finished game's 125 share one —
  * the routine that draws the table's model where the object was spawned and
  * does nothing else. The rest have handlers of their own and are left out,
- * all but those on fourteen handlers, which are read below, and one class that
+ * all but those on sixteen handlers, which are read below, and one class that
  * stands a row of props (see standRow).
  *
  * Types 97 to 101 are room 4's walls and shutters (PN_r4_04 pieces), and they
@@ -262,6 +262,13 @@ function walkScript(rom, at, visit) {
  * closes as a prop does and draws 0x413B0's commands with its own model and
  * size: PN_door_n4a (0x165) at 0.9, 1.4 and 1.0 on x, y and z. Chapter 2's
  * section 9 spawns the only one (0xF05A0, Stage 2 set 7).
+ *
+ * Type 68 (PN_furukagi00a) on 0x3D6E0 draws through 0x413B0 as a prop does,
+ * but does not close as one: once the zone's clock passes 521 it counts 227
+ * frames and closes. It swings (bit 28 of +0x58, turning +0x34) once a shot
+ * sets bit 1 or 2 of +0x58, or once the byte 0x51EFB0 has been 1 for 45
+ * frames; the explorer opens neither. Chapter 1's section 13 spawns the only
+ * one (0xE92C0, Stage 1 set 3), and it stands still here.
  *
  * Type 14 (PN_jinmengyo_01, scale 0.3) on 0x3B550 is a fish that swims a
  * path of its own: its record stands at the origin, and each frame the

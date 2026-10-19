@@ -5992,7 +5992,7 @@ Not every type is a prop, either. Each has a handler, and 77 of the finished
 game's 125 share one — the routine that draws the table's model where the object
 stands and does nothing else. The rest are their own things, and only the types
 on the shared handler are stood up, and only for records of the generic class.
-The others are left out rather than guessed at, but for fifteen handlers.
+The others are left out rather than guessed at, but for sixteen handlers.
 
 The first is room 4's walls and shutters: types 97 to 101 (models
 `PN_r4_04_00a`, `_01a`, `_01b`, `_02a`, `_02b`) share the handler 0x3E510 in
@@ -6282,6 +6282,27 @@ ticked. Checked in MAME (`hotdo`, the attract scene table pointed at chapter
 place the explorer's to the bit, every model the same, and every angle within
 2 of 0x10000. The board's first draw has angles 0, and so has the explorer's.
 
+The sixteenth is type 68 on 0x3D6E0, `PN_furukagi00a` (0xBA5), scale 1. It
+does not close as a prop does: once the zone's clock (0x51E51C) passes 521 it
+counts +0x50 up a frame, and past 226 queues a sound and closes (0x150D0).
+Each frame it draws through 0x413B0 with the type's model, and offers itself
+as a target (0x41890). It swings once a shot sets bit 1 or 2 of +0x58, or
+once the byte 0x51EFB0 has stayed 1 for 45 frames (+0x2EC counting from -14):
+it then sets bit 28 of +0x58, and each frame sets +0x34 to +0x31C times what
+the coprocessor hands back for +0x320, which goes up 0x1000 a frame; +0x31C
+starts at 0x1200 and loses 0x100 each time +0x320 passes 0xFFFE, and at 0 bit
+28 clears and the swing stops. 0x51EFB0 is a word many
+routines write, and the explorer opens none of them, nor any shot. The
+spawn's per-type cases (0x38A1C) have none for it. Chapter 1's section 13
+spawns the only one, record 0xE92C0, at (133.83, 42.5, 358.8), yaw 0x4000.
+So it stands there still, Stage 1 · set 3, which goes from 43 props to 44;
+`hotdo` set props go from 218 to 219. The swing and the close are left out.
+Checked in MAME (`hotdo`, the attract scene table at 0xAB0D0 pointed at
+chapter 1's section 13, a breakpoint on the draw at 0x3D844): drawn 1409
+times as 0xBA5 at the record's place, turns 0, 0x4000 and 0, scale 1, flags
+0x1401 throughout, the clock going from 292 to 589. 0x51EFB0 was 1 on the
+last 33 draws, too few to start the swing, and the run ended before the close.
+
 One spawn class stands props of its own. A record's first word picks the task
 the spawn opens (the class table at 0xAFDD0), and class 131's task, 0x39B50,
 is not the generic object: it opens eight tasks on the shared prop handler
@@ -6302,8 +6323,8 @@ window, and all eight were drawn 342 times each, every model and place the
 explorer's to the bit, turns 0, scale 1, from clock 64 to 127.
 
 They come out as their own layer, so they can be switched off and so the camera
-frames the room rather than them. The first chapter stands 31 in the courtyard
-and 43 in the mansion; the prototype, whose table is the same one 78 types long,
+frames the room rather than them. The first chapter stands 34 in the courtyard
+and 44 in the mansion; the prototype, whose table is the same one 78 types long,
 stands 31 and 45.
 
 The prototype's table was found by its own shape and then held against the
