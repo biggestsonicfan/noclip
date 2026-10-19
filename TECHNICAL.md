@@ -1606,6 +1606,21 @@ a loop's passes, the same way the hands do.
   1000: 412, 680, 680, 681, 681, 681) and row 9 on frame 7 (15 frames back
   to 0, so 412 again by frame 20). It used to show 412 throughout. Dural
   has no tables, so the head never changes.
+- **VF2's player 2 face.** An entry of the picker is four words, and
+  `0x4B74C` takes the second (`addo 4`) while `+0x1B0` is not `+0x1B1`: the
+  record player 2 wears when both pick the same fighter (13 on) against the
+  fighter. With **P2 colours** on, the explorer reads that word. Only Sarah,
+  Kage and Jeffry's pickers have a second word unlike the first: Sarah's
+  stance head is 0x90C rather than 0x1DB, Kage's 0x8DC rather than 0x35, and
+  Jeffry's 0x8CC rather than 0x25, with their eyes and mouths alongside
+  (Sarah's 0xE84/0xE85 for 0xC38/0xC39, Kage's 0xAFA/0xAFB for
+  0xAFE/0xAFF). Before, the face step put player 1's head back on the P2
+  record from the first frame (Sarah P2's 1269 drew 0x1DB, her own part
+  list says 0x90C). Checked in MAME (`vf2`, attract, both players' `+0x1B0`
+  set to `+0x1B1` + 13 from frame 600, a breakpoint at the store `0x4B76C`
+  for 150 s): 0x90C, 0xE84 and 0xE85 on Sarah's record 15, 0x8DC, 0xAFA
+  and 0xAFB on Kage's 16, 0x8CC on Jeffry's 18, and every other fighter's
+  the same models as before the write.
 - **VF2's voice** (op 9, `0x1B05C`) runs only on its own frame. It names a
   voice by `0x201E44C[op][char]` (0: nothing). If it does, it sets the voice's
   time left (`+0x770`) to `0x201E498[op][char]`. That counts down by 1 at
@@ -1616,9 +1631,9 @@ a loop's passes, the same way the hands do.
   never.
 
 Left out: the record's second value and its picker's id, which only time
-sound requests (`0x4B7B0`, `0x4B7E8`); the picker's other columns, +4
-for player 2's look when both pick the same fighter (`+0x1B0` ≠ `+0x1B1`)
-and +8 for Kage's `+0x700` bit 4; the game-mode tests at the top of
+sound requests (`0x4B7B0`, `0x4B7E8`); the picker's +8 column, taken
+under `+0x700` bit 4 (Kage's 0xAD2), which the fighter's load clears
+(`0x1408C`) and no motion sets; the game-mode tests at the top of
 `0x4B640` (attract and the ending scenes); and the scene resets
 (`0x4B5B0`), which are not motions.
 

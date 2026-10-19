@@ -231,15 +231,20 @@ function faceLoad(rom, s, at) {
 
 const faceChain = (ctx, table, op) => u32At(ctx.rom, u32At(ctx.rom, table + op * 4) + (ctx.body.char ?? ctx.body.index) * 4);
 
-/* The model the picker gives for value `v`: entry trunc(v · steps / 1001). */
-function facePick(rom, picker, v) {
+/* The model the picker gives for value `v`: entry trunc(v · steps / 1001),
+ * its word at `column`. */
+function facePick(rom, picker, v, column = 0) {
     const r = dataAt(rom, picker);
     if (!r) return null;
     const steps = r.view.getUint16(r.off + 2, true);
     const k = Math.floor(((v * steps) >>> 0) / FACE_SCALE);
     const e = dataAt(rom, picker + 8 + k);
-    return e ? u32At(rom, r.view.getUint32(r.off + 4, true) + e.view.getUint8(e.off) * FACE_ENTRY) : null;
+    return e ? u32At(rom, r.view.getUint32(r.off + 4, true) + column + e.view.getUint8(e.off) * FACE_ENTRY) : null;
 }
+
+/* 0x4B74C: the entry's word +4 while +0x1B0 (the record) is not +0x1B1 (the
+ * fighter), which is player 2's look. */
+const faceColumn = (ctx) => (ctx.F.p2 && ctx.body.char != null && ctx.body.index !== ctx.body.char ? ctx.F.p2 : 0);
 
 /* One frame's script ops: op 16 starts its chain; op 9 on its own frame
  * sets the voice's time left (0x1B05C), if the table names a voice. */
@@ -262,7 +267,7 @@ function faceStep(ctx, s) {
     if (!s.count) return;
     const n = --s.count;
     s.value = n ? s.value + Math.trunc((s.aim - s.value) / n) : s.aim;
-    s.model = facePick(ctx.rom, s.picker, s.value) ?? s.model;
+    s.model = facePick(ctx.rom, s.picker, s.value, faceColumn(ctx)) ?? s.model;
     if (!n) faceLoad(ctx.rom, s, s.next);
 }
 

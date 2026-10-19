@@ -3634,9 +3634,13 @@ const vf2 = {
              * Script op 9 (0x1B05C) sets the voice's time left, +0x770,
              * from 0x201E498[op][char] when 0x201E44C names a voice; at
              * `talk.at` left the chain switches to 0x2006278[talk.to]
-             * unless it is already on [talk.keep]'s. */
+             * unless it is already on [talk.keep]'s. The picker's entry
+             * gives its word at `p2` while +0x1B0 is not +0x1B1 (0x4B74C),
+             * player 2's look; +8 under +0x700 bit 4, which the fighter's
+             * load clears (0x1408C) and nothing in a motion sets, is left
+             * out. */
             face: {
-                op: 16, table: 0x02006278, cold: 0x020062a0, eased: true,
+                op: 16, table: 0x02006278, cold: 0x020062a0, eased: true, p2: 4,
                 talk: { op: 9, voices: 0x0201e44c, times: 0x0201e498, at: 25, keep: 1, to: 2 },
             },
             /* Script op 17 (0x1B2D0), on its own frame, sets +0 bit 27 when

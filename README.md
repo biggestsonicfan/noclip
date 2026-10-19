@@ -560,7 +560,9 @@ the strongest. The bubbles rising from a fighter are left out with the fighters.
 The Animation tab has the **fighters** — Akira, Jacky, Sarah, Kage, Lau,
 Jeffry, Pai, Wolf, Shun, Dural and Lion, named from the game's own tables —
 each on its own texture sets, with a **P2 colours** switch for the look player
-2 wears when both pick the same fighter (Akira's white gi among them) — and
+2 wears when both pick the same fighter (Akira's white gi among them, and
+Sarah's, Kage's and Jeffry's own faces, which the game's face step picks for
+that look) — and
 every one of the
 1359 motions in the game's table plays on any of them
 ([`js/vf2fighters.js`](js/vf2fighters.js)). Each fighter's list opens on its
