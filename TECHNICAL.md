@@ -4972,8 +4972,8 @@ material word, mesh pointer, polygon count. It runs 2026 entries. The model
 numbers MAME logs at 0x1E8E4 put the parts in groups: the players' bodies at
 3..303, the courts' lines and the HUD text at 384..491, the intro's city and
 dome at 539..555, home-side team models at 556..1291 and away-side ones at
-1292..2025. The court floors and the stands are not drawn through 0x1E8D8,
-and their path has not been found.
+1292..2025. The courts' arena, floors and stands go through it too, by
+0x1E890 (see [the courts](#air-walkers-courts-jsairwlkrsjs)).
 Model 555, the intro's city, is 5440 polygons in one mesh, so the profile
 raises the decoder's cap of 4096 vertex pairs (`maxVertexPairs`).
 
@@ -5011,7 +5011,9 @@ intro's 10 from 0x4D31 (0x256AC). A court's set-up, 0x247D0 (court, variant),
 sends five tables from `ld 0xD440[court*4]` to the slots at 0xF1980, five
 fixed ones from 0x4731 to slots 7..11, and the variant's two
 (`ld 0xD484[v*4]` to slot 0, `ld 0xD494[v*4]` to slot 14). The team's comes
-last.
+last. The court is the home team's (below), so a home team's number, 0..16,
+builds its own court's tables in its own variant; an away team's builds court
+0's in variant 1.
 
 **Checks.** Against MAME's colorxlat and palette RAM in a game on court 0,
 variant 1, with home team 0 against away team 20: every row and entry
@@ -5019,10 +5021,68 @@ matches, except the other side's team slot and block, which the Models tab
 leaves at the intro's. Set 34 is the intro: the two runs and the first block
 only. It matches MAME's dump 20 seconds after boot exactly.
 
-**Not done.** Stages: there are 17 courts (`0xD440` has 17 entries) with 4
-variants each, but the floors and stands are drawn by a path other than
-0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
-same rows as the title page and open on the boot pages, which may be wrong.
+**Not done.** Models 534..538 sample the same rows as the title page and
+open on the boot pages, which may be wrong.
+
+### Air Walkers' courts (`js/airwlkrs.js`)
+
+**Which court.** The match set-up at 0xD048C takes the court from the home
+side's team byte (0x5136D0 + side * 0xB0) and the variant from that team's
+record. The records are 20 bytes at 0xFBA80: +0 the city's name, +4 the
+nickname's, +12 the variant (0..3), the rest the line-up. So there are
+seventeen courts, one a team, and the Legends' is the only one in variant 3.
+A debug cycler at 0x29C88 steps 0..17; 17 is the intro's scene (0x256A0).
+
+**Set-up, 0x247D0 (court, variant).** The court's colours (above), the
+palette block 0x1EAF0, the two boot pages again, and two models by the
+variant: 0x521774 = `ld 0xF8280[v*4]` (0x95, 0xDD, 0x10C, 0x120), drawn on
+each hoop's stand, and 0x52178C = `ld 0xF8290[v*4]` (0x98, 0xDE, 0x10D,
+0x121), drawn on the court. It ends in 0x25750, which sets up the
+backboards' objects.
+
+**Draw, 0x24DA0 (court)**, called each frame from 0xBA4 with `ldob
+0x510980`. Every piece goes through 0x1E890 to the model table, under the
+coprocessor's matrix (the commands js/doa.js keeps: push 0x05, pop 0x06,
+translate 0x12, scale 0x13, turns 0x14..0x16). In order:
+
+- 0x24470 works out from the camera (0x510964..0x510974) whether each hoop
+  is near (1), far (3, drawn plainer by 0x24240) or out of view (0), into
+  0x521768 and 0x521769;
+- the arena 0x99, the crowd frame `ld 0xF19C0[f*4]` (f = 0x521784, which
+  steps the crowd), 0x101, the stands 0x96, 0x94, 0x93, one of 0xDA..0xDC by
+  a counter, and the variant's model;
+- the players, by 0x23850 on each object at 0x510B40 and 0x511D10 (+0x390
+  apart), and 0xB2B70;
+- the floor `ld 0xF8230[court*4]` (0x175..0x185), turned 0x8000 about Y when
+  byte 0x5136C5 is over 2; 0x186 and 0xD9 by flags; 0x8E; the crowd's second
+  frame `ld 0xF19A0[f*4]`;
+- the hoops, 0x24640 (0) and 0x24640 (1) under a turn of 0x8000: 0x9A, 0xD8,
+  the variant's padding, the rim 0x10F at (115.41, 26.99, 0), and 0x24940's
+  scoreboard digits out of 0xF81D0 and 0xF8200;
+- 0x25B90, the ball and what the play has out (0x510990, 0x5109C0; type 7
+  is model 0x18D at the object), and 0x8F..0x92 on a timer.
+
+The explorer runs the set-up and one frame of the draw on js/i960.js with
+js/doa.js's machine, from the identity, so each piece comes out in the
+court's frame. It skips the player draw, the colour, palette and page
+uploads (the explorer builds them from the same tables), and answers 0x24470
+with "near" for both hoops. Each court is 32 pieces, and the run meets no
+coprocessor command it does not know.
+
+**Lighting.** The frame start (0x1C240) sends geometry function 6 with the
+31 material slots at 0x1B3C0, {parameter word, distance coefficient} each,
+and function 0x0A with the light (0, 0, 1), which is in the camera's frame.
+So the light runs down the view wherever the camera is, and the Stages tab
+keeps it there (`headlight`).
+
+**Checks.** MAME's draw log (`bp 1E8D8` with the model number, frame 5000 of
+the attract, a game on court 9 in variant 0) has the same pieces in the same
+order: 153, the crowd, 257, 150, 148, 147, the counter's, 152, the players,
+4, the floor 381, 142, the crowd, then each hoop as 154, 216, 149, 271 and
+its digits. The crowd's frames and the counter's model differ with the
+moment, and the play's ball and objects come after. The court as the Stages
+tab shows it, from a camera behind one baseline, has the same floor, logo,
+lines, boards, banners and stands as MAME's picture.
 
 ### Air Walkers' cells (`js/cells.js`)
 

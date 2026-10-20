@@ -16,6 +16,7 @@ import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
 import { readVonStages } from './von.js';
+import { readAirwlkrsStages } from './airwlkrs.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -2414,10 +2415,19 @@ function stepStageMaterials(frame) {
  * A light that follows where the camera stands rather than the frame: Virtua
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
  * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
- * its light with the camera's heading instead (js/fvstages.js).
+ * its light with the camera's heading instead (js/fvstages.js), and Air
+ * Walkers' courts point it where the camera looks (js/airwlkrs.js).
  */
 function stepEyeLight() {
     const stage = state.stages[state.stageIndex];
+    /* Air Walkers' light is (0, 0, 1) in the camera's frame: down the view. */
+    if (stage?.headlight) {
+        const d = state.viewer.camera.getWorldDirection(new THREE.Vector3());
+        if (state.eyeLightAt?.equals?.(d)) return;
+        state.eyeLightAt = d;
+        state.viewer.material.uniforms.uLight.value.copy(d);
+        return;
+    }
     if (stage?.lightFromHeading) {
         const h = cameraOnCourse().heading;
         if (state.eyeLightAt === h) return;
@@ -6028,8 +6038,9 @@ function loadGameContent() {
     if (on.stage) {
         /* The shapes of stage data: a record per arena, a placement
          * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
-         * segments, Virtua Fighter 2's, and what Dead or Alive's and
-         * Virtual-On's own code places, run on js/i960.js. */
+         * segments, Virtua Fighter 2's, and what Dead or Alive's,
+         * Virtual-On's and Air Walkers' own code places, run on
+         * js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
@@ -6042,6 +6053,7 @@ function loadGameContent() {
             state.stages = readVonStages(state.rom);
             state.modelCache.clear();
         }
+        else if (T.airwlkrs) state.stages = readAirwlkrsStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else state.stages = readStageTable(state.rom);

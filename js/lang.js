@@ -91,7 +91,7 @@ const JA_PAGE = {
     'dynamcop.clip.harbour': 'コース&nbsp;4-1 の洞窟の港に浮かぶガレオン船',
     'dynamcop.clip.deck': 'コース&nbsp;4-2、夜の甲板の上',
     'airwlkrs.name': 'エアウォーカーズ <i>実験的</i>',
-    'airwlkrs.meta': 'すべてのモデル、各チームのテクスチャつき &middot; <code>airwlkrs</code>',
+    'airwlkrs.meta': '17のコートとすべてのモデル、各チームのテクスチャつき &middot; <code>airwlkrs</code>',
     'airwlkrs.clip.city': 'イントロで飛び越える街',
     'airwlkrs.clip.mascot': 'あるチームのカバのマスコット',
     'airwlkrs.clip.trophy': 'トロフィー',
