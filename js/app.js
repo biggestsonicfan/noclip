@@ -20,6 +20,7 @@ import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRob
 import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
 } from './airwlkrs.js';
+import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -1095,8 +1096,8 @@ function composeOps(out, ops) {
          * the identity here, which leaves the draw standing where it stands
          * unrotated — what the parts panel and the camera bounds want, and what
          * stepBillboards then replaces once a frame with the real thing. The
-         * camera's heading is the same. */
-        if (kind === 'b' || kind === 'cy') continue;
+         * camera's heading is the same, and so is standing at its eye. */
+        if (kind === 'b' || kind === 'cy' || kind === 'ce') continue;
         if (kind === 's') OP_SCRATCH.makeScale(v[0], v[1], v[2]);
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
@@ -1845,7 +1846,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
         state.anim.entries.push(item);
     }
     if (windowed && (entry.block != null || entry.inView)) state.anim.blocks.push({ entry, mesh, lines, item });
-    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
+    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy' || op[0] === 'ce')) {
         state.anim.billboards.push({ entry, mesh, lines });
     }
     return mesh;
@@ -2047,7 +2048,19 @@ function stepBillboards() {
     BB_Q.multiplyQuaternions(BB_ROOT_Q, camera.quaternion);
     for (const it of list) {
         const ops = opsAt(it.entry, state.anim.frame > 0 ? state.anim.frame : 0);
-        let at = ops.findIndex((op) => op[0] === 'b');
+        let at = ops.findIndex((op) => op[0] === 'ce');
+        if (at >= 0) {
+            /* The eye in the root's frame, unturned. */
+            composeOps(BB_HEAD, ops.slice(0, at));
+            BB_INV.copy(root.matrixWorld).invert();
+            BB_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(BB_INV);
+            BB_HEAD.premultiply(BB_YAW.makeTranslation(BB_POS.x, BB_POS.y, BB_POS.z));
+            composeOps(BB_TAIL, ops.slice(at + 1));
+            it.mesh.matrix.multiplyMatrices(BB_HEAD, BB_TAIL);
+            if (it.lines) it.lines.matrix.copy(it.mesh.matrix);
+            continue;
+        }
+        at = ops.findIndex((op) => op[0] === 'b');
         if (at >= 0) {
             composeOps(BB_HEAD, ops.slice(0, at));
             BB_POS.setFromMatrixPosition(BB_HEAD);
@@ -3345,6 +3358,8 @@ const BODY_RIGS = {
         read: readAirwlkrsBodies, motions: readAirwlkrsMotions, list: airwlkrsMotionList,
         pose: (rom, body, motion, frame, opts) => poseAirwlkrs(rom, body, motion, frame, opts),
     },
+    /* Power Sled's figures: every part's matrix baked a frame. */
+    powsled: { read: readPowsledBodies, motions: readPowsledMotions, list: powsledMotionList, pose: posePowsledBody },
 };
 
 function bodyRig() {
@@ -6002,18 +6017,17 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's
-     * and Air Walkers', name the game's own addresses; the plain bodies note
+    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
+     * Air Walkers' and Power Sled's, name the game's own addresses; the plain bodies note
      * is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
-    /* The music sits with the stages, or for a game with none (Air Walkers,
-     * Power Sled) at the foot of the model panel, where it plays the song
-     * picked rather than a stage's. */
+    /* The music sits with the stages, or for a game with none at the foot of
+     * the model panel, where it plays the song picked rather than a stage's. */
     const home = $(`.tabpanel[data-tab="${f.stages ? 'stage' : 'model'}"]`);
     const anchor = f.stages ? $('#view-field') : null;
     for (const id of ['music-field', 'stage-sfx-label', 'music-song-field']) home.insertBefore($(`#${id}`), anchor);
@@ -6093,6 +6107,7 @@ function loadGameContent() {
         else if (T.airwlkrs) state.stages = readAirwlkrsStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
+        else if (T.powsled) state.stages = readPowsledStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

@@ -222,6 +222,13 @@ export const BILLBOARD = ['b'];
  */
 export const CAMERA_YAW = ['cy'];
 
+/*
+ * Stand where the camera stands: a translation to the eye, unturned, so what
+ * comes after it is carried along with the camera and never got nearer to.
+ * Power Sled's sky and mountains go round the sled this way (0xD8890).
+ */
+export const AT_EYE = ['ce'];
+
 /* cage_corners — the four posts pole_disp puts around South Island, alternating
  * between two models. */
 const SOUTH_ISLAND_CAGE_CORNERS = [519, 554, 519, 554];
@@ -2464,6 +2471,7 @@ export function describeOps(ops) {
     return ops.map(([kind, v]) => {
         if (kind === 'b') return 'billboard';
         if (kind === 'cy') return 'camera yaw';
+        if (kind === 'ce') return 'at the eye';
         if (kind === 's') return `×${v.map((n) => n.toFixed(2)).join('/')}`;
         if (kind === 'r') return `${Math.round(v)}°`;
         if (kind === 'rx') return `${Math.round(v)}°x`;

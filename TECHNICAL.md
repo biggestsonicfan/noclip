@@ -5341,10 +5341,9 @@ texture header address and object address (bit 23 set: a word index into the
 polygon ROM). The program takes the three words from three places, and
 `js/powsled.js` gathers them all:
 
-- 64-byte placement records in the data ROM, {tpa, tha, oba, 0, 3x4 float
-  matrix}. The grid at data 0x4770 is {ptr, 33, 33 offsets} of them, read by
-  0xE47AC through 0xE1F30. Longer runs are at 0x40534, 0xE7270, 0xEDD98,
-  0x13E240, 0x18E6E8, 0x1DEF68 and 0x285CA4.
+- 64-byte part records in the data ROM, {tpa, tha, oba, 0, 3x3, place}:
+  the frames of the figures (see Animation below), such as data 0x4770's,
+  read by 0xE47AC through 0xE1F30.
 - 28-byte named records in the program ROM, 0xD8EA0..0xE19E8: two words, the
   three, a zero and a pointer to a name such as `HONBAN_sce2_course_N_4_1_0`.
 - Immediates: `lda tpa,g6; st g6,0x804000; lda d(g6),g6; st; lda oba,g6; st`,
@@ -5377,9 +5376,141 @@ result matches m2-hle2's colorxlat exactly.
 **Luma.** 0xC8F0 writes two bands of 128, entry i = ((i & 127) + 1) >> 1
 (`halfRamp`). It matches.
 
-**Not done.** Stages: the grid and the runs hold placement matrices, but
-which go together for a course, and where the ground comes from, is not
-worked out. No lighting.
+**The course** (`readPowsledStages`). There is one, and nothing names it.
+The race keeps the sled's progress down the course and hands it to a scene
+routine for each span of it (0x30AF4, and its twins 0x2A01C and 0x35CD0),
+with what is left past the span's start:
+
+| Routine | Progress | Records it draws |
+|---|---|---|
+| 0xDB0C0 | 0x000-0x0DB | `HONBAN_sce1_start`, `HONBAN_sce2_course_1..22` |
+| 0xDBFD0 | 0x0DC-0x171 | `HONBAN_sce3_course_1..15` |
+| 0xDCBF0 | 0x172-0x1B7 | `HONBAN_sce4_course_1..7`, `sce4_tonnel` |
+| 0xDD250 | 0x1B8-0x1C6 | `HONBAN_sce5_course1..2` |
+| 0xDE200 | 0x1C7-0x267 | `HONBAN_sce7_bridge_1..7` |
+| 0xE1AF0 | 0x268-0x347 | `HONBAN_sce8_course1..7`, `_F1..F10`, `GOAL_KANBAN` |
+
+Each one draws the 28-byte named records whose {first, last} span holds the
+progress (0xD8B50: g0 the records, g1 their count, g2 the progress), in
+world space under the camera, and a few pieces under a matrix of their own.
+0x2A034's sce8 is 0xE1C80, the same less the goal (0xE04B0). Past 0x347
+nothing changes.
+
+The explorer runs each routine on the i960 (`js/i960.js`) for every progress
+in its span. The coprocessor here is not the TGP: a command is one word to
+0x884000 with the opcode in its low byte, then its singles. The routines send
+0x04 push, 0x05 pop, 0x1D translate (3), 0x1F times a 3x4 (12), 0x07 hand
+the matrix over (the geometrizer's 0x0B reads its twelve words back), and,
+from the goal's sign only, 0x2C scale (1) and 0x21 turn about Y (1 word).
+The geometrizer's 0x01 then draws {tpa, tha, oba} under that matrix. A piece
+is kept once, at the first place it is drawn, keyed by its model and place,
+with every scene that draws it and the first and last progress that does:
+304 pieces, models 137 to 490, all from the model list. Six of them are
+drawn at progress 0 only (one of them up to 3) and then swapped for another
+on the same spot (m2-hle2's race draws mesh 0x8401B6 up to
+frame 4601 and 0x822070 from 4731, never both); the stage keeps the one the
+race keeps, which leaves 298. One piece, the goal sign's frame (mesh 0x882859), steps its
+material with the frame counter; the stage draws it with the first one it
+is sent, as model `283#608ac`. Every routine finishes, and no unknown
+coprocessor opcode is met.
+
+The scenes are the stage's views, named for their records; each opens on a
+camera framed on its own pieces. The race sends the light straight to the
+geometrizer (function 0xA, at 0x3672C and 0x3740C): (0.1, -1, 0.01). The 32
+material pairs at program 0xEBC0 go with function 6 at boot (0xED04 calls
+0xEB70 with a count of 31 + 1); the rocks are lit by slot 25 (diffuse 0xF7,
+ambient 0x32), which reading only 16 left black. Over the palette's 0x20A
+colours 0xF1F8 greys entries 8 to 63 (0x39CE), as m2-hle2's palette RAM
+holds them through the race (`paletteFixes`); 0xF6E0's per-frame cycle into
+the same entries is not modelled.
+
+Three things the scene routines do not draw go with the stage as objects:
+
+- The sky and the mountains. 0xD8890, which the race loops call through the
+  words at 0x2A144, 0x30C0C and 0x35A4C, stands at the eye unturned and
+  draws the sky (mesh 0x8AB219) 500 above it at three times its size
+  (0xD88E4, 0xD890C), then the mountains (0x89DAE0) 2600 below it (0xD8A48).
+  They follow the camera (display op `ce`, at the eye). The sky is the
+  shell, drawn first; the mountains, whose floor runs under the course,
+  are a backdrop drawn over it with no depth test, as the board's z sort
+  puts the course in front of that floor where a depth buffer would not.
+- The four cranes over the start that hold the sleds before the drop:
+  0xE6DA0 runs r4 from 0 to 3 through 0xE6560, which draws
+  {0xA244, 0xA798, 0x811E36} for an even r4 and {0xA7C8, 0xAD24, 0x8124FF}
+  for an odd one, at a matrix the copro works out. Their places are read off
+  m2-hle2's race: (6.959, 1783.965, 5527.939), (-9.041, 1790.465, 5567.939),
+  (6.959, 1796.965, 5607.939) and (-9.041, 1803.465, 5647.939), unturned and
+  still from frame 3561 to 4900. The sleds hanging from them are the
+  players' and are left out.
+
+The finish banners (the flag's stripes, *1996 KEROLYMPIC*, the vertical
+*KEROAME*) are a plain face with the lettering laid on it as a second,
+cut-out one, so the game takes Daytona's depth arrangement (`depth.layers`);
+without it the two fight.
+
+MAME cannot reach the race. As the network's master (the default) the board
+stops at the RIDE ID prompt. With the ride ID (RAM 0x5293F0, printed by
+0x152D4: 2 BLACK, 3 YELLOW) poked to a ride, it shows THIS IS RED RIDE and
+waits for the master, which it looks for in the comm RAM at 0x1A02180
+(0x24600 on): *Cannot find network main.*
+
+m2-hle2 reaches it with two boards on its comm link: one run with
+`--comm-master`, the other with `--comm-slave PORT:TOKEN` from the first's
+log. On the main unit's panel CALL (input 0x200) at frame 2400, the ride's
+ENTRY (0x100) at 2700, STEP (0x800) at 3000 and 3200 and GO (0x20000) at
+3600 take both to race state 7 (RAM 0x53E744); the race runs to time-over
+at about 7400. Every 130 frames or so the ride's picture and its geometry
+captures (`get_geo_captures`: mesh, tpa and the 3x4 each object was drawn
+under) were taken. In each frame one camera C fits every course capture,
+C times the explorer's matrix for the same mesh to within 0.02 (rotation)
+and 0.2 (translation), so the pieces stand where the race draws them. The
+explorer was then rendered from that camera through the board's projection
+(focal 200, centre 249, 183 of 496x384, which is a vertical field of
+2 atan(192/200)) and set beside the board's picture: the start from the
+ride (frame 3561) and from the main unit, the tunnel (5521) and the finish
+banners (6300) match, but for the HUD and the player's own sled. The race
+times out before the bridges and the goal, so those two scenes are checked
+by eye only.
+
+**Animation** (`readPowsledBodies`). Ten tables in the data ROM, each
+{frame list, parts}; the list is a data offset a frame, ended by
+0xFFFFFFFF, and a frame is a 64-byte record a part:
+
+| Offset | |
+|---|---|
+| +0x00 | tpa, tha, oba (the part's model), then a zero |
+| +0x10 | a 3x3, nine singles, columns X, Y, Z |
+| +0x34 | the place, three singles |
+
+0xE1D70 draws a frame (and 0xE1F30, the same with the ride's colour): per
+part, copro push, translate by +0x34, times the 3x3 with a zero translation
+(op 0x1F, the twelve words being +0x10..+0x30 and three zeros), output, draw,
+pop. Every part is placed from the figure's origin, so a frame is the whole
+pose baked; the explorer gives every part parent -1 and poses it as
+S · T(place) · R · S, S the Z flip. A part's model is the same on every
+frame.
+
+| Table | Parts | Frames | What it shows | Played by |
+|---|---|---|---|---|
+| 0x4770 | 33 | 65 | crane with a sled | attract, 0xE47AC |
+| 0x260C0 | 33 | 25 | crane lowering the sled | - |
+| 0x32F70 | 18 | 46 | crane arm and claw | - |
+| 0x3FF34 | 28 | 381 | woman in a yellow suit | attract |
+| 0xE7034 | 3 | 140 | three-part object | record 0x3B2C0 |
+| 0xEDB70 | 38 | 135 | two riders on a sled | - |
+| 0x13E018 | 38 | 135 | two riders, second take | attract |
+| 0x18E4C0 | 38 | 135 | two riders, third take | attract, 0xE46C0 |
+| 0x1DE968 | 28 | 381 | woman, second take | attract, 0xE45C0 |
+| 0x285A68 | 3 | 140 | the object, mirrored in X | record 0x3B2A0 |
+
+The attract's tasks (from 0xE44B0) pick the frame from their own counter:
+0xE45C0 plays 0x1DE968's frames 0 to 0x17C and then loops 0x138 to 0x17C;
+0xE46C0 holds 0x18E4C0 on frame 0x86 once it gets there. No address in the
+program names the three marked -, which were found by their layout; all ten
+differ. The two three-part ones are named only by two records, {table, 1,
+0x8B, 0}, at 0x3B2A0 and 0x3B2C0, just past a list of places at x = 8 and -8
+by the start (0x3B190, read at 0x3B91C); what plays them is not found. The
+names are the explorer's.
 
 ### Polygon decoding (`js/model.js`)
 
