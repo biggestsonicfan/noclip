@@ -4820,6 +4820,78 @@ call sites as their names. The seventh advice screen of the attract mode
 (0x2FD0464, drawn by `0x20974`) comes out garbled on both CGs; the others
 read, so its characters are probably loaded by something not found yet.
 
+### Dynamite Cop's cells (`js/cells.js`)
+
+Dynamite Cop keeps The House of the Dead's pictures, routines and all, a year
+on. The table is at program 0xE9B10 in the 2A export build (0xE9B00 in the
+Japanese 2A, 0xC9880 and 0xC9870 in the 2B pair, 0xFA230 in the 2C): 971
+entries of three pointers, tiles, colours and map, into the program's upper
+pair and the data ROM, ended by a zero entry. The table's bytes are the same
+in all five builds; only where it sits moves. The code reads the three words
+at `table`, `table + 4` and `table + 8`, indexed by `n * 3` (0xA3B94 to
+0xA43A4 in the export 2A build, and 0x1DD00 and 0x2BA90).
+
+0xA3F30 loads a picture into free blocks the first time it is drawn: 0xA3C50
+finds a run of free 128-tile blocks, 0xA3E70 copies each chunk of tiles into
+a block of its own, and 0xA3DE0 and 0xA3D40 copy that chunk's 16 colours into
+the block's group. The draw (0xA3F90) adds the first block to every map entry,
+and ORs in the category bit (`r5 << 15`) and `r6 << 14`, so the group is the
+block, as in Dead or Alive and The House of the Dead. The panel loads each
+picture from block 0, and the palette goes through colorxlat.
+
+Checked in the explorer on every build: all 971 open, and the stage 4
+briefing (cell 930) and the "2" logo (434) draw whole, as does the mission
+text (600) in the export 2A build. The pictures are reached by number, so there is no unused list.
+
+### Power Sled's cells (`js/cells.js`)
+
+Power Sled has no maps. Its draw, 0x4EE0, takes the tilemap address in g0,
+a script in g1 and a halfword to OR into the entries in g2 (every one of the
+65 calls sets bit 15, the category bit), and walks the script a byte at a
+time. A byte up to 0x7F writes entry b of a dictionary at RAM 0x51AD40; 0x80
+and up index a jump table at 0x4F50, and anything above 0x8D returns. A
+character is built from two bytes as `(0x100 + lo + (hi << 8)) & 0x3FFF`:
+
+| op | arguments | what it does |
+|---|---|---|
+| 80 | x, y | go to `0x1000000 + (y << 9) + x * 2` |
+| 81 | s | move `s * 2` bytes, s signed |
+| 82 | n, lo, hi | n copies of the character, rightwards |
+| 83, 84 | n, lo, hi | n entries counting up (down) from it |
+| 85 | n, hi, b... | n entries, `(0x100 + (hi << 8)) \| b` each |
+| 86 | n, (lo, hi)... | n characters, ORed with the whole of g2 |
+| 87 | the same | and each one added to the dictionary |
+| 88 | k | clear layer `k & 3` from the table at 0x33E0 (0x4890) |
+| 89, 8A | n, lo, hi | n copies downwards, 0x80 bytes a step |
+| 8B, 8C | n, lo, hi | n copies upwards |
+| 8D | a, b | move `(a + b)` signed, times 0x200 bytes |
+
+0x52D0 erases what a script drew by walking it the same way with zeros (30
+calls). Every call loads its script with `lda`; the scripts lie end to end
+from data 0x322500 to 0x323108, each ending with 0x8E, thirty of them. At
+0x323108 there is a table of thirty offsets, each from the table itself,
+which names the same thirty starts; nothing reads it. Eight scripts (cells 0,
+1, 3, 4, 9, 10, 17 and 18) are named by no call, and listed `unused`. A cell
+is what its script writes, run from entry 0, cropped to the entries it
+touches; no script uses 88, and none reads a dictionary entry it did not add.
+
+The tile chip is filled once, by the boot at 0x46F0, and that is the cells'
+only CG:
+
+- 0x48B0 expands the 1bpp font at program 0x33F0, 8 bytes a character with
+  the top bit leftmost, into characters 0-255 at pen 1.
+- 0x4EA0 copies 0x22500 bytes from data 0x300000 to 0x1082000, character 256
+  on, straight: no byte swap, unlike Virtua Cop's.
+- 0xF100 fills groups 0-127 with the 16 colours at 0xF0C0 and groups 128-255
+  with those at 0xF0E0, then 0xF17C copies 0x230 colours from data 0x323180
+  to 0x1800040, group 2 on.
+
+Against m2-hle2's memory in the attract (frames 900 and 3000), the
+characters match byte for byte and the palette in all but colour 0 of group
+0. The interpreter's output for scripts 11, 21, 25 and 28 is found entry for
+entry in the dumped tilemap layer 0, at 0x294, 0xF10, 0x81A and 0x844. The
+palette goes through colorxlat, as MAME's `palette_w` sends every tile colour.
+
 ### Air Walkers (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
 Data East's basketball game on Model 2A shares none of Sega's tables, so each
@@ -4888,6 +4960,31 @@ only. It matches MAME's dump 20 seconds after boot exactly.
 variants each, but the floors and stands are drawn by a path other than
 0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
 same rows as the title page and open on the boot pages, which may be wrong.
+
+### Air Walkers' cells (`js/cells.js`)
+
+Data East's 2D is The House of the Dead's picture format, with its own copy
+of the routines. The table is at data 0xC15220 as the code names it
+(0x2C15220, the 1MB EPROM pair's third repeat; the pair itself starts at
+0x800000): 492 entries of three pointers, tiles, colours and map. The 493rd
+word is no pointer, and no code bounds the table, so the count is where the
+pointers stop. The table is read at 0xC38DC, 0xC3B18, 0xC3BE8, 0xC3CEC,
+0xC3DB0 and 0xC3E6C (tiles and colours) and at 0xC3F3C, 0xC3FC8, 0xCE330,
+0xCE368, 0xD47B0, 0xD47E8 and 0xD4814 (maps).
+
+0xC3CD0 loads a picture the first time it is drawn (its slot holds no block
+yet): after a call to 0xC38D0 (not read), each chunk, a count and that many tiles, goes to a 128-tile
+block of its own (`block << 12` from 0x1080000), and the chunk's 16 colours
+go to every block it takes, at `0x1800000 + block * 32`. The draw, 0xC3F10,
+takes the picture's slot in g0, the tilemap in g1, two bits in g2 and g3,
+the column and row in g4 and g5, and the picture in g6; it adds
+`(g2 << 15) + (g3 << 14) + (firstBlock << 7)` to each map entry, so the
+group is the block. The panel loads each picture from block 0, and the
+palette goes through colorxlat.
+
+Found with m2-hle2: a write watchpoint on the title's tilemap stopped in the
+draw at 0xC3FA0 reading map 40 (the AIR layer, layer 2) and map 41 (the
+WALKERS layer, layer 0); both pictures in the tab match the dumped layers.
 
 ### Power Sled (`js/powsled.js`, `js/texture.js`, `js/colors.js`)
 

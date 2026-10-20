@@ -4909,24 +4909,24 @@ const DYNAMCOP_AT = {
     dynamcop: {
         tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
         flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
-        materials: 0x6ecc0, missions: 0xe9a70,
+        materials: 0x6ecc0, missions: 0xe9a70, pictures: 0xe9b10,
     },
 };
 DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
-    missions: 0xe9a60,
+    missions: 0xe9a60, pictures: 0xe9b00,
 };
 DYNAMCOP_AT.dynamcopb = {
     tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
     flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
-    materials: 0x17c40, missions: 0xf9370,
+    materials: 0x17c40, missions: 0xf9370, pictures: 0xc9880,
 };
 DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
-    missions: 0xf9360,
+    missions: 0xf9360, pictures: 0xc9870,
 };
 DYNAMCOP_AT.dynamcopc = {
     tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
     flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
-    materials: 0x6f3b0, missions: 0xfa190,
+    materials: 0x6f3b0, missions: 0xfa190, pictures: 0xfa230,
 };
 
 /*
@@ -5012,7 +5012,18 @@ function dynamcopBuild({ id, name, low, high }) {
          * reads, three pointers a mission to runs of area descriptors. */
         stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
         sound: DYNAMCOP_SOUND,
-        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        /* The 2D pictures (js/cells.js): The House of the Dead's, 971 of them
+         * at `pictures` (0xE9B10 in the 2A export build), three pointers
+         * each, tiles, colours and map, into the program's upper pair and
+         * the data ROM; the table is the same bytes in every build, and a
+         * zero entry ends it. The routines are HOTD's: 0xA3F30 loads a
+         * picture into free blocks the first time it is drawn (0xA3C50 finds
+         * the run, 0xA3E70 copies each chunk of tiles to a block of its own,
+         * 0xA3DE0 and 0xA3D40 its 16 colours a block), and the draw (0xA3F90)
+         * adds the first block to every map entry, so the group is the
+         * block. Colours go through colorxlat. */
+        cells: { pictures: { table: A.pictures, count: 971 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
     };
 }
@@ -5137,10 +5148,59 @@ const airwlkrs = {
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures (js/cells.js): The House of the Dead's format, Data
+     * East's own copy of it. 492 entries of three pointers, tiles, colours and
+     * map, at data 0xC15220 (the 1MB EPROM pair's third repeat, as the code
+     * names it); the next word is no pointer, and nothing bounds the table.
+     * 0xC3CD0 loads a picture into free blocks the first time it is drawn,
+     * each chunk of tiles to a 128-tile block of its own and its 16 colours to
+     * every block it takes; the draw (0xC3F10) adds `(g2 << 15) + (g3 << 14)
+     * + (firstBlock << 7)` to the map's entries, so the group is the block.
+     * Colours go through colorxlat. */
+    cells: { pictures: { table: 0x02c15220, count: 492 }, charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Power Sled ----------------------------------------------------------- */
+
+/*
+ * Power Sled's 2D pictures (js/cells.js `scripts`): the attract's panels,
+ * the entry and course select, the ranking, drawn by 0x4EE0 from tilemap
+ * scripts in the data ROM. Its callers load g0 with the tilemap address and g1
+ * with the script, both by `lda`, and set bit 15 of g2; 0x52D0 erases what a
+ * script drew by walking it again. The scripts lie end to end from data
+ * 0x322500 to 0x323108, thirty of them; there a table of thirty offsets
+ * from itself names the same thirty starts, though nothing reads it. No call
+ * names eight of them (`unused`).
+ *
+ * The tile chip is filled once, at boot (0x46F0):
+ *   0x48B0   expands the 1bpp font at 0x33F0 into characters 0-255, pen 1;
+ *   0x4EA0   copies data 0x300000, 0x22500 bytes, to character 256 on,
+ *            straight (no byte swap);
+ *   0xF100   fills groups 0-127 with the 16 colours at 0xF0C0 and 128-255
+ *            with 0xF0E0 (white and grey on black, the font's), then copies
+ *            0x230 colours from data 0x323180 to group 2 on (0xF17C).
+ * The characters match m2-hle2's character RAM in the attract byte for byte,
+ * and the palette all but colour 0 of group 0. The palette goes through
+ * colorxlat, as every Model 2 tile palette does.
+ */
+const POWSLED_CELLS = {
+    scripts: [0x02322500, 0x02323108],
+    unused: [0, 1, 3, 4, 9, 10, 17, 18],
+    boot: {
+        font: { src: 0x33f0, first: 0, count: 256, pen: 1 },
+        chars: [[0x02300000, 0x100, 0x1128]],
+        straight: true,
+        palette: [
+            { colours: 0xf0c0, group: 0, groups: 128 },
+            { colours: 0xf0e0, group: 128, groups: 128 },
+            { block: 0x02323180, group: 2, groups: 35 },
+        ],
+    },
+    charBytes: 0x80000,
+    programAt0: true,
+    colorxlat: true,
+};
 
 /*
  * Sega's sled racer on Model 2B CRX (m2-hle2's src/profiles/powsled.h,
@@ -5223,7 +5283,8 @@ const powsled = {
             hint: 'Every sound in the sound driver\'s table, by its command: the program names none of them. A0 13 02 is the loudest tune among them, likely the song; A0 12 04 and A0 13 00 are wind',
         },
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    cells: POWSLED_CELLS,
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
