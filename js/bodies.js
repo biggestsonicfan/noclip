@@ -162,12 +162,13 @@ function saneFloat(v) {
     return Number.isFinite(v) && Math.abs(v) < 1e4 && (v === 0 || Math.abs(v) > 1e-6);
 }
 
-function rootsSane(view, off, frames, joints, end) {
+function rootsSane(view, off, frames, joints, end, layout) {
     const step = frameBytes(joints);
+    const root = layout === 'dynamcop' ? 6 * joints : 0;
     if (off + frames * step > end) return false;
     for (let f = 0; f < frames; f++) {
         for (let a = 0; a < 12; a += 4) {
-            if (!saneFloat(view.getFloat32(off + f * step + a, true))) return false;
+            if (!saneFloat(view.getFloat32(off + f * step + root + a, true))) return false;
         }
     }
     return true;
@@ -195,28 +196,43 @@ export function readMotions(rom, bodies) {
     const list = [];
     for (let i = 0; i < M.count; i++) {
         const address = dv.getUint32(M.data + i * 4, true);
-        const r = xtraResolve(rom, address);
+        const r = motionResolve(rom, address);
         list.push({
             index: i,
-            name: cString(rom, dv.getUint32(M.names + i * 4, true)),
+            /* Dynamite Cop keeps no motion names, so its go by number. */
+            name: M.names === undefined ? `motion ${i}` : cString(rom, dv.getUint32(M.names + i * 4, true)),
             address,
-            offset: r.off,
-            view: r.view,
+            offset: r?.off ?? -1,
+            view: r?.view ?? null,
             frames: dv.getUint32(M.frames + i * 4, true),
             flatAnkles: rom.maincpu[M.flatAnkles + i] !== 0,
+            /* The flag byte itself, for a body whose parts say which bits
+             * stand them back up (`flatBits`). */
+            flags: rom.maincpu[M.flatAnkles + i],
+            layout: M.layout ?? 'hotd',
             joints: null,
         });
     }
-    const starts = [...new Set(list.map((m) => m.offset))].sort((a, b) => a - b);
+    const starts = [...new Set(list.filter((m) => m.view).map((m) => m.offset))].sort((a, b) => a - b);
     for (const m of list) {
+        if (!m.view) continue;
         const next = starts.find((s) => s > m.offset);
         const end = next ?? m.view.byteLength;
         const fits = next === undefined
-            ? counts.filter((j) => rootsSane(m.view, m.offset, m.frames, j, end))
+            ? counts.filter((j) => rootsSane(m.view, m.offset, m.frames, j, end, m.layout))
             : counts.filter((j) => ((m.frames * frameBytes(j) + 15) & ~15) === next - m.offset);
         if (fits.length === 1) m.joints = fits[0];
     }
     return list;
+}
+
+/* Where a motion's frames are: through XTRA_DATA, or (a few of Dynamite
+ * Cop's) a plain data ROM address. Anything else has no frames to read. */
+function motionResolve(rom, address) {
+    if ((address >>> 24) === 0x06) return xtraResolve(rom, address);
+    const off = address - MAIN_DATA_BASE;
+    if (off >= 0 && off < rom.mainData.length) return { view: rom.mainDataView, off };
+    return null;
 }
 
 /**
@@ -283,6 +299,13 @@ function turn(r, ax, ay, az) {
  * One frame's numbers: the root position and each joint's three angles. Frame
  * numbers are the game's, from 1; a body with no motion reads every angle as 0
  * and stands at the origin, which is the tree as modelled.
+ *
+ * Dynamite Cop's frames are the same size but the other way round: the angles
+ * first, then the root. sub_15000 copies a joint's three halfwords to its
+ * slot's +0x28, +0x26 and +0x24 (in that order), and sub_15210 turns by them
+ * as Rx(+0x24)·Ry(+0x26)·Rz(+0x28) on row vectors, which in the viewer, its z
+ * the board's negated, is the HOTD order with x the third halfword, y the
+ * second and z the first negated. The root's z is negated with it.
  */
 function readFrame(motion, frame, joints) {
     const angles = new Int16Array(joints * 3);
@@ -290,6 +313,16 @@ function readFrame(motion, frame, joints) {
     if (!motion || motion.joints !== joints) return { root, angles };
     const at = motion.offset + (Math.max(1, Math.min(frame, motion.frames)) - 1) * frameBytes(joints);
     const v = motion.view;
+    if (motion.layout === 'dynamcop') {
+        for (let a = 0; a < 3; a++) root[a] = v.getFloat32(at + 6 * joints + a * 4, true);
+        root[2] = -root[2];
+        for (let j = 0; j < joints; j++) {
+            angles[j * 3] = v.getInt16(at + j * 6 + 4, true);
+            angles[j * 3 + 1] = v.getInt16(at + j * 6 + 2, true);
+            angles[j * 3 + 2] = -v.getInt16(at + j * 6, true);
+        }
+        return { root, angles };
+    }
     for (let a = 0; a < 3; a++) root[a] = v.getFloat32(at + a * 4, true);
     for (let i = 0; i < joints * 3; i++) angles[i] = v.getInt16(at + 12 + i * 2, true);
     return { root, angles };
@@ -334,7 +367,12 @@ export function poseBody(body, motion, frame, { travel = false } = {}) {
         }
         const pr = rot[p.parent], pt = pos[p.parent], o = p.offset;
         pos[i] = [0, 1, 2].map((row) => pt[row] + pr[row] * o[0] + pr[row + 3] * o[1] + pr[row + 6] * o[2]);
-        const r = flat && (p.flags & 1) ? [k, 0, 0, 0, k, 0, 0, 0, k] : pr.slice();
+        /* A part that names its own bits (Dynamite Cop's ankles and wrists)
+         * is stood up by those bits of the motion's flag byte. */
+        const up = p.flatBits !== undefined
+            ? Boolean(motion && motion.joints === body.joints && (motion.flags & p.flatBits))
+            : flat && (p.flags & 1);
+        const r = up ? [k, 0, 0, 0, k, 0, 0, 0, k] : pr.slice();
         turn(r, ax, ay, az);
         rot[i] = r;
     });

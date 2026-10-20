@@ -14,7 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages } from './dynamcop.js';
+import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
 import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -3319,6 +3319,11 @@ const BODY_RIGS = {
     },
     vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
     doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
+    /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
+    dynamcop: {
+        read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
+        pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
+    },
 };
 
 function bodyRig() {
@@ -5952,10 +5957,12 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    $('#anim-note-bodies').hidden = !bodies || solved;
-    /* The solved rig's note names the game's own addresses. */
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
-    for (const n of ['vf2', 'fv', 'doa']) $(`#anim-note-${n}`).hidden = n !== note;
+    /* The solved rigs' notes, and Dynamite Cop's, name the game's own
+     * addresses; the plain bodies note is The House of the Dead's. */
+    const kind = state.rom.game.rig?.kind;
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : kind === 'dynamcop' ? 'dynamcop' : null;
+    $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
+    for (const n of ['vf2', 'fv', 'doa', 'dynamcop']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song

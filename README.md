@@ -18,7 +18,7 @@ courses, its models and its cells — see [Sega Rally Championship](#sega-rally-
 *Cyber Troopers Virtual-On* has its models, its cells and its ten stages, some
 of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
-of its stages and its cells on all three boards — see [Dynamite Cop](#dynamite-cop).
+of its stages, its cells and its characters posed by their motions on all three boards — see [Dynamite Cop](#dynamite-cop).
 Data East's *Air Walkers* and Sega's *Power Sled* have their models and their
 cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
@@ -804,6 +804,17 @@ the results and the colour bars. They are The House of the Dead's pictures,
 read by the same routines a year on, so each brings its own tiles and colours
 and opens on a CG of its own with the same number. See [Dynamite Cop's
 cells](TECHNICAL.md#dynamite-cops-cells-jscellsjs).
+
+The **Animation** tab has 94 of the game's characters (Bruno Delinger, Jean
+Ivy and Eddie Brown first; the rest by number), each put together from its 15
+parts on the game's 16-joint skeleton, and its 2284 motions (2134 play on that
+skeleton; the game gives them numbers, not names). The pose of a frame matches
+the joint positions MAME's RAM holds for the same motion and frame, and the
+heroes' outfits match MAME's screen. The motions are the same in all five
+builds; the character tables were found in each. Not drawn yet: the extra
+models some joints carry (the guns and items in a hand, belts and pads),
+mirrored motions and the blend between two motions. Character 80 shows
+nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 
 ## Air Walkers
 
