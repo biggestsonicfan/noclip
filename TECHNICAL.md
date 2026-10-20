@@ -4760,8 +4760,85 @@ Moon Base, Flooded City, Nirvana and Secret Base.
 What this leaves out: Green Hills draws its sky and no floor, Space Dock
 and Moon Base only a few small pieces, Nirvana a tube and Flooded City a
 plane and its backdrop. The rest of those fields is probably drawn by code
-that follows the camera or culls, which is not run. The robots are not
-posed.
+that follows the camera or culls, which is not run. The robots are on the
+Animation tab (below).
+
+### Virtual-On's robots (`readVonBodies` in `js/von.js`)
+
+The Animation tab has nine robots, `rig: { kind: 'von' }` in the profile.
+Nothing of HOTD's `js/bodies.js` is used but the shape of a body: the parts,
+the motions and the pose are read and built in `js/von.js`, from the draw
+routines (the legs 0x8DD40, the upper body 0x8DFC0, the weapon 0x3403C).
+
+**The robot record.** `ld 0x19360[g3*4]` (0x19D74 and others) reads a table
+of ten pointers to robot records, in the select screen's order: Temjin,
+Viper II, Belgdor, Raiden, Dorkas, Fei-Yen, Apharmd, Bal-Bas-Bow,
+Jaguarandi, Zig-Raht. The name is at +0x6BC. +0x00, +0x08 and +0x10 are
+three lists of parts, each a pointer and a count: the weapons, the upper
+body and the legs. A list entry is 8 bytes:
+
+| first word | second word | the entry |
+|---|---|---|
+| nonzero | variants pointer | a drawn part |
+| 0 | -1 | nothing (the upper body's entry 0, its root) |
+| 0 | 0-5 | a slot: its frame entry is kept at 0x562430 + 12 * slot |
+
+A variant is 16 bytes: the texture point pointer, the header pointer, a
+second header (used when the object's +0x1AA is set) and the mesh word.
+Which variant is a halfword of the object per part (from +0xDA for the legs,
+from +0xB6 for the upper body, +0xB2 for the weapon); the explorer draws
+variant 0. The triples go into the model table through `addModelTriples`,
+as the field code's do. Slot 0 is the waist, the legs list's last entry.
+Slot 1 is the hand the weapon list's entry 1 is drawn in. Zig-Raht's record
+has no weapons or upper body, and one list of 25 parts with 32-byte
+variants that another routine draws; it is left out.
+
+`vonu`'s records are 0xF0 lower, their table at 0x19270; the records and
+lists are the same.
+
+**Motions.** From +0x70 the record holds 103 pairs of record pointers, the
+upper body's then the legs'. The draw (0x2EE70) reads them as
+`0x1D8[n * 40]` and `0x1DC[n * 40]`, the same pairs in groups of five. A
+record is 8 bytes in the data ROM: the data pointer, a u16 frame count and
+an s16 part count. A frame is 12 bytes a part: three s16 angles (x, y, z,
+65536 a turn) and three IEEE half floats, the part's offset, which the copro
+takes with command 0x2F (the low 16 bits of three words). The part count is
+negative where the frames run backwards from the pointer; the draw steps by
+the signed count and loops over its size, so a list entry past the count is
+not drawn on that motion. The frame is clamped to the last. The legs'
+records have 8 parts (Bal-Bas-Bow 9), the upper body's 12 to 17. The two
+records of a pair play on one frame count (0x51AB10 and 0x51AB12). Repeated
+pairs are dropped: Temjin, Viper II, Belgdor, Raiden, Dorkas, Apharmd and
+Jaguarandi have 97 each, Fei-Yen 93 and Bal-Bas-Bow 89. The game names
+none, so a motion is called by its pair's number.
+
+These are not all of a robot's motions. The robots' action code keeps more
+pairs in tables of its own, between 0x42460 and 0x4FFFF (865 different
+pairs, Temjin's ranking-screen pose among them at 0x46950). Telling which
+robot plays them means following each robot's action routines, so they
+are not listed.
+
+**The pose.** Every part is drawn at `T(offset) Rz Ry Rx` of its frame
+entry (copro 0x2F, then 0x16, 0x15, 0x14), each in a push and pop:
+
+- the legs from the robot's place, which is the object's matrix turned by
+  its +0x184, +0xFC, +0xFE and +0x34;
+- then the waist the same way, turned on y by the object's +0x36 (the
+  twist, 0 in the explorer); then the inverse of the upper body's entry 0
+  (`Rx(-x) Ry(-y) Rz(-z) T(-offset)`); then each upper body part;
+- the weapon at the hand's entry under the upper body's root, plus the aim
+  the fight gives it (the object's +0x3A and +0x38 when the record's +0x484
+  is set, which the explorer leaves out).
+
+**Checked against MAME.** A Lua script read the matrix written into the
+geometrizer list for each object (`:bufferram` at the list address) and
+the pair and frame from 0x51AB08-0x51AB12. In the attract fight at frame
+1800 Temjin is on pair 0 with the counter at 16: with the record's entry 17
+every leg and upper body part matches to 5e-5, and the weapon's offset
+exactly (its turn differs by the aim). At frame 2400 (the ranking screen,
+the pose at 0x46950) the legs match to 1e-4, and the upper body, drawn a
+frame earlier, matches part to part to 3e-4. So the counter is one behind
+the entry drawn; the tab's frame 1 is entry 0.
 
 ### The House of the Dead's cells (`js/cells.js`)
 

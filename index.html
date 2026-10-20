@@ -594,6 +594,17 @@
         them with the leg or arm. Motion numbers are the table's at
         <code>0x15FA00</code>; the game has no names for them.
       </div>
+      <div class="note" id="anim-note-von" data-i18n="note.von" hidden>
+        Each robot is a record in the program (the table at
+        <code>0x19360</code>) with three lists of parts: the legs, the upper
+        body and the weapons. A motion is a pair of records, one for the upper
+        body and one for the legs, that give every part three angles and an
+        offset each frame. A robot has 103 pairs from <code>+0x70</code> of
+        its record; repeats are dropped, and the numbers are the pairs'. The
+        legs are drawn from where the robot stands, and the upper body from
+        the waist. The weapon is drawn in the hand without the aim the fight
+        gives it. Zig-Raht is drawn by another routine and is not here.
+      </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the
         explorer: the attract's fight is set up with the fighter in player
