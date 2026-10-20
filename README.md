@@ -1100,12 +1100,18 @@ on another in the same plane (a decal, a shoe's strap) is lifted a hair off it,
 toward the camera, in the order the view drew them. The sky panorama and the
 scroll layers are not models and are not in it.
 
-To see the colours the explorer shows in Blender:
+**Blender opens it grey.** Its default Solid view paints every imported
+material that has a texture plain grey, whatever the file holds. To see the
+colours, press **Z** in the 3D view and pick **Material Preview**, or in Solid
+mode's **Shading** popover pick **Texture** colour (and **Flat** lighting). The
+file can't change this: Blender's importer gives Solid mode a colour only
+for materials that have no texture. Checked in Blender 4.0 and 5.2.
+
+To see the colours as the explorer shows them:
 
 - set **Render > Color Management > View Transform** to **Standard**: the
   default, AgX, shifts every colour (blue goes toward green);
-- in Solid mode pick **Flat** lighting and **Texture** colour; in Material
-  Preview or EEVEE the material is already unlit;
+- in Material Preview or EEVEE the material is already unlit;
 - Cycles ignores backface culling, so the hidden sides of one-sided faces show
   there: use EEVEE or Material Preview to see what the board shows;
 - if a decal flickers far off, raise the camera's **Clip Start**.
@@ -1113,7 +1119,10 @@ To see the colours the explorer shows in Blender:
 What the board's painter's sort decides does not carry over: a face it draws
 over one that is in front of it (a South Island pillar's yellow top) is behind
 it in Blender, and two half-transparent faces in one plane (the sea's two
-layers) both show, where the board shows the top one.
+layers) both show, where the board shows the top one. Far off, a repeating
+texture (a stage's grass) comes out lighter than in the view: the explorer
+draws it there with the board's own smaller levels, which are darker, and
+Blender averages the full-size tile. glTF has no way to carry those levels.
 
 ### The game's own camera (Sonic the Fighters)
 
