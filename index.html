@@ -583,6 +583,17 @@
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
       </div>
+      <div class="note" id="anim-note-dynamcop" data-i18n="note.dynamcop" hidden>
+        Every character has the same sixteen-joint skeleton, which is in the
+        code (<code>0x15210</code>) rather than in a table. The offsets of its
+        joints come from <code>0xE1890</code> and the fifteen models from
+        <code>0xE1A10</code>, both indexed by character. A motion is the
+        sixteen joints' angles for every frame, followed by the root's
+        position. A flag byte per motion (<code>0x164160</code>) keeps the
+        ankles, and sometimes a wrist, level with the body instead of turning
+        them with the leg or arm. Motion numbers are the table's at
+        <code>0x15FA00</code>; the game has no names for them.
+      </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the
         explorer: the attract's fight is set up with the fighter in player

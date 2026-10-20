@@ -382,3 +382,86 @@ export function readDynamcopStages(rom) {
     }
     return stages;
 }
+
+/* ---- characters ------------------------------------------------------------ */
+
+/*
+ * The skeleton every character is drawn on, as sub_15210 builds it. There is
+ * no tree of part records as in The House of the Dead: the routine walks
+ * sixteen joints in a fixed order, pushing and popping the coprocessor's
+ * matrix stack, and reads back each joint's matrix to 0x6A4 + 48 * joint of
+ * the object. Joint 0 is the root and draws nothing; 1 is the chest, 2 the
+ * head, 3-5 and 6-8 the arms, 9 the hips, 10-12 and 13-15 the legs. These
+ * parents were fitted against those read-back matrices in MAME (offset and
+ * turn exact for every joint, over a dozen attract frames).
+ */
+const DYNAMCOP_PARENTS = [-1, 0, 1, 1, 3, 4, 1, 6, 7, 0, 9, 10, 11, 9, 13, 14];
+
+/*
+ * The joints a motion's flag byte (0x164160[motion]) can stand back up: the
+ * routine reads the matrix back, puts the body's own turn (the one it held
+ * before joint 0) in place of its rotation, and turns the joint from there.
+ * Bit 0 does both ankles, bits 1 and 2 one wrist each (`2 << arm`).
+ */
+const DYNAMCOP_FLAT = { 5: 2, 8: 4, 12: 1, 15: 1 };
+
+/* The skeletons that are not this one: character 75's table is not sixteen
+ * offsets and 79's is laid out for another body. */
+const DYNAMCOP_OTHER_SKELETONS = new Set([75, 79]);
+
+const DYNAMCOP_NAMES = ['Bruno Delinger', 'Jean Ivy', 'Eddie Brown'];
+
+/**
+ * Every character in the program's two parallel tables, as bodies.js bodies.
+ *
+ * `rig.bodies.offsets[char]` points at sixteen float triples, the offset of
+ * joint k + 1 from its parent (sub_15210 reads it with `ld 0xE1890[g4*4]` on
+ * the object's +0xDC); `rig.bodies.models[char]` at fifteen model numbers, one
+ * for each of joints 1-15 in order, which sub_18FC0 draws off the object's
+ * +0xE4 with sub_9A980. The offsets are the board's; the viewer's z is the
+ * board's negated.
+ *
+ * @param {object} rom loaded ROM set
+ * @returns {object[]}
+ */
+export function readDynamcopBodies(rom) {
+    const B = rom.game.rig.bodies;
+    const dv = rom.mainCpuView;
+    const out = [];
+    for (let i = 0; i < B.count; i++) {
+        if (DYNAMCOP_OTHER_SKELETONS.has(i)) continue;
+        const skel = dv.getUint32(B.offsets + i * 4, true);
+        const list = dv.getUint32(B.models + i * 4, true);
+        if (skel + 16 * 12 > rom.maincpu.length || list + 15 * 4 > rom.maincpu.length) continue;
+        const parts = DYNAMCOP_PARENTS.map((parent, j) => {
+            const at = skel + (j ? j - 1 : 0) * 12;
+            const offset = j ? [dv.getFloat32(at, true), dv.getFloat32(at + 4, true), -dv.getFloat32(at + 8, true)] : [0, 0, 0];
+            let depth = 0;
+            for (let p = parent; p >= 0; p = DYNAMCOP_PARENTS[p]) depth++;
+            return {
+                index: j,
+                parent,
+                depth,
+                model: j ? dv.getUint32(list + (j - 1) * 4, true) : 0,
+                offset,
+                flags: 0,
+                flatBits: DYNAMCOP_FLAT[j] ?? 0,
+                joint: j,
+                record: skel,
+            };
+        });
+        out.push({
+            index: i,
+            name: DYNAMCOP_NAMES[i] ?? `character ${i}`,
+            joints: 16,
+            scale: 1,
+            roles: [],
+            skin: -1,
+            hitMotions: [],
+            start: -1,
+            root: skel,
+            parts,
+        });
+    }
+    return out;
+}

@@ -4465,6 +4465,69 @@ drawn under its own set. In the attract, 0x51F4A0, 0x51F49C and 0x51F4A4 are
 cabin MAME shows then: the double doors, bed, desk and wall lamp, in the
 same colours.
 
+### Dynamite Cop's characters (`readDynamcopBodies` in `js/dynamcop.js`)
+
+The Animation tab runs on The House of the Dead's code (`js/bodies.js`,
+`readMotions` and `poseBody`) with a `dynamcop` rig in `js/games.js`. The
+formats were read off the routines that use them, and differ from HOTD's in
+four places.
+
+**The skeleton is in code.** There is no body record. 0x15210 poses an
+object: 16 joints, parents hard-coded as
+`[-1,0,1,1,3,4,1,6,7,0,9,10,11,9,13,14]` (hips, chest, head, two arms of
+three, two legs of three). Joint j >= 1 sits at entry j-1 of 16 float triples
+at `offsets[char]` from its parent, turned by the parent: `pos = pos_p +
+off * R_p` (row vectors). The matrices land at object +0x6A4 + 48 * j.
+`models[char]` points at 15 model numbers, one for each of joints 1-15, drawn
+by 0x18FC0 (joint 0 has no model). The two tables run in parallel, 96
+characters each; 75 and 79 use other skeleton routines and are left out.
+
+| table | dynamcop | dyndeka2 | dynamcopb | dyndeka2b | dynamcopc |
+|---|---|---|---|---|---|
+| offsets | 0xE1890 | 0xE1880 | 0xCFE90 | 0xCFE80 | 0xF2260 |
+| models | 0xE1A10 | 0xE1A00 | 0xD0010 | 0xD0000 | 0xF23E0 |
+
+Each was found in its build by searching for the 2A tables' bytes. The motion
+tables are in the shared upper half of the program, so they are the same in
+all five: 2284 data pointers at 0x15FA00, frame counts at 0x161DB0 and a flag
+byte per motion at 0x164160. Most data is in the extra ROM (0x06xxxxxx), some
+in main data (0x02E...); the 24 pointing at 0x01... are not motions and are
+skipped. 2134 motions are spaced for 16 joints.
+
+**The frame is reversed.** It has HOTD's size, `((48 * joints + 127) >> 5) *
+4` bytes, but the 16 angle triples come first and the root's x, y, z floats
+after them, at 6 * joints. 0x15000 copies a triple's halfwords (h0, h1, h2)
+to slot +0x40C, +0x40A, +0x408 (slot j at 0x3E4 + 0x2C * j), and 0x15210
+builds `R = Rx(h2) Ry(h1) Rz(h0) R_parent`. Joint 0's triple is the root's
+turn. Only the root's y is used for its position (x and z are travel, shown
+with the travel option); the object's own yaw at +0x40 is outside the pose.
+In the viewer's frame (z negated) this is HOTD's `turn` with ax = h2,
+ay = h1, az = -h0, offsets (x, y, -z) and the root's z negated
+(`readFrame`, `layout: 'dynamcop'`).
+
+**Level joints come from the motion.** Bit 0 of the motion's flag byte sets
+both ankles (joints 12 and 15) level, bits 1 and 2 the wrists (joints 5 and 8):
+the joint's rotation starts again from the body's own and only its angles
+turn it, as HOTD's reset to the scale matrix does. A part's `flatBits` names
+its bit. The wrist bits were read from the code; no motion was found that
+uses them.
+
+**Checked against MAME.** A Lua script read the 16 matrices at +0x6A4 and the
+motion number and frame from RAM in the attract and in play (10 dumps). The
+positions `poseBody` gives for the same motion and frame match to 0.0000 in 6;
+in the others the right ankle is off by up to 0.03 and two dumps by 0.12 and
+0.07, most likely the frame read a tick apart from the matrices. Headless
+Chrome pictures of Bruno (motion 1255, the throw) and Jean (motion 1970, the
+high kick) match MAME's screen at frames 3300 and 4800, outfits included.
+
+Not done: the extra models some joints carry (0xED140 / 0xED2C0, on joints 1,
+3, 4, 6, 7, 9-11, 13, 14), the items in a hand chosen per motion
+(0x164A50 / 0x164A54, drawn by 0x19580 and 0x192E0 on joints 5 and 8), the
+mirror flag at object +0xCD8, the blend between motions, and which motions
+each character plays (lists from 0x1B70A8). Only the three heroes are named.
+Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
+explorer; why was not found.
+
 ### Fighting Vipers' cells (`js/cells.js`)
 
 Sonic The Fighters' two tables a year earlier, at the addresses the stage sky

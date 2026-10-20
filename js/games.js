@@ -4666,24 +4666,24 @@ const DYNAMCOP_AT = {
     dynamcop: {
         tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
         flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
-        materials: 0x6ecc0, missions: 0xe9a70,
+        materials: 0x6ecc0, missions: 0xe9a70, offsets: 0xe1890, models: 0xe1a10,
     },
 };
 DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
-    missions: 0xe9a60,
+    missions: 0xe9a60, offsets: 0xe1880, models: 0xe1a00,
 };
 DYNAMCOP_AT.dynamcopb = {
     tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
     flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
-    materials: 0x17c40, missions: 0xf9370,
+    materials: 0x17c40, missions: 0xf9370, offsets: 0xcfe90, models: 0xd0010,
 };
 DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
-    missions: 0xf9360,
+    missions: 0xf9360, offsets: 0xcfe80, models: 0xd0000,
 };
 DYNAMCOP_AT.dynamcopc = {
     tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
     flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
-    materials: 0x6f3b0, missions: 0xfa190,
+    materials: 0x6f3b0, missions: 0xfa190, offsets: 0xf2260, models: 0xf23e0,
 };
 
 function dynamcopBuild({ id, name, low, high }) {
@@ -4744,7 +4744,22 @@ function dynamcopBuild({ id, name, low, high }) {
         /* js/dynamcop.js readDynamcopStages: `missions` is the table 0x2B960
          * reads, three pointers a mission to runs of area descriptors. */
         stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
-        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        /*
+         * The characters (js/dynamcop.js readDynamcopBodies, bodies.js for the
+         * motions). Ninety-six of them in two parallel tables, `offsets` the
+         * skeleton sub_15210 reads and `models` the fifteen models sub_18FC0
+         * draws; the skeleton itself is in the code. The motion tables are in
+         * the program's upper half, which every build shares: 2284 motions,
+         * data 0x15FA00 (sub_15000 steps a frame pointer through them), frames
+         * 0x161DB0, and the flag byte 0x164160 the wrists and ankles test.
+         * A frame is HOTD's size, `((48*16+127)>>5)*4`, angles first.
+         */
+        rig: {
+            kind: 'dynamcop',
+            bodies: { count: 96, offsets: A.offsets, models: A.models },
+            motions: { count: 2284, data: 0x15fa00, frames: 0x161db0, flatAnkles: 0x164160, layout: 'dynamcop' },
+        },
+        features: { stages: true, characters: false, motions: true, bodies: true, cells: false },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
     };
 }
