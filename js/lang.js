@@ -419,11 +419,12 @@ const JA_TEXT = {
     'extra': '追加', 'cage': '檻', 'poles': '柱', 'objects': 'オブジェクト', 'scenery': '風景',
     'fighters': 'ファイター', 'outside': '屋外', 'inside': '屋内',
 
-    /* Its record, views and states (stages.js, placements.js, vcop.js, vf2.js, doa.js, daytona.js) */
+    /* Its record, views and states (stages.js, placements.js, vcop.js, vf2.js, doa.js, daytona.js, dynamcop.js) */
     'stage': 'ステージ', 'course': 'コース', 'blocks': 'ブロック', 'never in view': '一度も見えない',
     'sections': 'セクション', 'zones': 'ゾーン', 'placements': '配置', 'props': '小物',
     'in no reached zone': '到達するゾーン外', 'segments': 'セグメント', 'low detail': '低詳細度', 'pieces': 'ピース',
     'object parts': 'オブジェクトのパーツ', 'flags': 'フラグ', 'routine': 'ルーチン', 'unread': '未解読',
+    'area': 'エリア', 'list': 'リスト', 'set': 'セット',
     'Everything': 'すべて',
     'Every segment at once': 'すべてのセグメントを一度に',
     'Every block a car reaches': '車が到達するすべてのブロック',

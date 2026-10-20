@@ -12,6 +12,7 @@
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
 import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
+import { dynamcopPalette } from './dynamcop.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -398,6 +399,11 @@ export function facePalette(rom) {
     rom.facePalettes ??= new Map();
     if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
 
+    if (p?.layout === 'dynamcop') {
+        const out = dynamcopPalette(rom, set);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
     const out = new Int32Array(1024).fill(-1);
     if (!p) {
         /* Sega Rally keeps its table in the program ROM (0x267B0 copies it). */

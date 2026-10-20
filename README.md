@@ -17,6 +17,8 @@ twelve stages and its models on both its boards — see
 courses and its models — see [Sega Rally Championship](#sega-rally-championship).
 *Cyber Troopers Virtual-On* has its models and its ten stages, some of them
 only in part — see [Virtual-On](#virtual-on).
+*Dynamite Cop* has its models and the rooms
+of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
 
 Three views, and a fourth for the 2D art:
 
@@ -745,6 +747,31 @@ What is still missing:
 - The Virtuaroids are in the Models tab as parts, in their base colours: the
   colours each one wears are set when a player picks it, and the tab picks
   none. They are not posed.
+
+## Dynamite Cop
+
+All five builds MAME has load: `dynamcop.zip` (export, Model 2A),
+`dyndeka2.zip` (Japan, 2A), `dynmcopb.zip` and `dyndek2b.zip` (the same two on
+2B) and `dynmcopc.zip` (USA, 2C). The clones need `dynamcop.zip` beside them.
+A merged set, or several zips dropped at once, opens as the 2A export build,
+and the Build list at the top of the sidebar picks another.
+
+The **Models** tab has all 19432 entries of the model table, each with the
+textures and colours of the scene that loads it: the stage it belongs to, or
+for an enemy's model, that enemy's set.
+
+The **Stages** tab has 279 areas, one room each, from the game's own object
+lists. Each is assembled as the game places it: the room, its props and the
+sea and sky round it, under the stage's textures and colours. The areas are
+named by their place in the game's table ("Course 1-1, area 28" is the
+cruise ship cabin of the attract, and matches MAME there). Six areas are
+mostly an enemy set's models; they are drawn under that set, which brings
+stage 1 with it, and look wrong in places. What the table's indices mean in the
+game, which areas a mission plays in which order, and the enemies standing in
+each room are not read yet; nor is the second copy of the model table, whose
+models are drawn under the first copy's sets unchecked. The light comes from
+The House of the Dead's settings. See
+[TECHNICAL.md](TECHNICAL.md#dynamite-cop-jsdynamcopjs).
 
 ## Running it
 

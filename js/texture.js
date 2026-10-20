@@ -31,6 +31,7 @@
 import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
 import { doaLoadId } from './colors.js';
+import { buildDynamcopTexram } from './dynamcop.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -1245,6 +1246,10 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
+        if (layout === 'dynamcop') {
+            const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+            return buildDynamcopTexram(rom, sets.length ? sets[sets.length - 1] : 0);
+        }
         return buildRawTexram(rom, texSets);
     }
     const md = rom.mainData;

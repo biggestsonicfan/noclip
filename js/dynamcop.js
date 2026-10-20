@@ -1,0 +1,384 @@
+/*
+ * dynamcop.js — Dynamite Cop's scenes: what texture RAM and the face palette
+ * hold while a stage and two enemy sets are loaded.
+ *
+ * The game numbers 25 sets. Set 0 is boot, sets 1-13 are stages and 14-24 are
+ * enemy sets (enemy n is set 14 + n). Three RAM slots name the loaded ones:
+ * 0x543024 the stage, 0x543028 and 0x54302C the two enemy sets. The two enemy
+ * sets always have opposite flags in `enemyFlags`, and the flag decides which
+ * half of texture RAM and of the palette each one takes. So a scene is a stage
+ * and an enemy pair, and a set number the explorer asks for is turned into one
+ * here (`dynamcopScene`).
+ *
+ * Addresses below are the 2A export build's (dynamcop); games.js gives each
+ * build its own.
+ */
+
+import { MAIN_DATA_BASE } from './romset.js';
+import { SHEET_BYTES } from './atlas.js';
+import { bankTextureSet } from './texture.js';
+import { gameLighting } from './stages.js';
+
+const SHEET0 = 0;
+const SHEET1 = SHEET_BYTES;
+/* The full-size half of a sheet is rows 0-511; the mip half starts at row 512,
+ * 0x40000 halfwords in. */
+const MIP = 0x80000;
+
+/** The stage and enemy pair loaded with `set`. */
+export function dynamcopScene(rom, set) {
+    const D = rom.game.dynamcop;
+    const flag = (n) => rom.mainCpuView.getUint32(D.enemyFlags + n * 4, true);
+    /* An enemy set's partner: the first enemy set with the other flag. */
+    const partner = (n) => {
+        for (let k = 0; k < D.enemies; k++) if (flag(k) !== flag(n)) return k;
+        return n;
+    };
+    const s = Number.isInteger(set) ? set : 0;
+    if (s >= D.stages && s < D.stages + D.enemies) {
+        const n = s - D.stages;
+        return { stage: D.defaultStage, enemies: [n, partner(n)], flag };
+    }
+    const n = D.defaultEnemy;
+    return { stage: s > 0 && s < D.stages ? s : 0, enemies: [n, partner(n)], flag };
+}
+
+/* A data address as an offset into main_data. XTRA_DATA (0x06000000) is
+ * main_data from 0x1000000 on; set 5's stage bank is 0x06755500. */
+function dataOffset(a) {
+    if (a >= 0x06000000) return a - 0x06000000 + 0x1000000;
+    return a - MAIN_DATA_BASE;
+}
+
+/* Copy halfwords packed end to end into the rectangle (x0,y0)-(x1,y1) of a
+ * sheet image, row 0x200 halfwords. 0x6FF60 does this, one halfword per
+ * texture RAM word. Returns the source position after it. */
+function packedRect(md, src, tex, base, x0, y0, x1, y1) {
+    const n = (x1 - x0 + 1) * 2;
+    for (let y = y0; y <= y1; y++) {
+        if (src + n > md.length) return md.length;
+        tex.set(md.subarray(src, src + n), base + ((y << 9) + x0) * 2);
+        src += n;
+    }
+    return src;
+}
+
+/* 0x6F9A0: zero a rectangle of the mip half. Both bank loaders clear
+ * (0x1F0,0x1F8)-(0x1FF,0x1FF) of the far sheet's mip half when they are done. */
+function clearMipCorner(tex, base) {
+    for (let y = 0x1f8; y <= 0x1ff; y++) tex.fill(0, base + MIP + ((y << 9) + 0x1f0) * 2, base + MIP + ((y << 9) + 0x200) * 2);
+}
+
+/*
+ * The boot bank (0x978C0): byte pair encoding, Gage's, in blocks. A block is a
+ * pair table and then a 16-bit big-endian count of packed bytes. The table is
+ * read as runs: a count byte c over 127 skips c - 127 codes and reads none, and
+ * otherwise c + 1 codes follow, each a left byte and, when the left byte is not
+ * the code itself, a right byte. It ends when the code reaches 256. Packed bytes
+ * expand through a stack. The output pairs into halfwords, first byte low, and
+ * goes into the rectangles of the table at `rects` (24 bytes each: sheet, word
+ * offset, x0, y0, x1, y1; -1 ends it). Sheet 0 of that table is texture RAM 0.
+ */
+function bootBank(rom, md, src, tex) {
+    const cv = rom.mainCpuView;
+    const R = rom.game.texture.raw.bootRects;
+    const rects = [];
+    for (let o = R; cv.getInt32(o, true) !== -1 && rects.length < 64; o += 24) {
+        rects.push([0, 1, 2, 3, 4, 5].map((k) => cv.getInt32(o + k * 4, true)));
+    }
+    if (!rects.length) return;
+    let ri = 0;
+    let [sel, off, x0, y0, x1, y1] = rects[0];
+    let x = x0, y = y0, lo = -1;
+    const left = new Uint8Array(256), right = new Uint8Array(256);
+    const stack = [];
+    let p = src;
+    while (ri < rects.length && p < md.length) {
+        for (let i = 0; i < 256; i++) left[i] = i;
+        let code = 0;
+        let c = md[p++];
+        for (;;) {
+            if (c > 127) { code += c - 127; c = 0; }
+            if (code === 256) break;
+            for (let k = 0; k <= c && code < 256; k++, code++) {
+                left[code] = md[p++];
+                if (left[code] !== code) right[code] = md[p++];
+            }
+            if (code === 256) break;
+            c = md[p++];
+        }
+        let size = (md[p] << 8) | md[p + 1];
+        p += 2;
+        while (ri < rects.length) {
+            let ch;
+            if (stack.length) ch = stack.pop();
+            else if (size-- > 0) ch = md[p++];
+            else break;
+            if (left[ch] !== ch) { stack.push(right[ch], left[ch]); continue; }
+            if (lo < 0) { lo = ch; continue; }
+            const at = (sel ? SHEET1 : SHEET0) + (off + (y << 9) + x) * 2;
+            tex[at] = lo;
+            tex[at + 1] = ch;
+            lo = -1;
+            if (++x > x1) {
+                x = x0;
+                if (++y > y1 && ++ri < rects.length) {
+                    [sel, off, x0, y0, x1, y1] = rects[ri];
+                    x = x0; y = y0;
+                }
+            }
+        }
+    }
+    clearMipCorner(tex, SHEET1);
+}
+
+/* A stage's bank (0x6F9E0, called with g1 = 1): 0xAAA00 bytes, the full-size
+ * half onto sheet 1 and its mips dealt between the two. */
+function stageBank(md, src, tex) {
+    const near = SHEET1, far = SHEET0;
+    let p = packedRect(md, src, tex, near, 0, 0, 0x1ff, 0x1ff);
+    p = packedRect(md, p, tex, far + MIP, 0x000, 0x100, 0x0ff, 0x1ff);
+    p = packedRect(md, p, tex, near + MIP, 0x100, 0x180, 0x17f, 0x1ff);
+    p = packedRect(md, p, tex, far + MIP, 0x180, 0x1c0, 0x1bf, 0x1ff);
+    p = packedRect(md, p, tex, near + MIP, 0x1c0, 0x1e0, 0x1df, 0x1ff);
+    packedRect(md, p, tex, far + MIP, 0x1e0, 0x1f0, 0x1ef, 0x1ff);
+    clearMipCorner(tex, far);
+}
+
+/* An enemy set's bank (0x6F8D0): 0x55500 bytes, all in the mip halves, in the
+ * rectangles the stage leaves free. The flag picks which sheet takes which. */
+function enemyBank(md, src, tex, flag) {
+    const a = flag ? SHEET1 : SHEET0, b = flag ? SHEET0 : SHEET1;
+    let p = packedRect(md, src, tex, a + MIP, 0x000, 0x000, 0x1ff, 0x0ff);
+    p = packedRect(md, p, tex, b + MIP, 0x100, 0x100, 0x1ff, 0x17f);
+    p = packedRect(md, p, tex, a + MIP, 0x180, 0x180, 0x1ff, 0x1bf);
+    p = packedRect(md, p, tex, b + MIP, 0x1c0, 0x1c0, 0x1ff, 0x1df);
+    p = packedRect(md, p, tex, a + MIP, 0x1e0, 0x1e0, 0x1ff, 0x1ef);
+    packedRect(md, p, tex, b + MIP, 0x1f0, 0x1f0, 0x1ff, 0x1f7);
+}
+
+/* Where 0x97D10 puts a stage's eight 64x64 blocks on sheet 0, as in The House
+ * of the Dead; a null entry leaves the place alone. */
+const PATCH_AT = [[0, 0], [64, 0], [0, 64], [64, 64], [0, 128], [64, 128], [0, 192], [64, 192]];
+
+/*
+ * Texture RAM for a scene, in the order the game loads it: boot (0x7D450), the
+ * stage (0x7D3F0: its bank, then its blocks) and the two enemy sets (0x7D420).
+ * Checked against texture RAM read out of MAME (dynamcop, three attract
+ * scenes): sheet 1 matches exactly. Sheet 0 matches outside the eight block
+ * places, which hold the blocks of every stage played before, as nothing puts
+ * boot's back; here they hold boot's and the stage's own.
+ */
+export function buildDynamcopTexram(rom, set, scene = dynamcopScene(rom, set)) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const bank = (k) => dataOffset(cv.getUint32(raw.bankTable + k * 4, true));
+    bootBank(rom, md, bank(0), tex);
+    let pages = 1;
+    if (scene.stage > 0) {
+        stageBank(md, bank(scene.stage), tex);
+        for (let i = 0; i < PATCH_AT.length; i++) {
+            const src = cv.getUint32(raw.patchTable + scene.stage * 32 + i * 4, true);
+            if (!src) continue;
+            const s0 = dataOffset(src);
+            if (s0 + 0x2000 > md.length) continue;
+            const [x, y] = PATCH_AT[i];
+            for (let r = 0; r < 64; r++) {
+                tex.set(md.subarray(s0 + r * 128, s0 + r * 128 + 128), SHEET0 + (((y + r) << 9) + x) * 2);
+            }
+        }
+        pages++;
+    }
+    const D = rom.game.dynamcop;
+    for (const n of scene.enemies) {
+        enemyBank(md, bank(D.stages + n), tex, scene.flag(n));
+        pages++;
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
+/*
+ * The face palette for a scene. Each table is a count and that many BGR555
+ * colours, written up from a start (0x318E0 and the like) or down from one.
+ * In the order boot and the set loaders write them:
+ *
+ *   boot table `tables[0]`             up from 0
+ *   top table `top[0]`                 down from 1023
+ *   `extra`: its first 50              down from 983, the rest down from 873
+ *   the stage's `tables[s]`            up from 400
+ *   the stage's `top[s]`               down from 933
+ *   enemy n's `tables[14 + n]`         up from 550 (flag 0) or 600 (flag 1)
+ *
+ * Checked against palette RAM read out of MAME in three attract scenes: only
+ * a few entries the game animates differ. Entries nothing writes are 0.
+ */
+export function dynamcopPalette(rom, set, scene = dynamcopScene(rom, set)) {
+    const p = rom.game.palette;
+    const cv = rom.mainCpuView;
+    const len = rom.maincpu.length;
+    const out = new Int32Array(1024).fill(0);
+    const put = (t, first, down, from = 0, to = Infinity) => {
+        if (!t || t + 2 > len) return;
+        const count = Math.min(cv.getUint16(t, true), to);
+        for (let i = from; i < count; i++) {
+            const j = down ? first - (i - from) : first + (i - from);
+            if (j < 0 || j > 1023 || t + 4 + i * 2 > len) break;
+            out[j] = cv.getUint16(t + 2 + i * 2, true);
+        }
+    };
+    const ptr = (a, k) => cv.getUint32(a + k * 4, true);
+    put(ptr(p.tables, 0), 0, false);
+    put(ptr(p.top, 0), 1023, true);
+    put(ptr(p.extra, 0), 983, true, 0, 50);
+    put(ptr(p.extra, 0), 873, true, 50);
+    if (scene.stage > 0) {
+        put(ptr(p.tables, scene.stage), 400, false);
+        put(ptr(p.top, scene.stage), 933, true);
+    }
+    const D = rom.game.dynamcop;
+    for (const n of scene.enemies) put(ptr(p.tables, D.stages + n), scene.flag(n) ? 600 : 550, false);
+    return out;
+}
+
+/* ---- Stages: the areas the mission table lists -------------------------- */
+
+/*
+ * 0x2B960 starts an area. `missions` is twelve pointers, three per mission
+ * (the mission in 0x51F4A0, the variant in 0x51F49C), each to a run of area
+ * descriptors, 40 bytes apiece; the area number is 0x51F4A4. Word +0x10 of a
+ * descriptor is its object list: 32-byte records, ended by the first record
+ * after the first whose type (+0x14) is 0.
+ *
+ *   +0x02  s16    model, an index into the whole model table
+ *   +0x04  float  x, y, z
+ *   +0x10  s16    yaw, 0x4000 a quarter turn
+ *   +0x14  u32    type
+ *
+ * The first record sets the area up (0x1D970 by its type). The others are
+ * spawned through 0x1D9A0[type]. Type 2 is the room itself (0x1F0D0, whose
+ * task 0x1DFD0 draws its model where it stands), and the rest are props,
+ * the sea and sky, and the things a cut scene moves. Each area is a room in
+ * its own frame, round the origin.
+ *
+ * The runs have no count. One ends where the next starts, and the last one
+ * ends at the mission table. A descriptor whose list is outside the data the
+ * lists live in (0x1D0000-0x200000) is past the end.
+ */
+const LISTS = [0x1d0000, 0x200000];
+
+function areaRuns(rom) {
+    const D = rom.game.stageTable.dynamcop;
+    const cv = rom.mainCpuView;
+    const runs = [...new Set([...Array(12).keys()].map((k) => cv.getUint32(D.missions + k * 4, true)))]
+        .sort((a, b) => a - b);
+    const out = new Map();
+    runs.forEach((p, i) => {
+        const end = runs[i + 1] ?? D.missions;
+        const areas = [];
+        for (let d = p; d + 40 <= end; d += 40) {
+            const list = cv.getUint32(d + 0x10, true);
+            if (list < LISTS[0] || list >= LISTS[1]) break;
+            areas.push(list);
+        }
+        out.set(p, areas);
+    });
+    return out;
+}
+
+function areaRecords(rom, list) {
+    const cv = rom.mainCpuView;
+    const count = rom.game.modelTable.count;
+    const out = [];
+    for (let i = 0, o = list; i < 512 && o + 32 <= LISTS[1]; i++, o += 32) {
+        const type = cv.getUint32(o + 0x14, true);
+        if (i > 0 && type === 0) break;
+        if (i === 0) continue;
+        const model = cv.getInt16(o + 2, true);
+        if (model <= 0 || model >= count) continue;
+        out.push({
+            model, type,
+            pos: [cv.getFloat32(o + 4, true), cv.getFloat32(o + 8, true), cv.getFloat32(o + 12, true)],
+            yaw: cv.getUint16(o + 0x10, true),
+        });
+    }
+    return out;
+}
+
+/* A model's set: its bank's (bankTextureSet), with boot's models drawn under
+ * whatever the area is. */
+function areaSet(rom, records) {
+    const votes = new Map();
+    for (const r of records) {
+        const s = bankTextureSet(rom, r.model);
+        if (s) votes.set(s, (votes.get(s) ?? 0) + 1);
+    }
+    let best = 0, most = 0;
+    for (const [s, n] of votes) if (n > most) { best = s; most = n; }
+    return best;
+}
+
+/**
+ * One stage per area the missions reach. An area two variants share is
+ * listed once, under the first that reaches it. A model of an enemy set is
+ * drawn under that set, the rest under the area's stage.
+ */
+export function readDynamcopStages(rom) {
+    const D = rom.game.stageTable.dynamcop;
+    const cv = rom.mainCpuView;
+    const lit = gameLighting(rom);
+    const runs = areaRuns(rom);
+    const seen = new Set();
+    const stages = [];
+    for (let k = 0; k < 12; k++) {
+        const mission = Math.floor(k / 3), variant = k % 3;
+        const areas = runs.get(cv.getUint32(D.missions + k * 4, true)) ?? [];
+        areas.forEach((list, area) => {
+            if (seen.has(list)) return;
+            seen.add(list);
+            const records = areaRecords(rom, list);
+            if (!records.length) return;
+            const set = areaSet(rom, records);
+            const setOf = (m) => {
+                const s = bankTextureSet(rom, m);
+                return s >= D.enemySets ? s : set;
+            };
+            const draws = [], objects = [];
+            for (const r of records) {
+                const s = setOf(r.model);
+                if (r.type === 2) draws.push({ model: r.model, pos: r.pos, turn: r.yaw, set: s, layer: 'scenery' });
+                else objects.push({ model: r.model, pos: r.pos, turn: [0, r.yaw, 0], scale: 1, set: s });
+            }
+            const sets = [...new Set([...draws, ...objects].map((d) => d.set))].sort((a, b) => a - b);
+            stages.push({
+                slot: stages.length,
+                placements: true,
+                mixedSets: sets.length > 1,
+                num: mission + 1,
+                name: `Course ${mission + 1}-${variant + 1}, area ${area}`,
+                chapter: mission,
+                draws,
+                objects,
+                sky: null,
+                zones: [],
+                views: [['all', 'Everything']],
+                view: 'all',
+                union: 'all',
+                texSets: [set],
+                texSet: [set, set],
+                tint: [1, 1, 1],
+                bright: 1,
+                light: lit?.light,
+                materials: lit?.materials,
+                colorCycles: [],
+                flags: 0,
+                floorSize: 0,
+                meta: [['course', `${mission + 1}-${variant + 1}`], ['area', area],
+                    ['list', `0x${list.toString(16)}`], ['set', sets.join(', ')],
+                    ['pieces', draws.length + objects.length]],
+            });
+        });
+    }
+    return stages;
+}
