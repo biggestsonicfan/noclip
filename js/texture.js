@@ -935,6 +935,93 @@ function buildDoaTexram(rom, texSets, fighters = [{ char: 0 }, { char: 1 }]) {
 }
 
 /*
+ * Virtual On's banks are LZSS: a big-endian byte count, then flag bytes read
+ * low bit first, a set bit a literal, a clear one a 12-bit window offset and
+ * a 4-bit length less 3, out of a 4096-byte window whose writes start at
+ * 0xFEE (vonj 0x27E50, which deals the halfwords out as it goes).
+ */
+function vonUnpack(md, src) {
+    if (src < 0 || src + 4 > md.length) return null;
+    const need = (((md[src] << 24) | (md[src + 1] << 16) | (md[src + 2] << 8) | md[src + 3]) >>> 0) & ~1;
+    if (need > SHEET_BYTES) return null;
+    const out = new Uint8Array(need);
+    const win = new Uint8Array(0x1000);
+    let r = 0xfee, p = src + 4, n = 0, flags = 0;
+    while (n < need && p < md.length) {
+        flags >>= 1;
+        if (!(flags & 0x100)) flags = md[p++] | 0xff00;
+        if (flags & 1) {
+            const b = md[p++];
+            out[n++] = b; win[r] = b; r = (r + 1) & 0xfff;
+        } else {
+            const b0 = md[p], b1 = md[p + 1];
+            p += 2;
+            const at = b0 | ((b1 & 0xf0) << 4);
+            for (let k = 0; k < (b1 & 0xf) + 3 && n < need; k++) {
+                const b = win[(at + k) & 0xfff];
+                out[n++] = b; win[r] = b; r = (r + 1) & 0xfff;
+            }
+        }
+    }
+    return out;
+}
+
+/*
+ * The unpacked halfwords go to the same place in one sheet or the other.
+ * The first 0x60000 go to the first sheet; past that a 512-byte table in
+ * the program (vonj 0x27C50, read at 0x2801C) gives each a pair of numbers,
+ * one for the low byte of the index and one for the high, and the pair picks
+ * the sheet: the mip rectangles live on the other one.
+ */
+function vonDeal(page, deal, a, b) {
+    for (let i = 0; i < page.length >> 1; i++) {
+        let other = false;
+        if (i > 0x5ffff) {
+            const g5 = deal[i & 0x1ff], g4 = deal[(i >> 8) & 0x1fe];
+            other = g4 === 1 || g5 === 1;
+            for (let k = 3; k <= 9 && !other; k += 2) {
+                other = (g4 === k && g5 > k - 1) || (g5 === k && g4 > k);
+            }
+        }
+        const dst = other ? b : a;
+        dst[2 * i] = page[2 * i];
+        dst[2 * i + 1] = page[2 * i + 1];
+    }
+}
+
+/*
+ * Virtual On's texture RAM for one field. At boot the game unpacks the font
+ * and common bank (main_data 0xC00008) with sheet 0 first, then bank 0 with
+ * sheet 1 first; each field then unpacks its own bank (`ld fieldBanks[field]`
+ * into the five-pointer `banks` table) with sheet 1 first. Every bank is a
+ * full sheet. Field 13 unpacks none and keeps the last field's (MAME, after
+ * field 3, holds bank 1 there); the viewer gives it bank 0. Byte-for-byte against
+ * MAME's texture RAM after each field's start.
+ */
+function buildVonTexram(rom, texSets) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const s0 = tex.subarray(0, SHEET_BYTES), s1 = tex.subarray(SHEET_BYTES);
+    const deal = rom.maincpu.subarray(raw.deal, raw.deal + 512);
+    const bank = (k) => cv.getUint32(raw.banks + k * 4, true) - MAIN_DATA_BASE;
+    let pages = 0;
+    const load = (src, a, b) => {
+        const page = vonUnpack(md, src);
+        if (page) { vonDeal(page, deal, a, b); pages++; }
+    };
+    load(raw.boot, s0, s1);
+    load(bank(0), s1, s0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const field = sets.length ? sets[sets.length - 1] : null;
+    if (field !== null && !raw.keepBank0.includes(field)) {
+        load(bank(cv.getUint32(raw.fieldBanks + field * 4, true)), s1, s0);
+    }
+    return { sheet0: s0, sheet1: s1, pages };
+}
+
+/*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
  * rectangles are complementary, so each sheet's mip half is half one bank and
@@ -1156,6 +1243,7 @@ export function buildTexram(rom, texSets, fighters) {
         const layout = rom.game.texture.raw.layout;
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
+        if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         return buildRawTexram(rom, texSets);
     }

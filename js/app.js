@@ -14,6 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
+import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -5999,15 +6000,22 @@ function loadGameContent() {
     const on = applyGameFeatures();
     resetMusic();
     if (on.stage) {
-        /* Four shapes of stage data: a record per arena, a placement
-         * table per chapter, Daytona USA's grid of blocks and Virtua Cop's
-         * segments. */
+        /* The shapes of stage data: a record per arena, a placement
+         * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
+         * segments, Virtua Fighter 2's, and what Dead or Alive's and
+         * Virtual-On's own code places, run on js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
+        else if (T.von) {
+            /* It also puts right model entries, so nothing decoded before
+             * it stands. */
+            state.stages = readVonStages(state.rom);
+            state.modelCache.clear();
+        }
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }

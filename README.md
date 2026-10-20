@@ -15,6 +15,8 @@ stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Ali
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
 courses and its models — see [Sega Rally Championship](#sega-rally-championship).
+*Cyber Troopers Virtual-On* has its models and its ten stages, some of them
+only in part — see [Virtual-On](#virtual-on).
 
 Three views, and a fourth for the 2D art:
 
@@ -710,6 +712,39 @@ Not read yet: the low-detail copy as a view of its own, the trackside objects
 and the cars' places on the grid, and the ground beyond the course, which the
 explorer leaves black. The car windows are black, where MAME draws them as
 dark glass. MAME's other Sega Rally builds are not added.
+
+## Virtual-On
+
+Two builds load: `vonj` (Japan, Revision B) and `vonu` (USA, Revision B).
+MAME's `vonj.zip` holds only the program pair, so drop it with the parent
+`von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
+`vonu` by itself. The export `von` and the relay build `vonr` have programs
+of their own that were not to hand, so they are not detected yet. The
+Stages and Models tabs work; there are no fighters, cells or sounds.
+
+The game has no model table of its own: every piece is a triple of pointers
+built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
+them, and takes the triples the stage code sends as the right ones where they
+differ. Textures are unpacked from the ROM as the game unpacks them, bank by
+bank, with their smaller levels, and match MAME's texture RAM byte for byte.
+The colours are the game's own ramps, and the stages light as the game does.
+
+Each stage is a "field" with three routines: one that sets it up, one that
+draws the floor and one that draws the rest. As with Dead or Alive, the
+explorer runs them on its i960 interpreter and keeps what they draw. The ten
+stages have the names the game prints (Airport, Death Trap, Waterfront and
+on), and field 10 is the one the title draws.
+
+What is still missing:
+
+- Some stages are only partly there. Airport, Death Trap, Waterfront, Secret
+  Base and field 10 look like the game's arenas. Green Hills shows its sky and
+  no floor, Space Dock and Moon Base only a few small pieces, Nirvana a long
+  tube, and Flooded City a plane and its backdrop. The rest is probably
+  drawn by code that follows the camera, which the explorer does not run.
+- The Virtuaroids are in the Models tab as parts, in their base colours: the
+  colours each one wears are set when a player picks it, and the tab picks
+  none. They are not posed.
 
 ## Running it
 

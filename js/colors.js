@@ -160,11 +160,14 @@ export function buildLumaram(rom) {
      * any other, so both games are the same two reads. The House of the Dead
      * states no count: sub_1610 copies a fixed 0x4000 bytes, data
      * 0xC8EB40..0xC92B3F, to the even addresses. */
-    const { count, data, bytes } = rom.game.colors.luma;
-    const n = Math.min(bytes ?? dv.getUint32(count, true) * LUMA_BAND, LUMA_BYTES / 2);
+    const { count, data, bytes, at = 0, ramps = 0 } = rom.game.colors.luma;
+    const n = Math.min(bytes ?? dv.getUint32(count, true) * LUMA_BAND, LUMA_BYTES / 2 - at);
 
     const luma = new Uint8Array(LUMA_BYTES);
-    for (let i = 0; i < n; i++) luma[i * 2] = md[data + i];
+    /* Virtual On (0x28548) computes its first bands, (k + 1) >> 1 for k of
+     * 0..127, and copies the ROM's from entry `at` on. */
+    for (let i = 0; i < ramps * LUMA_BAND; i++) luma[i * 2] = ((i % LUMA_BAND) + 1) >> 1;
+    for (let i = 0; i < n; i++) luma[(at + i) * 2] = md[data + i];
     return luma;
 }
 
@@ -321,6 +324,72 @@ function buildDoaColorxlat(rom, stage, fighters) {
 }
 
 /*
+ * Virtual On's colorxlat. MakeRGBTable (0x28840) computes a grey curve for
+ * all 32 rows: row r, luma i of 1..64, is
+ *
+ *     (x ** gamma * 0.85 + 0.15) * 255,  x = ((8r + r / 4) * i >> 6) / 255
+ *
+ * in single floats, 0 where x is, entry i - 1 of the row's front half
+ * (0..127) and of its back half (128..255); luma 0 stays 0 and 64..127 hold
+ * the last value. `gamma` is one of ten picked by the setting byte at backup
+ * RAM 0x1D00027, the default 0.55 when it is out of range, as it is on
+ * fresh NVRAM. The odd rows then take colours copied out of the ROMs, 64
+ * entries of red, green, blue bytes (SetRampRGB_TBL_BOTH 0xE2040 writes both
+ * halves, SetRampRGB_TBL 0xE1F20 the front only), through a 256-entry
+ * intensity table that is the identity at the default setting (0xE1E00):
+ *
+ * - `rows`: InitRampSet's (0xE2130), at boot.
+ * - `fields[field]`: RampSet's case for the field (0xE2330, its jump table
+ *   0xE23B4 indexed by 0x577590, which initField sets to the field).
+ * - `robots`: SetRoboRamp (0xE2120) for the two players, rows 1 and 3 for
+ *   player 1 and 5 and 7 for player 2, out of `ld 0x142E94[robot * 4 + n]`,
+ *   n 0, 1 for player 1's colours and 2, 3 for player 2's (0x19F30).
+ *
+ * The rows match MAME's colorxlat after each field's start; what MAME also
+ * holds is what an earlier field left in the back halves.
+ *
+ * @param {{char:number, costume?:number}[]} robots  player 1 first
+ */
+function buildVonColorxlat(rom, field, robots) {
+    const C = rom.game.colors.von;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const set = cxlatWriter(out);
+    const f32 = Math.fround;
+    const gamma = f32(C.gamma);
+    for (let row = 0; row < 32; row++) {
+        const k = 8 * row + (row >> 2);
+        for (let luma = 1; luma < 128; luma++) {
+            const x = f32(f32((k * Math.min(luma + 1, 64)) >> 6) / 255);
+            const v = x === 0 ? 0 : Math.trunc((2 ** (Math.log2(x) * gamma) * 0.85 + 0.15) * 255);
+            for (let ch = 0; ch < 3; ch++) {
+                set(ch, row, luma, v);
+                set(ch, row, luma + 128, v);
+            }
+        }
+    }
+    const copy = (row, addr, front = false) => {
+        const view = addr >= MAIN_DATA_BASE ? rom.mainDataView : rom.mainCpuView;
+        const at = addr >= MAIN_DATA_BASE ? addr - MAIN_DATA_BASE : addr;
+        if (at + 64 * 3 > view.byteLength) return;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) {
+                const v = view.getUint8(at + luma * 3 + ch);
+                set(ch, row, luma, v);
+                if (!front) set(ch, row, luma + 128, v);
+            }
+        }
+    };
+    for (const [row, addr] of C.rows) copy(row, addr);
+    for (const [row, addr, front] of C.fields[field] ?? []) copy(row, addr, front);
+    const R = C.robots;
+    if (R) robots.slice(0, 2).forEach((r, p) => {
+        const n = r.char * 4 + 2 * ((r.costume ?? p) & 1);
+        R.rows[p].forEach((row, j) => copy(row, rom.mainCpuView.getUint32(R.table + (n + j) * 4, true)));
+    });
+    return out;
+}
+
+/*
  * Sega Rally's tables, made by running the game's own routines rather than a
  * port of them: js/i960.js runs each entry in `i960.run` against a bus of the
  * program ROM, its copy in RAM, a zeroed work RAM and the two colour RAMs, and
@@ -462,6 +531,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
+    if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.i960) return runColorRoutines(rom).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;

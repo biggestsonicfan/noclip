@@ -75,6 +75,8 @@ const JA_PAGE = {
     'vf2.clip.fighter': '専用リグのアキラ',
     'doa.name': 'デッド オア アライブ <i>実験的</i>',
     'doa.meta': '12ステージとすべてのモデル、Model 2B と 2A で &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code>',
+    'von.name': '電脳戦機バーチャロン <i>実験的</i>',
+    'von.meta': '10ステージ（一部組み立て済み）とすべてのモデル &middot; <code>vonj</code> / <code>vonu</code>',
     'doa.clip.palace': 'ステージ&nbsp;3 の壁に囲まれた宮殿の中庭',
     'doa.clip.sunset': 'ステージ&nbsp;11 の溶岩に囲まれた岩のリング',
     'doa.clip.city': 'ステージ&nbsp;10、夜の街の上',
