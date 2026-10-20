@@ -634,7 +634,8 @@ need a table found in that game's ROM first. Where they stand:
 | Cells tab | yes | yes | yes | yes |
 
 Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
-Sega Rally Championship and Virtual-On have the Cells tab too.
+Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
+have the Cells tab too, and all of them but Air Walkers the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
@@ -730,6 +731,13 @@ that have it. 49 files, 363 pictures, are named nowhere in the program and
 are marked unused. See [Sega Rally's
 cells](TECHNICAL.md#sega-rally-championships-cells-jscellsjs).
 
+Tick **music** and a course starts with its own song on the game's sound
+board: Conditioned Reflex on the desert, Desert Land in the forest, Getting
+Muddy (the Ref mix) on the mountain and Ignition at the lakeside, the
+championship's, from the table the race start reads. The **song** list has
+the sound test's 17, by the names the program gives them. See [The music of
+the later games](TECHNICAL.md#the-music-of-the-later-games).
+
 ## Virtual-On
 
 Two builds load: `vonj` (Japan, Revision B) and `vonu` (USA, Revision B).
@@ -737,7 +745,7 @@ MAME's `vonj.zip` holds only the program pair, so drop it with the parent
 `von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
 `vonu` by itself. The export `von` and the relay build `vonr` have programs
 of their own that were not to hand, so they are not detected yet. The
-Stages, Models and Cells tabs work; there are no fighters or sounds.
+Stages, Models and Cells tabs work, and the music; there are no fighters.
 
 The game has no model table of its own: every piece is a triple of pointers
 built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
@@ -772,6 +780,10 @@ address, or an entry of the robot or stage tables. The tile chip is filled
 once, one way for the attract mode and another for the game, so there are two
 CGs. One advice screen comes out garbled on both. See [Virtual-On's
 cells](TECHNICAL.md#virtual-ons-cells-jscellsjs-voncells-in-jsgamesjs).
+
+Tick **music** and pick from the **song** list: the sound test's 35, by its
+names, played on the game's sound board. Which stage plays which is decided in
+the fight code, not read yet, so a stage has no song of its own here.
 
 ## Dynamite Cop
 
@@ -816,6 +828,11 @@ models some joints carry (the guns and items in a hand, belts and pads),
 mirrored motions and the blend between two motions. Character 80 shows
 nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 
+Tick **music** and an area starts with the song its descriptor names, as
+the game starts it; the **song** list has all thirty of the song table, by
+the names the program's debug table gives them (bgm1, boss1, happy...). The
+song is listed in each area's details.
+
 ## Air Walkers
 
 `airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
@@ -840,6 +857,9 @@ rest of the 2D over a game. Data East kept The House of the Dead's picture
 format, so each brings its own tiles and colours and opens on a CG of its own
 with the same number. See [Air Walkers'
 cells](TECHNICAL.md#air-walkers-cells-jscellsjs).
+
+There is no music yet. The sound program is Data East's own, not Sega's
+driver, and in the attract the game sends it nothing but a reset.
 
 ## Power Sled
 
@@ -866,6 +886,10 @@ a time, not as maps, and the tab runs each script and shows what it writes,
 with the one set of tiles and colours the game loads at boot. Eight of them
 are named by no call in the program; searching for `unused` lists those. See
 [Power Sled's cells](TECHNICAL.md#power-sleds-cells-jscellsjs).
+
+**music**, on the Models tab, plays the 31 sounds of the sound driver's
+table on the game's sound board. Nothing names them, so they are numbered;
+sound 25 (A0 13 02) is the longest tune among them and likely the song.
 
 There is no Stages tab and no lighting yet. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).

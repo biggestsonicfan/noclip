@@ -9262,3 +9262,55 @@ the same times through the board natively (m2-hle2 `f797c4b`, the build of
 Chapter 2's song is read from the scripts and was not played in MAME. In the
 page, the four Stage 1 entries play `A0 10 01` and the four Stage 2 entries play
 `A0 10 02`, at an RMS of about 270–1,000.
+
+### The music of the later games
+
+Sega Rally Championship, Virtual-On, Dynamite Cop and Power Sled run the
+Model 2 sound board (`board.wasm`) with their own programs and samples; the
+specs are in js/games.js. A game whose program names its songs gives the
+list as `music.list` (js/sound/sound.js `listedSongs`), read out of the ROM:
+
+- **Virtual-On** (`named`): the sound test's records at 0xEFF62 in vonj
+  (0xF0BA2 in vonu), 35 of 0x22 bytes: the song number, the command's middle
+  byte and the name (SDB_...). A song is `AE 10 nn`, after `A0 00 01`. Which
+  field plays which song is the fight code's and is not read yet, so a stage
+  has none of its own (`own: 'none'`).
+- **Dynamite Cop** (`codes`): thirty 12-byte records, a song's command
+  (`A0 10 nn`) and two more, the first of them `A0 01 nn`, sent right after
+  it (`then`). The table moves between builds (0xBC8B0 in the 2A export
+  build, 0xBC8A0 in dyndeka2, 0xC92D0 in dyndeka2b), so it is found by its
+  bytes; the debug names (S_BGM_...) are pointers at 0x1AD394, the same in
+  every build. Word +0x1C of an area descriptor is the area's song, which
+  0x4B6A8 sends as the area starts; the stage's details list it.
+- **Sega Rally** (`ids`): the program runs from RAM, 0x59F000 above its ROM
+  address. By ROM address, 0x261B0 sends sound ID g0 as the 3-byte command at
+  0x24CE0 + 3 * ID, named by the pointer at 0x258C0 + 4 * ID; IDs 0x9B to 0xAB
+  are the sound test's B.G.M list, all `AE 10 nn`, and 0x9A (`AE 10 00`,
+  "Off") stops them. The race start, 0x1D0E8, takes the course's song ID
+  from 0x1C6E0 (the championship) or 0x1C700 (practice), indexed by the
+  course at work RAM 0x214354. The championship's are ConditionedReflex,
+  DesertLand, GettingMuddyRef and Ignition, the songs [Sega Retro's
+  credits](https://segaretro.org/Sega_Rally_Championship/Production_credits)
+  give Desert, Forest, Mountain and Lakeside. That is the course records'
+  order too, so the explorer's course 1 is the forest and course 2 the
+  mountain (they were the other way round before); their skies agree, the
+  Alps over a forest road and a village on the cliffs.
+- **Power Sled** (`groups`): the program names nothing. Its driver is
+  CRX_drv 3.0.6 (by HiroF, 1996; Dynamite Cop's is 3.2.8). The UART handler
+  (0x600486) is a MIDI parser with running status; status A0 with a middle
+  byte from 0x10 to 0x5F (0x601B1A) starts entry `last` of group `middle` -
+  0x10 of the table the long at 0x60801C points to. Group 0x10 is empty, and
+  0x11 to 0x14 hold 16, 6, 4 and 5 sounds, all started in the effect slots
+  (first byte bit 7 set), none in the music slot. On the board, 11 0A, 11 0C,
+  12 04, 13 00, 13 02 and 14 01 hold their level; 12 04 and 13 00 have a flat
+  spectrum (wind and snow), and 13 02 is the loudest tonal one, likely the
+  song [Sega Retro](https://segaretro.org/Power_Sled) says Sega Racing Best
+  carries. The attract sends `A0 00 01`, `A0 13 03`, `A0 13 01` and
+  `A0 70 00`, each byte twice.
+
+A game without stages (Power Sled) has the music fields on the Models tab,
+and plays nothing until a song is picked.
+
+Air Walkers has no music yet. Its sound program (`10-18_ic30_30f2.30`) is Data
+East's, not Sega's driver, and in m2-hle2's attract the i960 sent it only a
+reset (`FF`); its command set is not read.
