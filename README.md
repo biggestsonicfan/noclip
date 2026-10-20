@@ -17,10 +17,10 @@ twelve stages and its models on both its boards — see
 courses and its models — see [Sega Rally Championship](#sega-rally-championship).
 *Cyber Troopers Virtual-On* has its models and its ten stages, some of them
 only in part — see [Virtual-On](#virtual-on).
-*Dynamite Cop* has its models and the rooms
-of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
-[Air Walkers](#air-walkers) and [Power Sled](#power-sled).
+*Dynamite Cop* has its models, the rooms
+of its stages and its cells on all three boards — see [Dynamite Cop](#dynamite-cop).
+Data East's *Air Walkers* has its models, and Sega's *Power Sled* its models
+and its cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -775,6 +775,13 @@ models are drawn under the first copy's sets unchecked. The light comes from
 The House of the Dead's settings. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-cop-jsdynamcopjs).
 
+The **Cells** tab has the game's 971 pictures, in every build: the stage
+briefings with their wireframe maps, the mission text, the title and logos,
+the results and the colour bars. They are The House of the Dead's pictures,
+read by the same routines a year on, so each brings its own tiles and colours
+and opens on a CG of its own with the same number. See [Dynamite Cop's
+cells](TECHNICAL.md#dynamite-cops-cells-jscellsjs).
+
 ## Air Walkers
 
 `airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
@@ -809,6 +816,15 @@ them, most likely the courses' ground, reached some other way.
 Textures, palette, colour tables and luma match m2-hle2's memory byte for
 byte. MAME's game stops at the network check, so the models were checked by
 eye in the Models tab and against m2-hle2, not against MAME's screen.
+
+The **Cells** tab has the 30 pictures the game lays out on the tile chip:
+WAITING YOUR ENTRY, the SEMI AUTO and MANUAL panels, the course select's
+signs, the big countdown digits, EMERGENCY STOP and the rest of the text over
+a race. The game keeps them as small scripts that write the tilemap a run at
+a time, not as maps, and the tab runs each script and shows what it writes,
+with the one set of tiles and colours the game loads at boot. Eight of them
+are named by no call in the program; searching for `unused` lists those. See
+[Power Sled's cells](TECHNICAL.md#power-sleds-cells-jscellsjs).
 
 There is no Stages tab and no lighting yet. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
