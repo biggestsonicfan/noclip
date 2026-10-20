@@ -2418,10 +2418,9 @@ function stepStageMaterials(frame) {
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
  * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
  * its light with the camera's heading instead (js/fvstages.js), and Air
- * Walkers' courts point it where the camera looks (js/airwlkrs.js).
+ * Walkers' courts and players point it where the camera looks (js/airwlkrs.js).
  */
-function stepEyeLight() {
-    const stage = state.stages[state.stageIndex];
+function stepEyeLight(stage = state.stages[state.stageIndex]) {
     /* Air Walkers' light is (0, 0, 1) in the camera's frame: down the view. */
     if (stage?.headlight) {
         const d = state.viewer.camera.getWorldDirection(new THREE.Vector3());
@@ -3430,11 +3429,9 @@ function useAirwlkrsPlayerScene(body) {
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
     u.uTint.value.set(1, 1, 1);
     u.uBright.value = 1;
-    const lit = gameLighting(state.rom);
-    if (lit) {
-        u.uLight.value.set(...lit.light);
-        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
-    }
+    body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    state.eyeLightAt = null;
+    stepEyeLight(body);
     const set = body.playerSet;
     useRomTexram([set]);
     useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
@@ -6283,6 +6280,7 @@ function start() {
         else if (state.tab === 'anim') {
             if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();
+            if (state.character?.headlight) stepEyeLight(state.character);
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */

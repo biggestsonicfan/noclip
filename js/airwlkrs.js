@@ -36,7 +36,7 @@ const RAM_BASE = 0x500000;
  * loads the 31 material slots from 0x1B3C0, {parameter word, distance
  * coefficient} each, and function 0x0A the light, (0, 0, 1) in the camera's
  * frame, so the light is the eye's own and runs down the view. */
-function courtMaterials(rom) {
+export function courtMaterials(rom) {
     const A = rom.game.airwlkrs;
     const cv = rom.mainCpuView;
     return Array.from({ length: 32 }, (_, i) => {
@@ -204,6 +204,11 @@ export function readAirwlkrsBodies(rom) {
             hitMotions: [], start: -1, root: record, parts,
             /* The team's page and its colour rows (js/texture.js, js/colors.js). */
             playerSet: team < R.specialTeam ? team : 0,
+            /* Lit as on court: the frame start's material slots and a light
+             * down the view. The skin of the shared arms and legs is slots 6
+             * and 7, all diffuse and little ambient, so a light from anywhere
+             * else leaves it black. */
+            materials: courtMaterials(rom), headlight: true,
         });
     };
     for (let team = 0; team < R.specialTeam; team++) {

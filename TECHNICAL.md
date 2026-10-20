@@ -5136,10 +5136,22 @@ there is none; it is not read.
 
 **Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
 `+0x11D`), the blend into a new motion, and the hands the game swaps in during
-a play (MAME's log has hands 41 and 47 where the record has 37 and 43). The
-shared limbs (models 9, 20, 32, 33...) are textured, and come out black;
-MAME's are the player's skin, so the game puts something there at run time
-that the explorer does not yet.
+a play (MAME's log has hands 41 and 47 where the record has 37 and 43).
+
+**Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
+and translates and call 0x1E890, which draws from the model table as it is.
+A skin tone is a set of limb models: the player record names them (33, 56...
+or 122, 139... or 192...), and they differ in their texture word's colour
+base (`th3` 0x3C0, palette 15, for the darker skin; 0x400, palette 16, for
+the lighter) over the same tiles. They came out black because their faces
+use material slots 6 and 7 (diffuse 255, ambient 111 and 48), all diffuse and
+little ambient, and Air Walkers has no game lighting table, so the player
+scene kept whatever light and slots the last tab had set. It now takes the
+court's slots (0x1B3C0) and the court's light down the view. Checked against
+MAME at frame 5000 of the attract (Orlando against Chicago on court 9): its
+palette, luma RAM and colour tables equal the explorer's, the texture sheet
+too where the limb tiles are, and Orlando #7's dark brown and Chicago #22's
+light skin come out as in MAME's picture.
 
 **Checks.** MAME, `bp 0x2373C` logging the pose words and the coprocessor's
 read-backs of five joint ends (0x5215E0..0x521630), on ten players in a game
