@@ -5112,8 +5112,8 @@ material word, mesh pointer, polygon count. It runs 2026 entries. The model
 numbers MAME logs at 0x1E8E4 put the parts in groups: the players' bodies at
 3..303, the courts' lines and the HUD text at 384..491, the intro's city and
 dome at 539..555, home-side team models at 556..1291 and away-side ones at
-1292..2025. The court floors and the stands are not drawn through 0x1E8D8,
-and their path has not been found.
+1292..2025. The courts' arena, floors and stands go through it too, by
+0x1E890 (see [the courts](#air-walkers-courts-jsairwlkrsjs)).
 Model 555, the intro's city, is 5440 polygons in one mesh, so the profile
 raises the decoder's cap of 4096 vertex pairs (`maxVertexPairs`).
 
@@ -5151,7 +5151,9 @@ intro's 10 from 0x4D31 (0x256AC). A court's set-up, 0x247D0 (court, variant),
 sends five tables from `ld 0xD440[court*4]` to the slots at 0xF1980, five
 fixed ones from 0x4731 to slots 7..11, and the variant's two
 (`ld 0xD484[v*4]` to slot 0, `ld 0xD494[v*4]` to slot 14). The team's comes
-last.
+last. The court is the home team's (below), so a home team's number, 0..16,
+builds its own court's tables in its own variant; an away team's builds court
+0's in variant 1.
 
 **Checks.** Against MAME's colorxlat and palette RAM in a game on court 0,
 variant 1, with home team 0 against away team 20: every row and entry
@@ -5159,10 +5161,147 @@ matches, except the other side's team slot and block, which the Models tab
 leaves at the intro's. Set 34 is the intro: the two runs and the first block
 only. It matches MAME's dump 20 seconds after boot exactly.
 
-**Not done.** Stages: there are 17 courts (`0xD440` has 17 entries) with 4
-variants each, but the floors and stands are drawn by a path other than
-0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
-same rows as the title page and open on the boot pages, which may be wrong.
+**Not done.** Models 534..538 sample the same rows as the title page and
+open on the boot pages, which may be wrong.
+
+### Air Walkers' courts (`js/airwlkrs.js`)
+
+**Which court.** The match set-up at 0xD048C takes the court from the home
+side's team byte (0x5136D0 + side * 0xB0) and the variant from that team's
+record. The records are 20 bytes at 0xFBA80: +0 the city's name, +4 the
+nickname's, +12 the variant (0..3), the rest the line-up. So there are
+seventeen courts, one a team, and the Legends' is the only one in variant 3.
+A debug cycler at 0x29C88 steps 0..17; 17 is the intro's scene (0x256A0).
+
+**Set-up, 0x247D0 (court, variant).** The court's colours (above), the
+palette block 0x1EAF0, the two boot pages again, and two models by the
+variant: 0x521774 = `ld 0xF8280[v*4]` (0x95, 0xDD, 0x10C, 0x120), drawn on
+each hoop's stand, and 0x52178C = `ld 0xF8290[v*4]` (0x98, 0xDE, 0x10D,
+0x121), drawn on the court. It ends in 0x25750, which sets up the
+backboards' objects.
+
+**Draw, 0x24DA0 (court)**, called each frame from 0xBA4 with `ldob
+0x510980`. Every piece goes through 0x1E890 to the model table, under the
+coprocessor's matrix (the commands js/doa.js keeps: push 0x05, pop 0x06,
+translate 0x12, scale 0x13, turns 0x14..0x16). In order:
+
+- 0x24470 works out from the camera (0x510964..0x510974) whether each hoop
+  is near (1), far (3, drawn plainer by 0x24240) or out of view (0), into
+  0x521768 and 0x521769;
+- the arena 0x99, the crowd frame `ld 0xF19C0[f*4]` (f = 0x521784, which
+  steps the crowd), 0x101, the stands 0x96, 0x94, 0x93, one of 0xDA..0xDC by
+  a counter, and the variant's model;
+- the players, by 0x23850 on each object at 0x510B40 and 0x511D10 (+0x390
+  apart), and 0xB2B70;
+- the floor `ld 0xF8230[court*4]` (0x175..0x185), turned 0x8000 about Y when
+  byte 0x5136C5 is over 2; 0x186 and 0xD9 by flags; 0x8E; the crowd's second
+  frame `ld 0xF19A0[f*4]`;
+- the hoops, 0x24640 (0) and 0x24640 (1) under a turn of 0x8000: 0x9A, 0xD8,
+  the variant's padding, the rim 0x10F at (115.41, 26.99, 0), and 0x24940's
+  scoreboard digits out of 0xF81D0 and 0xF8200;
+- 0x25B90, the ball and what the play has out (0x510990, 0x5109C0; type 7
+  is model 0x18D at the object), and 0x8F..0x92 on a timer.
+
+The explorer runs the set-up and one frame of the draw on js/i960.js with
+js/doa.js's machine, from the identity, so each piece comes out in the
+court's frame. It skips the player draw, the colour, palette and page
+uploads (the explorer builds them from the same tables), and answers 0x24470
+with "near" for both hoops. Each court is 32 pieces, and the run meets no
+coprocessor command it does not know.
+
+**Lighting.** The frame start (0x1C240) sends geometry function 6 with the
+31 material slots at 0x1B3C0, {parameter word, distance coefficient} each,
+and function 0x0A with the light (0, 0, 1), which is in the camera's frame.
+So the light runs down the view wherever the camera is, and the Stages tab
+keeps it there (`headlight`).
+
+**Checks.** MAME's draw log (`bp 1E8D8` with the model number, frame 5000 of
+the attract, a game on court 9 in variant 0) has the same pieces in the same
+order: 153, the crowd, 257, 150, 148, 147, the counter's, 152, the players,
+4, the floor 381, 142, the crowd, then each hoop as 154, 216, 149, 271 and
+its digits. The crowd's frames and the counter's model differ with the
+moment, and the play's ball and objects come after. The court as the Stages
+tab shows it, from a camera behind one baseline, has the same floor, logo,
+lines, boards, banners and stands as MAME's picture.
+
+### Air Walkers' players (`js/airwlkrs.js`)
+
+The Animation tab is a `BODY_RIGS.airwlkrs` rig (`rig` in `js/games.js`):
+`readAirwlkrsBodies`, `readAirwlkrsMotions` and `poseAirwlkrs`, which hands
+the viewer matrices the way `js/doafighters.js` does.
+
+**The skeleton is in code.** There is no tree of parts. 0x23850 draws a
+player object (0x510B40 and on, +0x390 apart); 0x23600 places it (translate
+to its spot, scale `+0x58, +0x5C, +0x58`, translate (0, `+0xB0`, 0), turn
+`+0x14` about Y) and calls 0x214A0 (the legs) and 0x21A70 (the rest), or
+0x20850 for both when the team at `+0xC` is 34. Those push and pop the
+coprocessor's stack down fifteen joints, with the bone lengths as constants
+in the code: the legs at (1.5, 0, ±1.0) from the hips, knee and ankle 4.7
+on; the neck 4.4 over the trunk; the shoulders at (3.6, 0, ±2.3), elbow and
+wrist 2.7 on. Team 34's routine has lengths of its own. Each joint turns by
+three halfwords of the pose at 0x5214C0 (6 bytes a joint): the first to
+command 0x16 (Z), then 0x15 (Y), then 0x14 (X). Each draws one of the sixteen
+models at `+0x120..+0x15C`, plus `ld 0x5215F0`, which is -1 (the plainer
+model before it in the table) when the camera is over 35 units away. The
+explorer runs the routines on js/i960.js with js/doa.js's machine, from the
+identity, and takes each part's matrix at its draw; `PLAYER_PARTS` lists the
+sixteen in their draw order with the field, parent and joint.
+
+**Players.** The set-up 0x1F3F0 (object, team, player) copies sixteen model
+words from `0xF4B20 + 0x190 * team + 0x50 * player` to the object: +0 the
+trunk (`+0x140`), +4 the head (`+0x120`), +8..+0x1C the arms
+(`+0x128..+0x13C`), +0x20 the hips (`+0x144`), +0x24..+0x38 the legs
+(`+0x148..+0x15C`) and +0x3C the head's second model (`+0x124`). Teams 0..16
+wear their home kit and 17..33 the same players' away kit, five each; team 34
+has three records, bodies of their own, which the set-up swaps in for a player
+when a cheat bit (0x5214A4) is set. That is 173 bodies. A team's body is shown
+with its team's texture set and colours (`useAirwlkrsPlayerScene`), team 34's
+with set 0.
+
+**Motions.** The motion start 0x1F1B0 (object, m) takes the angles from
+`ld 0x26E3CA0[m*4]` and the root's track from `ld 0x25BF740[m*4]`, unless the
+byte at `0xF2C68 + 12 * m` is set: then from entry byte - 1 of 0x2CE9750 and
+0x2CE96C0. 35 motions are taken from that second pair, ten of them ones the
+first table has no frames for (64, 80, 81, 85..88, 90, 91). 0x23F94 keeps m at
+or under 0x285. A motion is a halfword n, then n + 1 frames of 45 halfwords
+(0x5A bytes), padded to 16; n = 0xFFFF is no motion. 619 of the 646 numbers
+have frames. The clock `+0xE0` is 8.8 fixed point, and 0x201B0 eases each
+angle from frame `t >> 8` to the next into 0x5214C0. The root's track is a
+float triple a frame, eased into `+0xAC..+0xB4`: y is the hips' height
+(about 12 standing, 34.3 at the top of motion 633's dunk), and 0x23600 lifts
+the player by it; x and z are its path, which the explorer follows only with
+root travel on. A third table, `ld 0x26F8600[m*4]` (0x2CE97E0 for the second
+pair), goes to `+0x110` with a halfword a frame, 0x8000 at the start when
+there is none; it is not read.
+
+**Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
+`+0x11D`), the blend into a new motion, and the hands the game swaps in during
+a play (MAME's log has hands 41 and 47 where the record has 37 and 43).
+
+**Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
+and translates and call 0x1E890, which draws from the model table as it is.
+A skin tone is a set of limb models: the player record names them (33, 56...
+or 122, 139... or 192...), and they differ in their texture word's colour
+base (`th3` 0x3C0, palette 15, for the darker skin; 0x400, palette 16, for
+the lighter) over the same tiles. They came out black because their faces
+use material slots 6 and 7 (diffuse 255, ambient 111 and 48), all diffuse and
+little ambient, and Air Walkers has no game lighting table, so the player
+scene kept whatever light and slots the last tab had set. It now takes the
+court's slots (0x1B3C0) and the court's light down the view. Checked against
+MAME at frame 5000 of the attract (Orlando against Chicago on court 9): its
+palette, luma RAM and colour tables equal the explorer's, the texture sheet
+too where the limb tiles are, and Orlando #7's dark brown and Chicago #22's
+light skin come out as in MAME's picture.
+
+**Checks.** MAME, `bp 0x2373C` logging the pose words and the coprocessor's
+read-backs of five joint ends (0x5215E0..0x521630), on ten players in a game
+on court 9: the pose words are the motion table's frames eased at `+0xE0`
+(but just after a motion changes, while it blends), and with MAME's own pose
+words the explorer's run gives the same distances between those ends to
+0.0001, or within 0.21 where the head is turned. `+0xB0` is the root track's
+y (10.75 at motion 18's first frame), and motion 80 has the 8 frames of its
+second-table entry. The headless page shows 173 bodies and 619 motions with no
+errors; Orlando's #7 (TEDIN, set 9) wears the jersey MAME's screen shows.
 
 ### Air Walkers' cells (`js/cells.js`)
 

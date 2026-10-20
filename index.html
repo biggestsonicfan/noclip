@@ -240,7 +240,7 @@
         <li class="game" data-game="airwlkrs" data-zip="airwlkrs.zip" tabindex="0">
           <div class="thumb"></div>
           <div class="g-name" data-i18n="airwlkrs.name">Air Walkers <i>experimental</i></div>
-          <div class="g-meta" data-i18n="airwlkrs.meta">Every model, with each team's textures &middot; <code>airwlkrs</code></div>
+          <div class="g-meta" data-i18n="airwlkrs.meta">Its seventeen courts and every model, with each team's textures &middot; <code>airwlkrs</code></div>
           <ol class="clips" hidden>
             <li data-clip="airwlkrs-city" data-i18n="airwlkrs.clip.city">The city the intro flies over</li>
             <li data-clip="airwlkrs-mascot" data-i18n="airwlkrs.clip.mascot">A team's hippo mascot</li>
@@ -614,6 +614,16 @@
         <code>0x5CA280</code>, picked by the cabinet's operation days over
         thirty. The cars are not here: their wheels are turned by code, with
         no motion data.
+      </div>
+      <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
+        Every player has the same fifteen-joint skeleton, which is in the
+        code (<code>0x214A0</code> for the legs, <code>0x21A70</code> for the
+        rest; <code>0x20850</code> for team 34) rather than in a table, and the
+        explorer runs those routines. A player's sixteen models are a record
+        at <code>0xF4B20</code>, five players to a team, the away kits from
+        team 17. A motion is the fifteen joints' angles for every frame,
+        from the table at data <code>0x6E3CA0</code>; the game has no names
+        for them.
       </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the

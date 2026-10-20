@@ -19,8 +19,9 @@ courses, its models, its cells and the spectators' animations — see [Sega Rall
 of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
 of its stages, its cells and its characters posed by their motions on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* and Sega's *Power Sled* have their models and their
-cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
+Data East's *Air Walkers* has its seventeen courts, its models, its cells and
+its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its models and its
+cells — see [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -858,7 +859,14 @@ song is listed in each area's details.
 
 ## Air Walkers
 
-`airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
+`airwlkrs.zip` on its own. The **Stages** tab has the seventeen courts, one
+for each team, as the game draws them on the team's home games: the arena,
+the stands and their crowd, the court's floor with the team's name and logo
+on it, the two hoops and their scoreboards, in the court's own colours and
+the variant the team plays on. The players are left off. Each court is lit
+the way the game lights it, from the eye, so the light follows the camera.
+
+The **Models** tab has all 2026 entries of the
 model table, with the textures, palette and colour tables the game loads for
 them: the players' bodies, the courts' lines and logos, the text the game
 puts over a play, the intro's city and dome, and each team's kit.
@@ -866,13 +874,25 @@ puts over a play, the intro's city and dome, and each team's kit.
 The game numbers its teams twice, 0..16 for the home side and 17..33 for the
 away side, and each side keeps its team's page on a sheet of its own. A team
 model opens on team 0 of its side; the texture picker's sets 0..33 swap in
-the other teams, and set 34 is the intro's, with its own colours. The colours
-are court 0's, in the variant MAME's game was played on, and match MAME's
-dumps of a game and of the intro entry for entry.
+the other teams, and set 34 is the intro's, with its own colours. A home
+team's set brings its court's colours; an away team's are court 0's, in the
+variant MAME's game was played on. Both match MAME's dumps of a game and of
+the intro entry for entry. See
+[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs)
+and [Air Walkers' courts](TECHNICAL.md#air-walkers-courts-jsairwlkrsjs).
 
-There is no Stages tab yet. The courts' floors and stands are not drawn by
-the routine the rest of the models go through, and it has not been found. See
-[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs).
+The **Animation** tab has the 173 players: five for each of the seventeen
+teams in its home kit, the same five in the away kit, and the three of team
+34, who have bodies of their own. Each is put together from its 16 part
+models on the game's 15-joint skeleton, the way the game's own draw routine
+does it (the explorer runs that routine), and posed by any of the 619 motions
+(the game gives them numbers, not names). A motion also carries where the hips
+go: they stand at its height, so a dunk leaves the floor, and **root travel**
+lets the player run along its path. A frame's joints match the ones MAME's
+RAM holds for the same motion and frame, and each player wears his own skin
+as in MAME. Not shown: the head's turn toward the play and the hands the
+game swaps in during a play. See
+[Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
 The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
 layers, the warning, the quarter and score banners, the team names and the

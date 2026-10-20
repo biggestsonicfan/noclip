@@ -5167,9 +5167,10 @@ const airwlkrs = {
     /*
      * The luma table is the 2A library's, 0x4000 bytes at 0x54C0 in the program
      * ROM. The rest is js/colors.js's Air Walkers section: the ramp, the
-     * boot's and the title's runs, court 0's five tables, the five fixed ones,
-     * the variant's two, then the team's. Variant 1 is the one MAME's game
-     * played on court 0.
+     * boot's and the title's runs, the court's five tables, the five fixed
+     * ones, the variant's two, then the team's. A home team (0..16) brings its
+     * own court and variant; the away side's numbers take court 0 and variant
+     * 1, the one MAME's game played on court 0.
      */
     colors: {
         luma: { source: 'maincpu', data: 0x54c0, bytes: 0x4000 },
@@ -5192,7 +5193,39 @@ const airwlkrs = {
      * + (firstBlock << 7)` to the map's entries, so the group is the block.
      * Colours go through colorxlat. */
     cells: { pictures: { table: 0x02c15220, count: 492 }, charBytes: 0x80000, colorxlat: true },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+    /*
+     * The courts (js/airwlkrs.js): the set-up 0x247D0 (court, variant) and
+     * the draw 0x24DA0 (court) run on js/i960.js. The team records are 20
+     * bytes at 0xFBA80, the city's name, the nickname's, the court variant at
+     * +12. The draw's players (0x23850), the colour and palette uploads
+     * (0x1BAD0, 0x16370) and the page copies (0x1D430) are skipped; 0x24470
+     * puts both hoops' detail in 0x521768/9. The frame start's material
+     * slots are 31 at 0x1B3C0.
+     */
+    airwlkrs: {
+        setup: 0x247d0, draw: 0x24da0, courts: 17, teams: 0xfba80,
+        skip: [0x23850, 0x1bad0, 0x16370, 0x1d430], hoops: 0x24470, hoopShown: 0x521768,
+        materials: { at: 0x1b3c0, count: 31 },
+    },
+    stageTable: { airwlkrs: true, flat: true },
+    /*
+     * The players (js/airwlkrs.js): sixteen models a player at `players`,
+     * five players a team, 34 teams and the three of team 34; the legs'
+     * routine and the rest's run on an object at `object` with the pose at
+     * `pose`. The read-backs are the feet's, the head's and the hands' ends.
+     */
+    rig: {
+        kind: 'airwlkrs',
+        players: 0xf4b20, teamStride: 0x190, playerStride: 0x50, specialTeam: 34, specials: 3,
+        draw: [0x214a0, 0x21a70], drawSpecial: [0x20850],
+        object: 0x510b40, pose: 0x5214c0, modelOffset: 0x5215f0,
+        ends: [0x5215e0, 0x521600, 0x521610, 0x521620, 0x521630],
+        motions: {
+            table: 0x026e3ca0, roots: 0x025bf740, count: 0x286,
+            alternate: 0xf2c68, altTable: 0x02ce9750, altRoots: 0x02ce96c0,
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Power Sled ----------------------------------------------------------- */

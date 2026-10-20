@@ -17,6 +17,9 @@ import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
+import {
+    readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
+} from './airwlkrs.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -2415,10 +2418,18 @@ function stepStageMaterials(frame) {
  * A light that follows where the camera stands rather than the frame: Virtua
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
  * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
- * its light with the camera's heading instead (js/fvstages.js).
+ * its light with the camera's heading instead (js/fvstages.js), and Air
+ * Walkers' courts and players point it where the camera looks (js/airwlkrs.js).
  */
-function stepEyeLight() {
-    const stage = state.stages[state.stageIndex];
+function stepEyeLight(stage = state.stages[state.stageIndex]) {
+    /* Air Walkers' light is (0, 0, 1) in the camera's frame: down the view. */
+    if (stage?.headlight) {
+        const d = state.viewer.camera.getWorldDirection(new THREE.Vector3());
+        if (state.eyeLightAt?.equals?.(d)) return;
+        state.eyeLightAt = d;
+        state.viewer.material.uniforms.uLight.value.copy(d);
+        return;
+    }
     if (stage?.lightFromHeading) {
         const h = cameraOnCourse().heading;
         if (state.eyeLightAt === h) return;
@@ -3329,6 +3340,11 @@ const BODY_RIGS = {
     von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },
     /* Sega Rally's people: every part placed from the figure, a frame baked. */
     srallyc: { read: readRallyFigures, motions: readRallyMotions, list: rallyMotionList, pose: poseRallyFigure },
+    /* Air Walkers' players: one skeleton in the code, run as the game runs it. */
+    airwlkrs: {
+        read: readAirwlkrsBodies, motions: readAirwlkrsMotions, list: airwlkrsMotionList,
+        pose: (rom, body, motion, frame, opts) => poseAirwlkrs(rom, body, motion, frame, opts),
+    },
 };
 
 function bodyRig() {
@@ -3410,6 +3426,25 @@ function useDoaFighterScene(body) {
     if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
+/* An Air Walkers player stands on its team's page, under its team's colour
+ * tables (js/texture.js, js/colors.js), as the court set-up loads them. */
+function useAirwlkrsPlayerScene(body) {
+    const u = state.viewer.material.uniforms;
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    state.eyeLightAt = null;
+    stepEyeLight(body);
+    const set = body.playerSet;
+    useRomTexram([set]);
+    useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
+    u.uUseRamp.value = state.cxlat ? 1 : 0;
+    const status = $('#tex-status');
+    if (status) status.textContent = t('sheets unpacked from ROM (set {set})', { set });
+}
+
 function bodySceneModel(body) {
     const models = body.parts.map((p) => p.model).filter(Boolean);
     if (body.texSet === undefined) return models[0];
@@ -3429,6 +3464,7 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (body.playerSet !== undefined) useAirwlkrsPlayerScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
     else if (first != null) useModelScene(first, colourFighter(body));
@@ -5966,13 +6002,14 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's and Sega
-     * Rally's, name the game's own addresses; the plain bodies note is The
-     * House of the Dead's. */
+    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's
+     * and Air Walkers', name the game's own addresses; the plain bodies note
+     * is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : ['dynamcop', 'von', 'srallyc'].includes(kind) ? kind : null;
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs'];
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'von', 'srallyc']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song
@@ -6038,8 +6075,9 @@ function loadGameContent() {
     if (on.stage) {
         /* The shapes of stage data: a record per arena, a placement
          * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
-         * segments, Virtua Fighter 2's, and what Dead or Alive's and
-         * Virtual-On's own code places, run on js/i960.js. */
+         * segments, Virtua Fighter 2's, and what Dead or Alive's,
+         * Virtual-On's and Air Walkers' own code places, run on
+         * js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
@@ -6052,6 +6090,7 @@ function loadGameContent() {
             state.stages = readVonStages(state.rom);
             state.modelCache.clear();
         }
+        else if (T.airwlkrs) state.stages = readAirwlkrsStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else state.stages = readStageTable(state.rom);
@@ -6254,6 +6293,7 @@ function start() {
         else if (state.tab === 'anim') {
             if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();
+            if (state.character?.headlight) stepEyeLight(state.character);
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
