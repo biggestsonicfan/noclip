@@ -19,8 +19,8 @@ courses and its models — see [Sega Rally Championship](#sega-rally-championshi
 only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
 of its stages and its cells on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* has its models, and Sega's *Power Sled* its models
-and its cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
+Data East's *Air Walkers* and Sega's *Power Sled* have their models and their
+cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -799,6 +799,13 @@ dumps of a game and of the intro entry for entry.
 There is no Stages tab yet. The courts' floors and stands are not drawn by
 the routine the rest of the models go through, and it has not been found. See
 [TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs).
+
+The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
+layers, the warning, the quarter and score banners, the team names and the
+rest of the 2D over a game. Data East kept The House of the Dead's picture
+format, so each brings its own tiles and colours and opens on a CG of its own
+with the same number. See [Air Walkers'
+cells](TECHNICAL.md#air-walkers-cells-jscellsjs).
 
 ## Power Sled
 

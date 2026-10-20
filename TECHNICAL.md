@@ -4864,6 +4864,31 @@ variants each, but the floors and stands are drawn by a path other than
 0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
 same rows as the title page and open on the boot pages, which may be wrong.
 
+### Air Walkers' cells (`js/cells.js`)
+
+Data East's 2D is The House of the Dead's picture format, with its own copy
+of the routines. The table is at data 0xC15220 as the code names it
+(0x2C15220, the 1MB EPROM pair's third repeat; the pair itself starts at
+0x800000): 492 entries of three pointers, tiles, colours and map. The 493rd
+word is no pointer, and no code bounds the table, so the count is where the
+pointers stop. The table is read at 0xC38DC, 0xC3B18, 0xC3BE8, 0xC3CEC,
+0xC3DB0 and 0xC3E6C (tiles and colours) and at 0xC3F3C, 0xC3FC8, 0xCE330,
+0xCE368, 0xD47B0, 0xD47E8 and 0xD4814 (maps).
+
+0xC3CD0 loads a picture the first time it is drawn (its slot holds no block
+yet): after a call to 0xC38D0 (not read), each chunk, a count and that many tiles, goes to a 128-tile
+block of its own (`block << 12` from 0x1080000), and the chunk's 16 colours
+go to every block it takes, at `0x1800000 + block * 32`. The draw, 0xC3F10,
+takes the picture's slot in g0, the tilemap in g1, two bits in g2 and g3,
+the column and row in g4 and g5, and the picture in g6; it adds
+`(g2 << 15) + (g3 << 14) + (firstBlock << 7)` to each map entry, so the
+group is the block. The panel loads each picture from block 0, and the
+palette goes through colorxlat.
+
+Found with m2-hle2: a write watchpoint on the title's tilemap stopped in the
+draw at 0xC3FA0 reading map 40 (the AIR layer, layer 2) and map 41 (the
+WALKERS layer, layer 0); both pictures in the tab match the dumped layers.
+
 ### Power Sled (`js/powsled.js`, `js/texture.js`, `js/colors.js`)
 
 Sega's 1996 Model 2B snowmobile racer, as MAME's `powsled` (Slave, Revision

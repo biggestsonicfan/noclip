@@ -4880,7 +4880,17 @@ const airwlkrs = {
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures (js/cells.js): The House of the Dead's format, Data
+     * East's own copy of it. 492 entries of three pointers, tiles, colours and
+     * map, at data 0xC15220 (the 1MB EPROM pair's third repeat, as the code
+     * names it); the next word is no pointer, and nothing bounds the table.
+     * 0xC3CD0 loads a picture into free blocks the first time it is drawn,
+     * each chunk of tiles to a 128-tile block of its own and its 16 colours to
+     * every block it takes; the draw (0xC3F10) adds `(g2 << 15) + (g3 << 14)
+     * + (firstBlock << 7)` to the map's entries, so the group is the block.
+     * Colours go through colorxlat. */
+    cells: { pictures: { table: 0x02c15220, count: 492 }, charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Power Sled ----------------------------------------------------------- */
