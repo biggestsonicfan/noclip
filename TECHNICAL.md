@@ -4341,6 +4341,69 @@ Not read: the course paths, the cars' places, the trackside objects, and the
 CGM blocks in the data ROM, which the dumps show change nothing in palette
 RAM on these three courses.
 
+### Sega Rally Championship's people (`js/srally.js`)
+
+The Animation tab's bodies are the spectators by the course. They are the
+only keyframed things in the game; everything else that moves does so by
+code.
+
+**The cars are not bodies.** The car draw (0x5C2B80 to 0x5C3060) draws the
+body model (object +4), then four wheels: push, translate by the wheel's
+offset from the car's table plus its suspension travel (+0x30), on the front
+two (g13 <= 1) a steering turn from +0x24 (TGP `0x15002A2A`), the spin
+(`0x14802929`), the wheel model, pop. Every value is the car's physics state
+of that frame; there is nothing to play back.
+
+**The figures.** One routine, 0x5CA290 (ROM 0x2B290), draws every jointed
+figure. It takes a figure record, a frame and a step:
+
+| Offset | |
+|---|---|
+| +0x00 | key frames (30 for all three) |
+| +0x04 | parts |
+| +0x08 | the key frames, a main_data address |
+| +0x0C | a model number per part |
+
+The three records are at RAM 0x5CA180, 0x5CA1A0 and 0x5CA1D0 (ROM 0x2B180,
+0x2B1A0, 0x2B1D0): 5 parts, models 284-288, data 0x2057F80; 8 parts, models
+289-296, data 0x2058B40; 12 parts, models 297-308, data 0x2059E00. A key
+frame is 20 bytes a part: the part's place as three floats, then halfwords at
++0x0C and +0x10 that go with the place to the TGP as one command, function
+0x5F (`lda 0x2F805F5F`). +0x0E and +0x12 are never read. Each part is placed
+from the figure's own origin, not from another part, so a key frame is the
+whole pose; the explorer gives every part parent -1.
+
+The TGP's function 0x5F was measured, not guessed: a MAME Lua script read the
+matrix the TGP writes to the geometry buffer for each part (bufferram, at the
+pointer in 0x802008) on all three figures, the second and third forced by
+setting the operation-day count. Against the figure's own matrix, every part's
+is T(place) · Rz(-h0C) · Rx(-h10) on the board's axes, to 3e-5 in the
+translation and exactly in the rotation, at scale 1. The explorer's Z is the
+board's negated, which keeps the Z turn and flips the X one: Rz(-h0C) ·
+Rx(h10). The angles are 0x10000 a turn. The parts are flat quads stood up by
+an X turn of a quarter.
+
+**Playing.** The routine returns frame + step, and with the mode both callers
+pass (g3 = 1) it swings back at the end: keys 0 to 29, then -29 to -1 taken by
+their size, one a video frame. MAME showed key 29 twice and then the count
+down. The explorer unrolls that into one motion of 59 frames a figure.
+
+**Who draws them.** Object classes from the handler table at 0x5DDFC4:
+
+- class 6 (0x5CAAE0, state at +0x60) turns each frame toward the player's
+  car (0x2140CC) and draws the first figure (`lda 0x5CA180` at 0x5CAAAC);
+- classes 5 and 7 (0x5CA6D0, 0x5CA710, draw 0x5CA5B0) face the camera
+  (0x20220C) and take the figure from the four-entry table at 0x5CA280
+  (first, second, third, second), indexed by `(0x1D001B8 / 30) & 3`.
+
+0x1D001B8 is in backup RAM. The self-test report (0x5A8FEC) prints it with
+"OPERATION DAYS %10d Days"; it is set at 0x5A1AF4 and counted up at
+0x5A1D9C. So a cabinet's spectators change every thirty days it is on, and
+MAME, fresh, always shows the first table entry.
+
+The flat crowds (class 3, 0x5CA580, draw 0x5CA420) are single billboard
+models from the table at 0x5CA210 indexed by object +0x5C, and are not jointed.
+
 ### Dynamite Cop (`js/dynamcop.js`)
 
 All five builds share the data, polygon and texture chips and the program's

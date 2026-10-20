@@ -15,6 +15,7 @@ import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
+import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -3326,6 +3327,8 @@ const BODY_RIGS = {
     },
     /* Virtual-On's robots: two part lists and pairs of records (js/von.js). */
     von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },
+    /* Sega Rally's people: every part placed from the figure, a frame baked. */
+    srallyc: { read: readRallyFigures, motions: readRallyMotions, list: rallyMotionList, pose: poseRallyFigure },
 };
 
 function bodyRig() {
@@ -4925,7 +4928,7 @@ function renderBodyMotionPanel() {
     /* A Virtual-On motion is two records, the upper body's and the legs'. */
     const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
         : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
-        : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
+        : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
@@ -5963,12 +5966,13 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, Dynamite Cop's and Virtual-On's name the
-     * game's own addresses; the plain bodies note is The House of the Dead's. */
+    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's and Sega
+     * Rally's, name the game's own addresses; the plain bodies note is The
+     * House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : ['dynamcop', 'von'].includes(kind) ? kind : null;
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : ['dynamcop', 'von', 'srallyc'].includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'von']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'von', 'srallyc']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song

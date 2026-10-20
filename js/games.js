@@ -4853,9 +4853,22 @@ const srallyc = {
      * palette_w puts every tile colour.
      */
     cells: { cgm: { dataEnd: 0xa00000 }, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    /*
+     * The people by the course (js/srally.js): three figures of 5, 8 and 12
+     * parts, 30 key frames each, all drawn by 0x5CA290. `figures.table` is
+     * the four figure pointers at ROM 0x2B280 (RAM 0x5CA280) that object
+     * classes 5 and 7 pick from; class 6 draws the first.
+     */
+    rig: {
+        kind: 'srallyc',
+        figures: { table: 0x2b280, count: 4, ramBase: 0x59f000 },
+        /* What each one does; the game has no names for them. */
+        names: ['fist pump', 'overhead clap', 'jump, arms up'],
+    },
     /* The courses but not the cars' placement on them, nor the trackside
-     * objects. */
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+     * objects. The cars are not bodies: code turns and springs their wheels
+     * (0x5C2B80 on), with no motion data. */
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Dynamite Cop / Dynamite Deka 2 (Pinboard #1286) --------------------- */
