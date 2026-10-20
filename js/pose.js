@@ -57,10 +57,13 @@
  */
 const COS = new Float32Array(0x10000);
 const SIN = new Float32Array(0x10000);
-for (let i = 0; i < 0x10000; i++) {
-    COS[i] = Math.fround(Math.cos((i * 2 * Math.PI) / 0x10000));
-    SIN[i] = Math.fround(Math.sin((i * 2 * Math.PI) / 0x10000));
+function computeTrig() {
+    for (let i = 0; i < 0x10000; i++) {
+        COS[i] = Math.fround(Math.cos((i * 2 * Math.PI) / 0x10000));
+        SIN[i] = Math.fround(Math.sin((i * 2 * Math.PI) / 0x10000));
+    }
 }
+computeTrig();
 const cosA = (a) => COS[a & 0xffff];
 const sinA = (a) => SIN[a & 0xffff];
 
@@ -73,14 +76,22 @@ const COPRO_COS = 0x30000;
 
 /**
  * Take the sine and cosine tables out of a loaded set's coprocessor ROM. A set
- * without that region keeps the computed tables.
+ * without them gets the computed tables back, so a set loaded before it
+ * leaves nothing behind. Only the SHARC's data ROM has them where they are
+ * looked for: Daytona's and Sega Rally's TGP data ROMs are as long, and hold
+ * other things there, so the table is taken only if sin 90 and cos 0 are 1.
  *
  * @param {object} rom  from loadRomSet()
  * @returns {boolean}   whether the ROM's tables are now in use
  */
 export function useCoproTrig(rom) {
     const dv = rom?.coproView;
-    if (!dv || dv.byteLength < (COPRO_COS + 0x8000) * 4) return false;
+    const one = (at) => Math.abs(dv.getFloat32(at * 4, true) - 1) < 1e-5;
+    if (!dv || dv.byteLength < (COPRO_COS + 0x8000) * 4
+        || !one(COPRO_SIN + 0x4000) || !one(COPRO_COS)) {
+        computeTrig();
+        return false;
+    }
     for (let i = 0; i < 0x10000; i++) {
         const a = i < 0x8000 ? i : i - 0x10000;
         SIN[i] = dv.getFloat32((COPRO_SIN + a) * 4, true);
