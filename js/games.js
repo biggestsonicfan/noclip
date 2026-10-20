@@ -5298,8 +5298,45 @@ const powsled = {
             hint: 'Every sound in the sound driver\'s table, by its command: the program names none of them. A0 13 02 is the loudest tune among them, likely the song; A0 12 04 and A0 13 00 are wind',
         },
     },
+    /*
+     * The race's light goes to the geometrizer as it is (function 0xA,
+     * 0x3672C and 0x3740C): (0.1, -1, 0.01), near enough straight down.
+     * Z is negated, as for Daytona. The materials are the 16 pairs at
+     * 0xEBC0 that 0xED04 sends with function 6 at boot.
+     */
+    lighting: {
+        light: [0.1, -1, -0.01],
+        materials: { source: 'maincpu', at: 0xebc0, count: 16, stride: 8 },
+    },
+    /* The one course, run out of the race's own scene routines
+     * (readPowsledStages in js/powsled.js). */
+    stageTable: { powsled: true, flat: true },
     cells: POWSLED_CELLS,
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+    /*
+     * The figures (js/powsled.js): tables in the data ROM of every part's
+     * matrix a frame, drawn by 0xE1D70. `at` is the table's data ROM offset.
+     * The attract's tasks (0xE44B0 on) play 0x4770, 0x3FF34, 0x13E018,
+     * 0x18E4C0 and 0x1DE968; 0xE7034 and 0x285A68 are named by two records
+     * at 0x3B2A0 whose player is not found; no address in the program names
+     * the other three, found by their layout. The game names none: the names
+     * say what they show.
+     */
+    rig: {
+        kind: 'powsled',
+        figures: [
+            { at: 0x4770, name: 'crane with a sled' },
+            { at: 0x260c0, name: 'crane with a sled, lowering it' },
+            { at: 0x32f70, name: 'crane arm and claw' },
+            { at: 0x3ff34, name: 'woman in a yellow suit' },
+            { at: 0xe7034, name: 'three-part object' },
+            { at: 0xedb70, name: 'two riders on a sled' },
+            { at: 0x13e018, name: 'two riders on a sled, second take' },
+            { at: 0x18e4c0, name: 'two riders on a sled, third take' },
+            { at: 0x1de968, name: 'woman in a yellow suit, second take' },
+            { at: 0x285a68, name: 'three-part object, mirrored' },
+        ],
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to

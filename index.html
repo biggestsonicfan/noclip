@@ -594,6 +594,16 @@
         them with the leg or arm. Motion numbers are the table's at
         <code>0x15FA00</code>; the game has no names for them.
       </div>
+      <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
+        The figures: ten tables in the data ROM, each a list of
+        frames and a count of parts, every part a model of its own. A frame is
+        a 64-byte record a part, its model and the matrix it is drawn with,
+        baked: <code>0xE1D70</code> pushes, translates to the place at
+        <code>+0x34</code>, multiplies by the 3x3 at <code>+0x10</code>, draws
+        and pops, with no parent. The attract's tasks (<code>0xE44B0</code> on)
+        play five of them a frame at a time from their own counter. The game
+        names none of them: the names say what they show.
+      </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the
         explorer: the attract's fight is set up with the fighter in player

@@ -19,8 +19,9 @@ courses, its models and its cells — see [Sega Rally Championship](#sega-rally-
 of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
 of its stages, its cells and its characters posed by their motions on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* and Sega's *Power Sled* have their models and their
-cells — see [Air Walkers](#air-walkers) and [Power Sled](#power-sled).
+Data East's *Air Walkers* has its models and its cells, and Sega's *Power
+Sled* its course, its models, its cells and the attract's animations — see
+[Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -863,7 +864,8 @@ driver, and in the attract the game sends it nothing but a reset.
 
 ## Power Sled
 
-`powsled.zip` on its own, the Slave Revision A that MAME has. The **Models**
+`powsled.zip` on its own, the Slave Revision A that MAME has, loads with the
+Stages, Models, Animation and Cells tabs. The **Models**
 tab lists the 494 models the program names, with the one texture RAM the game
 loads, its palette and its colour tables: the sleds, the riders, the snow,
 rock and ice of the courses, the signs and the text over a race.
@@ -871,8 +873,8 @@ rock and ice of the courses, the signs and the text over a race.
 There is no model table in this game. The program hands the geometry engine
 its three words from records in both ROMs and from immediates in the code,
 and the list is every one of those. A frame's display list from m2-hle2 names
-nothing that is not in it, but about half the polygon ROM is named by none of
-them, most likely the courses' ground, reached some other way.
+nothing that is not in it, and neither does the course (below), but about
+half the polygon ROM is named by none of them.
 
 Textures, palette, colour tables and luma match m2-hle2's memory byte for
 byte. MAME's game stops at the network check, so the models were checked by
@@ -887,11 +889,31 @@ with the one set of tiles and colours the game loads at boot. Eight of them
 are named by no call in the program; searching for `unused` lists those. See
 [Power Sled's cells](TECHNICAL.md#power-sleds-cells-jscellsjs).
 
-**music**, on the Models tab, plays the 31 sounds of the sound driver's
-table on the game's sound board. Nothing names them, so they are numbered;
-sound 25 (A0 13 02) is the longest tune among them and likely the song.
+The **Stages** tab has the course. There is only one, and the game names it
+nowhere, so it is *The course*. It is not a table: the race draws it with six
+scene routines, each from the run's progress, and the explorer runs those
+routines on the program's own code over the whole run and keeps every piece
+they draw, 304 of them. Each scene is a view, named for the records it draws
+(`HONBAN_sce3_course_1`, `sce7_bridge_1` and on): the start, sce3, the
+tunnel, sce5, the bridges and the goal. A view opens on its scene. The light
+and the 16 materials are the race's own.
 
-There is no Stages tab and no lighting yet. See
+The **Animation** tab has ten figures, each a model a part with every part's
+matrix stored for every frame: a crane carrying a sled, the crane's arm and
+claw, a woman in a yellow suit, two riders on a sled, each in two or three
+takes, and a three-part object, once and mirrored. The attract plays five of
+them; no address in the program names three. The names are the explorer's;
+the game has none.
+
+**music**, on the Stages tab, plays the 31 sounds of the sound driver's
+table on the game's sound board. Nothing names them, so they are numbered;
+sound 25 (A0 13 02) is the longest tune among them and likely the song. The
+course has no song of its own here, as the race's is not found yet.
+
+MAME cannot show the race: as the network's master the board stops at the
+ride ID prompt, and with the ride ID set to a ride it waits for the master
+(*Cannot find network main.*). So the course has not been compared with a
+picture of the race; it is what the scene routines draw, checked by eye. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
 
 ## Running it
