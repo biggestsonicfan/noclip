@@ -19,6 +19,8 @@ courses and its models — see [Sega Rally Championship](#sega-rally-championshi
 only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models and the rooms
 of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
+Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
+[Air Walkers](#air-walkers) and [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -773,6 +775,44 @@ models are drawn under the first copy's sets unchecked. The light comes from
 The House of the Dead's settings. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-cop-jsdynamcopjs).
 
+## Air Walkers
+
+`airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
+model table, with the textures, palette and colour tables the game loads for
+them: the players' bodies, the courts' lines and logos, the text the game
+puts over a play, the intro's city and dome, and each team's kit.
+
+The game numbers its teams twice, 0..16 for the home side and 17..33 for the
+away side, and each side keeps its team's page on a sheet of its own. A team
+model opens on team 0 of its side; the texture picker's sets 0..33 swap in
+the other teams, and set 34 is the intro's, with its own colours. The colours
+are court 0's, in the variant MAME's game was played on, and match MAME's
+dumps of a game and of the intro entry for entry.
+
+There is no Stages tab yet. The courts' floors and stands are not drawn by
+the routine the rest of the models go through, and it has not been found. See
+[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs).
+
+## Power Sled
+
+`powsled.zip` on its own, the Slave Revision A that MAME has. The **Models**
+tab lists the 494 models the program names, with the one texture RAM the game
+loads, its palette and its colour tables: the sleds, the riders, the snow,
+rock and ice of the courses, the signs and the text over a race.
+
+There is no model table in this game. The program hands the geometry engine
+its three words from records in both ROMs and from immediates in the code,
+and the list is every one of those. A frame's display list from m2-hle2 names
+nothing that is not in it, but about half the polygon ROM is named by none of
+them, most likely the courses' ground, reached some other way.
+
+Textures, palette, colour tables and luma match m2-hle2's memory byte for
+byte. MAME's game stops at the network check, so the models were checked by
+eye in the Models tab and against m2-hle2, not against MAME's screen.
+
+There is no Stages tab and no lighting yet. See
+[TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -812,6 +852,8 @@ how your set is organised:
 Where a set holds both builds, the other is offered as a variant.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
+
+So is `airwlkrs.zip` for Air Walkers, and `powsled.zip` for Power Sled.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

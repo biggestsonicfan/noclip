@@ -152,7 +152,10 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     const idx = [0, 1, 2, 3];   /* placeholder group that becomes the first face */
     let vcount = 0;
 
-    while (vcount < MAX_VERTEX_PAIRS) {
+    /* A game can raise the cap: Air Walkers' intro city, model 555, is 5440
+     * polygons in one mesh. */
+    const maxPairs = rom.game.modelTable?.maxVertexPairs ?? MAX_VERTEX_PAIRS;
+    while (vcount < maxPairs) {
         if (meshOffset + VERTEX_PAIR_SIZE > polygons.length) break;
 
         const f1 = polygons[meshOffset + 24];

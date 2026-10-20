@@ -4723,6 +4723,128 @@ are reached by number, not by pointer, so there is no unused list.
 Revision A (`hotd`) moved its tables, and its picture table has not been found,
 so it has no Cells tab.
 
+### Air Walkers (`js/texture.js`, `js/colors.js`, `js/romset.js`)
+
+Data East's basketball game on Model 2A shares none of Sega's tables, so each
+one was found from the code that uses it, with MAME's debugger logging the
+calls (`bp addr,1,{logerror ...;g}` from a Lua script) and its memory dumped
+to check the result.
+
+**Regions.** As MAME's `airwlkrs` lays them out: the 2MB program pair, an 8MB
+mask pair at data 0 and a 1MB EPROM pair that MAME repeats from 0x800000 to
+16MB, one polygon pair and one texture pair.
+
+**Model table.** 0x1E8D8 is the draw: `lda 0x258DD50[g0*16]`, `ldq`, then the
+geometry FIFO. That is data 0x58DD50, 16 bytes an entry: texture word,
+material word, mesh pointer, polygon count. It runs 2026 entries. The model
+numbers MAME logs at 0x1E8E4 put the parts in groups: the players' bodies at
+3..303, the courts' lines and the HUD text at 384..491, the intro's city and
+dome at 539..555, home-side team models at 556..1291 and away-side ones at
+1292..2025. The court floors and the stands are not drawn through 0x1E8D8,
+and their path has not been found.
+Model 555, the intro's city, is 5440 polygons in one mesh, so the profile
+raises the decoder's cap of 4096 vertex pairs (`maxVertexPairs`).
+
+**Textures.** The game copies raw texels from the data ROMs into the 2A
+window itself, where dword n is halfword n of a sheet. 0x1D430 (source,
+sheet, kind) loads a page and is a switch of 51 cases at 0x1D474; the game
+calls two. Case 0x20 (0x1D678) is a whole half sheet and its mips, and boot
+loads 0x2000000 to sheet 0 and 0x20AAA00 to sheet 1 (0x248DC). Case 0x31
+(0x1D8D0) is rows 256..511, and the intro loads the title page 0x2155400 to
+sheet 1 (0x256B8). 0x1D9B0 (source, sheet) loads a team's page into rows
+512..767 and makes its mips with 0x1DA80. The routines under them are
+0x1DCC0 (a rectangle of a sheet-shaped source), 0x1DD20 (a packed one) and
+0x1DA80 (a mip level). The boot pages match m2-hle2's texture RAM, mips
+included, texel for texel. The team mips follow the code but were not
+compared.
+
+**Teams.** 0x1F0E0 (n) sets a team up. The 34 numbers are 17 teams twice:
+0..16 are the home side, which goes on colour slot 5 and sheet 0, and 17..33
+the away side, on slot 6 and sheet 1 (`cmpi g0, 16` and then
+`mov r4, 0, g1` for the page). It sends `ld 0x11A64[n*4]` to 0x1BAD0, lays
+`ld 0xF18A0[n*4]` as a palette block with 0x16370, and loads
+`ld 0xF1810[n*4]` with 0x1D9B0. The Models tab opens a part on a team's page
+on team 0 of its side (set 0 or 17), and the picker gives the rest.
+
+**Palette.** Boot writes {count, colours} from entry 0 out of 0x1E8F8
+(0x162E4). Blocks are {first, count, colours}, laid by 0x16370: 0x1EBA0
+(800..887, by the intro at 0x256A0) and 0x1EAF0 (400..485, by each court's
+set-up), then the team's.
+
+**Colours.** 0x1B9E0 writes a grey ramp to all 32 rows at boot (the floor
+byte table is at 0x1B9C0). 0x1BAD0 (table, slot) lays 64 RGB triples on
+slot k, which is row 1 + 2k (the halfword offsets at 0xF17F0). 0x1BB90 lays a
+run of them on slots 0, 1, 2 and on: boot's 15 from 0x41F0 (0x1B5DC) and the
+intro's 10 from 0x4D31 (0x256AC). A court's set-up, 0x247D0 (court, variant),
+sends five tables from `ld 0xD440[court*4]` to the slots at 0xF1980, five
+fixed ones from 0x4731 to slots 7..11, and the variant's two
+(`ld 0xD484[v*4]` to slot 0, `ld 0xD494[v*4]` to slot 14). The team's comes
+last.
+
+**Checks.** Against MAME's colorxlat and palette RAM in a game on court 0,
+variant 1, with home team 0 against away team 20: every row and entry
+matches, except the other side's team slot and block, which the Models tab
+leaves at the intro's. Set 34 is the intro: the two runs and the first block
+only. It matches MAME's dump 20 seconds after boot exactly.
+
+**Not done.** Stages: there are 17 courts (`0xD440` has 17 entries) with 4
+variants each, but the floors and stands are drawn by a path other than
+0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
+same rows as the title page and open on the boot pages, which may be wrong.
+
+### Power Sled (`js/powsled.js`, `js/texture.js`, `js/colors.js`)
+
+Sega's 1996 Model 2B snowmobile racer, as MAME's `powsled` (Slave, Revision
+A). MAME's game stops at its network screen, so the tables were found in the
+program and checked against m2-hle2's memory (`dump_geo_list`, texture,
+palette, colorxlat and luma dumps) in attract mode.
+
+**Models.** There is no model table. On 2B the main CPU writes object
+commands into bufferram for the DSP: 0x00800101, then texture point address,
+texture header address and object address (bit 23 set: a word index into the
+polygon ROM). The program takes the three words from three places, and
+`js/powsled.js` gathers them all:
+
+- 64-byte placement records in the data ROM, {tpa, tha, oba, 0, 3x4 float
+  matrix}. The grid at data 0x4770 is {ptr, 33, 33 offsets} of them, read by
+  0xE47AC through 0xE1F30. Longer runs are at 0x40534, 0xE7270, 0xEDD98,
+  0x13E240, 0x18E6E8, 0x1DEF68 and 0x285CA4.
+- 28-byte named records in the program ROM, 0xD8EA0..0xE19E8: two words, the
+  three, a zero and a pointer to a name such as `HONBAN_sce2_course_N_4_1_0`.
+- Immediates: `lda tpa,g6; st g6,0x804000; lda d(g6),g6; st; lda oba,g6; st`,
+  as at 0xE3F9C. An untextured model stores g6 twice, so its header address
+  is its point address.
+
+A triple counts if its object address is inside the polygon ROM's data
+(0xFF fill from 0x2B3000), and its header address is no more than 0x1000
+words past its point address; the widest real gap is 0xD84. That gives 494
+distinct triples, 37 of them untextured. Every model in a captured frame's
+display list is among them. The list does not reach about half the polygon
+ROM (for one, 0x15803C..0x209EAC words), which is likely the courses' ground.
+
+**Textures.** 0xC540, called from 0xE688 at boot, copies data 0x600000 to
+sheet 0 and data 0x700000 to sheet 1, 1MB each, raw. That is the only texture
+load, so there is one set (`layout: 'copy'`). It matches m2-hle2's texture
+RAM byte for byte.
+
+**Palette.** {count 0x20A, colours} at program 0x128EC, uploaded to 0x1802000
+by 0xF1B0 (`paletteProgram`). All 522 entries match.
+
+**Colours.** The curve is `trunc(255 * (x/255)^(10/17))`. 0xE2D0 fills all 32
+rows at boot: row r has a = 8r + (r >> 2), and luma l gets the curve of
+(a * (l + 1)) >> 6 on all three channels; luma 64 and up repeats luma 63.
+0xE1D0 then lays the 15 odd rows 1..29 from the table at 0xCB50, 0x180 bytes
+a row of {r, g, b} halfwords for luma 0..63, through 0xC960. Fades go through
+RAM 0x53EB60..0x543B60 (0x18DF0 on), which the explorer leaves alone. The
+result matches m2-hle2's colorxlat exactly.
+
+**Luma.** 0xC8F0 writes two bands of 128, entry i = ((i & 127) + 1) >> 1
+(`halfRamp`). It matches.
+
+**Not done.** Stages: the grid and the runs hold placement matrices, but
+which go together for a course, and where the ground comes from, is not
+worked out. No lighting.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

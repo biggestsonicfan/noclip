@@ -12,6 +12,7 @@
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
 import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
+import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
@@ -236,11 +237,18 @@ export function setRomPatches(rom, on) {
  * because both are built on the same Sega library, but the count differs. */
 
 const MODEL_FIELDS = { uv: 0, mat: 4, mesh: 8 };
+const MODEL_LISTS = { powsled: powsledModels };
 
 /* A game whose numbers run on into a second table (`past`) indexes that one by
  * the same number from its own base: Virtua Cop's models from 0x4D2 on. */
 export function readModelEntry(rom, index) {
     const t = rom.game.modelTable;
+    /* A game with no table of its own has a list put together from what its
+     * program draws: Power Sled (js/powsled.js). */
+    if (t.list) {
+        rom.modelList ??= MODEL_LISTS[t.list](rom);
+        return rom.modelList[index] ?? { uvPtr: 0, matPtr: 0, meshPtr: 0 };
+    }
     if (t.scan) {
         const e = (rom.modelEntries ??= scanModelTable(rom))[index];
         return e ?? { uvPtr: 0, matPtr: 0, meshPtr: 0 };
@@ -412,13 +420,39 @@ export function facePalette(rom) {
          * at whatever the boot clear put there, so the entries past the count
          * are left as no colour rather than read out of the next table along. */
         const n = Math.min(rom.game.paletteCount ?? 1024, 1024);
-        for (let i = 0; i < n; i++) {
+        /* Power Sled keeps {count, colours} in its program ROM instead
+         * (`paletteProgram`; the upload at 0xF1B0). */
+        const at = rom.game.paletteProgram;
+        if (at !== undefined) {
+            const cv = rom.mainCpuView;
+            const count = Math.min(cv.getUint16(at, true), 1024);
+            for (let i = 0; i < count; i++) out[i] = cv.getUint16(at + 2 + i * 2, true);
+        }
+        for (let i = 0; at === undefined && i < n; i++) {
             const o = rom.game.paletteOffset + i * 2;
             if (o + 2 > md.length) break;
             out[i] = md[o] | (md[o + 1] << 8);
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
+    } else if (p.blocks) {
+        /* Air Walkers: a block is {first, count, colours} (0x16370), laid
+         * over the boot's table, which is {count, colours} from 0 (0x16200). */
+        const cv = rom.mainCpuView;
+        const len = rom.maincpu.length;
+        const block = (first, count, at) => {
+            for (let i = 0; i < count && first + i < 1024 && at + i * 2 + 2 <= len; i++) {
+                out[first + i] = cv.getUint16(at + i * 2, true);
+            }
+        };
+        block(0, cv.getUint16(p.base, true), p.base + 2);
+        const lay = (t) => {
+            if (t && t + 4 <= len) block(cv.getUint16(t, true), cv.getUint16(t + 2, true), t + 4);
+        };
+        /* The intro and the title lay only the first block (0x256A0); a
+         * court's set-up lays the rest, then the team's. */
+        for (const t of set === p.titleSet ? p.blocks.slice(0, 1) : p.blocks) lay(t);
+        if (set >= 0 && set < p.sets) lay(cv.getUint32(p.tables + set * 4, true));
     } else {
         const cv = rom.mainCpuView;
         const table = (s, first) => {

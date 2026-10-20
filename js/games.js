@@ -4775,13 +4775,168 @@ const dynamcopc = dynamcopBuild({
     low: [0x000000, 'epr-20952.15', 0xec8bc896, 'epr-20953.16', 0xa8276ffd],
     high: [0x100000, 'epr-20950.13', 0x618a68bf, 'epr-20951.14', 0x13abe49c],
 });
+/* ---- Air Walkers ---------------------------------------------------------- */
+
+/*
+ * Data East's basketball game on Model 2A (m2-hle2's src/profiles/airwlkrs.h,
+ * MAME's `airwlkrs`). Its program keeps nothing in the shapes the other games
+ * use: the textures are loaded by the program's own copy routines and the
+ * colours are a ramp it works out, so js/texture.js and js/colors.js each have
+ * a section for it.
+ */
+const airwlkrs = {
+    id: 'airwlkrs',
+    name: 'Air Walkers',
+    identify: ['j_2-14_ic12_fe7e.12', 'j_2-14_ic13_d539.13', 'mpr-19235.16', 'mpr-19234.25'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [[0x000000, 'j_2-14_ic12_fe7e.12', 0x8851a8d7, 'j_2-14_ic13_d539.13', 0x72287ee0]],
+        },
+        /*
+         * An 8MB mask pair and a 1MB EPROM pair, which MAME repeats up to 16MB
+         * (the ROM_COPY run in `airwlkrs`). The model table is in the mask pair;
+         * the teams' texture pages run into the repeats.
+         */
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19236.10', 0x3c26e978, 'mpr-19237.11', 0x961328b1],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x800000 + i * 0x100000, '11-7_ic8_d400.8', 0x37f300bd, '11-7_ic9_6e4a.9', 0x454e4a09]),
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19235.16', 0xeaad8f92, 'mpr-19232.20', 0xfd153001]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19234.25', 0xd7d69493, 'mpr-19233.24', 0x7a2e51f1]],
+        },
+    },
+    /*
+     * 2026 entries of 16 bytes at data 0x58DD50: texture word, material word,
+     * mesh pointer, polygon count. The draw routine at 0x1E8D8 indexes it with
+     * `lda 0x258DD50[g0*16]` and reads the mesh pointer at +8. Model 555 runs
+     * past the decoder's usual cap of 4096 vertex pairs.
+     */
+    modelTable: { offset: 0x58dd50, count: 2026, stride: 16, maxVertexPairs: 8192 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /*
+     * Laid in blocks, not tables. Boot writes {count, colours} from entry 0 at
+     * 0x1E8F8 (0x162E4); the title lays the block at 0x1EBA0 and the court
+     * set-up the one at 0x1EAF0, both {first, count, colours} (0x16370). A
+     * team's block is `ld 0xF18A0[n*4]`, laid by 0x1F0E0. The game's 34 team
+     * numbers are 17 teams twice: 0..16 for the home side, 17..33 for the away.
+     */
+    palette: { base: 0x1e8f8, blocks: [0x1eba0, 0x1eaf0], tables: 0xf18a0, sets: 34, titleSet: 34 },
+    /*
+     * Raw pages, copied by the program (js/texture.js): two boot pages of kind
+     * 0x20, then a team's page from `ld 0xF1810[n*4]`. Sets 0..33 are the team
+     * numbers; set 34 is the title's page (0x256B8), which the attract arena,
+     * model 555, is drawn from.
+     */
+    texture: {
+        raw: {
+            layout: 'airwlkrs',
+            boot: [[0x02000000, 0, 0x20], [0x020aaa00, 1, 0x20]],
+            teamPages: 0xf1810,
+            title: [0x02155400, 1, 0x31],
+            titleSet: 34,
+            titleModels: [539, 555],
+        },
+        sets: 35,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * The luma table is the 2A library's, 0x4000 bytes at 0x54C0 in the program
+     * ROM. The rest is js/colors.js's Air Walkers section: the ramp, the
+     * boot's and the title's runs, court 0's five tables, the five fixed ones,
+     * the variant's two, then the team's. Variant 1 is the one MAME's game
+     * played on court 0.
+     */
+    colors: {
+        luma: { source: 'maincpu', data: 0x54c0, bytes: 0x4000 },
+        airwlkrs: {
+            floor: 0x1b9c0, slots: 0xf17f0, runs: [0x41f0, 0x4d31],
+            stages: 0xd440, stageSlots: 0xf1980,
+            fixed: [[0x4731, 7], [0x47f1, 8], [0x48b1, 9], [0x4971, 10], [0x4a31, 11]],
+            variants: [0xd484, 0xd494],
+            teams: 0x11a64, teamCount: 34, variant: 1, titleSet: 34,
+        },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/* ---- Power Sled ----------------------------------------------------------- */
+
+/*
+ * Sega's sled racer on Model 2B CRX (m2-hle2's src/profiles/powsled.h,
+ * MAME's `powsled`, the Slave unit's program, Revision A). Like Air Walkers it
+ * keeps nothing in the AM2 shapes: it has no model table, its colours are a
+ * curve it works out, and its textures are one straight copy.
+ */
+const powsled = {
+    id: 'powsled',
+    name: 'Power Sled (Slave, Revision A)',
+    identify: ['epr-19470a.15', 'epr-19471a.16', 'fpr-19455.17', 'fpr-19458.27'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19470a.15', 0x8f28cc09, 'epr-19471a.16', 0x01a013e3]],
+        },
+        mainData: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19468.11', 0x56fae4e2, 'fpr-19469.12', 0x5579c922]],
+        },
+        polygons: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19455.17', 0x165ee345, 'fpr-19456.21', 0xc3b2e2c5]],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19458.27', 0xf24acca2, 'fpr-19457.25', 0x79d7e6fa]],
+        },
+    },
+    /*
+     * No table: js/powsled.js lists every {texture word, material word, mesh}
+     * triple the program hands the geometry engine, out of the data ROM's
+     * placement records, the program's named records and its immediates.
+     * 494 of them, sorted by mesh.
+     */
+    modelTable: { list: 'powsled', count: 494, offset: 0 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* {count, colours}: 0x20A colours at 0x128EE, copied to the face palette
+     * (0x1802000) by 0xF1B0. */
+    paletteProgram: 0x128ec,
+    paletteOffset: null,
+    /* Data 0x600000 on sheet 0 and 0x700000 on sheet 1, by 0xC540. */
+    texture: {
+        raw: { layout: 'copy', sheets: [0x02600000, 0x02700000] },
+        sets: 1,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* js/colors.js's Power Sled section: luma from 0xC8F0, colorxlat from
+     * 0xE2D0 and 0xE1D0 with the odd rows' colours at 0xCB50. */
+    colors: {
+        luma: { halfRamp: true },
+        powsled: { table: 0xcb50, rows: 15 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
-    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc];
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

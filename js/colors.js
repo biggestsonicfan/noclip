@@ -146,6 +146,13 @@ function trim(v, tint) {
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
 export function buildLumaram(rom) {
+    /* Power Sled works its table out (0xC8F0): two bands of 128, entry i
+     * (i + 1) >> 1, so a texel's luma halves onto the row's 64 entries. */
+    if (rom.game.colors.luma?.halfRamp) {
+        const luma = new Uint8Array(LUMA_BYTES);
+        for (let i = 0; i < 256; i++) luma[i * 2] = ((i & 127) + 1) >> 1;
+        return luma;
+    }
     if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
     /* Daytona USA keeps both the count and the bands in its program ROM, where
      * the other games keep them in the data ROM — `lda 0x22FD38` and
@@ -265,6 +272,45 @@ function buildRampColorxlat(rom, colorSet) {
     if (shift) shiftRamp(out, shift);
     const band = C.band?.tables[colorSet];
     if (band !== undefined) writeBand(rom.mainData, band, set);
+    return out;
+}
+
+/* ---- Power Sled ------------------------------------------------------------
+ *
+ * Two passes, both through the same curve: v = 255 * (x / 255) ^ (10 / 17),
+ * truncated, worked in the FPU with logr, expr and scaler (0xE354..0xE3B4).
+ *
+ * - 0xE2D0, at boot: every row is a ramp. Row r's top is a = 8r + (r >> 2),
+ *   so row 31 reaches 255; luma l takes x = (a * (l + 1)) >> 6, and luma 64 on
+ *   holds the value at 63. The three channels are the same.
+ * - 0xE1D0, straight after: the odd rows 1..29 get 64 colours each instead,
+ *   {r, g, b} halfwords from `table`, 0x180 bytes a row, through 0xC960. Luma
+ *   64 on keeps the ramp's last value.
+ *
+ * Checked against m2-hle2's colorxlat RAM: no entry differs. */
+function powsledCurve(x) {
+    return x <= 0 ? 0 : Math.trunc(Math.exp(Math.log(x / 255) * (10 / 17)) * 255);
+}
+
+function buildPowsledColorxlat(rom) {
+    const P = rom.game.colors.powsled;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const a = row * 8 + (row >> 2);
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = powsledCurve((a * (Math.min(luma, 63) + 1)) >> 6);
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    const cv = rom.mainCpuView;
+    for (let k = 0; k < P.rows; k++) {
+        const row = 1 + k * 2;
+        const at = P.table + k * 0x180;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, powsledCurve(cv.getUint16(at + (luma * 3 + ch) * 2, true)));
+        }
+    }
     return out;
 }
 
@@ -529,6 +575,8 @@ function sendFighterColors(dv, put, rgb, C, fighters, palette) {
  * @returns {Uint8Array} CXLAT_BYTES, laid out like a dump of 0x01810000
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
+    if (rom.game.colors.airwlkrs) return buildAirwlkrsColorxlat(rom, colorSet);
+    if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
@@ -594,6 +642,76 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
 
     sendFighterColors(dv, put, rgb, C, fighters, palette);
 
+    return out;
+}
+
+/* ---- Air Walkers ---------------------------------------------------------- */
+
+/*
+ * Air Walkers' colorxlat, all of it out of the program ROM.
+ *
+ * 0x1B9E0, once at boot, writes all 32 rows with the same value in the three
+ * channels. Luma 1..64 of row r run v = (6r + r/6 + 64) * luma >> 6 (row 0
+ * stays 0), floored at r (the byte table at 0x1B9C0 is 0..31); the last value
+ * fills the other 192 entries.
+ *
+ * 0x1BAD0 (table, slot) then lays 64 RGB byte triples over luma 0..63 of one
+ * row: slot k is row 1 + 2k (the halfword offsets at 0xF17F0). 0x1BB90 lays
+ * a run of them, a count byte and then the tables, over slots 0, 1, 2 and on:
+ * boot sends 15 from 0x41F0 (0x1B5DC) and the title 10 from 0x4D31 (0x256AC).
+ * The stage set-up at 0x247D0 then sends five of the stage's tables, 0xC0
+ * apart from `ld 0xD440[stage*4]`, to the slots `ld 0xF1980..0xF1990` name;
+ * five fixed ones (0x4731 on, slots 7..11); and the variant's two
+ * (`ld 0xD484[v*4]` to slot 0, `ld 0xD494[v*4]` to slot 14). 0x1F0E0 sends a
+ * team's, `ld 0x11A64[n*4]`, to slot 5 for the home side's numbers 0..16 or
+ * slot 6 for the away side's 17..33. The other side's slot keeps the title's.
+ *
+ * `colorSet` is the team, or the profile's `titleSet` for the intro's and the
+ * title's colours, the two runs alone. The court and its variant are the
+ * profile's.
+ */
+function buildAirwlkrsColorxlat(rom, colorSet) {
+    const A = rom.game.colors.airwlkrs;
+    const cv = rom.mainCpuView;
+    const cpu = rom.maincpu;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+
+    for (let row = 0; row < 32; row++) {
+        const k = row ? 6 * row + Math.trunc(row / 6) + 0x40 : 0;
+        let v = 0;
+        for (let luma = 1; luma <= 64; luma++) {
+            v = Math.max((k * luma) >> 6, cpu[A.floor + row]);
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma - 1, v);
+        }
+        for (let luma = 64; luma < 256; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+
+    const send = (src, slot) => {
+        if (!src || src + 192 > cpu.length) return;
+        const row = cv.getUint16(A.slots + slot * 2, true) / CXLAT_ROW;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, cpu[src + luma * 3 + ch]);
+        }
+    };
+    const run = (at) => {
+        for (let k = 0; k < cpu[at]; k++) send(at + 1 + k * 192, k);
+    };
+    for (const at of A.runs) run(at);
+    /* The intro and the title stop there: nothing else is sent until a
+     * court is set up. */
+    if (colorSet === A.titleSet) return out;
+    const stage = A.stage ?? 0, variant = A.variant ?? 0;
+    const base = cv.getUint32(A.stages + stage * 4, true);
+    for (let i = 0; i < 5; i++) send(base + i * 0xc0, cv.getUint32(A.stageSlots + i * 4, true));
+    for (const [src, slot] of A.fixed) send(src, slot);
+    send(cv.getUint32(A.variants[0] + variant * 4, true), 0);
+    send(cv.getUint32(A.variants[1] + variant * 4, true), 14);
+    if (colorSet >= 0 && colorSet < A.teamCount) {
+        send(cv.getUint32(A.teams + colorSet * 4, true), colorSet > 16 ? 6 : 5);
+    }
     return out;
 }
 

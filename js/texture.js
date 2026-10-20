@@ -935,6 +935,173 @@ function buildDoaTexram(rom, texSets, fighters = [{ char: 0 }, { char: 1 }]) {
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
 }
 
+/* ---- Air Walkers ---------------------------------------------------------- */
+
+/*
+ * Air Walkers keeps its texels raw in the data ROMs and writes them through the
+ * Model 2A window (0x12000000 sheet 0, 0x12400000 sheet 1, each mirrored
+ * 0x200000 on), where dword n of the window is halfword n of the sheet
+ * (model2.cpp tex0_w). Three routines do all of it:
+ *
+ *   0x1DCC0  copy a rectangle out of a sheet-shaped source, 0x200 halfwords a
+ *            row: copyRect
+ *   0x1DD20  copy a rectangle out of a packed source, the rectangle's own
+ *            width a row, from row `at` of 0x200 halfwords on
+ *   0x1DA80  make a mip level out of the one above it on the other sheet
+ *
+ * 0x1D430 (source, sheet, kind) loads a page of `kind`, a switch of 51 cases
+ * at 0x1D474 of which the game calls two, and 0x1D9B0 (source, sheet) loads a
+ * fighter's page and makes its mips. A list below is one case: its packed
+ * rectangles as [at, sheet, x0, y0, x1, y1], `sheet` 0 the one named and 1
+ * the other, rows counted from row 512 (`lda 0x100000(r6)`) where `low` is set.
+ */
+const AW_PAGES = {
+    /* Case 0x20 (0x1D678): a full-size half sheet straight, then its mips. The
+     * boot pages, 0x2000000 on sheet 0 and 0x20AAA00 on sheet 1 (0x248DC). */
+    0x20: {
+        full: true,
+        rects: [
+            [0x00, 1, 0x000, 0x100, 0x0ff, 0x1ff, true],
+            [0x80, 0, 0x100, 0x180, 0x17f, 0x1ff, true],
+            [0xa0, 1, 0x180, 0x1c0, 0x1bf, 0x1ff, true],
+            [0xa8, 0, 0x1c0, 0x1e0, 0x1df, 0x1ff, true],
+            [0xaa, 1, 0x1e0, 0x1f0, 0x1ef, 0x1ff, true],
+        ],
+    },
+    /* Case 0x31 (0x1D8D0): rows 256..511 of the sheet and their mips. The
+     * title's page, 0x2155400 on sheet 1 (0x256C8). */
+    0x31: {
+        full: false,
+        rects: [
+            [0x000, 0, 0x000, 0x100, 0x1ff, 0x1ff, false],
+            [0x100, 1, 0x000, 0x180, 0x0ff, 0x1ff, true],
+            [0x140, 0, 0x100, 0x1c0, 0x17f, 0x1ff, true],
+            [0x150, 1, 0x180, 0x1e0, 0x1bf, 0x1ff, true],
+            [0x154, 0, 0x1c0, 0x1f0, 0x1df, 0x1ff, true],
+            [0x155, 1, 0x1e0, 0x1f0, 0x1ef, 0x1ff, true],
+        ],
+    },
+};
+
+/* 0x1D9B0's five mip levels: [from, x, y, w, h], `from` the sheet read (0 the
+ * team's, 1 the other), the level written to the other one. The third is
+ * 0x3F wide where the rest halve, as the code has it (`lda 0x3f, g4`). */
+const AW_TEAM_MIPS = [
+    [0, 0x200, 0x000, 0x100, 0x80],
+    [1, 0x300, 0x100, 0x80, 0x40],
+    [0, 0x380, 0x180, 0x3f, 0x20],
+    [1, 0x3c0, 0x1c0, 0x20, 0x10],
+    [0, 0x3e0, 0x1e0, 0x10, 8],
+];
+
+/* 0x1DD20: `rows` x `cols` halfwords, back to back from `src`. */
+function awPacked(md, src, tex, base, x0, y0, x1, y1) {
+    const w = (x1 - x0 + 1) * 2;
+    for (let y = y0; y <= y1; y++, src += w) {
+        if (src + w > md.length) return;
+        tex.set(md.subarray(src, src + w), base + ((y << 9) + x0) * 2);
+    }
+}
+
+/*
+ * 0x1DA80: one mip level. A halfword is a 2x2 block of texels, so a 2x2 block
+ * of halfwords becomes one: each input halfword gives one texel, its low texel
+ * plus three times the next, over four (`addo` three times, `shro 2`). The
+ * top-left input lands in the top nibble. x past 0x1FF folds onto rows 512 on,
+ * for the source and the destination alike, and the destination is where the
+ * level halves towards (0x400, 0x200).
+ */
+function awMip(tex, from, to, sx, sy, w, h) {
+    let dx = 0x400 - ((0x400 - sx) >> 1);
+    let dy = 0x200 - ((0x200 - sy) >> 1);
+    if (sx > 0x1ff) { sx -= 0x200; sy += 0x200; }
+    if (dx > 0x1ff) { dx -= 0x200; dy += 0x200; }
+    const at = (base, x, y) => base + ((y << 9) + x) * 2;
+    const hw = (base, x, y) => tex[at(base, x, y)] | (tex[at(base, x, y) + 1] << 8);
+    const t = (v) => ((v & 15) + 3 * ((v >> 4) & 15)) >> 2;
+    for (let j = 0; j < h; j++) {
+        const y = sy + 2 * j;
+        for (let i = 0; i < w; i++) {
+            const x = sx + 2 * i;
+            const v = t(hw(from, x + 1, y + 1)) | (t(hw(from, x, y + 1)) << 4)
+                | (t(hw(from, x + 1, y)) << 8) | (t(hw(from, x, y)) << 12);
+            const o = at(to, dx + i, dy + j);
+            tex[o] = v & 0xff;
+            tex[o + 1] = v >> 8;
+        }
+    }
+}
+
+/* 0x1D430: a page of `kind` out of `src` (a data offset) onto `sheet`. */
+function awPage(md, tex, src, sheet, kind) {
+    const near = sheet ? SHEET1 : SHEET0, far = sheet ? SHEET0 : SHEET1;
+    const page = AW_PAGES[kind];
+    let at = src;
+    if (page.full) {
+        copyRect(md, src, tex, near, 0, 0, 0x1ff, 0x1ff);
+        at += 0x80000;
+    }
+    for (const [row, other, x0, y0, x1, y1, low] of page.rects) {
+        awPacked(md, at + row * ROW_PAIR, tex, (other ? far : near) + (low ? 0x80000 : 0), x0, y0, x1, y1);
+    }
+}
+
+/* 0x1D9B0: a team's page, rows 512..767, and its mips made from it. */
+function awTeamPage(md, tex, src, sheet) {
+    const near = sheet ? SHEET1 : SHEET0, far = sheet ? SHEET0 : SHEET1;
+    awPacked(md, src, tex, near + 0x80000, 0, 0, 0x1ff, 0xff);
+    for (const [from, x, y, w, h] of AW_TEAM_MIPS) {
+        awMip(tex, from ? far : near, from ? near : far, x, y, w, h);
+    }
+}
+
+/*
+ * Texture RAM for Air Walkers. The stage set-up (0x247D0) loads the same two
+ * boot pages for every court; then 0x1F0E0 loads a team's page,
+ * `ld 0xF1810[team*4]`, onto sheet 0 for the home side's numbers 0..16 and
+ * sheet 1 for the away side's 17..33, which is where each side's models look
+ * for it. The set past the teams is the title's: the boot pages with the
+ * title's page over them (0x256C8), which the attract screens draw against.
+ */
+function buildAirwlkrsTexram(rom, texSets) {
+    const md = rom.mainData;
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const off = (a) => a - MAIN_DATA_BASE;
+    for (const [src, sheet, kind] of raw.boot) awPage(md, tex, off(src), sheet, kind);
+    let pages = raw.boot.length;
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : -1;
+    if (set === raw.titleSet) {
+        const [src, sheet, kind] = raw.title;
+        awPage(md, tex, off(src), sheet, kind);
+        pages++;
+    } else if (set >= 0) {
+        const src = rom.mainCpuView.getUint32(raw.teamPages + set * 4, true);
+        if (src >= MAIN_DATA_BASE && off(src) + 0x40000 <= md.length) {
+            awTeamPage(md, tex, off(src), set > 16 ? 1 : 0);
+            pages++;
+        }
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
+/*
+ * Texture RAM that is one straight copy of the data ROM: Power Sled's 0xC540
+ * copies 0x80000 halfwords from data 0x600000 into sheet 0 and the next
+ * 0x80000 into sheet 1, and nothing loads over them. m2-hle2's sheets match
+ * the ROM byte for byte.
+ */
+function buildCopyTexram(rom) {
+    const md = rom.mainData;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    rom.game.texture.raw.sheets.forEach((src, i) => {
+        const at = src - MAIN_DATA_BASE;
+        tex.set(md.subarray(at, Math.min(at + SHEET_BYTES, md.length)), i * SHEET_BYTES);
+    });
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
 /*
  * Virtual On's banks are LZSS: a big-endian byte count, then flag bytes read
  * low bit first, a set bit a literal, a clear one a 12-bit window offset and
@@ -1099,6 +1266,30 @@ export function bankTextureSet(rom, index) {
 /* ---- The sets the program loads for a lone model ------------------------- */
 
 /*
+ * Air Walkers: a model on a team's page (rows 512..767, x past 1023 in the
+ * atlas) is on the home side's sheet 0 or the away side's sheet 1, and opens
+ * on team 0 of that side. The intro's city and dome, `titleModels` (MAME's
+ * draw log at 0x1E8E4, 15 to 30 seconds after boot), are drawn on the title's
+ * page. The rest sample the boot pages, which every court has.
+ */
+function airwlkrsModelSets(raw, index, decoded) {
+    if (!decoded) return null;
+    let home = false, away = false, any = false;
+    for (let i = 0; i < decoded.tiles.length; i += 4) {
+        if (!decoded.tiles[i + 2]) continue;
+        any = true;
+        if (decoded.tiles[i] < 1024 || (decoded.tiles[i + 1] & 1023) >= 512) continue;
+        if (decoded.tiles[i + 1] >= SHEET_H) away = true; else home = true;
+    }
+    if (!any) return { sets: [], how: 'untextured' };
+    const [lo, hi] = raw.titleModels;
+    if (index >= lo && index <= hi) return { sets: [raw.titleSet], how: 'title' };
+    if (home) return { sets: [0], how: 'home' };
+    if (away) return { sets: [17], how: 'away' };
+    return { sets: [0], how: 'boot' };
+}
+
+/*
  * The fighters' own sets, model by model: Fighting Vipers' player set-up
  * (0x1243C) takes the character record `ld 0x640D2B0[char*4]`, copies the
  * sixteen part models listed at its +0 into the player, and hands its +0x20 to
@@ -1173,6 +1364,8 @@ function rallyCourseModels(rom) {
  *   (0x1454) and no course replaces, so every course draws it the same. One on
  *   sheet 0 takes the bank sel_course picks (0x1438, `ld 0x15A0[course*4]`),
  *   and the course is the one whose object records name it.
+ * - Air Walkers: see airwlkrsModelSets.
+ * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1189,6 +1382,11 @@ export function programTextureSets(rom, index, decoded) {
         if (!sheet0) return { sets: [], how: 'boot' };
         const courses = courseNamedModels(rom).get(index);
         return courses?.size === 1 ? { sets: [...courses], how: 'course' } : null;
+    }
+    if (T.raw?.layout === 'airwlkrs') return airwlkrsModelSets(T.raw, index, decoded);
+    if (T.raw?.layout === 'copy') {
+        if (!decoded) return null;
+        return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
     }
     /* Sega Rally the other way round: the boot bank's full size is on sheet 0
      * and a course's on sheet 1. A sheet-1 model in one of the course lists
@@ -1244,6 +1442,8 @@ export function buildTexram(rom, texSets, fighters) {
         const layout = rom.game.texture.raw.layout;
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
+        if (layout === 'airwlkrs') return buildAirwlkrsTexram(rom, texSets);
+        if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {
