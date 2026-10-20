@@ -1092,8 +1092,8 @@ function composeOps(out, ops) {
          * the identity here, which leaves the draw standing where it stands
          * unrotated — what the parts panel and the camera bounds want, and what
          * stepBillboards then replaces once a frame with the real thing. The
-         * camera's heading is the same. */
-        if (kind === 'b' || kind === 'cy') continue;
+         * camera's heading is the same, and so is standing at its eye. */
+        if (kind === 'b' || kind === 'cy' || kind === 'ce') continue;
         if (kind === 's') OP_SCRATCH.makeScale(v[0], v[1], v[2]);
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
@@ -1842,7 +1842,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
         state.anim.entries.push(item);
     }
     if (windowed && (entry.block != null || entry.inView)) state.anim.blocks.push({ entry, mesh, lines, item });
-    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
+    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy' || op[0] === 'ce')) {
         state.anim.billboards.push({ entry, mesh, lines });
     }
     return mesh;
@@ -2044,7 +2044,19 @@ function stepBillboards() {
     BB_Q.multiplyQuaternions(BB_ROOT_Q, camera.quaternion);
     for (const it of list) {
         const ops = opsAt(it.entry, state.anim.frame > 0 ? state.anim.frame : 0);
-        let at = ops.findIndex((op) => op[0] === 'b');
+        let at = ops.findIndex((op) => op[0] === 'ce');
+        if (at >= 0) {
+            /* The eye in the root's frame, unturned. */
+            composeOps(BB_HEAD, ops.slice(0, at));
+            BB_INV.copy(root.matrixWorld).invert();
+            BB_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(BB_INV);
+            BB_HEAD.premultiply(BB_YAW.makeTranslation(BB_POS.x, BB_POS.y, BB_POS.z));
+            composeOps(BB_TAIL, ops.slice(at + 1));
+            it.mesh.matrix.multiplyMatrices(BB_HEAD, BB_TAIL);
+            if (it.lines) it.lines.matrix.copy(it.mesh.matrix);
+            continue;
+        }
+        at = ops.findIndex((op) => op[0] === 'b');
         if (at >= 0) {
             composeOps(BB_HEAD, ops.slice(0, at));
             BB_POS.setFromMatrixPosition(BB_HEAD);

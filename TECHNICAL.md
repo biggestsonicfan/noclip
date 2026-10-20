@@ -5125,25 +5125,73 @@ the matrix over (the geometrizer's 0x0B reads its twelve words back), and,
 from the goal's sign only, 0x2C scale (1) and 0x21 turn about Y (1 word).
 The geometrizer's 0x01 then draws {tpa, tha, oba} under that matrix. A piece
 is kept once, at the first place it is drawn, keyed by its model and place,
-with every scene that draws it: 304 pieces, models 137 to 490, all from the
-model list. One piece, the goal sign's frame (mesh 0x882859), steps its
+with every scene that draws it and the first and last progress that does:
+304 pieces, models 137 to 490, all from the model list. Six of them are
+drawn at progress 0 only (one of them up to 3) and then swapped for another
+on the same spot (m2-hle2's race draws mesh 0x8401B6 up to
+frame 4601 and 0x822070 from 4731, never both); the stage keeps the one the
+race keeps, which leaves 298. One piece, the goal sign's frame (mesh 0x882859), steps its
 material with the frame counter; the stage draws it with the first one it
 is sent, as model `283#608ac`. Every routine finishes, and no unknown
 coprocessor opcode is met.
 
 The scenes are the stage's views, named for their records; each opens on a
 camera framed on its own pieces. The race sends the light straight to the
-geometrizer (function 0xA, at 0x3672C and 0x3740C): (0.1, -1, 0.01). The 16
-material pairs at program 0xEBC0 go with function 6 at boot (0xED04 to
-0xEB70).
+geometrizer (function 0xA, at 0x3672C and 0x3740C): (0.1, -1, 0.01). The 32
+material pairs at program 0xEBC0 go with function 6 at boot (0xED04 calls
+0xEB70 with a count of 31 + 1); the rocks are lit by slot 25 (diffuse 0xF7,
+ambient 0x32), which reading only 16 left black. Over the palette's 0x20A
+colours 0xF1F8 greys entries 8 to 63 (0x39CE), as m2-hle2's palette RAM
+holds them through the race (`paletteFixes`); 0xF6E0's per-frame cycle into
+the same entries is not modelled.
+
+Three things the scene routines do not draw go with the stage as objects:
+
+- The sky and the mountains. 0xD8890, which the race loops call through the
+  words at 0x2A144, 0x30C0C and 0x35A4C, stands at the eye unturned and
+  draws the sky (mesh 0x8AB219) 500 above it at three times its size
+  (0xD88E4, 0xD890C), then the mountains (0x89DAE0) 2600 below it (0xD8A48).
+  They follow the camera (display op `ce`, at the eye). The sky is the
+  shell, drawn first; the mountains, whose floor runs under the course,
+  are a backdrop drawn over it with no depth test, as the board's z sort
+  puts the course in front of that floor where a depth buffer would not.
+- The four cranes over the start that hold the sleds before the drop:
+  0xE6DA0 runs r4 from 0 to 3 through 0xE6560, which draws
+  {0xA244, 0xA798, 0x811E36} for an even r4 and {0xA7C8, 0xAD24, 0x8124FF}
+  for an odd one, at a matrix the copro works out. Their places are read off
+  m2-hle2's race: (6.959, 1783.965, 5527.939), (-9.041, 1790.465, 5567.939),
+  (6.959, 1796.965, 5607.939) and (-9.041, 1803.465, 5647.939), unturned and
+  still from frame 3561 to 4900. The sleds hanging from them are the
+  players' and are left out.
+
+The finish banners (the flag's stripes, *1996 KEROLYMPIC*, the vertical
+*KEROAME*) are a plain face with the lettering laid on it as a second,
+cut-out one, so the game takes Daytona's depth arrangement (`depth.layers`);
+without it the two fight.
 
 MAME cannot reach the race. As the network's master (the default) the board
 stops at the RIDE ID prompt. With the ride ID (RAM 0x5293F0, printed by
 0x152D4: 2 BLACK, 3 YELLOW) poked to a ride, it shows THIS IS RED RIDE and
 waits for the master, which it looks for in the comm RAM at 0x1A02180
-(0x24600 on): *Cannot find network main.* So the course is the scene
-routines' own draws, checked by eye in a headless browser, not against a
-picture of the race.
+(0x24600 on): *Cannot find network main.*
+
+m2-hle2 reaches it with two boards on its comm link: one run with
+`--comm-master`, the other with `--comm-slave PORT:TOKEN` from the first's
+log. On the main unit's panel CALL (input 0x200) at frame 2400, the ride's
+ENTRY (0x100) at 2700, STEP (0x800) at 3000 and 3200 and GO (0x20000) at
+3600 take both to race state 7 (RAM 0x53E744); the race runs to time-over
+at about 7400. Every 130 frames or so the ride's picture and its geometry
+captures (`get_geo_captures`: mesh, tpa and the 3x4 each object was drawn
+under) were taken. In each frame one camera C fits every course capture,
+C times the explorer's matrix for the same mesh to within 0.02 (rotation)
+and 0.2 (translation), so the pieces stand where the race draws them. The
+explorer was then rendered from that camera through the board's projection
+(focal 200, centre 249, 183 of 496x384, which is a vertical field of
+2 atan(192/200)) and set beside the board's picture: the start from the
+ride (frame 3561) and from the main unit, the tunnel (5521) and the finish
+banners (6300) match, but for the HUD and the player's own sled. The race
+times out before the bridges and the goal, so those two scenes are checked
+by eye only.
 
 **Animation** (`readPowsledBodies`). Ten tables in the data ROM, each
 {frame list, parts}; the list is a data offset a frame, ended by

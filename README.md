@@ -893,10 +893,12 @@ The **Stages** tab has the course. There is only one, and the game names it
 nowhere, so it is *The course*. It is not a table: the race draws it with six
 scene routines, each from the run's progress, and the explorer runs those
 routines on the program's own code over the whole run and keeps every piece
-they draw, 304 of them. Each scene is a view, named for the records it draws
+they draw, 298 of them. Each scene is a view, named for the records it draws
 (`HONBAN_sce3_course_1`, `sce7_bridge_1` and on): the start, sce3, the
-tunnel, sce5, the bridges and the goal. A view opens on its scene. The light
-and the 16 materials are the race's own.
+tunnel, sce5, the bridges and the goal. A view opens on its scene. Round
+them are the race's sky and mountains, which stand at the eye, and over the
+start the four cranes that hold the sleds. The light and the 32 materials
+are the race's own.
 
 The **Animation** tab has ten figures, each a model a part with every part's
 matrix stored for every frame: a crane carrying a sled, the crane's arm and
@@ -912,8 +914,12 @@ course has no song of its own here, as the race's is not found yet.
 
 MAME cannot show the race: as the network's master the board stops at the
 ride ID prompt, and with the ride ID set to a ride it waits for the master
-(*Cannot find network main.*). So the course has not been compared with a
-picture of the race; it is what the scene routines draw, checked by eye. See
+(*Cannot find network main.*). m2-hle2 can: two of its boards on a local
+comm link, the main unit and a ride, race when the main's panel calls the
+ride and starts it. The course was compared with that race from the board's
+own cameras, at the start (both units), in the tunnel and at the finish
+banners, and matches it there; the race times out before the bridges and the
+goal, so those two scenes are the scene routines' draws, checked by eye. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
 
 ## Running it

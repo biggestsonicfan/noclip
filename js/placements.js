@@ -1383,6 +1383,8 @@ export function buildPlacementDisplayList(stage, getModel = null, mode = undefin
         ...(o.live ? { live: o.live, slides: true } : {}),
         /* Out of the face layering: Virtua Cop's enemies' joints. */
         ...(o.layered === false ? { layered: false } : {}),
+        /* Behind everything, whatever its depth: Power Sled's mountains. */
+        ...(o.backdrop ? { backdrop: true } : {}),
         /* Behind a stage switch: Virtua Cop's enemies and hostages. */
         ...(o.extra ? { extra: o.extra } : {}),
     }));

@@ -5257,6 +5257,9 @@ const powsled = {
      * (0x1802000) by 0xF1B0. */
     paletteProgram: 0x128ec,
     paletteOffset: null,
+    /* And then 0xF1F8 greys entries 8 to 63 (0x39CE) over the table's zeros,
+     * as m2-hle2's palette RAM holds them through the race. */
+    paletteFixes: Array.from({ length: 56 }, (_, k) => [8 + k, 0x39ce]),
     /* Data 0x600000 on sheet 0 and 0x700000 on sheet 1, by 0xC540. */
     texture: {
         raw: { layout: 'copy', sheets: [0x02600000, 0x02700000] },
@@ -5271,6 +5274,10 @@ const powsled = {
         powsled: { table: 0xcb50, rows: 15 },
         solid: true,
     },
+    /* Daytona's depth arrangement too: the banners at the finish are a plain
+     * face with its lettering laid on it as a second, cut-out one (the flag's
+     * stripes, 1996 KEROLYMPIC), which without the layering fight. */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
     /*
      * The Model 2B's sound board with one 4 MB sample chip, and Sega's
      * CRX_drv 3.0.6 (by HiroF, 7 May 1996, the string at 0x10 of the program;
@@ -5301,12 +5308,13 @@ const powsled = {
     /*
      * The race's light goes to the geometrizer as it is (function 0xA,
      * 0x3672C and 0x3740C): (0.1, -1, 0.01), near enough straight down.
-     * Z is negated, as for Daytona. The materials are the 16 pairs at
-     * 0xEBC0 that 0xED04 sends with function 6 at boot.
+     * Z is negated, as for Daytona. The materials are the 32 pairs at
+     * 0xEBC0 that 0xED04 sends with function 6 at boot (0xEB70, count
+     * 31 + 1): the rocks are lit by slot 25, which the first 16 left black.
      */
     lighting: {
         light: [0.1, -1, -0.01],
-        materials: { source: 'maincpu', at: 0xebc0, count: 16, stride: 8 },
+        materials: { source: 'maincpu', at: 0xebc0, count: 32, stride: 8 },
     },
     /* The one course, run out of the race's own scene routines
      * (readPowsledStages in js/powsled.js). */

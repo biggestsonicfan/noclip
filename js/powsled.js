@@ -28,6 +28,7 @@ import { boardToOps } from './doa.js';
 import { gameLighting } from './stages.js';
 import { readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
+import { AT_EYE } from './display.js';
 
 /* An object address with bit 23 set is a word index into the polygon ROM. */
 const POLY_BIT = 0x00800000;
@@ -258,7 +259,8 @@ function tripleModels(rom) {
 
 /**
  * Run every scene routine over its span of the progress and keep each piece
- * once, at the first place it is drawn, with the scenes that draw it.
+ * once, at the first place it is drawn, with the scenes that draw it and the
+ * first and last progress that does.
  */
 export function runPowsledCourse(rom, { maxSteps = 3_000_000 } = {}) {
     const { cpu, copro, geo } = machine(rom);
@@ -277,20 +279,19 @@ export function runPowsledCourse(rom, { maxSteps = 3_000_000 } = {}) {
                 if (at === null) continue;
                 const key = `${String(at).split('#')[0]}@${d.m.slice(9).map(Math.round).join(',')}`;
                 let piece = pieces.get(key);
-                if (!piece) pieces.set(key, (piece = { model: at, m: d.m, zones: new Set() }));
+                if (!piece) pieces.set(key, (piece = { model: at, m: d.m, zones: new Set(), first: p, last: p }));
                 piece.zones.add(zone);
+                piece.last = p;
             }
         }
     });
     return { pieces: [...pieces.values()], unknown: [...copro.unknown], failed };
 }
 
-/* Where each view's camera stands: off the scene's pieces, the way the stage
- * is framed when it opens (loadStage in js/app.js), since the views keep the
- * camera where none is given and the course is 25000 across. */
-function sceneCameras(rom, pieces) {
+/* A piece's box in the board's frame, as [lo, hi]; null for an empty mesh. */
+function pieceBounds(rom) {
     const bounds = new Map();
-    const box = (p) => {
+    const local = (p) => {
         const i = +String(p.model).split('#')[0];
         if (!bounds.has(i)) {
             const pos = decodeModel(rom, i)?.positions ?? [];
@@ -302,17 +303,53 @@ function sceneCameras(rom, pieces) {
         }
         return bounds.get(i);
     };
+    return (p) => {
+        const b = local(p);
+        if (!b) return null;
+        const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+        for (let c = 0; c < 8; c++) {
+            /* The decode's Z is the board's negated. */
+            const v = [b[c & 1][0], b[(c >> 1) & 1][1], -b[(c >> 2) & 1][2]];
+            const w = [0, 1, 2].map((k) => p.m[k] * v[0] + p.m[3 + k] * v[1] + p.m[6 + k] * v[2] + p.m[9 + k]);
+            for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], w[a]); hi[a] = Math.max(hi[a], w[a]); }
+        }
+        return [lo, hi];
+    };
+}
+
+/*
+ * The start's first frame draws six pieces of ground by the gate that the run
+ * then swaps for others on the same spot (in m2-hle2's race, 0x8401B6 up to
+ * frame 4601 and 0x822070 from 4731 on, never both): what the start camera
+ * sees, and what the sled rides over. Both at once fight, so the one the
+ * race keeps stays: a piece whose progress ends before another's starts and
+ * whose box is that one's.
+ */
+function dropReplaced(rom, pieces) {
+    const box = pieceBounds(rom);
+    const boxes = pieces.map(box);
+    const vol = (lo, hi) => [0, 1, 2].reduce((v, a) => v * Math.max(0, hi[a] - lo[a]), 1);
+    const same = (a, b) => {
+        const lo = [0, 1, 2].map((k) => Math.max(a[0][k], b[0][k]));
+        const hi = [0, 1, 2].map((k) => Math.min(a[1][k], b[1][k]));
+        const both = vol(lo, hi);
+        return both > 0.9 * (vol(...a) + vol(...b) - both);
+    };
+    return pieces.filter((p, i) => !boxes[i] || !pieces.some((q, j) =>
+        boxes[j] && p.last < q.first && same(boxes[i], boxes[j])));
+}
+
+/* Where each view's camera stands: off the scene's pieces, the way the stage
+ * is framed when it opens (loadStage in js/app.js), since the views keep the
+ * camera where none is given and the course is 25000 across. */
+function sceneCameras(rom, pieces) {
+    const box = pieceBounds(rom);
     const camera = (list) => {
         const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
         for (const p of list) {
             const b = box(p);
             if (!b) continue;
-            for (let c = 0; c < 8; c++) {
-                /* The decode's Z is the board's negated, and so is the explorer's. */
-                const v = [b[c & 1][0], b[(c >> 1) & 1][1], -b[(c >> 2) & 1][2]];
-                const w = [0, 1, 2].map((k) => p.m[k] * v[0] + p.m[3 + k] * v[1] + p.m[6 + k] * v[2] + p.m[9 + k]);
-                for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], w[a]); hi[a] = Math.max(hi[a], w[a]); }
-            }
+            for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], b[0][a]); hi[a] = Math.max(hi[a], b[1][a]); }
         }
         if (lo[0] === Infinity) return null;
         /* Into the explorer's frame, Z negated. */
@@ -327,12 +364,53 @@ function sceneCameras(rom, pieces) {
     return cameras;
 }
 
+/*
+ * The sky and the mountains round the course: 0xD8890, which the race loops
+ * call through the words at 0x2A144, 0x30C0C and 0x35A4C, stands at the eye
+ * unturned and draws the sky 500 above it at three times its size (0xD88E4,
+ * 0xD890C) and the mountains 2600 below it (0xD8A48). Each is a triple of its
+ * own, so neither is ever got nearer to; they go in every view. The sky is
+ * the shell, drawn first; the mountains go over it with no depth test, since
+ * their floor runs under the course, which the board's z sort puts in front
+ * of it but a depth test would not.
+ */
+const BACKDROP = [
+    { words: [0x7C864, 0x7C954, 0x8AB219], ops: [AT_EYE, ['t', [0, 500, 0]], ['s', [3, 3, 3]]] },
+    { words: [0x72A62, 0x72B5A, 0x89DAE0], ops: [AT_EYE, ['t', [0, -2600, 0]]], backdrop: true },
+];
+
+/*
+ * The four cranes over the start that hold the sleds before the drop:
+ * 0xE6DA0 runs r4 from 0 to 3 through 0xE6560, which draws
+ * {0xA244, 0xA798, 0x811E36} for an even r4 and {0xA7C8, 0xAD24, 0x8124FF}
+ * for an odd one, each at a matrix the copro works out. Where they stand is
+ * read off m2-hle2's race (the geometry engine's matrices through the start
+ * camera, frames 3561 to 4900): unturned, and still while the race runs. The
+ * sleds hanging from them are the players', which are not the course's.
+ */
+const START_CRANES = [
+    { words: [0xA244, 0xA798, 0x811E36], at: [6.959, 1783.965, 5527.939] },
+    { words: [0xA7C8, 0xAD24, 0x8124FF], at: [-9.041, 1790.465, 5567.939] },
+    { words: [0xA244, 0xA798, 0x811E36], at: [6.959, 1796.965, 5607.939] },
+    { words: [0xA7C8, 0xAD24, 0x8124FF], at: [-9.041, 1803.465, 5647.939] },
+];
+
+function backdrop(rom) {
+    const model = tripleModels(rom);
+    const sky = BACKDROP.map((b) => ({ model: model(b.words), layer: 'sky', layered: false, backdrop: b.backdrop, set: 0, ops: b.ops }));
+    const start = START_CRANES.map((b) => ({
+        model: model(b.words), pos: b.at, set: 0, zones: new Set([0]), ops: boardToOps([1, 0, 0, 0, 1, 0, 0, 0, 1, ...b.at]),
+    }));
+    return sky.concat(start).filter((o) => o.model !== null);
+}
+
 /** The course, as one stage with a view for each scene. */
 export function readPowsledStages(rom) {
     const lit = gameLighting(rom);
     const run = runPowsledCourse(rom);
+    const pieces = dropReplaced(rom, run.pieces);
     let cameras = null;
-    const draws = run.pieces.map((p) => ({
+    const draws = pieces.map((p) => ({
         model: p.model, pos: [p.m[9], p.m[10], p.m[11]], set: 0, zones: p.zones, ops: boardToOps(p.m),
     }));
     const zones = SCENES.map((s, i) => ({
@@ -346,12 +424,12 @@ export function readPowsledStages(rom) {
         name: 'The course',
         chapter: 0,
         draws,
-        objects: [],
+        objects: backdrop(rom),
         sky: null,
         panorama: null,
         zones,
         /* Decoded when the stage is first drawn. */
-        get cameras() { return (cameras ??= sceneCameras(rom, run.pieces)); },
+        get cameras() { return (cameras ??= sceneCameras(rom, pieces)); },
         views: [['all', 'Every scene at once'], ...zones.map((z, i) => [`zone:${i}`, z.label])],
         view: 'all',
         union: 'all',
