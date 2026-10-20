@@ -19,8 +19,8 @@ courses, its models and its cells — see [Sega Rally Championship](#sega-rally-
 of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
 of its stages, its cells and its characters posed by their motions on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* has its seventeen courts, its models and its cells —
-see [Air Walkers](#air-walkers). Sega's *Power Sled* has its models and its
+Data East's *Air Walkers* has its seventeen courts, its models, its cells and
+its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its models and its
 cells — see [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
@@ -857,6 +857,19 @@ variant MAME's game was played on. Both match MAME's dumps of a game and of
 the intro entry for entry. See
 [TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs)
 and [Air Walkers' courts](TECHNICAL.md#air-walkers-courts-jsairwlkrsjs).
+
+The **Animation** tab has the 173 players: five for each of the seventeen
+teams in its home kit, the same five in the away kit, and the three of team
+34, who have bodies of their own. Each is put together from its 16 part
+models on the game's 15-joint skeleton, the way the game's own draw routine
+does it (the explorer runs that routine), and posed by any of the 619 motions
+(the game gives them numbers, not names). A motion also carries where the hips
+go: they stand at its height, so a dunk leaves the floor, and **root travel**
+lets the player run along its path. A frame's joints match the ones MAME's
+RAM holds for the same motion and frame. Not shown: the head's turn toward
+the play, the hands the game swaps in during a play, and the skin of the
+limbs, which comes out black where MAME's is the player's own. See
+[Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
 The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
 layers, the warning, the quarter and score banners, the team names and the

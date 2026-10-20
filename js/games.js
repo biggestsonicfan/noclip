@@ -5189,7 +5189,24 @@ const airwlkrs = {
         materials: { at: 0x1b3c0, count: 31 },
     },
     stageTable: { airwlkrs: true, flat: true },
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+    /*
+     * The players (js/airwlkrs.js): sixteen models a player at `players`,
+     * five players a team, 34 teams and the three of team 34; the legs'
+     * routine and the rest's run on an object at `object` with the pose at
+     * `pose`. The read-backs are the feet's, the head's and the hands' ends.
+     */
+    rig: {
+        kind: 'airwlkrs',
+        players: 0xf4b20, teamStride: 0x190, playerStride: 0x50, specialTeam: 34, specials: 3,
+        draw: [0x214a0, 0x21a70], drawSpecial: [0x20850],
+        object: 0x510b40, pose: 0x5214c0, modelOffset: 0x5215f0,
+        ends: [0x5215e0, 0x521600, 0x521610, 0x521620, 0x521630],
+        motions: {
+            table: 0x026e3ca0, roots: 0x025bf740, count: 0x286,
+            alternate: 0xf2c68, altTable: 0x02ce9750, altRoots: 0x02ce96c0,
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Power Sled ----------------------------------------------------------- */

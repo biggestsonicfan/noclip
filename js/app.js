@@ -16,7 +16,9 @@ import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
 import { readVonStages } from './von.js';
-import { readAirwlkrsStages } from './airwlkrs.js';
+import {
+    readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
+} from './airwlkrs.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -3334,6 +3336,11 @@ const BODY_RIGS = {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
+    /* Air Walkers' players: one skeleton in the code, run as the game runs it. */
+    airwlkrs: {
+        read: readAirwlkrsBodies, motions: readAirwlkrsMotions, list: airwlkrsMotionList,
+        pose: (rom, body, motion, frame, opts) => poseAirwlkrs(rom, body, motion, frame, opts),
+    },
 };
 
 function bodyRig() {
@@ -3415,6 +3422,27 @@ function useDoaFighterScene(body) {
     if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
+/* An Air Walkers player stands on its team's page, under its team's colour
+ * tables (js/texture.js, js/colors.js), as the court set-up loads them. */
+function useAirwlkrsPlayerScene(body) {
+    const u = state.viewer.material.uniforms;
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    const lit = gameLighting(state.rom);
+    if (lit) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    }
+    const set = body.playerSet;
+    useRomTexram([set]);
+    useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
+    u.uUseRamp.value = state.cxlat ? 1 : 0;
+    const status = $('#tex-status');
+    if (status) status.textContent = t('sheets unpacked from ROM (set {set})', { set });
+}
+
 function bodySceneModel(body) {
     const models = body.parts.map((p) => p.model).filter(Boolean);
     if (body.texSet === undefined) return models[0];
@@ -3434,6 +3462,7 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (body.playerSet !== undefined) useAirwlkrsPlayerScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
     else if (first != null) useModelScene(first, colourFighter(body));
@@ -5967,12 +5996,12 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, and Dynamite Cop's, name the game's own
-     * addresses; the plain bodies note is The House of the Dead's. */
+    /* The solved rigs' notes, and Dynamite Cop's and Air Walkers', name the
+     * game's own addresses; the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : kind === 'dynamcop' ? 'dynamcop' : null;
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : ['dynamcop', 'airwlkrs'].includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', 'dynamcop']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'airwlkrs']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song

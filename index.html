@@ -594,6 +594,16 @@
         them with the leg or arm. Motion numbers are the table's at
         <code>0x15FA00</code>; the game has no names for them.
       </div>
+      <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
+        Every player has the same fifteen-joint skeleton, which is in the
+        code (<code>0x214A0</code> for the legs, <code>0x21A70</code> for the
+        rest; <code>0x20850</code> for team 34) rather than in a table, and the
+        explorer runs those routines. A player's sixteen models are a record
+        at <code>0xF4B20</code>, five players to a team, the away kits from
+        team 17. A motion is the fifteen joints' angles for every frame,
+        from the table at data <code>0x6E3CA0</code>; the game has no names
+        for them.
+      </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the
         explorer: the attract's fight is set up with the fighter in player
