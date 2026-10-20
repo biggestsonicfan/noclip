@@ -55,8 +55,91 @@ export function commandBytes(code) {
 export function musicChoices(rom) {
     const m = rom.game.sound?.music;
     if (!m) return null;
+    if (m.list) return listedSongs(rom, m.list);
     const picks = m.picks ?? m.buttons.map((label, i) => [i, label]);
     return picks.map(([index, label]) => ({ label, index, code: songAt(rom, index) }));
+}
+
+/* A game whose own sound test names its songs (`list`): every one of them,
+ * read out of the program ROM as the sound test reads them, with the name it
+ * prints. Two shapes:
+ *
+ * - `named`: records `stride` bytes apart from `at`, the song number and
+ *   the command's middle byte, then the name inline (Virtual-On's). The
+ *   status byte is `status`.
+ * - `codes`: whole commands `stride` bytes apart from `at`, each followed
+ *   (`then`, a byte offset into the record) by the command the game sends
+ *   right after it, and the names in a table of pointers (`names`), one a
+ *   song (Dynamite Cop's).
+ * - `ids`: the game's sound IDs, `first` on, each a 3-byte command at
+ *   `at` + 3 * ID and a name through the pointer at `names` + 4 * ID, the
+ *   pointers into the program's copy in RAM, `ramBase` above the ROM (Sega
+ *   Rally's).
+ * - `groups`: no names and no table in the i960's program, only the sound
+ *   driver's: [middle byte, count] for each of its groups, every sound in
+ *   them listed by its command (Power Sled's).
+ *
+ * `count` bounds the list; `skip` leaves records out by number; `strip` is
+ * a prefix every name has (SDB_, S_BGM_), left off. Read once a
+ * ROM set. */
+const listed = new WeakMap();
+function listedSongs(rom, L) {
+    if (!listed.has(rom)) listed.set(rom, readListedSongs(rom, L));
+    return listed.get(rom);
+}
+
+/* Where a build keeps a `codes` table, when it is not given (`at`): the run of
+ * `count` records whose commands count up from `first`, as the five Dynamite
+ * Cop builds' do wherever their programs put it. */
+function findListed(rom, L) {
+    const view = rom.mainCpuView;
+    const span = (L.count - 1) * L.stride;
+    for (let at = 0; at + span + 4 <= view.byteLength; at += 4) {
+        let i = 0;
+        while (i < L.count && view.getUint32(at + i * L.stride, true) === L.first + i) i++;
+        if (i === L.count) return at;
+    }
+    return -1;
+}
+
+function readListedSongs(rom, L) {
+    if (L.groups) {
+        return L.groups.flatMap(([mid, count]) => Array.from({ length: count }, (_, n) => (L.status << 16) | (mid << 8) | n))
+            .map((code, index) => ({ label: `sound ${index + 1}`, index, code }));
+    }
+    const view = rom.mainCpuView;
+    const bytes = rom.maincpu;
+    const base = L.ids ? 0 : L.at ?? findListed(rom, L);
+    if (base < 0) return null;
+    const text = (at, max = 32) => {
+        let s = '';
+        for (let i = 0; i < max && bytes[at + i]; i++) s += String.fromCharCode(bytes[at + i]);
+        s = s.trim();
+        return L.strip && s.startsWith(L.strip) ? s.slice(L.strip.length) : s;
+    };
+    const out = [];
+    for (let i = 0; i < L.count; i++) {
+        if (L.skip?.includes(i)) continue;
+        const at = base + i * L.stride;
+        if (L.ids) {
+            const id = L.first + i;
+            out.push({ label: text(view.getUint32(L.names + id * 4, true) - L.ramBase), index: i, code: soundId(rom, id) });
+        } else if (L.named) {
+            const code = (L.status << 16) | (bytes[at + 1] << 8) | bytes[at];
+            out.push({ label: text(at + 2), index: i, code });
+        } else {
+            const code = view.getUint32(at, true);
+            const then = L.then === undefined ? undefined : commandBytes(view.getUint32(at + L.then, true));
+            out.push({ label: text(view.getUint32(L.names + i * 4, true)), index: i, code, then });
+        }
+    }
+    return out;
+}
+
+/* A sound ID's command, out of a game's table of them (music.list.ids). */
+function soundId(rom, id) {
+    const b = rom.maincpu, at = rom.game.sound.music.list.at + id * 3;
+    return (b[at] << 16) | (b[at + 1] << 8) | b[at + 2];
 }
 
 function songAt(rom, index) {
@@ -69,8 +152,8 @@ function songAt(rom, index) {
 export function stageMusic(rom, slot, pick = -1) {
     const spec = rom.game.sound;
     if (spec?.music && pick >= 0) {
-        const { code, index } = musicChoices(rom)[pick];
-        return { code, index };
+        const { code, index, then } = musicChoices(rom)[pick];
+        return { code, index, then };
     }
     if (spec?.music?.slotMask !== undefined) {
         const index = slot & spec.music.slotMask;
@@ -84,6 +167,8 @@ export function stageMusic(rom, slot, pick = -1) {
     if (own !== undefined) return { code: own, index: slot & 0xF };
     const at = spec?.stageMusic;
     if (at === undefined) return { code: 0, index: -1 };
+    /* A table of sound IDs rather than commands (Sega Rally's). */
+    if (spec.music?.list?.ids) return { code: soundId(rom, rom.mainCpuView.getUint32(at + slot * 4, true)), index: slot };
     /* The program ROM's for every game but Virtua Fighter 2 and Fighting
      * Vipers, whose tables are in the data ROM. */
     const view = rom[`${spec.stageMusicRegion ?? 'mainCpu'}View`];
@@ -184,15 +269,16 @@ export class SoundBoard {
 
     /* Stop what is playing and start `code`, or just stop for 0. `index`
      * is the song's place in the game's table, for a game that sends more
-     * than the song for some of them (game.sound.after). */
-    play(code, index = -1) {
+     * than the song for some of them (game.sound.after); `then`, the bytes
+     * a listed song is followed by (listedSongs). */
+    play(code, index = -1, then = []) {
         const stop = this.kind.stop;
         if (!code) { this.send(stop); return; }
         const after = this.spec.after;
         /* `replaces`: a song takes over from the one playing by itself, and
          * a stop sent just ahead of it swallows it (DOA's driver). */
         this.send([...(this.spec.replaces ? [] : stop), ...commandBytes(code),
-            ...(after?.song?.[index] ?? []), ...(after?.every ?? [])]);
+            ...(after?.song?.[index] ?? []), ...then, ...(after?.every ?? [])]);
     }
 
     setVolume(v) {

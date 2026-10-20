@@ -410,6 +410,7 @@ const JA_TEXT = {
     'noclip camera': 'noclip カメラ',
     'orbit camera': 'オービットカメラ',
     'no music of its own': 'このステージ独自の曲はありません',
+    'pick a song': '曲を選んでください',
     'could not start: {err}': '開始できませんでした：{err}',
     '{name} (same colours as {same})': '{name}（{same} と同じ色）',
     'Sega Model 2': 'セガ Model 2',

@@ -5850,15 +5850,17 @@ function playStageMusic() {
     const slot = stage?.soundSlot ?? stage?.slot;
     /* A stage whose song the scripts start rather than a table (House of the
      * Dead's, js/placements.js) carries it. */
-    const { code, index } = !stage ? { code: 0, index: -1 }
+    const pick = +$('#music-song').value;
+    const { code, index, then } = pick >= 0 ? stageMusic(state.rom, slot, pick)
+        : !stage ? { code: 0, index: -1 }
         : stage.song !== undefined ? { code: stage.song, index: -1 }
-        : stageMusic(state.rom, slot, +$('#music-song').value);
+        : stageMusic(state.rom, slot);
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
     if (code === state.music.playing) return;
     state.music.playing = code;
-    state.music.board.play(code, index);
-    $('#music-status').textContent = code ? songName(code) : t('no music of its own');
+    state.music.board.play(code, index, then);
+    $('#music-status').textContent = code ? songName(code) : t(stage ? 'no music of its own' : 'pick a song');
     playStageSounds(slot);
 }
 
@@ -5951,6 +5953,12 @@ function applyGameFeatures() {
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
     for (const n of ['vf2', 'fv', 'doa']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
+    /* The music sits with the stages, or for a game with none (Air Walkers,
+     * Power Sled) at the foot of the model panel, where it plays the song
+     * picked rather than a stage's. */
+    const home = $(`.tabpanel[data-tab="${f.stages ? 'stage' : 'model'}"]`);
+    const anchor = f.stages ? $('#view-field') : null;
+    for (const id of ['music-field', 'stage-sfx-label', 'music-song-field']) home.insertBefore($(`#${id}`), anchor);
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
 

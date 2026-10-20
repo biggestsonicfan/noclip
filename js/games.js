@@ -4455,6 +4455,26 @@ const vonj = {
         materials: { at: 0x293b0, count: 32 },
     },
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
+    /*
+     * The Model 2B's sound board, with two 4 MB sample chips (von.zip's). The
+     * sound test's list is 0xEFF62: 35 records of 0x22 bytes, the song number,
+     * the command's middle byte (0x10) and the name, so a song is AE 10 nn.
+     * The attract starts the demo song as AE 10 1B and the title's as AE 10 1A,
+     * after A0 00 01. Which field plays which song is the fight code's, and is
+     * not read yet: the explorer plays the one picked.
+     */
+    sound: {
+        program: ['epr-18670.31', 0x3e715f76],
+        samples: [['mpr-18652.32', 0x037eee53], ['mpr-18653.34', 0x9ec3e7bf]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        music: {
+            list: { named: true, at: 0xeff62, count: 35, stride: 0x22, status: 0xae, strip: 'SDB_' },
+            own: 'none',
+            hint: 'A song from the sound test\'s list, by the name it gives it. Which field plays which is in the fight code, not read yet',
+        },
+    },
     stageTable: { von: true, flat: true },
     scenes: null,
     features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
@@ -4483,6 +4503,7 @@ const vonu = {
     texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+    sound: { ...vonj.sound, music: { ...vonj.sound.music, list: { ...vonj.sound.music.list, at: 0xf0ba2 } } },
 };
 
 /*
@@ -4604,6 +4625,33 @@ const srallyc = {
     /* Daytona's depth arrangement, for the same reason: no depth buffer, and
      * a road made of plates laid on plates. */
     depth: { recede: 0, nearMin: 0.02, layers: true },
+    /*
+     * The Model 2A's sound board, with four 2 MB sample chips. The program
+     * names every sound it sends. The program runs from RAM, 0x59F000
+     * above its ROM address; by ROM address, 0x261B0 sends sound ID g0 as
+     * the 3-byte command at 0x24CE0 + 3 * ID, and the pointer at
+     * 0x258C0 + 4 * ID names it (the sound test's B.G.M list, IDs 0x9B to
+     * 0xAB, all AE 10 nn; ID 0x9A, AE 10 00, is "Off"). As a race starts,
+     * 0x1D0E8 sends the course's song out of one of two tables of IDs
+     * indexed by the course (work RAM 0x214354): 0x1C6E0 for the
+     * championship, 0x1C700 for practice. The explorer plays the
+     * championship's, the songs Sega Retro's credits give each course.
+     */
+    sound: {
+        program: ['epr-17890a.30', 0x5bac3fa1],
+        samples: [
+            ['mpr-17756.31', 0x7725f111], ['mpr-17757.32', 0x1616e649],
+            ['mpr-17886.36', 0x54a72923], ['mpr-17887.37', 0x38c31fdd],
+        ],
+        boot: [0xAE, 0x10, 0x00],
+        stop: [0xAE, 0x10, 0x00],
+        stageMusic: 0x1c6e0,
+        music: {
+            list: { ids: true, at: 0x24ce0, names: 0x258c0, ramBase: 0x59f000, first: 0x9b, count: 17 },
+            own: "the course's own",
+            hint: 'The song the course plays. The game plays the championship\'s song for the course (practice has its own for some); this plays any of the sound test\'s, by the names the program gives them',
+        },
+    },
     /* The courses but not the cars' placement on them, nor the trackside
      * objects. */
     features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
@@ -4686,6 +4734,30 @@ DYNAMCOP_AT.dynamcopc = {
     materials: 0x6f3b0, missions: 0xfa190,
 };
 
+/*
+ * The sound board is the Model 2A's (epr-20811.30 and four 2 MB sample
+ * chips). The program's song table is thirty 12-byte records, each the song's
+ * command (A0 10 nn) and two more; the area descriptors name a record
+ * (js/dynamcop.js), and 0x4B6A8 sends its command as the area starts. The
+ * debug names are a table of pointers in the second megabyte, the same in
+ * every build, S_MUSIC_CLEAR and then one a record. Before a song, the
+ * attract sends A0 00 02 and A0 00 03; the boot, A0 00 01.
+ */
+const DYNAMCOP_SOUND = {
+    program: ['epr-20811.30', 0xa154b83e],
+    samples: [
+        ['mpr-20812.31', 0x695b6088], ['mpr-20813.32', 0x1908679c],
+        ['mpr-20814.36', 0xe8ebc74c], ['mpr-20815.37', 0x1b5aaae4],
+    ],
+    boot: [0xA0, 0x00, 0x01],
+    stop: [0xA0, 0x00, 0x02, 0xA0, 0x00, 0x03],
+    music: {
+        list: { first: 0xa01000, count: 30, stride: 12, then: 4, names: 0x1ad394, strip: 'S_BGM_' },
+        own: "the area's own",
+        hint: 'The song the area plays. The game plays the one its area descriptor names; this plays any of the thirty in its song table, by the names its debug table gives them',
+    },
+};
+
 function dynamcopBuild({ id, name, low, high }) {
     const A = DYNAMCOP_AT[id];
     return {
@@ -4744,6 +4816,7 @@ function dynamcopBuild({ id, name, low, high }) {
         /* js/dynamcop.js readDynamcopStages: `missions` is the table 0x2B960
          * reads, three pointers a mission to runs of area descriptors. */
         stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
+        sound: DYNAMCOP_SOUND,
         features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
     };
@@ -4927,6 +5000,33 @@ const powsled = {
         luma: { halfRamp: true },
         powsled: { table: 0xcb50, rows: 15 },
         solid: true,
+    },
+    /*
+     * The Model 2B's sound board with one 4 MB sample chip, and Sega's
+     * CRX_drv 3.0.6 (by HiroF, 7 May 1996, the string at 0x10 of the program;
+     * Dynamite Cop's is 3.2.8). Its UART handler (0x600486) is a MIDI parser
+     * with running status, and status A0 with a middle byte 0x10 to 0x5F
+     * (0x601B1A) starts entry `last` of group `middle` - 0x10 in the table
+     * 0x60801C points to. That table has five groups: 0x10 is empty (count
+     * -1), 0x11 to 0x14 hold 16, 6, 4 and 5 sounds, and every one of them
+     * starts in the effect slots (first byte bit 7 set), none in the music
+     * slot; A0 00 01 stops them. Nothing names them. Measured on the board,
+     * 11 0A, 11 0C, 12 04, 13 00, 13 02 and 14 01 hold their level; 12 04
+     * and 13 00 are noise (wind and snow, by their flat spectrum), and 13 02
+     * is the loudest tonal one, likely the song Sega Racing Best carries.
+     * The attract mode sends A0 00 01, A0 13 03, A0 13 01 and A0 70 00.
+     */
+    sound: {
+        program: ['epr-19466.31', 0xc42892a5],
+        samples: [['fpr-19459.32', 0xa424743f]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        music: {
+            list: { groups: [[0x11, 16], [0x12, 6], [0x13, 4], [0x14, 5]], status: 0xa0 },
+            own: 'none',
+            hint: 'Every sound in the sound driver\'s table, by its command: the program names none of them. A0 13 02 is the loudest tune among them, likely the song; A0 12 04 and A0 13 00 are wind',
+        },
     },
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };

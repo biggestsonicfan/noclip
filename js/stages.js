@@ -607,8 +607,11 @@ export function readCourseStages(rom) {
 /* ---- Sega Rally Championship's courses ------------------------------------ */
 
 /* In the order the course records are: the same order the texture banks take
- * (bank table 0x3DCF0, a course's variant in 0x214354), Desert first. */
-const RALLY_COURSE_NAMES = ['Desert', 'Mountain', 'Forest', 'Lakeside'];
+ * (bank table 0x3DCF0, a course's variant in 0x214354), Desert first. The race
+ * start's song table (0x1C6E0) is in that order too, and its songs are the
+ * ones Sega Retro's credits give Desert, Forest, Mountain and Lakeside; course
+ * 1's alpine forest and course 2's village on the cliffs agree. */
+const RALLY_COURSE_NAMES = ['Desert', 'Forest', 'Mountain', 'Lakeside'];
 
 /**
  * Sega Rally Championship's courses: a list of models per course.

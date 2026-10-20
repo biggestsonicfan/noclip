@@ -705,7 +705,7 @@ opens on its course's bank; a model on the course sheet that no course list
 names, a car for one, opens on the desert's, and the **Texture set** list picks
 another.
 
-The **Stages** tab has the four courses: Desert, Mountain, Forest and
+The **Stages** tab has the four courses: Desert, Forest, Mountain and
 Lakeside, each its 60 segments and its sky, read from the course records the
 game draws them from. Lakeside is the fourth record, which the attract mode
 does not show; its bank and its autumn trees say it is the secret course. The

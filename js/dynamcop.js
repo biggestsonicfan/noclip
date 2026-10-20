@@ -18,6 +18,7 @@ import { MAIN_DATA_BASE } from './romset.js';
 import { SHEET_BYTES } from './atlas.js';
 import { bankTextureSet } from './texture.js';
 import { gameLighting } from './stages.js';
+import { musicChoices } from './sound/sound.js';
 
 const SHEET0 = 0;
 const SHEET1 = SHEET_BYTES;
@@ -249,7 +250,9 @@ export function dynamcopPalette(rom, set, scene = dynamcopScene(rom, set)) {
  * (the mission in 0x51F4A0, the variant in 0x51F49C), each to a run of area
  * descriptors, 40 bytes apiece; the area number is 0x51F4A4. Word +0x10 of a
  * descriptor is its object list: 32-byte records, ended by the first record
- * after the first whose type (+0x14) is 0.
+ * after the first whose type (+0x14) is 0. Word +0x1C is the area's song, a
+ * record of the song table (0x4B6A8 sends it as the area starts, unless it is
+ * the one already playing).
  *
  *   +0x02  s16    model, an index into the whole model table
  *   +0x04  float  x, y, z
@@ -280,7 +283,7 @@ function areaRuns(rom) {
         for (let d = p; d + 40 <= end; d += 40) {
             const list = cv.getUint32(d + 0x10, true);
             if (list < LISTS[0] || list >= LISTS[1]) break;
-            areas.push(list);
+            areas.push({ list, song: cv.getUint32(d + 0x1c, true) });
         }
         out.set(p, areas);
     });
@@ -334,7 +337,7 @@ export function readDynamcopStages(rom) {
     for (let k = 0; k < 12; k++) {
         const mission = Math.floor(k / 3), variant = k % 3;
         const areas = runs.get(cv.getUint32(D.missions + k * 4, true)) ?? [];
-        areas.forEach((list, area) => {
+        areas.forEach(({ list, song }, area) => {
             if (seen.has(list)) return;
             seen.add(list);
             const records = areaRecords(rom, list);
@@ -360,6 +363,7 @@ export function readDynamcopStages(rom) {
                 chapter: mission,
                 draws,
                 objects,
+                song: musicChoices(rom)?.[song]?.code,
                 sky: null,
                 zones: [],
                 views: [['all', 'Everything']],
@@ -376,7 +380,8 @@ export function readDynamcopStages(rom) {
                 floorSize: 0,
                 meta: [['course', `${mission + 1}-${variant + 1}`], ['area', area],
                     ['list', `0x${list.toString(16)}`], ['set', sets.join(', ')],
-                    ['pieces', draws.length + objects.length]],
+                    ['pieces', draws.length + objects.length],
+                    ...(musicChoices(rom) ? [['song', musicChoices(rom)[song]?.label ?? song]] : [])],
             });
         });
     }
