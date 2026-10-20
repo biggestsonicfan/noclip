@@ -191,7 +191,7 @@ const JA_PAGE = {
     'f.texset': 'テクスチャセット',
     'f.fightercol': 'ファイターの色',
 
-    'cell.search': 'セル番号、範囲（例 500-520）または unused',
+    'cell.search': 'セル番号、範囲（例 500-520）、unused または名前',
     'cell.cg.title': 'セルと一緒に読み込む CG：タイルのピクセルと、その項目が指す色。すべてを描けるものが先に並びます',
     'cell.under': '先に読み込む',
     'cell.under.title': '上の CG より先に読み込む CG。画面が2つ必要なときのゲームと同じで、2つ目が書くものが1つ目の上に重なります',

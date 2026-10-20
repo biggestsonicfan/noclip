@@ -19,7 +19,7 @@ import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
-import { cellCount, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
+import { cellCount, cellName, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -5257,6 +5257,8 @@ function renderCellList() {
     /* "unused" lists only the cells the game never draws. */
     const unused = unusedCells(state.rom);
     const onlyUnused = /^unused$/i.test(q);
+    /* Other words match the names Sega Rally's and Virtual On's cells have. */
+    const word = !range && !single && !onlyUnused && q ? q.toLowerCase() : '';
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
     lo = Math.max(0, lo); hi = Math.min(n - 1, hi);
@@ -5267,9 +5269,10 @@ function renderCellList() {
     let shown = 0;
     for (let i = lo; i <= hi; i++) {
         const c = readCell(state.rom, i);
-        if (!c || (onlyUnused && !unused.has(i))) continue;
+        const name = cellName(state.rom, i);
+        if (!c || (onlyUnused && !unused.has(i)) || (word && !name.toLowerCase().includes(word))) continue;
         const best = ranks[i][0];
-        const info = `${c.cols * 8}&times;${c.rows * 8} · `
+        const info = (name ? `${name} · ` : '') + `${c.cols * 8}&times;${c.rows * 8} · `
             + (best?.cover === 1 ? cgLabel(state.rom, best.cg) : best ? `CG ${best.cg}, part` : 'no CG')
             + (unused.has(i) ? ' · unused' : '');
         const row = el('div', 'row-item' + (i === state.cell.index ? ' sel' : ''),
@@ -5336,7 +5339,8 @@ function drawCell() {
     canvas.getContext('2d').putImageData(new ImageData(pic.rgba, pic.width, pic.height), 0, 0);
     canvas.classList.toggle('whole', !$('#cell-fit').checked);
     const best = (cellRanks()[c.index] ?? [])[0];
-    info.innerHTML = `<b>cell ${c.index}</b> — ${pic.width}&times;${pic.height}, `
+    const name = cellName(state.rom, c.index);
+    info.innerHTML = `<b>cell ${c.index}${name ? `, ${name}` : ''}</b> — ${pic.width}&times;${pic.height}, `
         + `${pic.width / 8}&times;${pic.height / 8} tiles`
         + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
             + ` the game puts the rest in the tile chip some other way.`)
