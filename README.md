@@ -14,9 +14,9 @@ trackside objects in all eight of the builds it shipped as — see
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
-courses and its models — see [Sega Rally Championship](#sega-rally-championship).
-*Cyber Troopers Virtual-On* has its models and its ten stages, some of them
-only in part — see [Virtual-On](#virtual-on).
+courses, its models and its cells — see [Sega Rally Championship](#sega-rally-championship).
+*Cyber Troopers Virtual-On* has its models, its cells and its ten stages, some
+of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models and the rooms
 of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
 Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
@@ -633,6 +633,9 @@ need a table found in that game's ROM first. Where they stand:
 | Stage sounds | | yes | yes | |
 | Cells tab | yes | yes | yes | yes |
 
+Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
+Sega Rally Championship and Virtual-On have the Cells tab too.
+
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
 fight code already runs both players), stage sounds for Sonic the Fighters
@@ -689,7 +692,7 @@ and colours, so each cell opens on a CG of its own with the same number (see
 
 ## Sega Rally Championship
 
-`srallyc.zip` (Revision C, Model 2A) loads with the Stages and Models tabs.
+`srallyc.zip` (Revision C, Model 2A) loads with the Stages, Models and Cells tabs.
 It is on the same board as Virtua Cop and Dead or Alive's 2A builds, and the
 program is built the way Daytona USA's is: the sheets are raw in the data ROM,
 there is no depth buffer, and a course's models are already in world space.
@@ -717,6 +720,16 @@ and the cars' places on the grid, and the ground beyond the course, which the
 explorer leaves black. The car windows are black, where MAME draws them as
 dark glass. MAME's other Sega Rally builds are not added.
 
+The **Cells** tab has the game's 2D art: the title logo, the course titles,
+the corner signs, PUSH START BUTTON, the clear and ranking screens, the
+staff roll, the fonts and the rest, 853 pictures in 141 files. AM3 keeps them in files of its own
+("CGM 1.0"), each a set of tiles and colours and the pictures drawn from
+them, so each file is a CG and each picture a cell with the name the file
+gives it (TITLE1, DESERT16, sa_push1...); searching for a name lists the cells
+that have it. 49 files, 363 pictures, are named nowhere in the program and
+are marked unused. See [Sega Rally's
+cells](TECHNICAL.md#sega-rally-championships-cells-jscellsjs).
+
 ## Virtual-On
 
 Two builds load: `vonj` (Japan, Revision B) and `vonu` (USA, Revision B).
@@ -724,7 +737,7 @@ MAME's `vonj.zip` holds only the program pair, so drop it with the parent
 `von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
 `vonu` by itself. The export `von` and the relay build `vonr` have programs
 of their own that were not to hand, so they are not detected yet. The
-Stages and Models tabs work; there are no fighters, cells or sounds.
+Stages, Models and Cells tabs work; there are no fighters or sounds.
 
 The game has no model table of its own: every piece is a triple of pointers
 built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
@@ -749,6 +762,16 @@ What is still missing:
 - The Virtuaroids are in the Models tab as parts, in their base colours: the
   colours each one wears are set when a player picks it, and the tab picks
   none. They are not posed.
+
+The **Cells** tab has the 2D art, 119 pictures: the title logos, the SEGA
+mark and the FBI notice, the robots' portraits and name plates, the stage
+plans, the instruction and advice screens, the fight's messages (READY,
+WARNING!!, YOU WIN, TIME OVER and on) and the attract mode's stills. The maps
+have no header, so each is a place in the code that draws one, named by its
+address, or an entry of the robot or stage tables. The tile chip is filled
+once, one way for the attract mode and another for the game, so there are two
+CGs. One advice screen comes out garbled on both. See [Virtual-On's
+cells](TECHNICAL.md#virtual-ons-cells-jscellsjs-voncells-in-jsgamesjs).
 
 ## Dynamite Cop
 

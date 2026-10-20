@@ -4371,6 +4371,181 @@ const VON_CHIPS = {
     },
 };
 
+/*
+ * Virtual On's tile pictures. The maps are bare halfword entries, with no
+ * header: each draw routine takes the map, its width and its height from the
+ * caller and writes the entries to a tilemap with bits set, so the bits come
+ * from the routine. 0x1DC10 (layer A), 0x1DD80, 0x1DE00 and 0x1DE80 (the
+ * other three tilemaps) set 0x8000; 0x1DC90 and 0x1DD10 set 0xC000, which
+ * takes the colours from the upper half of the palette; 0x1BC90 copies the
+ * map as it is. VON_MAPS is every call with a constant map, as [map, width,
+ * height, bits, call site in vonj], the largest where a map is drawn twice;
+ * 0x2FDA1D0, the 64 by 64 zeros the game clears a layer with, is left out,
+ * and so are the calls that index a table of digit glyphs (0x2EA1E50 to
+ * 0x2EA2090, 0x2EA289C), 1 or 2 by 2 tiles of a counter each.
+ * The robot table (program 0x20B50 in vonj, 0x68 bytes a robot) holds each
+ * robot's 31 by 35 portrait (+0, drawn by 0x211F0) and its name plate (+0x4C,
+ * with its width and height at +0x50 and +0x54, drawn by 0x1DC90); 0x211B0
+ * holds ten 20 by 15 plans of the stages, which 0x21EB8 draws.
+ *
+ * The tile chip is filled by InitScroll (0x1C220: the 1bpp font from data
+ * 0x2EA0BB8 as characters 0 to 0x7F, pen 1, through 0x1C730) and
+ * SetScrolldata (0x1BDA0), whose argument picks the attract mode's characters
+ * and colours (0, from InitAll 0x18970 and InitAdvertize 0x2B508) or the
+ * game's (1, from InitGameMain 0x190E4); the rest it copies either way. The
+ * characters are stored byte-swapped. The colours are stored with each
+ * component's low bit apart (SetScrollcol, 0x1BB90): two copies of each set,
+ * from group 1 and group 0x81, and four groups from tables in the program.
+ */
+const VON_MAPS = [
+    [0x2fd8170, 14, 2, 0xc000, 0x1e0f0],
+    [0x2fd81a8, 16, 2, 0xc000, 0x1e128],
+    [0x2fd8872, 1, 2, 0xc000, 0x1e490],
+    [0x2fd8876, 1, 2, 0x8000, 0x1e544],
+    [0x2fd887a, 15, 2, 0x8000, 0x1e774],
+    [0x2fd88b6, 15, 4, 0x8000, 0x1e79c],
+    [0x2fe158c, 1, 1, 0xc000, 0x1e908],
+    [0x2fd8996, 6, 2, 0x8000, 0x1ea14],
+    [0x2fd898e, 1, 2, 0x8000, 0x1ea98],
+    [0x2fd8992, 1, 2, 0x8000, 0x1eb1c],
+    [0x2fd89ae, 15, 1, 0x8000, 0x1eba8],
+    [0x2fead34, 54, 6, 0xc000, 0x1ec4c],
+    [0x2fe277c, 39, 10, 0x8000, 0x1ec80],
+    [0x2fd89d0, 64, 48, 0x0, 0x1ec9c],
+    [0x2fe2d0c, 23, 14, 0x8000, 0x1ecf8],
+    [0x2fe2f90, 23, 14, 0x8000, 0x1edf4],
+    [0x2fd6d20, 32, 6, 0xc000, 0x1efa8],
+    [0x2fd0cd4, 19, 2, 0xc000, 0x1f048],
+    [0x2fd2520, 64, 48, 0x0, 0x1f078],
+    [0x2fe077e, 23, 5, 0xc000, 0x1f0b8],
+    [0x2fd8238, 41, 3, 0xc000, 0x1f124],
+    [0x2fd832e, 58, 3, 0xc000, 0x1f204],
+    [0x2fd848a, 58, 3, 0xc000, 0x1f2e4],
+    [0x2fe01d4, 56, 5, 0x8000, 0x1f4f8],
+    [0x2fde9d0, 55, 8, 0x8000, 0x1f584],
+    [0x2fe1606, 34, 2, 0x8000, 0x1f5d8],
+    [0x2fe158e, 30, 2, 0xc000, 0x1f61c],
+    [0x2fded40, 6, 8, 0xc000, 0x1f650],
+    [0x2fdeda0, 6, 8, 0xc000, 0x1f670],
+    [0x2fe321c, 30, 3, 0xc000, 0x1f768],
+    [0x2fe350e, 36, 3, 0xc000, 0x1f7ac],
+    [0x2fe35e6, 36, 3, 0xc000, 0x1f7f0],
+    [0x2fe343c, 35, 3, 0xc000, 0x1f834],
+    [0x2fe37fa, 31, 3, 0xc000, 0x1f878],
+    [0x2fe33b4, 34, 2, 0xc000, 0x1f8bc],
+    [0x2fe32d0, 38, 3, 0xc000, 0x1f900],
+    [0x2fe3746, 30, 3, 0xc000, 0x1f944],
+    [0x2fe053a, 58, 5, 0x8000, 0x1fa68],
+    [0x2fe099a, 45, 5, 0xc000, 0x1fab8],
+    [0x2fe1350, 43, 5, 0x8000, 0x1fafc],
+    [0x2fe1170, 48, 5, 0xc000, 0x1fb40],
+    [0x2fe0d42, 53, 5, 0x8000, 0x1fb88],
+    [0x2fe0404, 31, 5, 0x8000, 0x1fbd0],
+    [0x2fe17ec, 20, 3, 0x8000, 0x1fbf8],
+    [0x2fe14fe, 31, 2, 0x8000, 0x1fc94],
+    [0x2fe158a, 1, 1, 0x8000, 0x1fd48],
+    [0x2fe157a, 4, 2, 0x8000, 0x1fde8],
+    [0x2fd892e, 7, 2, 0xc000, 0x1fe20],
+    [0x2fd894a, 7, 2, 0x8000, 0x1fe54],
+    [0x2fe0cb0, 20, 2, 0x8000, 0x1fe74],
+    [0x2fe0b5c, 34, 5, 0x8000, 0x1ff34],
+    [0x2fe0f54, 54, 5, 0xc000, 0x1ffcc],
+    [0x2fdff54, 40, 8, 0xc000, 0x20028],
+    [0x2fdfc00, 13, 2, 0x8000, 0x2010c],
+    [0x2fdfbfc, 1, 2, 0x8000, 0x2013c],
+    [0x2fd5520, 64, 48, 0x0, 0x20208],
+    [0x2fefee8, 64, 30, 0x8000, 0x20238],
+    [0x2ff16e8, 64, 39, 0x8000, 0x20264],
+    [0x2ff1568, 64, 4, 0x8000, 0x20294],
+    [0x2fd0d20, 64, 48, 0x0, 0x203a8],
+    [0x2fe0864, 31, 5, 0xc000, 0x203c0],
+    [0x2fd3d20, 64, 48, 0x0, 0x203ec],
+    [0x2fdc9d0, 64, 48, 0x0, 0x20478],
+    [0x2fcf468, 8, 4, 0x8000, 0x204ac],
+    [0x2fcf2c8, 8, 4, 0x8000, 0x204fc],
+    [0x2fcf528, 12, 4, 0x8000, 0x2054c],
+    [0x2fcf828, 12, 4, 0x8000, 0x2059c],
+    [0x2fcf628, 12, 4, 0x8000, 0x205ec],
+    [0x2fcf928, 12, 4, 0x8000, 0x2063c],
+    [0x2fcf9e4, 16, 4, 0x8000, 0x20674],
+    [0x2fcf308, 16, 4, 0x8000, 0x206a4],
+    [0x2fcf388, 28, 4, 0x8000, 0x206d4],
+    [0x2fcf4a8, 16, 4, 0x8000, 0x20704],
+    [0x2fcf7a8, 16, 4, 0x8000, 0x20734],
+    [0x2fcf688, 16, 4, 0x8000, 0x20764],
+    [0x2fcf588, 20, 4, 0x8000, 0x20794],
+    [0x2fcf888, 20, 4, 0x8000, 0x207c4],
+    [0x2fcf708, 20, 4, 0x8000, 0x207f4],
+    [0x2fcf988, 23, 2, 0xc000, 0x20824],
+    [0x2fcfa64, 24, 8, 0xc000, 0x20854],
+    [0x2fcfbe4, 31, 8, 0xc000, 0x20884],
+    [0x2fcfdd4, 36, 8, 0xc000, 0x208b4],
+    [0x2fd0014, 34, 4, 0xc000, 0x208e4],
+    [0x2fd0124, 28, 8, 0xc000, 0x20914],
+    [0x2fd02e4, 24, 8, 0xc000, 0x20944],
+    [0x2fd0464, 29, 8, 0xc000, 0x20974],
+    [0x2fd0634, 29, 8, 0xc000, 0x209a4],
+    [0x2fd09a4, 28, 8, 0xc000, 0x209d4],
+    [0x2fd07f4, 27, 8, 0xc000, 0x20a04],
+    [0x2fe8fc4, 64, 8, 0x8000, 0x219a0],
+    [0x2feab34, 64, 4, 0x8000, 0x21a10],
+    [0x2fe8ec2, 43, 3, 0x8000, 0x21fe8],
+    [0x2fecbec, 41, 3, 0x8000, 0xd41a8],
+    [0x2fece6e, 33, 3, 0x8000, 0xd41e8],
+    [0x2fecce2, 33, 6, 0x8000, 0xd421c],
+    [0x2fed024, 49, 2, 0x8000, 0xd4a28],
+    [0x2fecf34, 24, 5, 0x8000, 0xd4a84],
+];
+
+/* The robot table's order, as its name plates spell it. */
+const VON_ROBOTS = ['Temjin', 'Viper II', 'Belgdor', 'Raiden', 'Dorkas', 'Fei-Yen', 'Apharmd', 'Bal-Bas-Bow', 'Jaguarandi', 'Z-Gradt'];
+
+/* `robots`, `select` and `shuffled` are the program tables, which the US
+ * build moves; `site` heads each call site's name. */
+const vonCells = ({ robots, select, shuffled, site }) => ({
+    maps: VON_MAPS.map(([at, cols, rows, or, call]) => [at, cols, rows, or, `drawn at ${site}0x${call.toString(16).toUpperCase()}`]),
+    mapTables: [
+        { table: robots, stride: 0x68, count: 10, cols: 31, rows: 35, or: 0x8000, what: 'portrait', names: VON_ROBOTS },
+        { table: robots + 0x4c, stride: 0x68, count: 10, or: 0xc000, what: 'name plate', names: VON_ROBOTS },
+        { table: select, stride: 4, count: 10, cols: 20, rows: 15, or: 0x8000, what: `stage plan (${site}0x21EB8)` },
+    ],
+    boot: {
+        font: { src: 0x02ea0bb8, first: 0, count: 0x80, pen: 1 },
+        modes: [
+            {
+                name: 'attract (SetScrolldata 0)',
+                chars: [[0x02ea2a74, 0x80, 0x1880], [0x02ed3054, 0x1900, 0x1700], [0x02f4db14, 0x3000, 0x680]],
+                palette: [
+                    { shuffled: [[0x02fdef20, 0x31], [0x02fd6ea0, 0x2e], [0x02ff7568, 0xd]], group: 1 },
+                    { shuffled: [[0x02fdf540, 0x31], [0x02fd7460, 0x2e], [0x02ff7568, 0xd]], group: 0x81 },
+                ],
+            },
+            {
+                name: 'game (SetScrolldata 1)',
+                chars: [[0x02ea2a74, 0x80, 0x1880], [0x02f000d4, 0x1900, 0x2700]],
+                palette: [
+                    { shuffled: [[0x02fdef20, 0x31], [0x02fed0e8, 0x4e]], group: 1 },
+                    { shuffled: [[0x02fdf540, 0x31], [0x02fedaa8, 0x4e]], group: 0x81 },
+                ],
+            },
+        ],
+        chars: [
+            [0x144cc4, 0x1488, 0x77], [0x146324, 0x3db0, 0x48], [0x144184, 0x3d10, 0x5a],
+            [0x145ba4, 0x3f40, 0x3c], [0x146c24, 0x37c, 2], [0x146c64, 0x37e, 2],
+        ],
+        fill: [[0x1570, 1, 0x9999]],
+        palette: [
+            { shuffled: [[shuffled[0], 1]], group: 0xa9 },
+            { shuffled: [[shuffled[1], 1]], group: 0xfa },
+            { shuffled: [[shuffled[1], 1]], group: 0xfb },
+            { shuffled: [[shuffled[1], 1]], group: 0xfe },
+        ],
+    },
+    programAt0: true,
+    charBytes: 0x80000,
+    colorxlat: true,
+});
+
 const vonj = {
     id: 'vonj',
     name: 'Cyber Troopers Virtual-On (Japan, Revision B)',
@@ -4457,7 +4632,8 @@ const vonj = {
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
     stageTable: { von: true, flat: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+    cells: vonCells({ robots: 0x20b50, select: 0x211b0, shuffled: [0x1bb50, 0x1bb70], site: '' }),
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* The US build (`vonu`, von.zip's vo-prog0.usa and vo-prog1.usa, which MAME
@@ -4483,6 +4659,9 @@ const vonu = {
     texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+    /* The same tables, found by their bytes; the colour tables sit 0xF0
+     * lower, the robot and select tables 0xA40 higher. The maps are data. */
+    cells: vonCells({ robots: 0x21590, select: 0x21bf0, shuffled: [0x1ba60, 0x1ba80], site: 'vonj ' }),
 };
 
 /*
@@ -4604,9 +4783,25 @@ const srallyc = {
     /* Daytona's depth arrangement, for the same reason: no depth buffer, and
      * a road made of plates laid on plates. */
     depth: { recede: 0, nearMin: 0.02, layers: true },
+    /*
+     * The 2D pictures are AM3's "CGM 1.0" files (js/cells.js, `cgm`): the
+     * loader 0x5C8EB0 (ROM 0x29EB0) takes a file's address, g2, compares its
+     * first eight bytes with the string at 0x5C8E60, loads its blocks from
+     * the free palette group (work RAM 0x20C950, which the reset 0x5C8A60
+     * sets to 9: groups 0-8 hold the font 0x5C5690 loads) and files its
+     * patterns in the table at 0x20B950; the draw 0x5C8C10 adds the group
+     * << 7 to each entry. Its 96 callers name the files directly, `lda
+     * 0x28AE89C, g2` (the attract's PUSH START, 0x5AB074) and the like. The
+     * files are in the data ROM and, 16 of them, the program ROM past the copy
+     * (0x61004 on). The third data pair is 2MB, which the region repeats up
+     * to 0xC00000 as the board's decoding does, so the scan stops at
+     * 0xA00000 (`dataEnd`). Every colour goes through colorxlat, as MAME's
+     * palette_w puts every tile colour.
+     */
+    cells: { cgm: { dataEnd: 0xa00000 }, programAt0: true, charBytes: 0x80000, colorxlat: true },
     /* The courses but not the cars' placement on them, nor the trackside
      * objects. */
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Dynamite Cop / Dynamite Deka 2 (Pinboard #1286) --------------------- */

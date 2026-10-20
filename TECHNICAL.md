@@ -4723,6 +4723,103 @@ are reached by number, not by pointer, so there is no unused list.
 Revision A (`hotd`) moved its tables, and its picture table has not been found,
 so it has no Cells tab.
 
+### Sega Rally Championship's cells (`js/cells.js`)
+
+AM3 keeps its 2D art in files of its own, each a CG and its patterns. A file
+starts with the eight bytes "CGM 1.0 ", which the loader (`0x5C8EB0`, in the
+RAM copy of the program) compares before it reads anything else, so a scan
+of the ROMs for them finds every file. After the magic:
+
+- u16, the number of blocks;
+- each block: 16 colours (32 bytes), a u16 the loader does not read, a u16
+  tile count (up to 128), and the tiles, 32 bytes each;
+- u16, the number of patterns;
+- each pattern: a 16-byte name, s16 columns, s16 rows, and a halfword entry a
+  tile.
+
+The loader gives block k the palette group g + k and the 128 characters from
+(g + k) × 128, copying both as they are (`0x5C58B0` and `0x5C5918` queue the
+colours). g is the first free group, which the reset (`0x5C8A60`) sets to 9,
+past the font; the draw (`0x5C8C10`) adds g << 7 to every entry, so the
+group is the block. In m2-hle2 the first writes of the file at 0x28AE89C
+(`sa_push1`, PUSH START BUTTON) are its colour 0x7EA9 to 0x1800120, group 9, and its
+first tile word 0x11110011 to 0x1089000, character 0x480, as the profile
+loads them.
+
+The Cells tab has a CG for each file, loaded from group 9, and a cell for
+each pattern, named as the file names it: 141 files (16 in the program ROM,
+125 in the data ROM) and 853 patterns. MAME's third data pair is 2MB, and the
+region repeats it from 0xA00000 to 0xC00000, so the scan stops at 0xA00000
+(`cells.cgm.dataEnd`); past it would be the same 59 files again. The game
+loads a file by its address, so the 49 files no aligned word in the program
+or data ROM names have their 363 patterns marked unused. The colours go
+through colorxlat, as on the other Model 2 games.
+
+### Virtual-On's cells (`js/cells.js`, `vonCells` in `js/games.js`)
+
+Virtual On's maps carry no header: the draw routines take the map's address,
+its width and its height from the caller, and write each entry to a tilemap
+with bits of their own set.
+
+| routine | tilemap | bits |
+|---|---|---|
+| `0x1DC10` | layer A, 0x1000000 | 0x8000 |
+| `0x1DD80`, `0x1DE00`, `0x1DE80` | 0x1002000, 0x1006000, 0x1004000 | 0x8000 |
+| `0x1DC90` | layer A | 0xC000 |
+| `0x1DD10` | layer A, at a column and row | 0xC000 |
+| `0x1BC90` | any, a row at a time (`memcpy`) | none |
+
+Bit 14 takes the colours from the upper half of the palette. So a cell is a
+call with a constant map: the profile lists every one in vonj (`VON_MAPS`,
+taken from the code, one cell a map, the largest where a map is drawn twice)
+and the two tables:
+
+- the robots, at program 0x20B50 (vonj), 0x68 bytes a robot: +0 the 31 × 35
+  portrait (drawn by `0x211F0`), +0x4C the name plate with its columns and
+  rows at +0x50 and +0x54 (drawn by `0x1DC90`). The plates name the robots;
+- 0x211B0: ten 20 × 15 plans of the stages (`0x21EB8`).
+
+The map at 0x2FDA1D0 is 64 × 64 zeros the game clears a layer with, and is
+left out. So are the calls that take their map from a table of digit glyphs
+(0x2EA1E50 to 0x2EA2090, and 0x2EA289C), a counter's 1 or 2 by 2 tiles each.
+That makes 119 cells.
+
+The tile chip is filled at the start and not again, as Virtua Cop's is
+(`cells.boot`). `InitScroll` (`0x1C220`) draws the 1-bit font at data
+0x2EA0BB8 into characters 0 to 0x7F with pen 1 (`0x1C730`). `SetScrolldata`
+(`0x1BDA0`) does the rest, and its argument picks one of two fills: 0, from
+`InitAll` (`0x18970`) and `InitAdvertize` (`0x2B508`), for the attract mode,
+and 1, from `InitGameMain` (`0x190E4`), for the game. Each copies its
+characters with the bytes of each halfword swapped (`0x1BC20`; the count is in
+halfwords):
+
+- 0: 0x2EA2A74 to characters 0x80, 0x1880 of them; 0x2ED3054 to 0x1900,
+  0x1700; 0x2F4DB14 to 0x3000, 0x680;
+- 1: 0x2EA2A74 to 0x80, 0x1880; 0x2F000D4 to 0x1900, 0x2700;
+- both, after: six runs from the program ROM's second megabyte (0x144CC4,
+  0x146324, 0x144184, 0x145BA4, 0x146C24, 0x146C64) to characters 0x1488,
+  0x3DB0, 0x3D10, 0x3F40, 0x37C and 0x37E, and character 0x1570 filled with
+  0x9999.
+
+The colours are written by `SetScrollcol` (`0x1BB90`), which stores each
+component's low bit apart: a stored colour v is the 555 colour
+`(v >> 12 & 1) | (v & 15) << 1 | (v >> 13 & 1) << 5 | (v >> 4 & 15) << 6 |
+(v >> 14 & 1) << 10 | (v >> 8 & 15) << 11`. Fill 0 writes 0x2FDEF20 (0x31
+groups), 0x2FD6EA0 (0x2E) and 0x2FF7568 (0xD) from group 1, and the same from
+0x2FDF540, 0x2FD7460 and 0x2FF7568 from group 0x81; fill 1 writes 0x2FDEF20
+(0x31) and 0x2FED0E8 (0x4E) from group 1, and 0x2FDF540 and 0x2FEDAA8 from
+0x81. Both then write program 0x1BB50 to group 0xA9 and 0x1BB70 to 0xFA, 0xFB
+and 0xFE.
+
+So the Cells tab has two CGs, the attract mode's and the game's, and every
+cell has one that writes every tile it names. The colours go through
+colorxlat. vonu has the same maps; its program moves the robot and stage
+tables up by 0xA40 (to 0x21590 and 0x21BF0) and the two colour tables down
+by 0xF0 (0x1BA60, 0x1BA80), found by their bytes, and its cells keep vonj's
+call sites as their names. The seventh advice screen of the attract mode
+(0x2FD0464, drawn by `0x20974`) comes out garbled on both CGs; the others
+read, so its characters are probably loaded by something not found yet.
+
 ### Air Walkers (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
 Data East's basketball game on Model 2A shares none of Sega's tables, so each
