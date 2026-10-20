@@ -141,7 +141,7 @@ const COPRO = {
 /* Commands whose words are integers rather than singles. */
 const INT_ARGS = new Set([0x14, 0x15, 0x16, 0x1b, 0x1c, 0x1d, 0x1e]);
 
-class Copro {
+export class Copro {
     /* `extra`: commands another game's copro program has beyond these. */
     constructor(log, extra = {}) {
         this.table = { ...COPRO, ...extra };
@@ -194,7 +194,7 @@ class Copro {
 
 /* The geometrizer's side: a draw for every object command, under the matrix
  * the last 0x0B or 0x0C left. */
-class Geo {
+export class Geo {
     constructor(copro, models) {
         this.copro = copro;
         this.models = models;

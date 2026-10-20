@@ -75,6 +75,8 @@ const JA_PAGE = {
     'vf2.clip.fighter': '専用リグのアキラ',
     'doa.name': 'デッド オア アライブ <i>実験的</i>',
     'doa.meta': '12ステージとすべてのモデル、Model 2B と 2A で &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code>',
+    'von.name': '電脳戦機バーチャロン <i>実験的</i>',
+    'von.meta': '10ステージ（一部組み立て済み）とすべてのモデル &middot; <code>vonj</code> / <code>vonu</code>',
     'doa.clip.palace': 'ステージ&nbsp;3 の壁に囲まれた宮殿の中庭',
     'doa.clip.sunset': 'ステージ&nbsp;11 の溶岩に囲まれた岩のリング',
     'doa.clip.city': 'ステージ&nbsp;10、夜の街の上',
@@ -417,11 +419,12 @@ const JA_TEXT = {
     'extra': '追加', 'cage': '檻', 'poles': '柱', 'objects': 'オブジェクト', 'scenery': '風景',
     'fighters': 'ファイター', 'outside': '屋外', 'inside': '屋内',
 
-    /* Its record, views and states (stages.js, placements.js, vcop.js, vf2.js, doa.js, daytona.js) */
+    /* Its record, views and states (stages.js, placements.js, vcop.js, vf2.js, doa.js, daytona.js, dynamcop.js) */
     'stage': 'ステージ', 'course': 'コース', 'blocks': 'ブロック', 'never in view': '一度も見えない',
     'sections': 'セクション', 'zones': 'ゾーン', 'placements': '配置', 'props': '小物',
     'in no reached zone': '到達するゾーン外', 'segments': 'セグメント', 'low detail': '低詳細度', 'pieces': 'ピース',
     'object parts': 'オブジェクトのパーツ', 'flags': 'フラグ', 'routine': 'ルーチン', 'unread': '未解読',
+    'area': 'エリア', 'list': 'リスト', 'set': 'セット',
     'Everything': 'すべて',
     'Every segment at once': 'すべてのセグメントを一度に',
     'Every block a car reaches': '車が到達するすべてのブロック',

@@ -4341,6 +4341,151 @@ const doaae = relocateDoa(doaa, {
 });
 
 /*
+ * Cyber Troopers Virtual-On (Model 2B, Japan, Revision B). MAME's `vonj` is a
+ * clone of `von`: its zip holds the program pair and takes the rest from the
+ * parent's (MAME model2.cpp, ROM_START( vonj )). Routine names are the ones in
+ * rokuYAMP's docs/von-rom-symbols.md.
+ */
+const VON_CHIPS = {
+    mainData: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18648.11', 0x2edbe489, 'mpr-18649.12', 0xe68c5aa6],
+            [0x800000, 'mpr-18650.9', 0x89a855b9, 'mpr-18651.10', 0xf4c23107],
+        ],
+    },
+    polygons: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18654.17', 0x6a0caf29, 'mpr-18655.21', 0xa4293e78],
+            [0x800000, 'mpr-18656.18', 0xb4f51e76, 'mpr-18657.22', 0xa9be4674],
+        ],
+    },
+    /* The texture point and header streams the object triples point at. */
+    textures: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-18660.27', 0xe53663e5, 'mpr-18658.25', 0x3d0fcd01],
+            [0x800000, 'mpr-18661.28', 0x52b50410, 'mpr-18659.26', 0x27aa8ae2],
+        ],
+    },
+};
+
+const vonj = {
+    id: 'vonj',
+    name: 'Cyber Troopers Virtual-On (Japan, Revision B)',
+    identify: ['epr-18664b.15', 'epr-18665b.16'],
+    identifyCrc: [0x27d0172c, 0x2f0142ee],
+    regions: {
+        /* The second megabyte is the data pair every build shares. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-18664b.15', 0x27d0172c, 'epr-18665b.16', 0x2f0142ee],
+                [0x100000, 'epr-18666.13', 0x66edb432, 'epr-18667.14', 0xb593d31f],
+            ],
+        },
+        ...VON_CHIPS,
+    },
+    /* No table: the program and data ROMs hold the object triples it sends
+     * (js/romset.js scanModelTable), one model a mesh. */
+    modelTable: {
+        scan: { sources: [['mainData', 0, 0x1000000], ['maincpu', 0, 0x200000]] },
+        count: 7097,
+    },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /*
+     * The boot copies the face palette out of the program ROM (`tables`
+     * names the `ldos` operand at 0x29A98 that points at it, 0xF48D0). The 24
+     * entries from 8 on are the ones the game cycles (data 0xBF83C4, records
+     * of a shift, a mask and a pointer to the colours); still, they hold the
+     * first colour of each.
+     */
+    palette: { tables: 0x29a9c, sets: 1, split: 0, cycles: { table: 0xbf83c4, first: 8, count: 24 } },
+    /* LZ banks, a full sheet each (js/texture.js buildVonTexram). A set is a
+     * field: 0-9 the ten stages, 10-13 the rest (title, select, ending). */
+    texture: {
+        raw: {
+            layout: 'von', boot: 0xc00008, banks: 0x280c0, deal: 0x27c50, fieldBanks: 0xc8ed0,
+            keepBank0: [13],
+        },
+        sets: 14,
+        residentSet: null,
+        defaultSet: 0,
+        mips: true,
+    },
+    /* Luma: two grey ramps of 128 (0x28548), then 0x2080 bytes from data
+     * 0xFB1D10 at entry 0x800. Colorxlat: js/colors.js buildVonColorxlat.
+     * Both match MAME's RAM after each field's start. */
+    colors: {
+        luma: { data: 0xfb1d10, bytes: 0x2080, at: 0x800, ramps: 2 },
+        von: {
+            gamma: 0.55,
+            rows: [
+                [1, 0x2fb3d90], [3, 0x2fb3e50], [5, 0x2fb4990], [7, 0x2fb4a50], [9, 0x2fb7510],
+                [11, 0x2fb75d0], [13, 0x2fb7690], [15, 0x2fb7750], [17, 0x2fb7810], [19, 0x2fb7990],
+                [21, 0x2fb6cd0], [25, 0x2fb7e10], [27, 0x2bfed8c], [29, 0x2fb6fd0],
+            ],
+            fields: [
+                [[11, 0x2fb75d0], [21, 0x2fb5b90], [23, 0x2fb5c50], [25, 0x2fb5d10]],
+                [[11, 0x2fb75d0]],
+                [[11, 0x2fb75d0], [21, 0x2fb5dd0], [23, 0x2fb5e90], [25, 0x2fb5f50], [27, 0x2fb6010], [29, 0x2fb60d0]],
+                [[11, 0x2fb75d0], [21, 0x2fb6190], [23, 0x2fb6250], [25, 0x2fb6310], [27, 0x2fb63d0], [29, 0x2fb6490]],
+                [[11, 0x2fb75d0], [23, 0x2fb6550], [25, 0x2fb6610], [27, 0x2fb66d0], [29, 0x2fb6790]],
+                [[11, 0x2fb75d0], [23, 0x2fb6850], [25, 0x2fb6910], [27, 0x2fb69d0], [29, 0x2fb6a90]],
+                [[11, 0x2fb75d0], [27, 0x2fb6b50], [29, 0x2fb6c10]],
+                [[11, 0x2fb75d0], [21, 0x2fb6cd0], [23, 0x2fb6d90], [25, 0x2fb6e50], [27, 0x2fb6f10], [29, 0x2fb6fd0]],
+                [[11, 0x2fb75d0]],
+                [[11, 0x2fb75d0], [29, 0x2fb7450]],
+                [[25, 0x143704], [27, 0x1437c4], [29, 0x2fb8590]],
+                [[1, 0x2fb4e10, true], [3, 0x2fb4ed0, true]],
+                [[21, 0x2fb6cd0], [25, 0x2fb7e10], [27, 0x2bfed8c], [29, 0x2fb6fd0]],
+                [[11, 0x2fb75d0, true], [1, 0x2fb7a50, true], [3, 0x2fb7b10, true], [5, 0x2fb7bd0, true],
+                    [7, 0x2fb7c90, true], [21, 0x2fb6cd0, true], [25, 0x2fb7e10, true], [27, 0x2bfed8c, true],
+                    [29, 0x2fb6fd0, true]],
+            ],
+            robots: { table: 0x142e94, rows: [[1, 3], [5, 7]] },
+        },
+    },
+    /* The boot uploads 32 material slots from program 0x293B0 (geometry
+     * function 6, 0x292D8); each field sets its light from 0x142FD4 + 12 *
+     * field (initField, stored at 0xC9030). The model view takes field 0's. */
+    lighting: {
+        light: [-0.296198, -0.5, -0.813798],
+        materials: { at: 0x293b0, count: 32 },
+    },
+    von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
+    stageTable: { von: true, flat: true },
+    scenes: null,
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/* The US build (`vonu`, von.zip's vo-prog0.usa and vo-prog1.usa, which MAME
+ * calls epr-18828b.15 and epr-18829b.16). Its program moves the tables by
+ * 0x610 to 0xC30; the second megabyte and the data ROMs are the same. */
+const vonu = {
+    ...vonj,
+    id: 'vonu',
+    name: 'Cyber Troopers Virtual-On (USA, Revision B)',
+    identify: ['epr-18828b.15', 'epr-18829b.16'],
+    identifyCrc: [0x6499cc59, 0x0053b10f],
+    regions: {
+        ...vonj.regions,
+        maincpu: {
+            ...vonj.regions.maincpu,
+            parts: [
+                [0x000000, 'epr-18828b.15', 0x6499cc59, 'epr-18829b.16', 0x0053b10f],
+                vonj.regions.maincpu.parts[1],
+            ],
+        },
+    },
+    palette: { ...vonj.palette, tables: 0x2a6ac },
+    texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
+    lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
+    von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+};
+
+/*
  * Sega Rally Championship, Revision C: a Model 2A, so a TGP with its program
  * uploaded by the i960, and the same geometrizer and texture RAM as the
  * other games here. None of its tables is named by a debug table or a
@@ -4464,12 +4609,334 @@ const srallyc = {
     features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/* ---- Dynamite Cop / Dynamite Deka 2 (Pinboard #1286) --------------------- */
+
+/* Bank k of each copy is set k's. The table holds two copies of 25 banks;
+ * the second copy's enemy banks name their texture records 4MB lower in the
+ * texture ROMs. */
+const DYNAMCOP_BANK_SETS = [...Array(25).keys(), ...Array(25).keys()];
+
+/*
+ * AM1's 1998 game, on all three boards: the 2A export and Japanese builds, the
+ * same two on 2B, and the US build on 2C. The data, polygon and texture ROMs
+ * are one set of chips for all five, and so is the program's upper pair; only
+ * the lower pair differs, and it is what tells the builds apart. The 2B and 2C
+ * zips name it `progrom0.15` and `progrom1.16`, so it is found by checksum.
+ *
+ * Read off a running board (MAME, the shared build, with Lua dumps of palette,
+ * colorxlat, luma and texture RAM at three attract scenes) and the program's
+ * set loaders: boot is 0x7D450, a stage 0x7D3F0 or 0x7D490, an enemy set
+ * 0x7D420 or 0x7D4D0, all handed the set number. Every table they read is a
+ * pointer array indexed by it. js/dynamcop.js has the scene this makes.
+ *
+ * The addresses are the 2A export build's. The other builds' were found by
+ * searching each program for the same table bytes. The 2B and 2C programs
+ * keep the same tables in another order.
+ */
+const DYNAMCOP_DATA = {
+    mainData: {
+        size: 0x2000000,
+        parts: [
+            [0x0000000, 'mpr-20797.10', 0x87bab1e4, 'mpr-20798.11', 0x40dd752b],
+            [0x0800000, 'mpr-20795.8', 0x0ef85e12, 'mpr-20796.9', 0x870139cb],
+            [0x1000000, 'mpr-20793.6', 0x42ea08f8, 'mpr-20794.7', 0x8e5cd1db],
+            [0x1800000, 'mpr-20791.4', 0x4883d0df, 'mpr-20792.5', 0x47becfa2],
+        ],
+    },
+    polygons: {
+        size: 0x2000000,
+        parts: [
+            [0x0000000, 'mpr-20799.16', 0x424571bf, 'mpr-20803.20', 0x61a8ad52],
+            [0x0800000, 'mpr-20800.17', 0x3c2ee808, 'mpr-20804.21', 0x03b35cb8],
+            [0x1000000, 'mpr-20801.18', 0xc6914173, 'mpr-20805.22', 0xf6605ede],
+            [0x1800000, 'mpr-20802.19', 0xd11b5267, 'mpr-20806.23', 0x0c942073],
+        ],
+    },
+    textures: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-20809.25', 0x3b7b4622, 'mpr-20807.24', 0x1241e0f2],
+            [0x800000, 'mpr-20810.27', 0x838a10a7, 'mpr-20808.26', 0x706bd495],
+        ],
+    },
+};
+
+/* The program's own tables, per build. */
+const DYNAMCOP_AT = {
+    dynamcop: {
+        tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
+        flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
+        materials: 0x6ecc0, missions: 0xe9a70,
+    },
+};
+DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
+    missions: 0xe9a60,
+};
+DYNAMCOP_AT.dynamcopb = {
+    tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
+    flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
+    materials: 0x17c40, missions: 0xf9370,
+};
+DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
+    missions: 0xf9360,
+};
+DYNAMCOP_AT.dynamcopc = {
+    tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
+    flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
+    materials: 0x6f3b0, missions: 0xfa190,
+};
+
+function dynamcopBuild({ id, name, low, high }) {
+    const A = DYNAMCOP_AT[id];
+    return {
+        id, name,
+        identify: [low[1], low[3]],
+        identifyCrc: [low[2], low[4]],
+        regions: {
+            maincpu: { size: 0x200000, parts: [low, high] },
+            ...DYNAMCOP_DATA,
+        },
+        /* Set 5's stage bank is 0x06755500, through XTRA_DATA. */
+        xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+        /*
+         * 19432 entries at data 0xD40000, HOTD's 16-byte layout and mesh
+         * pointers. Fifty empty entries split it into 51 banks. There is no
+         * name table. The texture blocks follow it at 0xD8BE80.
+         */
+        modelTable: { offset: 0xd40000, count: 19432, stride: 16 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        paletteOffset: null,
+        /* js/dynamcop.js dynamcopPalette: `tables` is a count-prefixed table
+         * per set, `top` one per stage written down from the top, `extra` one
+         * more boot writes in two runs. */
+        palette: { layout: 'dynamcop', tables: A.tables, top: A.top, extra: A.extra, sets: 25 },
+        texture: {
+            /* `bankTable[set]` is a data address: boot's packed (byte pair
+             * encoding, laid out by `bootRects`), the others raw halfwords.
+             * `patchTable[stage]` is eight 64x64 blocks for sheet 0. */
+            raw: { layout: 'dynamcop', bankTable: A.banks, bootRects: A.rects, patchTable: A.patches },
+            sets: 25,
+            residentSet: null,
+            bankSets: DYNAMCOP_BANK_SETS,
+        },
+        /*
+         * The HOTD curve with other weights (`weights`: 0.7, then 0.85), and
+         * fifteen ramps over the odd rows 1..29 with no gain: the first eleven
+         * from boot's list, the last four from the stage's (`shared`). Luma RAM
+         * is 0x7F80 bytes of the program ROM (0x70EB0 copies it). Both match
+         * MAME's RAM exactly in all three scenes, but for row 17, which the
+         * game animates.
+         */
+        colors: {
+            luma: { source: 'maincpu', data: A.luma, bytes: 0x7f80 },
+            curve: { weights: A.weights, sets: { ptrs: A.ramps, rows: 15, row0: 1, step: 2, gain: null, shared: 11 } },
+            solid: true,
+        },
+        /* Boot uploads 31 material slots from `materials` (0x6EE74, the same
+         * call as The House of the Dead's), and the table is HOTD's but for
+         * slots 4 and 13. The light and plane normals are carried over from
+         * HOTD, not read from this program. */
+        lighting: {
+            vecter: [0xe000, 0xc000],
+            materials: { at: A.materials, count: 31 },
+            planeNormals: true,
+        },
+        /* js/dynamcop.js readDynamcopStages: `missions` is the table 0x2B960
+         * reads, three pointers a mission to runs of area descriptors. */
+        stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
+    };
+}
+
+const DYNAMCOP_HIGH = [0x100000, 'epr-20932.14', 0x618a68bf, 'epr-20933.15', 0x13abe49c];
+const dynamcop = dynamcopBuild({
+    id: 'dynamcop', name: 'Dynamite Cop (Export, Model 2A)',
+    low: [0x000000, 'epr-20930.12', 0xb8fc8ff7, 'epr-20931.13', 0x89d13f88],
+    high: DYNAMCOP_HIGH,
+});
+const dyndeka2 = dynamcopBuild({
+    id: 'dyndeka2', name: 'Dynamite Deka 2 (Japan, Model 2A)',
+    low: [0x000000, 'epr-20922.12', 0x0a8b5604, 'epr-20923.13', 0x83be73d4],
+    high: [0x100000, 'epr-20924.14', 0x618a68bf, 'epr-20925.15', 0x13abe49c],
+});
+const dynamcopb = dynamcopBuild({
+    id: 'dynamcopb', name: 'Dynamite Cop (Export, Model 2B)',
+    low: [0x000000, 'epr-20944.15', 0x29b142f2, 'epr-20945.16', 0xc495912e],
+    high: [0x100000, 'epr-20942.13', 0x618a68bf, 'epr-20943.14', 0x13abe49c],
+});
+const dyndeka2b = dynamcopBuild({
+    id: 'dyndeka2b', name: 'Dynamite Deka 2 (Japan, Model 2B)',
+    low: [0x000000, 'epr-20936.15', 0x23ef98f2, 'epr-20937.16', 0x25a14e00],
+    high: [0x100000, 'epr-20934.13', 0x618a68bf, 'epr-20935.14', 0x13abe49c],
+});
+const dynamcopc = dynamcopBuild({
+    id: 'dynamcopc', name: 'Dynamite Cop (USA, Model 2C)',
+    low: [0x000000, 'epr-20952.15', 0xec8bc896, 'epr-20953.16', 0xa8276ffd],
+    high: [0x100000, 'epr-20950.13', 0x618a68bf, 'epr-20951.14', 0x13abe49c],
+});
+/* ---- Air Walkers ---------------------------------------------------------- */
+
+/*
+ * Data East's basketball game on Model 2A (m2-hle2's src/profiles/airwlkrs.h,
+ * MAME's `airwlkrs`). Its program keeps nothing in the shapes the other games
+ * use: the textures are loaded by the program's own copy routines and the
+ * colours are a ramp it works out, so js/texture.js and js/colors.js each have
+ * a section for it.
+ */
+const airwlkrs = {
+    id: 'airwlkrs',
+    name: 'Air Walkers',
+    identify: ['j_2-14_ic12_fe7e.12', 'j_2-14_ic13_d539.13', 'mpr-19235.16', 'mpr-19234.25'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [[0x000000, 'j_2-14_ic12_fe7e.12', 0x8851a8d7, 'j_2-14_ic13_d539.13', 0x72287ee0]],
+        },
+        /*
+         * An 8MB mask pair and a 1MB EPROM pair, which MAME repeats up to 16MB
+         * (the ROM_COPY run in `airwlkrs`). The model table is in the mask pair;
+         * the teams' texture pages run into the repeats.
+         */
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19236.10', 0x3c26e978, 'mpr-19237.11', 0x961328b1],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x800000 + i * 0x100000, '11-7_ic8_d400.8', 0x37f300bd, '11-7_ic9_6e4a.9', 0x454e4a09]),
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19235.16', 0xeaad8f92, 'mpr-19232.20', 0xfd153001]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19234.25', 0xd7d69493, 'mpr-19233.24', 0x7a2e51f1]],
+        },
+    },
+    /*
+     * 2026 entries of 16 bytes at data 0x58DD50: texture word, material word,
+     * mesh pointer, polygon count. The draw routine at 0x1E8D8 indexes it with
+     * `lda 0x258DD50[g0*16]` and reads the mesh pointer at +8. Model 555 runs
+     * past the decoder's usual cap of 4096 vertex pairs.
+     */
+    modelTable: { offset: 0x58dd50, count: 2026, stride: 16, maxVertexPairs: 8192 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /*
+     * Laid in blocks, not tables. Boot writes {count, colours} from entry 0 at
+     * 0x1E8F8 (0x162E4); the title lays the block at 0x1EBA0 and the court
+     * set-up the one at 0x1EAF0, both {first, count, colours} (0x16370). A
+     * team's block is `ld 0xF18A0[n*4]`, laid by 0x1F0E0. The game's 34 team
+     * numbers are 17 teams twice: 0..16 for the home side, 17..33 for the away.
+     */
+    palette: { base: 0x1e8f8, blocks: [0x1eba0, 0x1eaf0], tables: 0xf18a0, sets: 34, titleSet: 34 },
+    /*
+     * Raw pages, copied by the program (js/texture.js): two boot pages of kind
+     * 0x20, then a team's page from `ld 0xF1810[n*4]`. Sets 0..33 are the team
+     * numbers; set 34 is the title's page (0x256B8), which the attract arena,
+     * model 555, is drawn from.
+     */
+    texture: {
+        raw: {
+            layout: 'airwlkrs',
+            boot: [[0x02000000, 0, 0x20], [0x020aaa00, 1, 0x20]],
+            teamPages: 0xf1810,
+            title: [0x02155400, 1, 0x31],
+            titleSet: 34,
+            titleModels: [539, 555],
+        },
+        sets: 35,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * The luma table is the 2A library's, 0x4000 bytes at 0x54C0 in the program
+     * ROM. The rest is js/colors.js's Air Walkers section: the ramp, the
+     * boot's and the title's runs, court 0's five tables, the five fixed ones,
+     * the variant's two, then the team's. Variant 1 is the one MAME's game
+     * played on court 0.
+     */
+    colors: {
+        luma: { source: 'maincpu', data: 0x54c0, bytes: 0x4000 },
+        airwlkrs: {
+            floor: 0x1b9c0, slots: 0xf17f0, runs: [0x41f0, 0x4d31],
+            stages: 0xd440, stageSlots: 0xf1980,
+            fixed: [[0x4731, 7], [0x47f1, 8], [0x48b1, 9], [0x4971, 10], [0x4a31, 11]],
+            variants: [0xd484, 0xd494],
+            teams: 0x11a64, teamCount: 34, variant: 1, titleSet: 34,
+        },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/* ---- Power Sled ----------------------------------------------------------- */
+
+/*
+ * Sega's sled racer on Model 2B CRX (m2-hle2's src/profiles/powsled.h,
+ * MAME's `powsled`, the Slave unit's program, Revision A). Like Air Walkers it
+ * keeps nothing in the AM2 shapes: it has no model table, its colours are a
+ * curve it works out, and its textures are one straight copy.
+ */
+const powsled = {
+    id: 'powsled',
+    name: 'Power Sled (Slave, Revision A)',
+    identify: ['epr-19470a.15', 'epr-19471a.16', 'fpr-19455.17', 'fpr-19458.27'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19470a.15', 0x8f28cc09, 'epr-19471a.16', 0x01a013e3]],
+        },
+        mainData: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19468.11', 0x56fae4e2, 'fpr-19469.12', 0x5579c922]],
+        },
+        polygons: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19455.17', 0x165ee345, 'fpr-19456.21', 0xc3b2e2c5]],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'fpr-19458.27', 0xf24acca2, 'fpr-19457.25', 0x79d7e6fa]],
+        },
+    },
+    /*
+     * No table: js/powsled.js lists every {texture word, material word, mesh}
+     * triple the program hands the geometry engine, out of the data ROM's
+     * placement records, the program's named records and its immediates.
+     * 494 of them, sorted by mesh.
+     */
+    modelTable: { list: 'powsled', count: 494, offset: 0 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* {count, colours}: 0x20A colours at 0x128EE, copied to the face palette
+     * (0x1802000) by 0xF1B0. */
+    paletteProgram: 0x128ec,
+    paletteOffset: null,
+    /* Data 0x600000 on sheet 0 and 0x700000 on sheet 1, by 0xC540. */
+    texture: {
+        raw: { layout: 'copy', sheets: [0x02600000, 0x02700000] },
+        sets: 1,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* js/colors.js's Power Sled section: luma from 0xC8F0, colorxlat from
+     * 0xE2D0 and 0xE1D0 with the odd rows' colours at 0xCB50. */
+    colors: {
+        luma: { halfRamp: true },
+        powsled: { table: 0xcb50, rows: 15 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
-    doa, doab, doaa, doaab, doaae, srallyc];
+    doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -14,6 +14,8 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
+import { readDynamcopStages } from './dynamcop.js';
+import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -942,10 +944,16 @@ function describeTextureGuess(g) {
     switch (g.how) {
     case 'untextured': return 'samples no texture';
     case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
-    case 'boot': return state.rom.game.texture.raw
+    case 'boot': return state.rom.game.texture.raw?.layout === 'airwlkrs'
+        ? `${sets}: the boot pages, which every court has`
+        : state.rom.game.texture.raw
         ? `sheet ${state.rom.game.texture.raw.layout === 'srallyc' ? 0 : 1} only, the bank boot loads for every course`
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
+    case 'only': return `${sets}: the only texture RAM the game loads`;
+    case 'title': return `${sets}: drawn in the intro, on the title's page`;
+    case 'home': return `${sets}: on the home side's team page, team 0`;
+    case 'away': return `${sets}: on the away side's team page, team 0`;
     case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
     case 'resident': return `${sets} ${g.sets.length > 1 ? 'are' : 'is'} a guess: it is on the ${g.slot}s' pages, and nothing says which ${g.slot}'s`;
     case 'coverage': return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
@@ -5999,16 +6007,24 @@ function loadGameContent() {
     const on = applyGameFeatures();
     resetMusic();
     if (on.stage) {
-        /* Four shapes of stage data: a record per arena, a placement
-         * table per chapter, Daytona USA's grid of blocks and Virtua Cop's
-         * segments. */
+        /* The shapes of stage data: a record per arena, a placement
+         * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
+         * segments, Virtua Fighter 2's, and what Dead or Alive's and
+         * Virtual-On's own code places, run on js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
+        else if (T.von) {
+            /* It also puts right model entries, so nothing decoded before
+             * it stands. */
+            state.stages = readVonStages(state.rom);
+            state.modelCache.clear();
+        }
         else if (T.placements) state.stages = readPlacementStages(state.rom);
+        else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

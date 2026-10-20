@@ -12,6 +12,8 @@
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
 import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
+import { powsledModels } from './powsled.js';
+import { dynamcopPalette } from './dynamcop.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -235,11 +237,22 @@ export function setRomPatches(rom, on) {
  * because both are built on the same Sega library, but the count differs. */
 
 const MODEL_FIELDS = { uv: 0, mat: 4, mesh: 8 };
+const MODEL_LISTS = { powsled: powsledModels };
 
 /* A game whose numbers run on into a second table (`past`) indexes that one by
  * the same number from its own base: Virtua Cop's models from 0x4D2 on. */
 export function readModelEntry(rom, index) {
     const t = rom.game.modelTable;
+    /* A game with no table of its own has a list put together from what its
+     * program draws: Power Sled (js/powsled.js). */
+    if (t.list) {
+        rom.modelList ??= MODEL_LISTS[t.list](rom);
+        return rom.modelList[index] ?? { uvPtr: 0, matPtr: 0, meshPtr: 0 };
+    }
+    if (t.scan) {
+        const e = (rom.modelEntries ??= scanModelTable(rom))[index];
+        return e ?? { uvPtr: 0, matPtr: 0, meshPtr: 0 };
+    }
     const f = t.fields ?? MODEL_FIELDS;
     const base = t.past && index >= t.past.from ? t.past.offset : t.offset;
     const off = base + index * t.stride;
@@ -249,6 +262,111 @@ export function readModelEntry(rom, index) {
         matPtr: dv.getUint32(off + f.mat, true),
         meshPtr: dv.getUint32(off + f.mesh, true),
     };
+}
+
+/*
+ * A model table for a game that keeps none (`modelTable.scan`): Virtual On.
+ *
+ * Its program sends each object as three words, the texture point pointer,
+ * the header pointer and the mesh pointer (geometry function 1, 0x800010 =
+ * 0x101, then the three to 0x804000), and keeps them as aligned triples in
+ * its data and program ROMs rather than in one table. So the table is made
+ * here, one entry per mesh:
+ *
+ * - The meshes lie end to end from polygon word 0. A mesh is 40-byte records
+ *   up to the one whose attribute word (+24) has its low two bits clear, and
+ *   the next mesh starts 3 words before that record ends; 0xFFFFFFFF fill
+ *   ends the run (word 0x3EE7F1, 7097 meshes).
+ * - A triple (tpa, tha, 0x800000 | mesh start) in `scan.sources`, tpa and
+ *   tha under 0x800000, gives a mesh its two pointers. The first one found
+ *   wins: 5860 of the 7097 meshes have one, and the 2166 MAME's attract
+ *   draws all agree with it.
+ * - A mesh with none takes them from the mesh before it, the way the tools
+ *   laid the texture ROM out: its points start where the last one's headers
+ *   end (tha + 4 a header, headers counted to the furthest the mesh's `tho`
+ *   steps reach) and its headers where its own points end (tpa + 2 a vertex).
+ *   That holds for 92% of the pairs both of which have a triple.
+ */
+const MESH_RECORD = 40;
+
+function meshWalk(poly, word) {
+    let o = word * 4, n = 0, points = 0, header = 0, most = 0;
+    while (o + MESH_RECORD <= poly.length) {
+        n++;
+        const attr = poly[o + 24] | (poly[o + 25] << 8) | (poly[o + 26] << 16) | (poly[o + 27] << 24);
+        if ((attr & 3) === 0) return { n, points, headers: most + 1 };
+        points += (attr & 1 ? 4 : 3) * 2;
+        most = Math.max(most, header);
+        header += ((attr >> 12) & 0x1f) << 27 >> 27;
+        o += MESH_RECORD;
+    }
+    return null;
+}
+
+function scanModelTable(rom) {
+    const poly = rom.polygons;
+    const pv = rom.polygonsView;
+    const meshes = [];
+    for (let w = 0; w * 4 + MESH_RECORD <= poly.length;) {
+        if (pv.getUint32(w * 4, true) === 0xffffffff) break;
+        const m = meshWalk(poly, w);
+        if (!m) break;
+        meshes.push({ word: w, ...m });
+        w += 10 * m.n - 3;
+    }
+    const at = new Map(meshes.map((m, i) => [m.word, i]));
+    const found = new Array(meshes.length).fill(null);
+    for (const [region, from, to] of rom.game.modelTable.scan.sources) {
+        const dv = rom[`${region}View`];
+        const end = Math.min(to, dv.byteLength) - 8;
+        for (let o = from; o < end; o += 4) {
+            const c = dv.getUint32(o + 8, true);
+            if ((c & 0xff800000) !== 0x800000) continue;
+            const i = at.get(c & 0x7fffff);
+            if (i === undefined || found[i]) continue;
+            const a = dv.getUint32(o, true), b = dv.getUint32(o + 4, true);
+            if (a < 0x800000 && b < 0x800000) found[i] = { uvPtr: a, matPtr: b, meshPtr: c };
+        }
+    }
+    rom.modelMeshes = meshes;
+    return chainModelTable(meshes, found);
+}
+
+function chainModelTable(meshes, found) {
+    const out = meshes.map((m, i) => found[i]);
+    for (let i = 0; i < out.length; i++) {
+        if (out[i]) continue;
+        const prev = out[i - 1];
+        const meshPtr = 0x800000 | meshes[i].word;
+        if (prev) {
+            const uvPtr = prev.matPtr + 4 * meshes[i - 1].headers;
+            out[i] = { uvPtr, matPtr: uvPtr + meshes[i].points, meshPtr, chained: true };
+        } else {
+            out[i] = { uvPtr: 0, matPtr: 0, meshPtr, chained: true };
+        }
+    }
+    return out;
+}
+
+/*
+ * Triples the program sends as immediates rather than keeps in a table (the
+ * field code's, js/von.js) put right the entries that were only chained,
+ * and the chain after them is run again. Call it before any model of the
+ * set is decoded.
+ */
+export function addModelTriples(rom, triples) {
+    const entries = (rom.modelEntries ??= scanModelTable(rom));
+    const at = new Map(rom.modelMeshes.map((m, i) => [0x800000 | m.word, i]));
+    const found = entries.map((e) => (e.chained ? null : e));
+    let changed = false;
+    for (const [uvPtr, matPtr, meshPtr] of triples) {
+        const i = at.get(meshPtr);
+        if (i === undefined || found[i]) continue;
+        found[i] = { uvPtr, matPtr, meshPtr };
+        changed = true;
+    }
+    if (changed) rom.modelEntries = chainModelTable(rom.modelMeshes, found);
+    return changed;
 }
 
 /**
@@ -289,6 +407,11 @@ export function facePalette(rom) {
     rom.facePalettes ??= new Map();
     if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
 
+    if (p?.layout === 'dynamcop') {
+        const out = dynamcopPalette(rom, set);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
     const out = new Int32Array(1024).fill(-1);
     if (!p) {
         /* Sega Rally keeps its table in the program ROM (0x267B0 copies it). */
@@ -297,13 +420,39 @@ export function facePalette(rom) {
          * at whatever the boot clear put there, so the entries past the count
          * are left as no colour rather than read out of the next table along. */
         const n = Math.min(rom.game.paletteCount ?? 1024, 1024);
-        for (let i = 0; i < n; i++) {
+        /* Power Sled keeps {count, colours} in its program ROM instead
+         * (`paletteProgram`; the upload at 0xF1B0). */
+        const at = rom.game.paletteProgram;
+        if (at !== undefined) {
+            const cv = rom.mainCpuView;
+            const count = Math.min(cv.getUint16(at, true), 1024);
+            for (let i = 0; i < count; i++) out[i] = cv.getUint16(at + 2 + i * 2, true);
+        }
+        for (let i = 0; at === undefined && i < n; i++) {
             const o = rom.game.paletteOffset + i * 2;
             if (o + 2 > md.length) break;
             out[i] = md[o] | (md[o + 1] << 8);
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
+    } else if (p.blocks) {
+        /* Air Walkers: a block is {first, count, colours} (0x16370), laid
+         * over the boot's table, which is {count, colours} from 0 (0x16200). */
+        const cv = rom.mainCpuView;
+        const len = rom.maincpu.length;
+        const block = (first, count, at) => {
+            for (let i = 0; i < count && first + i < 1024 && at + i * 2 + 2 <= len; i++) {
+                out[first + i] = cv.getUint16(at + i * 2, true);
+            }
+        };
+        block(0, cv.getUint16(p.base, true), p.base + 2);
+        const lay = (t) => {
+            if (t && t + 4 <= len) block(cv.getUint16(t, true), cv.getUint16(t + 2, true), t + 4);
+        };
+        /* The intro and the title lay only the first block (0x256A0); a
+         * court's set-up lays the rest, then the team's. */
+        for (const t of set === p.titleSet ? p.blocks.slice(0, 1) : p.blocks) lay(t);
+        if (set >= 0 && set < p.sets) lay(cv.getUint32(p.tables + set * 4, true));
     } else {
         const cv = rom.mainCpuView;
         const table = (s, first) => {
@@ -330,6 +479,17 @@ export function facePalette(rom) {
             for (let i = 0; i < count && i < 1024; i++) out[1023 - i] = cv.getUint16(p.top + 2 + i * 2, true);
         }
         for (const [index, color] of p.fixed ?? []) out[index] = color;
+        /* Entries the game animates a frame at a time, from records of a
+         * shift, a mask and a pointer to the colours (Virtual On's 0x29B20:
+         * entry first + k is ptr[frame & mask]). A still takes frame 0. */
+        if (p.cycles) {
+            const { table, first, count } = p.cycles;
+            const dv = rom.mainDataView;
+            for (let k = 0; k < count; k++) {
+                const ptr = dv.getUint32(table + k * 8 + 4, true) - MAIN_DATA_BASE;
+                if (ptr >= 0 && ptr + 2 <= rom.mainData.length) out[first + k] = dv.getUint16(ptr, true);
+            }
+        }
     }
     rom.facePalettes.set(set, out);
     return out;

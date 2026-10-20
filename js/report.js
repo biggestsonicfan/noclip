@@ -81,7 +81,8 @@ export function collectDiagnostics(state) {
         d.build.id = rom.game.id;
         d.build.name = rom.game.name;
         d.build.variants = (rom.variants ?? []).map((v) => v.id).join(', ');
-        d.build.modelTable = `${rom.game.modelTable.count} entries at 0x${rom.game.modelTable.offset.toString(16)}`;
+        const mt = rom.game.modelTable;
+        d.build.modelTable = `${mt.count} entries ${mt.scan ? 'found by scanning the ROMs' : `at 0x${mt.offset.toString(16)}`}`;
         d.romset.warnings = rom.warnings ?? [];
     }
     d.romset.files = (state?.romFiles ?? []).map((f) => `${f.name} (${f.size.toLocaleString()} bytes)`);
