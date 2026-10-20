@@ -4630,6 +4630,10 @@ const vonj = {
         materials: { at: 0x293b0, count: 32 },
     },
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
+    /* The robots: ten pointers to their records (`ld 0x19360[g3*4]`), the
+     * lists of parts and the motion pairs in each (js/von.js readVonBodies).
+     * The last, Zig-Raht, is drawn by another routine and is left out. */
+    rig: { kind: 'von', robots: 0x19360, count: 10 },
     /*
      * The Model 2B's sound board, with two 4 MB sample chips (von.zip's). The
      * sound test's list is 0xEFF62: 35 records of 0x22 bytes, the song number,
@@ -4653,7 +4657,7 @@ const vonj = {
     stageTable: { von: true, flat: true },
     scenes: null,
     cells: vonCells({ robots: 0x20b50, select: 0x211b0, shuffled: [0x1bb50, 0x1bb70], site: '' }),
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* The US build (`vonu`, von.zip's vo-prog0.usa and vo-prog1.usa, which MAME
@@ -4679,6 +4683,8 @@ const vonu = {
     texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+    /* The robot records sit 0xF0 lower, and their table with them. */
+    rig: { ...vonj.rig, robots: 0x19270 },
     sound: { ...vonj.sound, music: { ...vonj.sound.music, list: { ...vonj.sound.music.list, at: 0xf0ba2 } } },
     /* The same tables, found by their bytes; the colour tables sit 0xF0
      * lower, the robot and select tables 0xA40 higher. The maps are data. */

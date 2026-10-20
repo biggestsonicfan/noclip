@@ -745,7 +745,7 @@ MAME's `vonj.zip` holds only the program pair, so drop it with the parent
 `von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
 `vonu` by itself. The export `von` and the relay build `vonr` have programs
 of their own that were not to hand, so they are not detected yet. The
-Stages, Models and Cells tabs work, and the music; there are no fighters.
+Stages, Models, Animation and Cells tabs work, and the music.
 
 The game has no model table of its own: every piece is a triple of pointers
 built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
@@ -769,7 +769,19 @@ What is still missing:
   drawn by code that follows the camera, which the explorer does not run.
 - The Virtuaroids are in the Models tab as parts, in their base colours: the
   colours each one wears are set when a player picks it, and the tab picks
-  none. They are not posed.
+  none. The Animation tab wears player one's.
+
+The **Animation** tab has nine of the ten Virtuaroids, from Temjin to
+Jaguarandi, each built from its own record's lists of parts: the legs, the
+upper body and the weapon in its hand, in player one's colours. Each plays the
+motions its record lists, 89 to 97 of them. A motion is a pair, one for the
+upper body and one for the legs, and the game gives them numbers, not names.
+The pose matches the matrices MAME's board draws Temjin with in the attract
+mode. Not shown yet: Zig-Raht, the boss, which another routine draws; the
+motions the robots' action code keeps in tables of its own (the ranking
+screen's pose among them); and the turns the fight gives the upper body and
+the weapon as a robot aims. See
+[TECHNICAL.md](TECHNICAL.md#virtual-ons-robots-readvonbodies-in-jsvonjs).
 
 The **Cells** tab has the 2D art, 119 pictures: the title logos, the SEGA
 mark and the FBI notice, the robots' portraits and name plates, the stage

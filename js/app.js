@@ -15,7 +15,7 @@ import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
-import { readVonStages } from './von.js';
+import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -3324,6 +3324,8 @@ const BODY_RIGS = {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
+    /* Virtual-On's robots: two part lists and pairs of records (js/von.js). */
+    von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },
 };
 
 function bodyRig() {
@@ -3461,6 +3463,8 @@ function rebuildBody({ keepCamera = true } = {}) {
 /* Whose colour rows a body is shaded with: a fighter's record's, so player
  * 2's look is its own number, whoever else wears the part. */
 function colourFighter(body) {
+    /* A Virtual-On robot names its own rows (SetRoboRamp's). */
+    if (body.colours) return body.colours;
     const first = bodySceneModel(body);
     return body.texSet !== undefined ? body.index : first == null ? null : modelFighter(first);
 }
@@ -4918,7 +4922,9 @@ function renderBodyMotionPanel() {
 
     const d = m.decoded;
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
-    const size = !d ? '' : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
+    /* A Virtual-On motion is two records, the upper body's and the legs'. */
+    const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
+        : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
         : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
@@ -5946,7 +5952,7 @@ function applyGameFeatures() {
     const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
-    $('#char-travel-field').hidden = !bodies || solved;
+    $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
@@ -5957,12 +5963,12 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, and Dynamite Cop's, name the game's own
-     * addresses; the plain bodies note is The House of the Dead's. */
+    /* The solved rigs' notes, Dynamite Cop's and Virtual-On's name the
+     * game's own addresses; the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : kind === 'dynamcop' ? 'dynamcop' : null;
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : ['dynamcop', 'von'].includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', 'dynamcop']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'von']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song
@@ -6050,6 +6056,8 @@ function loadGameContent() {
     if (on.anim && state.rom.game.rig) {
         state.bodies = bodyRig().read(state.rom);
         state.motion.list = bodyRig().motions(state.rom, state.bodies);
+        /* Virtual-On's robots put right model entries too (js/von.js). */
+        if (state.rom.game.rig.kind === 'von') state.modelCache.clear();
     }
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
