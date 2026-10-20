@@ -15,6 +15,7 @@ import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
+import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages } from './von.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -3324,6 +3325,8 @@ const BODY_RIGS = {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
+    /* Sega Rally's people: every part placed from the figure, a frame baked. */
+    srallyc: { read: readRallyFigures, motions: readRallyMotions, list: rallyMotionList, pose: poseRallyFigure },
 };
 
 function bodyRig() {
@@ -4919,7 +4922,7 @@ function renderBodyMotionPanel() {
     const d = m.decoded;
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
     const size = !d ? '' : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
-        : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
+        : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
@@ -5957,12 +5960,13 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    /* The solved rigs' notes, and Dynamite Cop's, name the game's own
-     * addresses; the plain bodies note is The House of the Dead's. */
+    /* The solved rigs' notes, and Dynamite Cop's and Sega Rally's, name the
+     * game's own addresses; the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : kind === 'dynamcop' ? 'dynamcop' : null;
+    const note = solved ? state.rom.game.rig.note ?? 'vf2'
+        : kind === 'dynamcop' || kind === 'srallyc' ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', 'dynamcop']) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'dynamcop', 'srallyc']) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none (Air Walkers,
      * Power Sled) at the foot of the model panel, where it plays the song

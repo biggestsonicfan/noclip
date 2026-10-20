@@ -14,7 +14,7 @@ trackside objects in all eight of the builds it shipped as — see
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
-courses, its models and its cells — see [Sega Rally Championship](#sega-rally-championship).
+courses, its models, its cells and the spectators' animations — see [Sega Rally Championship](#sega-rally-championship).
 *Cyber Troopers Virtual-On* has its models, its cells and its ten stages, some
 of them only in part — see [Virtual-On](#virtual-on).
 *Dynamite Cop* has its models, the rooms
@@ -693,7 +693,7 @@ and colours, so each cell opens on a CG of its own with the same number (see
 
 ## Sega Rally Championship
 
-`srallyc.zip` (Revision C, Model 2A) loads with the Stages, Models and Cells tabs.
+`srallyc.zip` (Revision C, Model 2A) loads with the Stages, Models, Animation and Cells tabs.
 It is on the same board as Virtua Cop and Dead or Alive's 2A builds, and the
 program is built the way Daytona USA's is: the sheets are raw in the data ROM,
 there is no depth buffer, and a course's models are already in world space.
@@ -715,6 +715,17 @@ game draws them from. Lakeside is the fourth record, which the attract mode
 does not show; its bank and its autumn trees say it is the secret course. The
 segments drawn are the near ones; the low-detail copy the game draws further
 off is listed in the stage's details.
+
+The **Animation** tab has the people who stand by the course and cheer: three
+figures, a fist pump (5 parts), an overhead clap (8) and a jump with both arms
+up (12). Each part is a flat cut-out model of its own, a head, a forearm, a
+leg, and each figure has one motion of 30 frames, which the game plays
+forward and back, so the tab's motion is 59 frames. The names are the
+explorer's; the game has none. Which figure a spectator is depends on the
+cabinet's OPERATION DAYS count, so it changes every thirty days the cabinet
+is switched on. The cars have no Animation entry: their wheels are steered,
+spun and sprung by code each frame, with no motion data to read. See [Sega
+Rally's people](TECHNICAL.md#sega-rally-championships-people-jssrallyjs).
 
 Not read yet: the low-detail copy as a view of its own, the trackside objects
 and the cars' places on the grid, and the ground beyond the course, which the
