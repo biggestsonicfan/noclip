@@ -535,3 +535,55 @@ export function dynamcopHands(rom, body, motion, frame) {
     }
     return out;
 }
+
+/*
+ * The shadow under each character (sub_197E0 at 0x19B70, past the parts):
+ * unless the object's +0x54 has bit 5, the draw multiplies by the matrix at
+ * 0x54ECF0 and then, for each joint in the list at `rig.shadows.joints`
+ * (`count` long: 1, 3, 4, 6, 7, 9, 10, 11, 13 and 14), pushes the joint's
+ * matrix and draws `table[joint]`, where
+ *
+ *   t = rig.shadows.tables[char]           (char = +0xDC)
+ *   table = t[+0xBC] if +0xBC <= 5, else t[0]
+ *
+ * +0xBC is a hero's player number, or an enemy's spawn record's +0x18; it
+ * only picks which of six copies of the pieces (each its own textures) is
+ * drawn. The matrix at 0x54ECF0 is built once, from two constant angles
+ * (sub_A6850, then sub_A68D0): it zeroes world y, so each piece is its
+ * joint laid flat on the floor, the light straight down.
+ */
+function shadowTable(rom, body, variant) {
+    const S = rom.game.rig.shadows;
+    const dv = rom.mainCpuView;
+    const inRom = (a) => a > 0 && a + 4 <= rom.maincpu.length;
+    const at = S.tables + body.index * 4;
+    const group = inRom(at) ? dv.getUint32(at, true) : 0;
+    const pick = group + (variant <= 5 ? variant : 0) * 4;
+    const table = inRom(pick) ? dv.getUint32(pick, true) : 0;
+    return inRom(table + 15 * 4) ? table : 0;
+}
+
+/**
+ * The shadow pieces a Dynamite Cop body draws.
+ *
+ * @param {object} rom loaded ROM set
+ * @param {object} body from readDynamcopBodies
+ * @param {number} [variant] the object's +0xBC (0: player 1's)
+ * @returns {[number, number][]} [joint, model] for each piece
+ */
+export function dynamcopShadows(rom, body, variant = 0) {
+    const S = rom.game.rig.shadows;
+    if (!S || !body) return [];
+    const table = shadowTable(rom, body, variant);
+    if (!table) return [];
+    const dv = rom.mainCpuView;
+    const count = dv.getUint32(S.count, true);
+    const out = [];
+    for (let i = 0; i < Math.min(count, 16); i++) {
+        const joint = dv.getUint32(S.joints + i * 4, true);
+        if (joint >= 16) continue;
+        const model = dv.getUint32(table + joint * 4, true);
+        if (model) out.push([joint, model]);
+    }
+    return out;
+}

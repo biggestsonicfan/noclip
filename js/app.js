@@ -14,7 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages, readDynamcopBodies, dynamcopHands } from './dynamcop.js';
+import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
@@ -4238,6 +4238,31 @@ function placeShadows(holder, body, pose, motion, frame) {
 }
 
 /*
+ * Dynamite Cop's shadows (js/dynamcop.js dynamcopShadows): a piece on ten of
+ * the joints, each the joint's matrix with world y zeroed, as the board's
+ * 0x54ECF0 makes it. `matrices` are the viewer's, whose y is the board's.
+ */
+const DYNAMCOP_SHADOW_POOL = 16;
+
+function placeDynamcopShadows(holder, body, matrices) {
+    if (state.rom.game.rig?.kind !== 'dynamcop') return;
+    if (holder.dcShadow?.rom !== state.rom) holder.dcShadow = { rom: state.rom, geoms: new Map() };
+    const { geoms } = holder.dcShadow;
+    const draws = [];
+    for (const [joint, model] of dynamcopShadows(state.rom, body)) {
+        if (!geoms.has(model)) {
+            const d = getModel(model);
+            geoms.set(model, d ? geomBundle(d) : null);
+        }
+        const e = matrices[joint];
+        if (!geoms.get(model) || !e) continue;
+        draws.push({ model, r: [e[0], 0, -e[2], e[4], 0, -e[6], -e[8], 0, e[10]], t: [e[12], 0, -e[14]] });
+    }
+    const usable = new Map([...geoms].filter(([, g]) => g));
+    placeEffectPool(holder, 'dcShadowPool', DYNAMCOP_SHADOW_POOL, usable, draws);
+}
+
+/*
  * Fighting Vipers' shadows on Bay Side's walls (js/fvwallshadow.js), on the
  * fighter and on the opponent, each from the motion it plays: lit from the
  * explorer camera's yaw, as the board lights them from the fight camera's.
@@ -4473,6 +4498,7 @@ function poseBodyRig() {
     placeBursts(m, pose.pose, m.decoded, m.frame);
     placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2', null, m.flash);
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
+    placeDynamcopShadows(m, body, matrices);
     placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeReflection(m, body, pose.pose);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
