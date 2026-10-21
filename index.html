@@ -498,6 +498,14 @@
         <label class="axis grow"><input type="range" id="motion-frame" min="1" max="1" step="1">
           <span id="motion-frame-val" class="axis-val">—</span></label>
       </div>
+      <div class="field" id="head-field" hidden>
+        <label data-i18n="f.head">Head turn</label>
+        <label class="axis" title="The turn: the bearing of what the player watches, from his facing (+0xC6), held to ±67.5°" data-i18n-title="head.turn"><input type="range" id="head-turn" min="-12288" max="12288" step="256" value="0">
+          <span id="head-turn-val" class="axis-val">0.0°</span></label>
+        <label class="axis" title="Its tilt (+0xC8), held to ±22.5°" data-i18n-title="head.tilt"><input type="range" id="head-tilt" min="-4096" max="4096" step="128" value="0">
+          <span id="head-tilt-val" class="axis-val">0.0°</span></label>
+        <div class="meta" id="head-note"></div>
+      </div>
       <div class="field" id="string-field" hidden>
         <label data-i18n="f.string">String &mdash; moves one after another</label>
         <div id="string-chain" class="chain"></div>
@@ -626,7 +634,10 @@
         for them. Each motion picks the hands the player holds (its record
         at <code>0xF2C60</code>); <em>mirrored</em> plays it the other way
         round, as the game does when a step of a player's move sequence
-        (<code>0x5A300</code>) has bit 12 or 14 set.
+        (<code>0x5A300</code>) has bit 12 or 14 set. In 58 of the motions
+        the head turns toward the play (<code>0xB1710</code>), up to 67.5°
+        either way and tilted up to 22.5°: <em>Head turn</em> sets that
+        turn.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of

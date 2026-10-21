@@ -893,7 +893,9 @@ RAM holds for the same motion and frame, and each player wears his own skin
 as in MAME. Each motion also picks the hands the player holds, and the
 explorer draws those, as MAME does. **mirrored** plays the motion the other
 way round, as the game plays many of them, the hands swapped with the arms.
-Not shown: the head's turn toward the play. See
+**Head turn** turns the head as the game turns it toward the play, in the
+motions that let it (58 of them, the attract's two most played among them);
+with the turn MAME's frames had, the joints match MAME's head included. See
 [Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
 The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title

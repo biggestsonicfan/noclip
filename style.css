@@ -433,6 +433,7 @@ html.mobile #tools a span { display: none; }
 #tex-luma-row > span:first-child { width: auto; }
 .axis input[type="range"] { flex: 1; accent-color: var(--accent); height: 14px; }
 .axis-val { width: 3em; text-align: right; font-family: ui-monospace, Consolas, monospace; }
+#head-field .axis-val { width: 3.8em; }
 
 #tex-drop {
     display: block; cursor: pointer; padding: 5px 8px; font-size: 11.5px;

@@ -280,7 +280,19 @@ function playerMachine(rom) {
  * The model offset 0x5215F0 is 0, the near models: 0x23600 sets it to -1, the
  * model before each in the table, when the camera is 35 units off or more.
  */
-export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false } = {}) {
+/* The turn and tilt 0xB1710 leaves for a bearing and tilt (0x10000 a
+ * turn): a bearing past ±0x3000 is held there, with the head level; inside
+ * it the tilt is held to ±0x1000. */
+export function airwlkrsHeadTurn(bearing, tilt) {
+    const b = ((bearing % 0x10000) + 0x10000) % 0x10000;
+    if (b > 0x3000 && b <= 0x8000) return [0x3000, 0];
+    if (b > 0x8000 && b < 0xd000) return [-0x3000, 0];
+    const r = ((tilt % 0x10000) + 0x10000) % 0x10000;
+    const pitch = r > 0x1000 && r <= 0x8000 ? 0x1000 : r > 0x8000 && r < 0xf000 ? -0x1000 : (r << 16) >> 16;
+    return [(b << 16) >> 16, pitch];
+}
+
+export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false, head = null } = {}) {
     const R = rom.game.rig;
     const M = playerMachine(rom);
     const obj = R.object - RAM_BASE;
@@ -297,6 +309,19 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrore
         const at = R.motions.records + motion.index * 12;
         M.ram[obj + 0x11e] = rom.maincpu[at + (mirrored ? 5 : 4)];
         M.ram[obj + 0x11f] = rom.maincpu[at + (mirrored ? 4 : 5)];
+        /* The record's flags (byte 3) go to `+0x11D` too; bit 5 lets the head
+         * turn. */
+        M.ram[obj + 0x11d] = rom.maincpu[at + 3];
+    }
+    /* The head's turn toward the play: 0x21A70 turns the head's joint by
+     * `+0xC8`, `+0xC6` and `+0xC4` when `+0x11D` bit 5 is set, which 0xB1710
+     * fills each frame of play: the watched point's bearing from his facing
+     * (`+0x338`) in `+0xC6`, held to ±0x3000, and the head's tilt in `+0xC8`,
+     * held to ±0x1000 (and 0 once the bearing is held); `+0xC4` stays 0. */
+    if (head) {
+        const [yaw, pitch] = airwlkrsHeadTurn(head[0], head[1]);
+        M.rv.setInt16(obj + 0xc6, yaw, true);
+        M.rv.setInt16(obj + 0xc8, pitch, true);
     }
     /* Whoever starts a motion says whether it plays mirrored: in a game,
      * 0x66FA0 takes a player's next step from its move sequence (six
