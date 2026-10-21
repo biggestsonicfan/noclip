@@ -5049,8 +5049,11 @@ body and the legs. A list entry is 8 bytes:
 A variant is 16 bytes: the texture point pointer, the header pointer, a
 second header (used when the object's +0x1AA is set) and the mesh word.
 Which variant is a halfword of the object per part (from +0xDA for the legs,
-from +0xB6 for the upper body, +0xB2 for the weapon); the explorer draws
-variant 0. The triples go into the model table through `addModelTriples`,
+from +0xB6 for the upper body, +0xB2 for the weapon). The explorer draws
+variant 0, except in a win or a loss (below), which step it. Variant 0 of
+some parts has mesh 0, which is not drawn. Temjin's upper body part 6 has
+62 variants that its win and loss step through, 61 down toward 2, one a
+frame. The triples go into the model table through `addModelTriples`,
 as the field code's do. Slot 0 is the waist, the legs list's last entry.
 Slot 1 is the hand the weapon list's entry 1 is drawn in. Zig-Raht's record
 has no weapons or upper body, and one list of 25 parts with 32-byte
@@ -5077,9 +5080,64 @@ none, so a motion is called by its pair's number.
 
 These are not all of a robot's motions. The robots' action code keeps more
 pairs in tables of its own, between 0x42460 and 0x4FFFF (865 different
-pairs, Temjin's ranking-screen pose among them at 0x46950). Telling which
-robot plays them means following each robot's action routines, so they
-are not listed.
+pairs; the one Temjin is on at the attract's frame 2400 is at 0x46950, an
+action indexed by the object's +0x188). Telling which robot plays them
+means following each robot's action routines, so they are not listed, but
+for the wins and losses.
+
+**Wins and losses.** The object's +0x172 is its action, dispatched at
+0x33B0C through the table at 0x32560 (16 bytes an action). Action 41 is the
+loss (0x324E0, set at 0x33944 when the object's +0x1D0, its health, is 0 or
+less) and calls the record's +0x440; action 42 is the win (0x32540) and
+calls +0x43C. These robot routines run on the object's frame counter +0x17A:
+they pick pairs from tables of their own, write the record pointers and
+frames to 0x51AB08-0x51AB12 (the legs and upper body, as the draw reads
+them), and step the part variants. The draw (0x33C40) then calls the
+record's +0x434, which steps more variants. A win picks one of two runs on
+its first frame by the game's random draw (`bal 0xF5058`, `& 1`, kept in
++0x17E; `vonu`'s draw is 0xF5C98). Some routines pose parts only while the
+scene, 0x503A00, is 12, the scene a played fight shows them in (the
+attract's is 7, the KO's 10, 11, 20 and 21).
+
+`runVonAction` runs them in `js/i960.js`: the object at 0x503AD0 (player 1)
+with the record at +0x6C and 0x51AB14, the action at +0x172, the scene 12,
+and the random draw hooked to answer 0 or 1. Each frame it sets the game
+frame (0x5024E8), calls the routine and +0x434, and keeps the pair, both
+frames and every part's variant. A run lasts its first legs record's frame
+count. The Animation tab lists them after a robot's pairs as `win 1`,
+`win 2` and `loss`, and the frame slider steps the run: each frame draws
+its own pair at its own frames and each part's variant. Some robots share
+code: Jaguarandi's win and loss are Raiden's pairs, and Apharmd's loss is
+Temjin's. The hook needed `js/i960.js` to answer a `bal` as it does a
+`call`; the stages and motions read for Dead or Alive, Air Walkers and
+Dynamite Cop are the same with it.
+
+Checked against MAME: a played run (inputs from a seeded random pad, 16000
+frames) logged, each frame, the object's action, 0x51AB08-0x51AB12, the
+variant halfwords and the mesh each part's draw sent (read at 0x8E28C, the
+upper body, 0x8DF3C, the legs, and 0x34230/0x3428C, the weapon). It showed
+Temjin's two wins and loss, Viper II's and Dorkas's losses and Belgdor's
+first win. On the 1001 frames in scene 12 the explorer's pair and both
+frames match on every one (1623 of 1623 over all scenes). The parts the
+runs move off variant 0 match on every frame of the wins (Temjin 906 of 906
+and 42 of 42, Belgdor 324 of 324) and on all but the first frame of each
+loss in scene 12 (Temjin 244 of 246 and 360 of 360, Viper II 64 of 66). The
+mesh each part's draw sent is the variant record's at MAME's variant 18310
+times of 18318. The attract's loss of Bal-Bas-Bow (frames 6628-6688) is on
+the explorer's pair.
+
+What is left out:
+
+- a loss in a fight starts in the KO scenes and reaches scene 12 some 72
+  frames in, so the parts posed only in 12 start late there; the explorer
+  runs the whole loss in scene 12;
+- what the fight leaves behind: the boosters' flicker (upper body parts 2-5)
+  and parts closed by fight states;
+- the loser's parts knocked off at random every 8 frames (`19A = rand %
+  count` at 0x3251C, variant 1, the debris drawn at 0x34F8C); these are the
+  8 meshes and 4 variants that miss;
+- Viper II's thrusters in its win, which its routine draws itself
+  (0x6ECE0).
 
 **The pose.** Every part is drawn at `T(offset) Rz Ry Rx` of its frame
 entry (copro 0x2F, then 0x16, 0x15, 0x14), each in a push and pop:
@@ -5110,8 +5168,8 @@ geometrizer list for each object (`:bufferram` at the list address) and
 the pair and frame from 0x51AB08-0x51AB12. In the attract fight at frame
 1800 Temjin is on pair 0 with the counter at 16: with the record's entry 17
 every leg and upper body part matches to 5e-5, and the weapon's offset
-exactly (its turn differs by the aim). At frame 2400 (the ranking screen,
-the pose at 0x46950) the legs match to 1e-4, and the upper body, drawn a
+exactly (its turn differs by the aim). At frame 2400 (the pair at
+0x46950) the legs match to 1e-4, and the upper body, drawn a
 frame earlier, matches part to part to 3e-4. So the counter is one behind
 the entry drawn; the tab's frame 1 is entry 0.
 

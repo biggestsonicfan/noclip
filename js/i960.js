@@ -155,8 +155,8 @@ export class I960 {
         this.cc = 0;
         this.ip = 0;
         this.frames = [];
-        /* Addresses a call is answered at by a function instead of the ROM:
-         * fn(cpu) runs in place of the routine and the call returns at once. */
+        /* Addresses a call (or a bal) is answered at by a function instead of
+         * the ROM: fn(cpu) runs in place of the routine and it returns at once. */
         this.hooks = new Map();
         this.steps = 0;
     }
@@ -227,7 +227,12 @@ export class I960 {
         if (op === 0x08) this.ip = to;
         else if (op === 0x09) this.doCall(to);
         else if (op === 0x0a) this.doRet();
-        else if (op === 0x0b) { this.r[30] = this.ip; this.ip = to; }
+        else if (op === 0x0b) {
+            /* A hook answers a bal as it does a call. */
+            const hook = this.hooks.get(to);
+            if (hook) hook(this);
+            else { this.r[30] = this.ip; this.ip = to; }
+        }
         else if (op >= 0x10 && op <= 0x17) { if (taken(this.cc, op & 7)) this.ip = to; }
         /* The faults are checks the game never fails here. */
         else if (op < 0x18 || op > 0x1f) this.unknown(ip, w);
