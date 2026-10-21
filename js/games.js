@@ -2904,7 +2904,10 @@ function daytonaBuild(spec) {
         /* The music, off until switched on — see DAYTONA_SOUND. */
         sound: spec.sound === undefined ? DAYTONA_SOUND : spec.sound,
         /* Stages, but no rig: this game has no motion tables of any kind. */
-        features: { stages: true, characters: false, motions: false, bodies: false, cells: Boolean(spec.cells) },
+        /* The player's car and the attract mode's recorded runs, for a build
+         * whose addresses were found (js/daytonacar.js). */
+        rig: spec.car ? { kind: 'daytona', ...spec.car } : null,
+        features: { stages: true, characters: false, motions: Boolean(spec.car), bodies: Boolean(spec.car), cells: Boolean(spec.cells) },
     };
 }
 
@@ -3181,6 +3184,22 @@ const daytona93 = daytonaBuild({
     },
 });
 
+/*
+ * The player's car as the linked attract draws it (js/daytonacar.js), Revision
+ * A's addresses. `car`: the body tables 0x7D38 and 0xD104 read by 0x501488
+ * (`bodies`, `seconds`), the number plates by cabinet (`plates`), the glass
+ * and shadow models, the wheels' model list and places (0x7DA4). `runs`: the
+ * "D.K." header in the data ROM, then the tables 0xD3E4 reads by course
+ * (`course`, `height`, `lift`) and by the car's place (`lengths`), and the
+ * two runs 0xD2D4 steers cars 0 and 1 by. The turbo, Maxx and GTX programs
+ * have every one at the same address.
+ */
+const DAYTONA_COURSE_NAMES = ['Three-Seven Speedway', 'Seaside Street Galaxy', 'Dinosaur Canyon'];
+const DAYTONA_CAR_A = {
+    car: { bodies: 0x281e390, seconds: 0x281e39c, plates: 0x281e3b4, glass: 0x284a2d0, shadow: 0x2843980, wheels: 0x230496, places: 0x230d54 },
+    runs: { at: 0x2880000, first: 34, course: 0x231b34, lengths: 0x231b44, height: 0x231c44, lift: 0x231c54, steer: [46, 47], courses: DAYTONA_COURSE_NAMES },
+};
+
 /* What the Revision A program and every build made from it share: the data
  * ROM pair the tables sit in, and the tables. A build lists what it changes. */
 const DAYTONA_REV_A = {
@@ -3212,6 +3231,7 @@ const DAYTONA_REV_A = {
 
 const daytona = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: DAYTONA_CAR_A,
     id: 'daytona',
     name: 'Daytona USA (Revision A)',
     program: [0x00000, 'epr-16722a.12', 0x48b94318, 'epr-16723a.13', 0x8af8b32d],
@@ -3219,6 +3239,10 @@ const daytona = daytonaBuild({
 
 const daytonase = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: {
+        car: { ...DAYTONA_CAR_A.car, bodies: 0x2818664, seconds: 0x2818670, plates: 0x2818688, wheels: 0x231136, places: 0x231a40 },
+        runs: { ...DAYTONA_CAR_A.runs, course: 0x232800, lengths: 0x232810, height: 0x232910, lift: 0x232920 },
+    },
     id: 'daytonase',
     name: 'Daytona USA Special Edition (Revision A)',
     program: [0x00000, 'epr-17369a.12', 0x3bc6ca62, 'epr-17370a.13', 0x5d1c74e4],
@@ -3237,6 +3261,10 @@ const daytonase = daytonaBuild({
 
 const daytonas = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: {
+        car: { ...DAYTONA_CAR_A.car, bodies: 0x2818664, seconds: 0x2818670, plates: 0x2818688, wheels: 0x231646, places: 0x231f50 },
+        runs: { ...DAYTONA_CAR_A.runs, at: 0x2886000, course: 0x232d10, lengths: 0x232d20, height: 0x232e20, lift: 0x232e30 },
+    },
     id: 'daytonas',
     name: 'Daytona USA (with Saturn advertisements)',
     program: [0x00000, 'epr-17965.ic12', 0xf022b3da, 'epr-17966.ic13', 0xf9e4ece5],
@@ -3268,6 +3296,7 @@ const daytonas = daytonaBuild({
 
 const daytonat = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: DAYTONA_CAR_A,
     id: 'daytonat',
     name: 'Daytona USA (Turbo hack, set 1)',
     program: [0x00000, 'turbo1.12', 0x4b41a341, 'turbo2.13', 0x6ca580fa],
@@ -3275,6 +3304,7 @@ const daytonat = daytonaBuild({
 
 const daytonata = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: DAYTONA_CAR_A,
     id: 'daytonata',
     name: 'Daytona USA (Turbo hack, set 2)',
     program: [0x00000, 'dayturbo.12', 0xaec6857a, 'dayturbo.13', 0xcb657edc],
@@ -3282,6 +3312,7 @@ const daytonata = daytonaBuild({
 
 const daytonam = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: DAYTONA_CAR_A,
     id: 'daytonam',
     name: 'Daytona USA (To The MAXX)',
     program: [0x00000, 'maxx.12', 0x604ef2d9, 'maxx.13', 0x7d319970],
@@ -3289,6 +3320,7 @@ const daytonam = daytonaBuild({
 
 const daytonagtx = daytonaBuild({
     ...DAYTONA_REV_A,
+    car: DAYTONA_CAR_A,
     id: 'daytonagtx',
     name: 'Daytona USA (GTX 2004 Edition)',
     program: [0x00000, 'gtx.12', 0x08283a6f, 'gtx.13', 0xf9b356ae],

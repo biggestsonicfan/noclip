@@ -10229,6 +10229,94 @@ throws the game's 16-bit random number every frame, which in the page is
 The **stage sounds** switch sends the scene and round codes when a stage opens
 and runs its player at 60 Hz.
 
+### Daytona USA's car on the Animation tab (`js/daytonacar.js`)
+
+The Animation tab's bodies are the player's car: a body, four wheels and a
+shadow, all placed by code from the car's state. Daytona has no motion data
+for them; what plays is the attract runs recorded in the data ROM.
+
+**The runs.** The data ROM's 0x2880000 opens "D.K.", followed by a pointer to
+each run. A run holds 20 bytes a frame: x, y and z as floats, then the pitch,
+heading and roll as halfwords (0x10000 to a turn). A linked cabinet's attract
+gives the player's car the handler 0xD104, which takes the car's models,
+zeroes the clock 0x501AAC and moves on to 0xD1B8. Each frame that handler:
+
+- reads (0xD3E4) the clock's frame of run 34 + n + 0x231B34[course], where
+  n is the car's place in the link (+0x6D, 0x12860) and the course table
+  holds 0, 8 and 4. The car's y is the run's y, stored as the course's height
+  0x231C44 (+0x20) and the run's y plus 0x231C54 (+0x5C); the second course
+  has 5.6 and -5.6 there;
+- turns the wheels (0xD330) by the frame's motion to the next record:
+  |dx| + |dz| times 10000, rounded, held to 0..0xAAA and taken off the spin
+  +0x5A. Car n = 2 instead adds 0x200 a frame from clock 0x8D to 0x19A, so
+  its wheels spin back;
+- steers (0xD2D4): cars 0 and 1 take the front wheels' turn from runs 46 and
+  47, the heading of the clock's frame halved. The others keep their wheels
+  straight;
+- counts the clock up to the run's length 0x231B44[n] (0x11D, 0x1BD, 0x19D,
+  0x27C), where it stays, still reading that frame.
+
+A lone cabinet's attract never plays the runs: its car follows a lane
+(0xD4F0).
+
+**The draw.** With the clock running, 0x7598 goes to 0x78C8. It translates
+to the car, then turns by the roll, heading and pitch (TGP 0x1616, 0x1515,
+0x1414). The body (0x7D38) is three models:
+
+- the car's model +0x14;
+- the glass, model 2139, which the boot builds in polygon RAM;
+- the second model 0x281E39C[0x501488].
+
+With 0x501488 = 2, the car's number plate +0x258 is drawn as well.
+
+The wheels (0x7DA4) first take off the tilt +0x52 and +0x56, which is 0 in
+every run measured. Each wheel is then a push, a translate to its place in
+0x230D54, the steer (front two only), the spin, and its model from the
+unaligned list at 0x230496 (805 left, 806 right). The shadow, model 791,
+comes from the car's x and z at +0x20's height, scaled to 0.01 on Y before
+the same three turns.
+
+**Which body.** 0x501488 is 2 on a linked cabinet (0xEBF0). There +0x258 is
+0x281E3B4 picked by the cabinet's number 0x5FE604 (models 1794 to 1801), so
+the tab lists the linked car once per cabinet. Otherwise 0x501488 is
+0x501464, which 0x25C54 sets; the tab lists both values.
+
+The TGP turns each axis the other way from a right-handed rotation. On the
+board's axes the body is T(x, y, z) · Rz(-roll) · Ry(-heading) · Rx(-pitch),
+and a wheel, against the body, is T(place) · Ry(-steer) · Rx(-spin). In the
+viewer, whose Z is the board's negated, these are Rz(-roll), Ry(heading) and
+Rx(pitch). Without root travel the car stands at the run's start with its
+heading taken off. With it, the car drives the run and the camera follows.
+
+**Graded on MAME.** I graded `daytonaCarPose` against the matrices the TGP
+sends the geometrizer, read with a Lua tap on the shared build. At the first
+frame after 600 where the car's handler +0xC is 0xD770, I set the car's place
++0x6D and the handler to 0xD104, which starts the recorded run. Three runs:
+
+| Run | Course, car | Frames |
+| --- | --- | --- |
+| 34 | Three-Seven Speedway, car 1 | 284 |
+| 36 | Three-Seven Speedway, car 3, the back-spin | 412 |
+| 43 | Seaside Street Galaxy, car 2 | 444 |
+
+On these frames the parts are far from rest: the pitch reaches -70 degrees,
+the steer about ±4000, and the spin wraps through the whole turn many times.
+Results:
+
+- The state the module reads (x, y, z, the three angles, the steer and the
+  spin) is the car's, exact, on every frame.
+- The body's matrix is exact (0.0036 on the second course, at coordinates in
+  the thousands).
+- Each wheel against the body is within 2e-5. The one exception is a frame of
+  run 43 at the spin's ±32768 wrap, at 0.014, from the TGP's sine.
+- The shadow is within 1.6e-4.
+
+Frames after a run's clock stops are left out of the grade. MAME's wheels
+start with whatever spin the attract's previous handler left; the tab starts
+it at 0. The SE and Saturn-ads builds move the tables (`rig` in `js/games.js`),
+and their runs read frame for frame what Revision A's do. The 1993 build has
+no "D.K." runs and no car on the tab.
+
 ### Daytona USA's music: the Model 1 sound board
 
 Daytona runs on the original Model 2, which kept Model 1's sound board rather

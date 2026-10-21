@@ -16,6 +16,7 @@ import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
+import { readDaytonaCars, readDaytonaRuns, daytonaRunList, poseDaytonaCar } from './daytonacar.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
@@ -3391,6 +3392,8 @@ const BODY_RIGS = {
     powsled: { read: readPowsledBodies, motions: readPowsledMotions, list: powsledMotionList, pose: posePowsledBody },
     /* Virtua Cop's enemies and hostages: the enemy's draw run a frame. */
     vcop: { read: readVcopBodies, motions: readVcopMotions, list: vcopMotionList, pose: poseVcopBody },
+    /* Daytona USA's car: a body and four wheels, playing the attract's runs. */
+    daytona: { read: readDaytonaCars, motions: readDaytonaRuns, list: daytonaRunList, pose: poseDaytonaCar },
 };
 
 function bodyRig() {
@@ -6315,10 +6318,10 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers', Power Sled's and Virtua Cop's, name the game's own addresses; the plain
-     * bodies note is The House of the Dead's. */
+     * Air Walkers', Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
