@@ -4313,7 +4313,7 @@ function placeDynamcopHeld(holder, body, matrices, frame) {
 /* The Held list for this character: its own sets first, then every model
  * the program puts in a hand. A new character starts on its own first set. */
 function renderHeld(body) {
-    const shown = state.rom.game.rig?.kind === 'dynamcop' && Boolean(body) && !body.quad;
+    const shown = state.rom.game.rig?.kind === 'dynamcop' && Boolean(body) && !body.quad && !body.chain;
     $('#held-field').hidden = !shown;
     if (!shown) return;
     const { items, own } = dynamcopItems(state.rom);
