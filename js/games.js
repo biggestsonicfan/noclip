@@ -5213,6 +5213,8 @@ const airwlkrs = {
      * five players a team, 34 teams and the three of team 34; the legs'
      * routine and the rest's run on an object at `object` with the pose at
      * `pose`. The read-backs are the feet's, the head's and the hands' ends.
+     * Each motion has a 12-byte record at `motions.records`: the hands it
+     * holds (+4, +5), its flags (+3) and its second-table entry (+8).
      */
     rig: {
         kind: 'airwlkrs',
@@ -5222,7 +5224,7 @@ const airwlkrs = {
         ends: [0x5215e0, 0x521600, 0x521610, 0x521620, 0x521630],
         motions: {
             table: 0x026e3ca0, roots: 0x025bf740, count: 0x286,
-            alternate: 0xf2c68, altTable: 0x02ce9750, altRoots: 0x02ce96c0,
+            records: 0xf2c60, alternate: 0xf2c68, altTable: 0x02ce9750, altRoots: 0x02ce96c0,
         },
     },
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },

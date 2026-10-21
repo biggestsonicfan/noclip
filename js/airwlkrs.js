@@ -287,6 +287,16 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false } = {}) 
     for (const p of body.parts) M.rv.setUint32(obj + p.field, p.model, true);
     for (const at of [0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c]) M.rv.setFloat32(obj + at, 1, true);
     M.rv.setUint32(obj + 0x0c, body.team, true);
+    /* The hands the motion holds: 0x21A70 draws `+0x13C` plus the byte at
+     * `+0x11E` and `+0x130` plus `+0x11F`, which the motion start (0x1F374)
+     * takes from bytes 4 and 5 of the motion's record, `0xF2C60 + 12 * m`
+     * (the other way round when `+0xF4` plays it mirrored). Team 34's
+     * routine adds nothing. */
+    if (motion) {
+        const at = R.motions.records + motion.index * 12;
+        M.ram[obj + 0x11e] = rom.maincpu[at + 4];
+        M.ram[obj + 0x11f] = rom.maincpu[at + 5];
+    }
     M.rv.setInt32(R.modelOffset - RAM_BASE, 0, true);
     const pose = R.pose - RAM_BASE;
     M.ram.fill(0, pose, pose + FRAME_BYTES);

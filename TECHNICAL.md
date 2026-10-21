@@ -5274,9 +5274,20 @@ root travel on. A third table, `ld 0x26F8600[m*4]` (0x2CE97E0 for the second
 pair), goes to `+0x110` with a halfword a frame, 0x8000 at the start when
 there is none; it is not read.
 
+**Hands.** A motion picks the hands. 0x21A70 draws the hand on joint 7 as
+`+0x13C` plus the byte at `+0x11E`, and the one on joint 4 as `+0x130` plus
+`+0x11F`, with no far-model offset; the motion start (0x1F374) fills the two
+bytes from bytes 4 and 5 of the motion's 12-byte record at
+`0xF2C60 + 12 * m` (the same record as the second-table byte at +8 and the
+flags at +3), the other way round when `+0xF4` is 1, which plays the motion
+mirrored (0x1FD10). The offsets are 0 to 5, models after the record's hand:
+384 of the 646 records keep both at 0, 64 take 4 for both (motion 0's
+stance among them). Team 34's routine adds nothing. The explorer sets the two
+bytes from the motion before it runs the draw, so the hands are whatever the
+game's routine draws (`poseAirwlkrs`, `motions.records` in the rig).
+
 **Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
-`+0x11D`), the blend into a new motion, and the hands the game swaps in during
-a play (MAME's log has hands 41 and 47 where the record has 37 and 43).
+`+0x11D`), the blend into a new motion, and the mirrored motions (`+0xF4`).
 
 **Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
 and translates and call 0x1E890, which draws from the model table as it is.
@@ -5302,6 +5313,18 @@ words the explorer's run gives the same distances between those ends to
 y (10.75 at motion 18's first frame), and motion 80 has the 8 frames of its
 second-table entry. The headless page shows 173 bodies and 619 motions with no
 errors; Orlando's #7 (TEDIN, set 9) wears the jersey MAME's screen shows.
+
+The hands, checked the same way: MAME at frames 4980 to 5040 of the attract
+(Orlando at home against Chicago in its away kit, ten players), logging the
+model 0x21A70 passes at its two hand draws (0x21EBC, 0x22144) with the
+object's motion, `+0xF4` and bytes, and at 0x2373C the pose words, the scale
+(`+0x58`, `+0x5C`) and the five read-backs. All 580 hand draws, over 15
+motions, mirrored and not, are the record's hand plus the motion record's
+byte as above. The explorer, on each of the 212 unmirrored draws' player and
+motion, draws the same two hand models as MAME (201 of them not the record's
+own). With MAME's pose words and its scale put on the explorer's read-backs,
+every distance between them agrees to 0.0001, the hands' included, except
+those to the head's on the 258 draws whose head is turned (up to 0.21).
 
 ### Air Walkers' cells (`js/cells.js`)
 
