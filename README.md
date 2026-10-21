@@ -852,12 +852,14 @@ cells](TECHNICAL.md#dynamite-cops-cells-jscellsjs).
 
 The **Animation** tab has 94 of the game's characters (Bruno Delinger, Jean
 Ivy and Eddie Brown first; the rest by number), each put together from its 15
-parts on the game's 16-joint skeleton, and its 2284 motions (2134 play on that
+parts on the game's 16-joint skeleton, and its 2284 motions (2226 play on that
 skeleton; the game gives them numbers, not names). The pose of a frame matches
 the joint positions MAME's RAM holds for the same motion and frame, and the
 heroes' outfits match MAME's screen. The motions are the same in all five
-builds; the character tables were found in each. Not drawn yet: the extra
-models some joints carry (the guns and items in a hand, belts and pads),
+builds; the character tables were found in each. The hands open, close and
+turn frame by frame as the game picks them, matching every hand MAME drew in
+the attract and two played runs. Not drawn yet: the extra models some joints
+carry (the guns and items held, belts and pads),
 mirrored motions and the blend between two motions. Character 80 shows
 nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 

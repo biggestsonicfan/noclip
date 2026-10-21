@@ -14,7 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
+import { readDynamcopStages, readDynamcopBodies, dynamcopHands } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
@@ -3358,7 +3358,8 @@ const BODY_RIGS = {
     /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
     dynamcop: {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
-        pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
+        /* The hands the motion's frame picks (dynamcopHands). */
+        pose: (rom, body, motion, frame, opts) => ({ ...poseBody(body, motion, frame, opts), hands: dynamcopHands(rom, body, motion, frame) }),
     },
     /* Virtual-On's robots: two part lists and pairs of records (js/von.js). */
     von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },

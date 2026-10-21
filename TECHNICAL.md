@@ -4597,7 +4597,10 @@ tables are in the shared upper half of the program, so they are the same in
 all five: 2284 data pointers at 0x15FA00, frame counts at 0x161DB0 and a flag
 byte per motion at 0x164160. Most data is in the extra ROM (0x06xxxxxx), some
 in main data (0x02E...); the 24 pointing at 0x01... are not motions and are
-skipped. 2134 motions are spaced for 16 joints.
+skipped. 2226 motions are spaced for 16 joints: 2134 padded to the next
+motion as HOTD's are, and 92 with hand tables (below) between their frames
+and the next motion, which start right after the last frame or at the next
+16 bytes.
 
 **The frame is reversed.** It has HOTD's size, `((48 * joints + 127) >> 5) *
 4` bytes, but the 16 angle triples come first and the root's x, y, z floats
@@ -4625,10 +4628,34 @@ in the others the right ankle is off by up to 0.03 and two dumps by 0.12 and
 Chrome pictures of Bruno (motion 1255, the throw) and Jean (motion 1970, the
 high kick) match MAME's screen at frames 3300 and 4800, outfits included.
 
+**The hands turn per frame** (`dynamcopHands`). The draw loop at 0x19124
+(in 0x18FC0) draws joint 5 with 0x19580 and joint 8 with 0x192E0 when the
+motion has a table at 0x164A50 + 8 * motion (+4 for joint 8): a halfword per
+frame, indexed by the object's frame from 0 (+0x2C8). Only its top five bits
+are read: n = h >> 11, r = n for joint 8 and 32 - n for joint 5. 0x7F0A0
+looks the part's model up in a list of {base, alt} words ending with -1
+(offsets + 0x5B0: 0xE1E40 in dynamcop, 0xE1E30 in dyndeka2, 0xD0430 in
+dyndeka2b; dynamcopb and dynamcopc by the same distance, their ROMs were not
+at hand). A model not listed is drawn as it is; otherwise r <= 0 or r > 23
+draws alt, r <= 15 alt + r and the rest base. Bruno's hands 18 and 19 turn to
+20 and 36, Jean's 226 and 227 to 228 and 244, Eddie's 355 and 356 to 357 and
+373; the models after alt are the glove opened and flat. 96 motions
+have tables; the 93 that read are shown (2259's points into the program ROM,
+2282 and 2283 hold 0).
+
+Checked against MAME: breakpoints on 0x192E0 and 0x19580 logged the model each
+draw passes on, with the character, motion and frame. In the attract (frames
+100-20000) 2908 of 2908 draws match the model `dynamcopHands` gives (2276 not
+the base model), in two played runs 13416 of 13416 (characters 1, 7-10) and
+242 of 242 (Bruno, motion 1718). The poses of the 10 newly shown motions
+(1948-1956, 1959, 2056) were read from +0x6A4 the same way: pairwise joint
+distances differ by 0.016 at the median (90% under 0.05, on a body 1.3 tall)
+in the 2333 samples where the frame moves; 2056 matches to 0.000. At frame 0
+the game is still blending out of the motion before, which is not drawn.
+
 Not done: the extra models some joints carry (0xED140 / 0xED2C0, on joints 1,
-3, 4, 6, 7, 9-11, 13, 14), the items in a hand chosen per motion
-(0x164A50 / 0x164A54, drawn by 0x19580 and 0x192E0 on joints 5 and 8), the
-mirror flag at object +0xCD8, the blend between motions, and which motions
+3, 4, 6, 7, 9-11, 13, 14), the guns and items held (the hand is drawn, not
+what it holds), the mirror flag at object +0xCD8, the blend between motions, and which motions
 each character plays (lists from 0x1B70A8). Only the three heroes are named.
 Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
 explorer; why was not found.

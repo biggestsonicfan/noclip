@@ -5084,6 +5084,10 @@ function dynamcopBuild({ id, name, low, high }) {
             kind: 'dynamcop',
             bodies: { count: 96, offsets: A.offsets, models: A.models },
             motions: { count: 2284, data: 0x15fa00, frames: 0x161db0, flatAnkles: 0x164160, layout: 'dynamcop' },
+            /* The hands a motion turns (dynamcopHands): two table pointers a
+             * motion at `frames`, in the shared upper half, and the list of
+             * hands that have turned models, 0x5B0 past `offsets`. */
+            hands: { frames: 0x164a50, swaps: A.offsets + 0x5b0 },
         },
         features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
