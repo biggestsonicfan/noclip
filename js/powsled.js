@@ -449,15 +449,15 @@ export function readPowsledStages(rom) {
 }
 
 /*
- * The attract's figures (Animation tab). Each is a table in the data ROM,
+ * The figures (Animation tab). Each is a table in the data ROM,
  * { frame list, parts }, the frame list one data offset a frame, ended by
  * 0xFFFFFFFF; a frame is a 64-byte record a part: the part's tpa, tha and
  * oba, a zero, then at +0x10 nine floats of a 3x3 (columns X, Y, Z) and at
  * +0x34 its place. 0xE1D70 (and 0xE1F30, the same with the ride's colour)
  * draws a frame: per part push, translate (+0x34), times the 3x3 with no
  * translation (copro op 1F), output, draw, pop. So a frame is every part's
- * matrix baked, with no hierarchy; the attract scenes pick the frame from
- * their own counter, such as 0xE45C0's 0..0x17C, then 0x138..0x17C over.
+ * matrix baked, with no hierarchy; the ride scenes (below) pick the frame
+ * from their own clock.
  */
 const tableCache = new WeakMap();
 function figureTables(rom) {
@@ -485,7 +485,21 @@ function partMatrix(dv, at) {
 export function readPowsledBodies(rom) {
     const dv = rom.mainDataView;
     const model = tripleModels(rom);
-    return figureTables(rom).map((t, i) => ({
+    const tables = figureTables(rom);
+    const part = (at, j, index) => {
+        const m = partMatrix(dv, at);
+        return {
+            index,
+            parent: -1,
+            depth: 0,
+            model: model([0, 1, 2].map((w) => dv.getUint32(at + w * 4, true))),
+            offset: [m[9], m[10], -m[11]],
+            flags: 0,
+            joint: index,
+            record: at,
+        };
+    };
+    const figures = tables.map((t, i) => ({
         index: i,
         name: t.name ?? `figure ${i}`,
         joints: t.parts,
@@ -495,26 +509,40 @@ export function readPowsledBodies(rom) {
         hitMotions: [],
         start: i,
         root: t.at,
-        parts: Array.from({ length: t.parts }, (_, j) => {
-            const at = t.frames[0] + j * PART_BYTES;
-            const m = partMatrix(dv, at);
-            return {
-                index: j,
-                parent: -1,
-                depth: 0,
-                model: model([0, 1, 2].map((w) => dv.getUint32(at + w * 4, true))),
-                offset: [m[9], m[10], -m[11]],
-                flags: 0,
-                joint: j,
-                record: at,
-            };
-        }),
+        parts: Array.from({ length: t.parts }, (_, j) => part(t.frames[0] + j * PART_BYTES, j, j)),
     }));
+    /* A ride's scene: its woman's, riders' and crane's parts, then the
+     * crane's colour piece. */
+    const rides = rideScenes(rom).map((r, k) => {
+        const parts = [];
+        for (const g of r.groups) {
+            for (let j = 0; j < g.table.parts; j++) parts.push(part(g.table.frames[0] + j * PART_BYTES, j, parts.length));
+        }
+        const piece = model(PIECES[r.colour]);
+        parts.push({ ...parts[r.groups[2].first + 2], index: parts.length, joint: parts.length, model: piece, record: r.scene });
+        const index = figures.length + k;
+        return {
+            index,
+            name: r.name,
+            ride: r,
+            joints: parts.length,
+            scale: 1,
+            roles: [],
+            skin: -1,
+            hitMotions: [],
+            start: tables.length + k * 2,
+            root: r.scene,
+            parts,
+        };
+    });
+    return figures.concat(rides);
 }
 
-/** One motion a figure: its frames, played one a frame. */
+/** One motion a figure: its frames, played one a frame; then each ride's
+ * two clocks, the wait for the riders and the scene that starts on Entry. */
 export function readPowsledMotions(rom) {
-    return figureTables(rom).map((t, i) => ({
+    const tables = figureTables(rom);
+    const own = tables.map((t, i) => ({
         index: i,
         name: `motion ${i}`,
         address: t.at,
@@ -526,15 +554,44 @@ export function readPowsledMotions(rom) {
         joints: t.parts,
         layout: 'powsled',
     }));
+    const rides = rideScenes(rom).flatMap((r, k) => [
+        { clock: 'waiting', phase: 'the wait, t & 1', address: r.waiting, frames: 2, name: `${r.name} · waiting` },
+        { clock: 'scene', phase: 'after Entry, t from 0', address: r.scene, frames: SCENE_FRAMES, name: `${r.name} · after Entry` },
+    ].map((c, n) => ({
+        ...c,
+        index: tables.length + k * 2 + n,
+        ride: k,
+        offset: c.address,
+        keys: c.frames,
+        joints: r.groups.reduce((s, g) => s + g.table.parts, 1),
+        layout: 'powsled',
+    })));
+    return own.concat(rides);
 }
 
 export function powsledMotionList(rom, body, motions) {
+    if (body.ride) {
+        const fits = motions.filter((m) => m.ride !== undefined);
+        const lead = fits.filter((m) => m.ride === body.ride.index);
+        return { fits: lead, lead, label: 'Played by its scene' };
+    }
     const fits = motions.filter((m) => m.index === body.index);
     return { fits, lead: fits, label: 'Played by its scene' };
 }
 
+/* A board 3x4 in the explorer's frame (z negated), as a 4x4. */
+function explorerMatrix(m) {
+    return [
+        m[0], m[1], -m[2], 0,
+        m[3], m[4], -m[5], 0,
+        -m[6], -m[7], m[8], 0,
+        m[9], m[10], -m[11], 1,
+    ];
+}
+
 /** Every part's matrix on one frame, in the explorer's frame (z negated). */
 export function posePowsledBody(rom, body, motion, frame) {
+    if (body.ride) return poseRide(rom, body, motion, frame);
     const dv = rom.mainDataView;
     const t = figureTables(rom)[body.index];
     const f = motion?.index === body.index ? Math.max(1, Math.min(frame, t.frames.length)) - 1 : 0;
@@ -542,13 +599,141 @@ export function posePowsledBody(rom, body, motion, frame) {
     const matrices = body.parts.map((_, j) => {
         const m = partMatrix(dv, t.frames[f] + j * PART_BYTES);
         origins.push([m[9], m[10], -m[11]]);
-        return [
-            m[0], m[1], -m[2], 0,
-            m[3], m[4], -m[5], 0,
-            -m[6], -m[7], m[8], 0,
-            m[9], m[10], -m[11], 1,
-        ];
+        return explorerMatrix(m);
     });
     /* Its own draws, as model 0 is a part here (the sled's first). */
     return { matrices, origins, draws: body.parts.map((p) => (p.model == null ? [] : [p.model])) };
+}
+
+/*
+ * The ride scenes (Animation tab). Mode 5 (0x32F40) is the ride's own screen
+ * before the race: 0x33780 picks a task handler by the ride's number
+ * (0x5293F0), which waits until Entry (0x529368 & 0x500) and then plays the
+ * scene, its clock at +0xC0 counting a frame from 0 (the wait's wraps at
+ * 0xE11). Both draw, under the camera, the woman, the two riders and the
+ * crane, each with 0xE1D70 at a frame the clock picks; the crane through
+ * 0xE1F30, which dresses the sled in the ride's colour.
+ *
+ * Rides 1 and 3 (0xE44B0, 0xE4BE0) use the camera 0xE2830 and the woman
+ * 0x1DE968 at T(0.85, 0, 0) and riders 0x18E4C0 at none; rides 2 and 0
+ * (0xE4820, 0xE4F50) the camera 0xE2E00, the woman 0x3FF34 turned 0x7000
+ * about Y (copro op 0x21) and then at T(1.4, 0, 0), the riders 0x13E018 at
+ * T(0, 0, -0.1), and the crane slides the other way. The clocks:
+ *
+ *   woman   t up to 0x17C, then 0x138 + (t - 0x137) % 0x45 over and over
+ *   riders  t up to 0x86, then 0x86; not drawn past 0xC7
+ *   crane   0 up to 0x86, then t - 0x87 (the lift) up to 0xC7, then 64
+ *   slide   none up to 0xDB, then X (t - 0xDC) / 10 up to 0x18F, then 18
+ *           (0xE2510; 0xE2670 the negative)
+ *
+ * The wait draws the woman and the crane at frame 0 and the riders at
+ * t & 1, which is their bob.
+ */
+const SCENE_FRAMES = 0x190 + 0x45;
+
+/* The colour piece 0xE1F30 draws for crane part 2 at T(0, -0.32, -4.1)
+ * under the part, a colour each. */
+const PIECES = [
+    [0x30d62, 0x30ea6, 0x8459cb],
+    [0x30aaa, 0x30bee, 0x845625],
+    [0x30c06, 0x30d4a, 0x8457f8],
+    [0x30ebe, 0x31002, 0x845b9e],
+];
+const PIECE_AT = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.32, -4.1];
+/* What crane part 2 draws instead of its own model: the sled's body in the
+ * colour, the black and ride 0 with {0x9C0C, 0x9D44, 0x81166F} over it. */
+const SLED_BODY = [
+    [[0x36372, 0x36876, 0x84d714], [0x9c0c, 0x9d44, 0x81166f]],
+    null,
+    [[0x35e16, 0x3631a, 0x84d05f], [0x9c0c, 0x9d44, 0x81166f]],
+    [[0x368ce, 0x36dd2, 0x84ddc9]],
+];
+
+const rideCache = new WeakMap();
+function rideScenes(rom) {
+    if (rideCache.has(rom)) return rideCache.get(rom);
+    const tables = figureTables(rom);
+    const table = (at) => tables.find((t) => t.at === at);
+    const translate = (x, y, z) => [1, 0, 0, 0, 1, 0, 0, 0, 1, x, y, z];
+    /* Op 0x21 as MAME's draws have it, the other way from the Copro
+     * class's (whose one use, a spinning piece on the course, is unchecked). */
+    const turnY = (w) => {
+        const a = ((w << 16) >> 16) * ANGLE_RAD, c = Math.cos(a), s = Math.sin(a);
+        return [c, 0, s, 0, 1, 0, -s, 0, c, 0, 0, 0];
+    };
+    const LAYOUTS = {
+        a: [
+            { at: 0x1de968, base: translate(0.85, 0, 0) },
+            { at: 0x18e4c0, base: IDENTITY },
+            { at: 0x4770, base: IDENTITY },
+        ],
+        b: [
+            { at: 0x3ff34, base: compose(turnY(0x7000), translate(1.4, 0, 0)) },
+            { at: 0x13e018, base: translate(0, 0, -0.1) },
+            { at: 0x4770, base: IDENTITY },
+        ],
+    };
+    const rides = (rom.game.rig.rides ?? []).map((r, index) => {
+        let first = 0;
+        const groups = LAYOUTS[r.layout].map((g) => {
+            const out = { ...g, table: table(g.at), first };
+            first += out.table.parts;
+            return out;
+        });
+        return { ...r, index, colour: r.ride, slide: r.layout === 'a' ? 1 : -1, groups };
+    });
+    rideCache.set(rom, rides);
+    return rides;
+}
+
+/* The frame each figure shows at the clock, and whether the riders are drawn. */
+function rideClock(motion, frame) {
+    const n = motion?.frames ?? 2;
+    const t = Math.max(1, Math.min(frame, n)) - 1;
+    if (motion?.clock !== 'scene') return { t, woman: 0, riders: t & 1, crane: 0, slide: 0 };
+    return {
+        t,
+        woman: t <= 0x17c ? t : 0x138 + (t - 0x137) % 0x45,
+        riders: t <= 0xc7 ? Math.min(t, 0x86) : null,
+        crane: t <= 0x86 ? 0 : t <= 0xc7 ? t - 0x87 : 64,
+        slide: t <= 0xdb ? 0 : t <= 0x18f ? (t - 0xdc) / 10 : 18,
+    };
+}
+
+/** A ride's scene at a clock, under its camera (board 3x4s, z negated). */
+export function rideMatrices(rom, body, motion, frame) {
+    const dv = rom.mainDataView;
+    const model = tripleModels(rom);
+    const r = body.ride, c = r.colour;
+    const clock = rideClock(motion?.ride === r.index ? motion : null, frame);
+    const boards = [], draws = [], words = [];
+    r.groups.forEach((g, n) => {
+        const f = [clock.woman, clock.riders, clock.crane][n];
+        const base = n === 2 ? compose([1, 0, 0, 0, 1, 0, 0, 0, 1, r.slide * clock.slide, 0, 0], g.base) : g.base;
+        for (let j = 0; j < g.table.parts; j++) {
+            const at = g.table.frames[Math.min(f ?? 0, g.table.frames.length - 1)] + j * PART_BYTES;
+            boards.push(compose(base, partMatrix(dv, at)));
+            let w = [[0, 1, 2].map((k) => dv.getUint32(at + k * 4, true))];
+            if (f === null) w = [];
+            else if (n === 2 && j === 2 && SLED_BODY[c]) w = SLED_BODY[c];
+            else if (n === 2 && j >= 4 && j <= 11 && c !== 1) w = [];
+            else if (n === 2 && j === 0 && (c === 0 || c === 2)) w = [];
+            words.push(w);
+            draws.push(w.map(model).filter((m) => m != null));
+        }
+    });
+    const sled = boards[r.groups[2].first + 2];
+    boards.push(compose(sled, PIECE_AT));
+    words.push([PIECES[c]]);
+    draws.push([model(PIECES[c])].filter((m) => m != null));
+    return { boards, draws, words, clock };
+}
+
+function poseRide(rom, body, motion, frame) {
+    const { boards, draws } = rideMatrices(rom, body, motion, frame);
+    return {
+        matrices: boards.map(explorerMatrix),
+        origins: boards.map((m) => [m[9], m[10], -m[11]]),
+        draws,
+    };
 }
