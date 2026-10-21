@@ -4388,8 +4388,13 @@ matrices, relative to the body's: turn error median 8.5e-6 radians, 99%
 wheel centres and rim points 1.4e-6 apart (median), 3.1e-4 (99%). With the
 wheels left straight, as before, the turn error's median was 1.57. 49 of the
 76,236 wheel matrices are off by more than 0.1 radians, all front wheels of
-the Delta in scenes 3 and 4; 39 of them match that wheel three frames before,
-a buffer the logger read before the TGP had written it.
+the Delta in scenes 3 and 4. They are the logger's: it reads each matrix from
+bufferram at the end of the frame, sometimes before the TGP has written it.
+Logged again with every matrix read once more one and two frames later
+(frames 300 to 10500, 64,608 wheel matrices), each re-read is the pose
+`poseRallyCar` gives, all 64,608 within the usual error; 23 frame-end reads
+were off again, and not on the same draws as the first run, which read 7 of
+its 10 unexplained ones cleanly this time.
 
 **The figures.** One routine, 0x5CA290 (ROM 0x2B290), draws every jointed
 figure. It takes a figure record, a frame and a step:
