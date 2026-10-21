@@ -869,7 +869,14 @@ builds; the character tables were found in each. The hands open, close and
 turn frame by frame as the game picks them, matching every hand MAME drew in
 the attract and two played runs. Each character's shadow is drawn as the
 game draws it: ten flat pieces on the floor, each under a limb, and the same
-models MAME drew. Not drawn yet: the guns and items held,
+models MAME drew. The **Held** list puts a gun or item in the hands:
+each enemy starts with its own weapon, the one the game gives it, and any
+model the program puts in a hand can be picked. A hero's pickup (a can or
+a bottle) shows from frame 10 of the motion, moved and scaled in the hand
+as the game does. Against MAME (the attract and two played runs), the held
+model sits where MAME's hand puts it on every frame of each motion. One
+exception: Bruno's pickup motion is off for some frames, because his whole
+pose already differs there. Not drawn yet:
 mirrored motions and the blend between two motions. Character 80 shows
 nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 

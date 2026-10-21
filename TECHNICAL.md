@@ -4711,8 +4711,82 @@ attract (frames 100-12000) and a coined run (to 20000):
 MAME's picture with the 0x19B70 call patched out differs from the normal one
 by exactly the floor shadows (frames 3300, 4800 and 5400).
 
-Not done: the guns and items held (the hand is drawn, not
-what it holds), the mirror flag at object +0xCD8, the blend between motions, and which motions
+#### What the hands hold (`dynamcopItems`, `dynamcopHeld`)
+
+The draw (sub_197E0) calls one routine per joint from the table at 0x19760.
+The right hand's (joint 8, sub_19350) and the left's (joint 5, sub_19600)
+draw the hand, then what the object holds, in the hand's own matrix:
+
+- Right hand: +0x1CC when +0x55 has bit 0. Characters 0x47 and 0x48 send copro
+  0x13 (scale) 2, 2, 2 first.
+- Left hand: +0x1D0 when +0x55 has bit 1. There is no special case.
+- Right hand with bit 0 clear: the routine still draws +0x1CC when all of
+  these hold:
+  - the action (+0x178) is 0x38E;
+  - +0x1CC is 0xB9D, 0xBA5 or 0xBAB;
+  - the frame (+0x2C8, from 0) is past 8.
+
+  It sends 0x12 (translate) 0.05, -0.1, 0, then 0x13 1.2, 1.2, 1.2, then
+  draws.
+
+These three models are the pickups. sub_9C338 (at 0x9C6A0) gives a hero
+action 0x38E for item types 0x72, 0x76 and 0x79. 0x88180 then stores the
+item's model in the hero's +0x1CC, leaving bit 0 clear. The special draw
+mode (table 0x197A0: sub_1D3C0 and sub_1D4B0) draws the same two fields
+with neither case.
+
+No table lists the models. `dynamcopItems` finds every `st` of a constant
+to +0x1CC or +0x1D0 in the first megabyte of program. The constant comes
+from an `lda` up to twelve words before it, and stores to fp locals are
+left out. The result is 13 right-hand models and 3 left-hand ones, the same
+in all five builds.
+
+An enemy's own weapon comes from its spawn records, 36 bytes each:
+
+| offset | field |
+|---|---|
+| +0 | char |
+| +4, +8, +C | x, y, z |
+| +0x10 | turn |
+| +0x14 | a pointer |
+| +0x18 | the task |
+| +0x1C, +0x20 | two words |
+
+Each frame, the task stores the weapon with the constants above. The scan
+reads the stores up to the task's first `ret`. Most of the
+enemies get model 1134. Character 26 gets 1362 with 1388 in the left
+hand, 47 gets 1034, and 31 and 66 have more than one set. The list puts
+the most used set first. Heroes (0-2) have none; the char-0 records are
+sub-objects.
+
+The explorer's Held list starts on the character's own first set. It
+offers every model found, and a pickup is drawn with the 0x38E case's
+offset and scale from frame 10 on.
+
+Checked against MAME using the logs from the shadow check, with a
+breakpoint at each item draw (0x19550, 0x19740, 0x1D498, 0x1D590) and the
+object's 16 read-back joint matrices on the same frame:
+
+- The models: characters 36 and 40 drew 1134 in motion 981 with +0x55 = 1,
+  as their spawn records give. Bruno, Jean and Eddie drew 0xBA5, 0xBAB and
+  0xB9D in motion 1696 with +0x55 = 8 and action 0x38E. Every one of those
+  draws was at frame 9 or later (from 0); none came earlier.
+- The placement: the held model's matrix relative to the hips (joint 9),
+  explorer against MAME, over 2765 draws in four logs. The hand turns up to 144° away
+  from frame 1. The error stays within 0.26° and 0.0000 in position for:
+  - characters 36 and 40 in motion 981 (2072 draws);
+  - Jean and Eddie in motion 1696 (364);
+  - and, in one played run, Bruno holding 1134 in motion 1718 (121; within
+    2.2° and 0.009).
+- The exception: Bruno in motion 1696 is off by up to 22° and 0.15 on
+  frames 10-59, and exact from frame 60. Every joint differs on those
+  frames, the legs and head too, so the body's pose differs, not the item.
+  This is the blend again, as in the shadow check.
+
+Not checked: the left hand (no character in the logs held anything there)
+and characters 0x47 and 0x48's scale of 2.
+
+Not done: the mirror flag at object +0xCD8, the blend between motions, and which motions
 each character plays (lists from 0x1B70A8). Only the three heroes are named.
 Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
 explorer; why was not found.

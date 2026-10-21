@@ -587,3 +587,134 @@ export function dynamcopShadows(rom, body, variant = 0) {
     }
     return out;
 }
+
+/*
+ * What a character holds (sub_197E0's joint routines, table 0x19760): after
+ * the hand, joint 8's (sub_19350) draws the object's +0x1CC when +0x55 has
+ * bit 0, joint 5's (sub_19600) its +0x1D0 when +0x55 has bit 1, each in
+ * the hand's own matrix. Two cases on the right:
+ *
+ *   char (+0xDC) 0x47 or 0x48, with bit 0: scale 2, 2, 2 (copro 0x13) first
+ *   bit 0 clear, action (+0x178) 0x38E, +0x1CC 0xB9D, 0xBA5 or 0xBAB and
+ *   frame (+0x2C8, from 0) > 8: translate 0.05, -0.1, 0 (0x12), scale 1.2
+ *
+ * Action 0x38E is the one a hero takes for a pickup (sub_9C338 at 0x9C6A0,
+ * item types 0x72, 0x76, 0x79), and 0x88180 then gives it the pickup's
+ * model, 0xB9D, 0xBA5 or 0xBAB, on bit 0 clear. The special draw mode
+ * (table 0x197A0, sub_1D3C0 and sub_1D4B0) draws the same two plainly.
+ *
+ * The models come from code, not a table: every `st` of a constant (an
+ * `lda` a few words up) to +0x1CC or +0x1D0 in the program. An enemy's own
+ * comes from its spawn record (36 bytes: char, x, y, z, turn, a pointer, the
+ * task it runs, two words), whose task stores its weapon every frame.
+ */
+const ITEM_FIELDS = { 0x1cc: 8, 0x1d0: 5 };
+const PICKUPS = new Set([0xb9d, 0xba5, 0xbab]);
+const PICKUP_AFTER = 8;
+const PICKUP_OFFSET = [0.05, -0.1, 0];
+const PICKUP_SCALE = 1.2;
+const BIG_HANDS = new Set([0x47, 0x48]);
+const SCAN_END = 0x100000;
+const RET = 0x0a000000;
+
+/* The constant an `lda` a few words before `at` puts in `reg`, if one does. */
+function ldaConst(dv, at, reg) {
+    for (let k = 1; k <= 12 && at - 4 * k >= 4; k++) {
+        const p = at - 4 * k;
+        const x = dv.getUint32(p, true);
+        if (x >>> 24 === 0x8c && ((x >>> 19) & 31) === reg) {
+            if (((x >>> 12) & 3) === 0) return x & 0xfff;
+            if (((x >>> 10) & 15) === 0b1100) return dv.getUint32(p + 4, true);
+            return null;
+        }
+        const y = dv.getUint32(p - 4, true);
+        if (y >>> 24 === 0x8c && ((y >>> 19) & 31) === reg && ((y >>> 10) & 15) === 0b1100) return x;
+    }
+    return null;
+}
+
+/* An `st reg, 0x1CC/0x1D0(base)` (MEMB, base not fp) at `at`: [joint, model]. */
+function itemStore(dv, at) {
+    const x = dv.getUint32(at, true);
+    if (x >>> 24 !== 0x92 || !((x >>> 13) & 1) || ((x >>> 12) & 1)) return null;
+    const joint = ITEM_FIELDS[x & 0xfff];
+    if (!joint || ((x >>> 14) & 31) === 31) return null;
+    const model = ldaConst(dv, at, (x >>> 19) & 31);
+    return model ? [joint, model] : null;
+}
+
+const itemCache = new WeakMap();
+
+/**
+ * Every model the program puts in a hand, and each enemy's own.
+ *
+ * @param {object} rom loaded ROM set
+ * @returns {{items: {joint: number, model: number}[], own: Map<number, {joint: number, model: number}[][]>}}
+ *   `own` maps a character to the sets its spawn records give it, the most
+ *   used first
+ */
+export function dynamcopItems(rom) {
+    if (itemCache.has(rom)) return itemCache.get(rom);
+    const dv = rom.mainCpuView;
+    const end = Math.min(SCAN_END, rom.maincpu.length) - 40;
+    const seen = new Map();
+    for (let at = 8; at < end; at += 4) {
+        const s = itemStore(dv, at);
+        if (s) seen.set(`${s[0]}:${s[1]}`, { joint: s[0], model: s[1] });
+    }
+    const counts = new Map();
+    for (let at = 0; at < end; at += 4) {
+        const char = dv.getUint32(at, true);
+        const task = dv.getUint32(at + 24, true);
+        const ptr = dv.getUint32(at + 20, true);
+        if (char < 3 || char >= 96 || dv.getUint32(at + 16, true) >= 0x10000) continue;
+        if (task < 0x1000 || task >= end || task % 16 || ptr < 0x1000 || ptr >= end) continue;
+        let ok = true;
+        for (let i = 1; i <= 3 && ok; i++) {
+            const v = dv.getFloat32(at + 4 * i, true);
+            ok = Number.isFinite(v) && Math.abs(v) < 2000;
+        }
+        if (!ok) continue;
+        const held = new Map();
+        for (let p = task; p < Math.min(task + 0x400, end); p += 4) {
+            if (dv.getUint32(p, true) === RET) break;
+            const s = itemStore(dv, p);
+            if (s) held.set(s[0], s[1]);
+        }
+        if (!held.size) continue;
+        const key = [...held].sort((a, b) => b[0] - a[0]).map(([j, m]) => `${j}:${m}`).join(',');
+        const byChar = counts.get(char) ?? counts.set(char, new Map()).get(char);
+        byChar.set(key, (byChar.get(key) ?? 0) + 1);
+    }
+    const own = new Map();
+    for (const [char, sets] of counts) {
+        own.set(char, [...sets].sort((a, b) => b[1] - a[1]).map(([key]) => key.split(',').map((s) => {
+            const [joint, model] = s.split(':').map(Number);
+            return { joint, model };
+        })));
+    }
+    const items = [...seen.values()].sort((a, b) => b.joint - a.joint || a.model - b.model);
+    const out = { items, own };
+    itemCache.set(rom, out);
+    return out;
+}
+
+/**
+ * Where each held model is drawn, in its hand joint's frame (board axes).
+ *
+ * @param {object} body from readDynamcopBodies
+ * @param {{joint: number, model: number}[]} held what the hands hold
+ * @param {number} frame 1-based
+ * @returns {{joint: number, model: number, offset: number[], scale: number}[]}
+ */
+export function dynamcopHeld(body, held, frame) {
+    const out = [];
+    for (const { joint, model } of held) {
+        if (joint === 8 && PICKUPS.has(model)) {
+            if (frame - 1 > PICKUP_AFTER) out.push({ joint, model, offset: PICKUP_OFFSET, scale: PICKUP_SCALE });
+        } else {
+            out.push({ joint, model, offset: [0, 0, 0], scale: joint === 8 && BIG_HANDS.has(body.index) ? 2 : 1 });
+        }
+    }
+    return out;
+}
