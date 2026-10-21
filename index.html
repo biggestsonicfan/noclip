@@ -466,6 +466,7 @@
         <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> <span data-i18n="char.squish">hammer squished</span></label>
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
         <label class="check" id="char-mirror-field" hidden title="The motions played the other way round: VF2's player +0 bit 6, Air Walkers' player +0xF4"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
+        <label class="check" id="char-backward-field" hidden title="The motion played backward, last frame first: Air Walkers' player +0xEC" data-i18n-title="char.backward.title"><input type="checkbox" id="char-backward"> <span data-i18n="char.backward">backward</span></label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
         <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
         <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
@@ -634,11 +635,14 @@
         for them. Each motion picks the hands the player holds (its record
         at <code>0xF2C60</code>); <em>mirrored</em> plays it the other way
         round, as the game does when a step of a player's move sequence
-        (<code>0x5A300</code>) has bit 12 or 14 set. In 58 of the motions
+        (<code>0x5A300</code>) has bit 12 or 14 set; <em>backward</em>
+        plays it from its last frame to its first, as the game does when
+        the step has bit 13 or 14 set (bit 14 is both). In 58 of the motions
         the head turns toward the play (<code>0xB1710</code>), up to 67.5°
         either way and tilted up to 22.5°: <em>Head turn</em> sets that
         turn. The game doesn't blend one motion into the next; a new
-        motion starts at its first frame, as here.
+        motion starts at its first frame (its last, played backward), as
+        here.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of
