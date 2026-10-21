@@ -4252,10 +4252,11 @@ setups. Graded the same way as Revision B against MAME's `doaa` display
 list (every third frame from 0x6B1 to 0x75E, 58 frames, 3991 draws, the
 geo FIFO under `M2_GEO_SHARC_OFF=1`, in the stage's frame through the camera
 at 0x5888C0), Zack's body and shadow are within 6.1e-4 radians in their turn
-(median 9e-5) and 6.4e-4 in place, and Tina's body the same, but for her
-ribbon's links on 0x6E4–0x702 (up to 0.024) and 0x744–0x75C (up to 0.053,
-2.8e-3 in place). Revision B's run is within 5.9e-4 everywhere. Those two
-spans are where the board's own revisions part: MAME's `doaa` against its
+(median 9e-5) and 6.4e-4 in place, Tina's within 1.2e-3 and 3.3e-4, and her
+ribbon's three links within 1e-4 (median) but for 0x6E4–0x702 (up to 0.024)
+and 0x744–0x75C (up to 0.053, 2.8e-3 in place). Revision B's run is within
+5.9e-4 everywhere. Those spans, and Tina's 1.1e-3 on 0x6C3–0x6CC, are where
+the board's own revisions part: MAME's `doaa` against its
 `doab`, draw for draw, differs by the same amounts there and by about 3e-4
 elsewhere. The two boards' fights drift apart by about 1e-5 in the players' places
 from the first frames (the counters at 0x54FBD0 and 0x54FD78 differ as the
