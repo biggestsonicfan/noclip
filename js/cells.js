@@ -78,10 +78,38 @@
  * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its
  * entries on by the first block, as Dead or Alive's does. Its colours go
  * through colorxlat. See js/games.js hotdo.cells.
+ *
+ * Sega Rally Championship's are AM3's own files (`cgm`): a file starts with
+ * "CGM 1.0 ", the string its loader (0x5C8EB0, in the RAM copy of the
+ * program) compares before it reads anything, so a scan of the ROMs for it
+ * finds every file. A file is its blocks, each 16 colours and up to 128
+ * tiles, then its patterns, each a 16-byte name, the width and the height and
+ * the entries, which number the file's own tiles. The loader gives block k
+ * group g + k and the 128 characters from (g + k) * 128, from the free group
+ * g, which the reset (0x5C8A60) sets to 9 above the font; the draw (0x5C8C10)
+ * adds g << 7 to each entry. So a file is a CG, loaded from group 9, and each
+ * of its patterns a cell with its name. See js/games.js srallyc.cells.
+ *
+ * Virtual On's maps are bare halfword entries: the draw routines (0x1DC10
+ * and its siblings) take the map's address, its width and its height from
+ * the caller, so a cell is a call site's `maps` entry, or one of a table's
+ * (`mapTables`). The tile chip is filled once, as Virtua Cop's is (`boot`),
+ * but the game has two fills, the attract mode's and the game's (`modes`),
+ * and its colours are stored with each component's low bit apart
+ * (`shuffled`). See js/games.js vonCells.
+ *
+ * Power Sled keeps no map at all (`scripts`): its draw (0x4EE0) walks a
+ * byte script that writes the entries one run at a time, and the scripts lie
+ * end to end in one run of the data ROM, each ending with a byte above 0x8D.
+ * The cell is what a script writes, cropped to the entries it touches. Its
+ * tile chip is filled once, at boot, as Virtua Cop's is, but with a 1bpp font
+ * expanded first (`boot.font`) and the characters copied straight. See
+ * js/games.js POWSLED_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
+import { MAIN_DATA_BASE } from './romset.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -100,8 +128,18 @@ function cellRecords(rom) {
     if (out) return out;
     const C = rom.game.cells;
     out = [];
-    if (C.pictures) {
+    if (C.cgm || C.maps) {
+        out = listedCells(rom).map((c) => c.at);
+    } else if (C.pictures) {
         for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
+    } else if (C.scripts) {
+        const [first, end] = C.scripts;
+        for (let a = first; a < end && out.length < MAX_CELLS;) {
+            const next = runScript(rom, a)?.end;
+            if (!next) break;
+            out.push(a);
+            a = next;
+        }
     } else if (C.records) {
         for (const [first, end] of C.records) {
             for (let a = first; a < end && out.length < MAX_CELLS;) {
@@ -122,6 +160,106 @@ function cellRecords(rom) {
     }
     recordCache.set(rom, out);
     return out;
+}
+
+/* The cells whose size is not in a record header: Sega Rally's patterns and
+ * Virtual On's maps, each {at, cols, rows, head, base, or, name, file}. */
+const listedCache = new WeakMap();
+function listedCells(rom) {
+    let out = listedCache.get(rom);
+    if (out) return out;
+    const C = rom.game.cells;
+    out = [];
+    if (C.cgm) {
+        cgmFiles(rom).forEach((f, file) => {
+            for (const p of f.patterns) out.push({ ...p, head: 0x14, base: CGM_GROUP << 7, or: 0, file });
+        });
+    } else {
+        const seen = new Set();
+        const add = (at, cols, rows, or, name) => {
+            if (seen.has(at) || !scrollPtrOk(rom, at)) return;
+            seen.add(at);
+            out.push({ at, cols, rows, head: 0, base: 0, or, name });
+        };
+        for (const T of C.mapTables ?? []) {
+            for (let i = 0; i < T.count; i++) {
+                const r = T.table + i * T.stride;
+                const cols = T.cols ?? word(rom, r + 4), rows = T.rows ?? word(rom, r + 8);
+                add(word(rom, r), cols, rows, T.or, T.names ? `${T.what}, ${T.names[i]}` : `${T.what} ${i}`);
+            }
+        }
+        for (const [at, cols, rows, or, name] of C.maps) add(at, cols, rows, or, name);
+    }
+    listedCache.set(rom, out);
+    return out;
+}
+
+/* Sega Rally's CGM files, in the program ROM and then the data ROM up to
+ * `cgm.dataEnd`: each file's blocks {pal, tiles, count} and patterns {at,
+ * name, cols, rows}. The loader (0x5C8EB0) refuses a file whose blocks would
+ * run past group 0x80; so does this. */
+const CGM_MAGIC = [...'CGM 1.0 '].map((ch) => ch.charCodeAt(0));
+const CGM_GROUP = 9;            /* the first free group after the reset, 0x5C8A60 */
+const cgmCache = new WeakMap();
+function cgmFiles(rom) {
+    let out = cgmCache.get(rom);
+    if (out) return out;
+    out = [];
+    const end = rom.game.cells.cgm.dataEnd ?? rom.mainData.length;
+    for (const [u8, base] of [[rom.maincpu, 0], [rom.mainData.subarray(0, end), MAIN_DATA_BASE]]) {
+        for (let o = u8.indexOf(CGM_MAGIC[0]); o >= 0 && o + 10 <= u8.length; o = u8.indexOf(CGM_MAGIC[0], o + 1)) {
+            if (!CGM_MAGIC.every((b, i) => u8[o + i] === b)) continue;
+            const f = readCgm(u8, o, base);
+            if (f) out.push(f);
+        }
+    }
+    cgmCache.set(rom, out);
+    return out;
+}
+
+/* One file: 0x5C9050 loads block k from P (16 colours, a halfword it doesn't
+ * read at 0x20, the tile count at 0x22, the tiles from 0x24); 0x5C90F0 steps
+ * over a pattern (the name, the width at 0x10, the height at 0x12, the
+ * entries). */
+function readCgm(u8, o, base) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const at = o;
+    const nblocks = dv.getUint16(o + 8, true);
+    if (!nblocks || CGM_GROUP + nblocks > 0x80) return null;
+    o += 10;
+    const blocks = [];
+    for (let k = 0; k < nblocks; k++) {
+        if (o + 0x24 > u8.length) return null;
+        const count = dv.getUint16(o + 0x22, true);
+        blocks.push({ pal: base + o, tiles: base + o + 0x24, count });
+        o += 0x24 + count * TILE_BYTES;
+    }
+    if (o + 2 > u8.length) return null;
+    const npatterns = dv.getUint16(o, true);
+    o += 2;
+    const patterns = [];
+    for (let k = 0; k < npatterns; k++) {
+        if (o + 0x14 > u8.length) return null;
+        const cols = dv.getInt16(o + 0x10, true), rows = dv.getInt16(o + 0x12, true);
+        if (cols <= 0 || rows <= 0 || cols > MAX_SIDE || rows > MAX_SIDE) return null;
+        /* Printable ASCII only, as the name goes into the page's HTML. */
+        let name = '';
+        for (let i = 0; i < 16 && u8[o + i]; i++) {
+            const ch = u8[o + i];
+            name += ch >= 0x20 && ch < 0x7f && !'<>&"'.includes(String.fromCharCode(ch)) ? String.fromCharCode(ch) : '?';
+        }
+        patterns.push({ at: base + o, name, cols, rows });
+        o += 0x14 + cols * rows * 2;
+    }
+    if (o > u8.length) return null;
+    return { at: base + at, blocks, patterns };
+}
+
+/** A cell's name, where the game gives it one: a Sega Rally pattern's own,
+ * or what a Virtual On map shows. */
+export function cellName(rom, cell) {
+    const C = rom.game.cells;
+    return C?.cgm || C?.maps ? listedCells(rom)[cell]?.name ?? '' : '';
 }
 
 /* Virtua Cop's zero halfwords between records. */
@@ -182,7 +320,21 @@ export function unusedCells(rom) {
     let out = unusedCache.get(rom);
     if (out) return out;
     out = new Set(rom.game.cells?.unused);
-    if (rom.game.cells?.records) {
+    if (rom.game.cells?.cgm) {
+        /* Sega Rally hands the loader a file's address (`lda` in the RAM
+         * copy of the program): a file no aligned word names is never
+         * loaded, and its patterns never drawn. */
+        const files = cgmFiles(rom);
+        const index = new Map(files.map((f, i) => [f.at, i]));
+        const named = new Set();
+        for (const v of [rom.mainCpuView, rom.mainDataView]) {
+            for (let o = 0; o + 4 <= v.byteLength; o += 4) {
+                const i = index.get(v.getUint32(o, true));
+                if (i !== undefined) named.add(i);
+            }
+        }
+        listedCells(rom).forEach((c, i) => { if (!named.has(c.file)) out.add(i); });
+    } else if (rom.game.cells?.records) {
         const records = cellRecords(rom);
         const index = new Map(records.map((a, i) => [a, i]));
         const named = new Set();
@@ -221,6 +373,14 @@ function cgListsAll(rom) {
     if (all) return all;
     const C = rom.game.cells;
     all = [];
+    if (C.cgm) {
+        for (const f of cgmFiles(rom)) {
+            const where = f.at < MAIN_DATA_BASE ? 'program' : 'data';
+            all.push({ cgm: f, name: `${f.patterns[0]?.name || 'no patterns'}…, ${where} 0x${f.at.toString(16).toUpperCase()}` });
+        }
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.pictures) {
         const skies = skyNames(rom);
         for (let n = 0; n < C.pictures.count; n++) {
@@ -230,9 +390,14 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.boot?.modes) {
+        C.boot.modes.forEach((m, mode) => all.push({ boot: true, mode, name: m.name }));
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.boot) {
         all.push({ boot: true, name: 'boot' });
-        for (let stage = 0; stage < C.boot.stages.count; stage++) {
+        for (let stage = 0; stage < (C.boot.stages?.count ?? 0); stage++) {
             all.push({ boot: true, stage, name: `stage ${stage + 1}` });
         }
         cgCache.set(rom, all);
@@ -297,7 +462,9 @@ export function cgLabel(rom, cg) {
  * @returns {null|{cols:number, rows:number, entries:Uint16Array}}
  */
 export function readCell(rom, cell) {
+    if (rom.game.cells.cgm || rom.game.cells.maps) return readListed(rom, cell);
     const p = cellRecords(rom)[cell];
+    if (p !== undefined && rom.game.cells.scripts) return scriptCell(rom, p);
     const h = p === undefined ? null : recordHeader(rom, p);
     if (!h) return null;
     const { R, base, wide, rows, cols, head } = h;
@@ -305,6 +472,109 @@ export function readCell(rom, cell) {
     for (let i = 0; i < entries.length; i++) {
         const v = wide ? R.view.getUint16(R.off + head + i * 2, true) : R.u8[R.off + head + i];
         entries[i] = (v + base) & 0xffff;
+    }
+    return { cols, rows, entries };
+}
+
+/* A Sega Rally pattern or a Virtual On map: halfword entries after `head`,
+ * `base` added (the draw's g << 7) or `or` set (the bits the map draws set). */
+function readListed(rom, cell) {
+    const c = listedCells(rom)[cell];
+    if (!c || !scrollPtrOk(rom, c.at)) return null;
+    const R = scrollAt(rom, c.at);
+    const entries = new Uint16Array(c.rows * c.cols);
+    if (R.off + c.head + entries.length * 2 > R.u8.length) return null;
+    for (let i = 0; i < entries.length; i++) {
+        entries[i] = ((R.view.getUint16(R.off + c.head + i * 2, true) + c.base) | c.or) & 0xffff;
+    }
+    return { cols: c.cols, rows: c.rows, entries };
+}
+
+/* Power Sled's tilemap script, as its draw (0x4EE0) runs it: g0 the tilemap
+ * address, g1 the script, g2 the halfword ORed into the entries it builds
+ * (0x8000, the category bit, from every caller). A byte up to 0x7F writes
+ * entry b of the script's dictionary; 0x80 and above are commands, and one
+ * above 0x8D ends the script. A character is built from two bytes as
+ * (0x100 + lo + hi * 256) & 0x3FFF: the font's 256 characters are never named
+ * this way.
+ *
+ *   80 x y        go to entry y * 256 + x of the layer
+ *   81 s          move s entries (signed)
+ *   82 n lo hi    n copies of the character, rightwards
+ *   83 n lo hi    n entries counting up from it; 84, counting down
+ *   85 n hi b..   n entries, (0x100 + hi * 256) | b each
+ *   86 n (lo hi)..  n characters; 87 the same, each added to the dictionary
+ *   88 k          clear layer k & 3 (no script here uses it)
+ *   89/8A n lo hi n copies downwards; 8B/8C upwards
+ *   8D a b        move (a + b) * 256 entries, the sum a signed byte
+ *
+ * Entries are numbered as the layer's are, 64 to a row. Returns them by
+ * entry number, and the address past the end; null where the script runs off
+ * the ROM. */
+function runScript(rom, start) {
+    const S = scrollAt(rom, start);
+    const b = S.u8;
+    let o = S.off, at = 0, dict = [];
+    const out = new Map();
+    const s8 = (v) => (v << 24) >> 24;
+    const ch = (lo, hi) => ((0x100 + lo + (hi << 8)) & CHAR_MASK) | 0x8000;
+    for (;;) {
+        if (o + 4 > b.length) return null;
+        const op = b[o++];
+        if (op < 0x80) { out.set(at++, dict[op] ?? 0); continue; }
+        if (op > 0x8d) break;
+        switch (op) {
+        case 0x80: at = b[o] + (b[o + 1] << 8); o += 2; break;
+        case 0x81: at += s8(b[o++]); break;
+        case 0x85: {
+            const n = b[o], base = ch(0, b[o + 1]); o += 2;
+            for (let i = 0; i < n; i++) out.set(at++, base | b[o++]);
+            break;
+        }
+        case 0x86: case 0x87: {
+            const n = b[o++];
+            for (let i = 0; i < n; i++, o += 2) {
+                const e = ch(b[o], b[o + 1]);
+                out.set(at++, e);
+                if (op === 0x87) dict.push(e);
+            }
+            break;
+        }
+        case 0x88: o++; break;
+        case 0x8d: at += s8(b[o] + b[o + 1]) * 256; o += 2; break;
+        default: {
+            const n = b[o];
+            let e = ch(b[o + 1], b[o + 2]);
+            o += 3;
+            const step = op <= 0x84 ? 1 : op <= 0x8a ? 64 : -64;
+            for (let i = 0; i < n; i++, at += step) {
+                out.set(at, e & 0xffff);
+                if (op === 0x83) e++;
+                if (op === 0x84) e--;
+            }
+        }
+        }
+        if (o > b.length) return null;
+    }
+    return { out, end: start + (o - S.off) };
+}
+
+/* A script's cell: the box round the entries it writes. Entries it leaves
+ * alone are 0, the font's blank character. */
+function scriptCell(rom, p) {
+    const r = runScript(rom, p);
+    if (!r || !r.out.size) return null;
+    let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+    for (const at of r.out.keys()) {
+        const row = Math.floor(at / 64), col = at - row * 64;
+        top = Math.min(top, row); bottom = Math.max(bottom, row);
+        left = Math.min(left, col); right = Math.max(right, col);
+    }
+    const cols = right - left + 1, rows = bottom - top + 1;
+    const entries = new Uint16Array(rows * cols);
+    for (const [at, e] of r.out) {
+        const row = Math.floor(at / 64), col = at - row * 64;
+        entries[(row - top) * cols + col - left] = e;
     }
     return { cols, rows, entries };
 }
@@ -331,6 +601,7 @@ function loadCG(rom, L) {
 function loadTiles(rom, L) {
     const charBytes = rom.game.cells.charBytes;
     if (L.picture) return loadPicture(rom, L, charBytes);
+    if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
@@ -371,24 +642,71 @@ function loadPicture(rom, L, charBytes) {
     return { chars, pal, written: block * 16, charRuns, palRuns };
 }
 
-/* What Virtua Cop's boot leaves in the tile chip, and a stage's group over
- * it (js/games.js VCOP_CELLS). The palette steps, in the boot's order:
- * `runs`, a count and sixteen colours, that group repeated count times, until
- * `until` groups are written or for `lists` such entries; `colours`, sixteen
- * colours over `groups` groups; `copy`, groups copied to others. */
-function loadBoot(rom, L, charBytes) {
-    const B = rom.game.cells.boot;
+/* A Sega Rally file as its loader (0x5C8EB0) leaves it, from group 9: block
+ * k's colours to group 9 + k, and its tiles, as they are, from character
+ * (9 + k) * 128. A block of more than 128 tiles runs on into the next
+ * block's characters, which that block then writes over, as on the board. */
+function loadCgm(rom, f, charBytes) {
     const chars = new Uint8Array(charBytes);
     const pal = new Uint16Array(0x8000);
     const charRuns = [], palRuns = [];
-    for (const [src, first, count] of B.chars) {
+    f.blocks.forEach((b, k) => {
+        const group = CGM_GROUP + k;
+        const P = scrollAt(rom, b.pal);
+        for (let c = 0; c < 16; c++) pal[group * 16 + c] = P.view.getUint16(P.off + c * 2, true);
+        palRuns.push([group * 16, 16]);
+        const T = scrollAt(rom, b.tiles);
+        const first = group * DOA_BLOCK;
+        const n = Math.min(b.count, (charBytes / TILE_BYTES) - first);
+        if (n <= 0) return;
+        chars.set(T.u8.subarray(T.off, T.off + n * TILE_BYTES), first * TILE_BYTES);
+        charRuns.push([first, n]);
+    });
+    return { chars, pal, written: 0, charRuns, palRuns };
+}
+
+/* Virtual On's colours (SetScrollcol, 0x1BB90): each component's four high
+ * bits in a nibble, red lowest, and the three low bits in 12-14. */
+const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) << 5)
+    | (((v >> 4) & 15) << 6) | (((v >> 14) & 1) << 10) | (((v >> 8) & 15) << 11);
+
+/* What Virtua Cop's boot leaves in the tile chip, and a stage's group over
+ * it (js/games.js VCOP_CELLS). The characters are copied a halfword at a
+ * time with the bytes swapped, unless `straight`. The palette steps, in the
+ * boot's order: `runs`, a count and sixteen colours, that group repeated
+ * count times, until `until` groups are written or for `lists` such entries;
+ * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
+ * colours copied as they are; `copy`, groups copied to others; `shuffled`,
+ * Virtual On's lists of [colours, groups], one group after another.
+ *
+ * `font` is a 1bpp font drawn first, 8 bytes a character, the top bit the
+ * left pixel, a set bit pen `pen` (Virtual On's, Power Sled's). Virtual On's
+ * boot has two fills (`modes`): SetScrolldata (0x1BDA0) takes the mode, and
+ * each puts its own characters and colours in before the ones both share
+ * (`chars`, `fill`, `palette`). */
+function loadBoot(rom, L, charBytes) {
+    const B = rom.game.cells.boot;
+    const M = L.mode !== undefined ? B.modes[L.mode] : {};
+    const chars = new Uint8Array(charBytes);
+    const pal = new Uint16Array(0x8000);
+    const charRuns = [], palRuns = [];
+    if (B.font) bootFont(rom, B.font, chars, charRuns);
+    for (const [src, first, count] of [...(M.chars ?? []), ...B.chars]) {
         const S = scrollAt(rom, src);
         const n = Math.min(count * TILE_BYTES, S.u8.length - S.off, charBytes - first * TILE_BYTES) & ~1;
+        const swap = B.straight ? 0 : 1;
         for (let i = 0; i < n; i += 2) {
-            chars[first * TILE_BYTES + i] = S.u8[S.off + i + 1];
-            chars[first * TILE_BYTES + i + 1] = S.u8[S.off + i];
+            chars[first * TILE_BYTES + i] = S.u8[S.off + i + swap];
+            chars[first * TILE_BYTES + i + 1] = S.u8[S.off + i + 1 - swap];
         }
         charRuns.push([first, n / TILE_BYTES]);
+    }
+    for (const [first, count, v] of B.fill ?? []) {
+        for (let i = first * TILE_BYTES; i < (first + count) * TILE_BYTES; i += 2) {
+            chars[i] = v & 255;
+            chars[i + 1] = v >> 8;
+        }
+        charRuns.push([first, count]);
     }
     const put = (group, src, groups) => {
         const S = scrollAt(rom, src);
@@ -397,8 +715,18 @@ function loadBoot(rom, L, charBytes) {
         }
         palRuns.push([group * 16, groups * 16]);
     };
-    for (const op of B.palette) {
-        if (op.runs) {
+    for (const op of [...(M.palette ?? []), ...B.palette]) {
+        if (op.shuffled) {
+            let group = op.group;
+            for (const [src, groups] of op.shuffled) {
+                const S = scrollAt(rom, src);
+                for (let i = 0; i < groups * 16 && group * 16 + i < pal.length; i++) {
+                    pal[group * 16 + i] = unshuffle(S.view.getUint16(S.off + i * 2, true));
+                }
+                palRuns.push([group * 16, groups * 16]);
+                group += groups;
+            }
+        } else if (op.runs) {
             let src = op.runs, group = op.group;
             for (let k = 0; k < 0x100 && (op.lists ? k < op.lists : group - op.group < op.until); k++) {
                 const S = scrollAt(rom, src);
@@ -409,6 +737,11 @@ function loadBoot(rom, L, charBytes) {
             }
         } else if (op.colours) {
             put(op.group, op.colours, op.groups);
+        } else if (op.block) {
+            const S = scrollAt(rom, op.block);
+            const n = Math.min(op.groups * 16, (S.u8.length - S.off) >> 1, pal.length - op.group * 16);
+            for (let i = 0; i < n; i++) pal[op.group * 16 + i] = S.view.getUint16(S.off + i * 2, true);
+            palRuns.push([op.group * 16, n]);
         } else if (op.copy) {
             const [from, to, groups] = op.copy;
             pal.copyWithin(to * 16, from * 16, (from + groups) * 16);
@@ -417,6 +750,24 @@ function loadBoot(rom, L, charBytes) {
     }
     if (L.stage !== undefined) put(B.stages.group, word(rom, B.stages.table + L.stage * 4), 1);
     return { chars, pal, charRuns, palRuns };
+}
+
+/* Virtual On's font (InitScroll, 0x1C220, through 0x1C730): `count`
+ * characters from `first`, a byte a row, bit 7 the left pixel, each set pixel
+ * pen `pen`. */
+function bootFont(rom, F, chars, charRuns) {
+    const S = scrollAt(rom, F.src);
+    for (let ch = 0; ch < F.count; ch++) {
+        for (let row = 0; row < 8; row++) {
+            const bits = S.u8[S.off + ch * 8 + row];
+            for (let px = 0; px < 8; px++) {
+                if (!(bits & (0x80 >> px))) continue;
+                const o = (F.first + ch) * TILE_BYTES + row * 4 + ((px >> 1) ^ 1);
+                chars[o] |= (px & 1) ? F.pen : F.pen << 4;
+            }
+        }
+    }
+    charRuns.push([F.first, F.count]);
 }
 
 /* A course CG's palette list writes nothing into the groups its picture
@@ -544,7 +895,12 @@ export function rankCGs(rom, cell) {
     const c = readCell(rom, cell);
     if (!c) return [];
     /* A Dead or Alive picture brings its own tiles and colours. */
-    return rom.game.cells.pictures ? [{ cg: cell, cover: 1 }] : rankSharedCGs(rom, cell, c);
+    if (rom.game.cells.pictures) return [{ cg: cell, cover: 1 }];
+    /* A Sega Rally pattern is drawn with its own file. */
+    if (rom.game.cells.cgm) return [{ cg: listedCells(rom)[cell].file, cover: 1 }];
+    /* Power Sled's one CG, the boot's, holds every character and colour. */
+    if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
+    return rankSharedCGs(rom, cell, c);
 }
 
 function rankSharedCGs(rom, cell, c) {

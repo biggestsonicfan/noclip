@@ -240,7 +240,7 @@
         <li class="game" data-game="airwlkrs" data-zip="airwlkrs.zip" tabindex="0">
           <div class="thumb"></div>
           <div class="g-name" data-i18n="airwlkrs.name">Air Walkers <i>experimental</i></div>
-          <div class="g-meta" data-i18n="airwlkrs.meta">Every model, with each team's textures &middot; <code>airwlkrs</code></div>
+          <div class="g-meta" data-i18n="airwlkrs.meta">Its seventeen courts and every model, with each team's textures &middot; <code>airwlkrs</code></div>
           <ol class="clips" hidden>
             <li data-clip="airwlkrs-city" data-i18n="airwlkrs.clip.city">The city the intro flies over</li>
             <li data-clip="airwlkrs-mascot" data-i18n="airwlkrs.clip.mascot">A team's hippo mascot</li>
@@ -437,7 +437,7 @@
     <!-- The game's 2D pictures, laid out on the tile chip: js/cells.js. -->
     <section class="tabpanel" data-tab="cell" hidden>
       <div class="field">
-        <input type="search" id="cell-search" data-i18n-placeholder="cell.search" placeholder="Cell number, range (e.g. 500-520) or unused">
+        <input type="search" id="cell-search" data-i18n-placeholder="cell.search" placeholder="Cell number, range (e.g. 500-520), unused or a name">
       </div>
       <div class="field">
         <label for="cell-cg" title="The CG loaded with the cell: the tile pixels and the colours its entries name. The ones that draw all of it come first" data-i18n-title="cell.cg.title">CG</label>
@@ -582,6 +582,58 @@
         fighter's move, as in Virtua Fighter 2. With it on, each head
         turns toward the other's every frame, which the game does only when
         the fight allows; alone, a head follows the motion's own target.
+      </div>
+      <div class="note" id="anim-note-dynamcop" data-i18n="note.dynamcop" hidden>
+        Every character has the same sixteen-joint skeleton, which is in the
+        code (<code>0x15210</code>) rather than in a table. The offsets of its
+        joints come from <code>0xE1890</code> and the fifteen models from
+        <code>0xE1A10</code>, both indexed by character. A motion is the
+        sixteen joints' angles for every frame, followed by the root's
+        position. A flag byte per motion (<code>0x164160</code>) keeps the
+        ankles, and sometimes a wrist, level with the body instead of turning
+        them with the leg or arm. Motion numbers are the table's at
+        <code>0x15FA00</code>; the game has no names for them.
+      </div>
+      <div class="note" id="anim-note-von" data-i18n="note.von" hidden>
+        Each robot is a record in the program (the table at
+        <code>0x19360</code>) with three lists of parts: the legs, the upper
+        body and the weapons. A motion is a pair of records, one for the upper
+        body and one for the legs, that give every part three angles and an
+        offset each frame. A robot has 103 pairs from <code>+0x70</code> of
+        its record; repeats are dropped, and the numbers are the pairs'. The
+        legs are drawn from where the robot stands, and the upper body from
+        the waist. The weapon is drawn in the hand without the aim the fight
+        gives it. Zig-Raht is drawn by another routine and is not here.
+      </div>
+      <div class="note" id="anim-note-srallyc" data-i18n="note.srallyc" hidden>
+        The people by the course: three figures of 5, 8 and 12 parts, each
+        part a model of its own, placed from the figure's origin by one
+        routine (<code>0x5CA290</code>). A frame is every part's place and
+        two turns; there are 30, which the game plays forward and back, one
+        a frame. The figure a spectator shows comes from the table at
+        <code>0x5CA280</code>, picked by the cabinet's operation days over
+        thirty. The cars are not here: their wheels are turned by code, with
+        no motion data.
+      </div>
+      <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
+        Every player has the same fifteen-joint skeleton, which is in the
+        code (<code>0x214A0</code> for the legs, <code>0x21A70</code> for the
+        rest; <code>0x20850</code> for team 34) rather than in a table, and the
+        explorer runs those routines. A player's sixteen models are a record
+        at <code>0xF4B20</code>, five players to a team, the away kits from
+        team 17. A motion is the fifteen joints' angles for every frame,
+        from the table at data <code>0x6E3CA0</code>; the game has no names
+        for them.
+      </div>
+      <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
+        The figures: ten tables in the data ROM, each a list of
+        frames and a count of parts, every part a model of its own. A frame is
+        a 64-byte record a part, its model and the matrix it is drawn with,
+        baked: <code>0xE1D70</code> pushes, translates to the place at
+        <code>+0x34</code>, multiplies by the 3x3 at <code>+0x10</code>, draws
+        and pops, with no parent. The attract's tasks (<code>0xE44B0</code> on)
+        play five of them a frame at a time from their own counter. The game
+        names none of them: the names say what they show.
       </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the

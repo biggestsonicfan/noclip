@@ -14,13 +14,14 @@ trackside objects in all eight of the builds it shipped as — see
 stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
-courses and its models — see [Sega Rally Championship](#sega-rally-championship).
-*Cyber Troopers Virtual-On* has its models and its ten stages, some of them
-only in part — see [Virtual-On](#virtual-on).
-*Dynamite Cop* has its models and the rooms
-of its stages on all three boards — see [Dynamite Cop](#dynamite-cop).
-Data East's *Air Walkers* and Sega's *Power Sled* have their models — see
-[Air Walkers](#air-walkers) and [Power Sled](#power-sled).
+courses, its models, its cells and the spectators' animations — see [Sega Rally Championship](#sega-rally-championship).
+*Cyber Troopers Virtual-On* has its models, its cells, its ten stages, some
+of them only in part, and nine of its robots posed by their motions — see [Virtual-On](#virtual-on).
+*Dynamite Cop* has its models, the rooms
+of its stages, its cells and its characters posed by their motions on all three boards — see [Dynamite Cop](#dynamite-cop).
+Data East's *Air Walkers* has its seventeen courts, its models, its cells and
+its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its course, its models,
+its cells and the attract's animations — see [Power Sled](#power-sled).
 
 Three views, and a fourth for the 2D art:
 
@@ -633,6 +634,10 @@ need a table found in that game's ROM first. Where they stand:
 | Stage sounds | | yes | yes | |
 | Cells tab | yes | yes | yes | yes |
 
+Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
+Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
+have the Cells tab too, and all of them but Air Walkers the music.
+
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
 fight code already runs both players), stage sounds for Sonic the Fighters
@@ -689,7 +694,7 @@ and colours, so each cell opens on a CG of its own with the same number (see
 
 ## Sega Rally Championship
 
-`srallyc.zip` (Revision C, Model 2A) loads with the Stages and Models tabs.
+`srallyc.zip` (Revision C, Model 2A) loads with the Stages, Models, Animation and Cells tabs.
 It is on the same board as Virtua Cop and Dead or Alive's 2A builds, and the
 program is built the way Daytona USA's is: the sheets are raw in the data ROM,
 there is no depth buffer, and a course's models are already in world space.
@@ -705,17 +710,45 @@ opens on its course's bank; a model on the course sheet that no course list
 names, a car for one, opens on the desert's, and the **Texture set** list picks
 another.
 
-The **Stages** tab has the four courses: Desert, Mountain, Forest and
+The **Stages** tab has the four courses: Desert, Forest, Mountain and
 Lakeside, each its 60 segments and its sky, read from the course records the
 game draws them from. Lakeside is the fourth record, which the attract mode
 does not show; its bank and its autumn trees say it is the secret course. The
 segments drawn are the near ones; the low-detail copy the game draws further
 off is listed in the stage's details.
 
+The **Animation** tab has the people who stand by the course and cheer: three
+figures, a fist pump (5 parts), an overhead clap (8) and a jump with both arms
+up (12). Each part is a flat cut-out model of its own, a head, a forearm, a
+leg, and each figure has one motion of 30 frames, which the game plays
+forward and back, so the tab's motion is 59 frames. The names are the
+explorer's; the game has none. Which figure a spectator is depends on the
+cabinet's OPERATION DAYS count, so it changes every thirty days the cabinet
+is switched on. The cars have no Animation entry: their wheels are steered,
+spun and sprung by code each frame, with no motion data to read. See [Sega
+Rally's people](TECHNICAL.md#sega-rally-championships-people-jssrallyjs).
+
 Not read yet: the low-detail copy as a view of its own, the trackside objects
 and the cars' places on the grid, and the ground beyond the course, which the
 explorer leaves black. The car windows are black, where MAME draws them as
 dark glass. MAME's other Sega Rally builds are not added.
+
+The **Cells** tab has the game's 2D art: the title logo, the course titles,
+the corner signs, PUSH START BUTTON, the clear and ranking screens, the
+staff roll, the fonts and the rest, 853 pictures in 141 files. AM3 keeps them in files of its own
+("CGM 1.0"), each a set of tiles and colours and the pictures drawn from
+them, so each file is a CG and each picture a cell with the name the file
+gives it (TITLE1, DESERT16, sa_push1...); searching for a name lists the cells
+that have it. 49 files, 363 pictures, are named nowhere in the program and
+are marked unused. See [Sega Rally's
+cells](TECHNICAL.md#sega-rally-championships-cells-jscellsjs).
+
+Tick **music** and a course starts with its own song on the game's sound
+board: Conditioned Reflex on the desert, Desert Land in the forest, Getting
+Muddy (the Ref mix) on the mountain and Ignition at the lakeside, the
+championship's, from the table the race start reads. The **song** list has
+the sound test's 17, by the names the program gives them. See [The music of
+the later games](TECHNICAL.md#the-music-of-the-later-games).
 
 ## Virtual-On
 
@@ -724,7 +757,7 @@ MAME's `vonj.zip` holds only the program pair, so drop it with the parent
 `von.zip`, which has the rest. A `von.zip` with the USA program in it opens as
 `vonu` by itself. The export `von` and the relay build `vonr` have programs
 of their own that were not to hand, so they are not detected yet. The
-Stages and Models tabs work; there are no fighters, cells or sounds.
+Stages, Models, Animation and Cells tabs work, and the music.
 
 The game has no model table of its own: every piece is a triple of pointers
 built in code. The explorer finds the 7097 models by scanning the program and data ROMs for
@@ -748,7 +781,33 @@ What is still missing:
   drawn by code that follows the camera, which the explorer does not run.
 - The Virtuaroids are in the Models tab as parts, in their base colours: the
   colours each one wears are set when a player picks it, and the tab picks
-  none. They are not posed.
+  none. The Animation tab wears player one's.
+
+The **Animation** tab has nine of the ten Virtuaroids, from Temjin to
+Jaguarandi, each built from its own record's lists of parts: the legs, the
+upper body and the weapon in its hand, in player one's colours. Each plays the
+motions its record lists, 89 to 97 of them. A motion is a pair, one for the
+upper body and one for the legs, and the game gives them numbers, not names.
+The pose matches the matrices MAME's board draws Temjin with in the attract
+mode. Not shown yet: Zig-Raht, the boss, which another routine draws; the
+motions the robots' action code keeps in tables of its own (the ranking
+screen's pose among them); and the turns the fight gives the upper body and
+the weapon as a robot aims. See
+[TECHNICAL.md](TECHNICAL.md#virtual-ons-robots-readvonbodies-in-jsvonjs).
+
+The **Cells** tab has the 2D art, 119 pictures: the title logos, the SEGA
+mark and the FBI notice, the robots' portraits and name plates, the stage
+plans, the instruction and advice screens, the fight's messages (READY,
+WARNING!!, YOU WIN, TIME OVER and on) and the attract mode's stills. The maps
+have no header, so each is a place in the code that draws one, named by its
+address, or an entry of the robot or stage tables. The tile chip is filled
+once, one way for the attract mode and another for the game, so there are two
+CGs. One advice screen comes out garbled on both. See [Virtual-On's
+cells](TECHNICAL.md#virtual-ons-cells-jscellsjs-voncells-in-jsgamesjs).
+
+Tick **music** and pick from the **song** list: the sound test's 35, by its
+names, played on the game's sound board. Which stage plays which is decided in
+the fight code, not read yet, so a stage has no song of its own here.
 
 ## Dynamite Cop
 
@@ -775,9 +834,39 @@ models are drawn under the first copy's sets unchecked. The light comes from
 The House of the Dead's settings. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-cop-jsdynamcopjs).
 
+The **Cells** tab has the game's 971 pictures, in every build: the stage
+briefings with their wireframe maps, the mission text, the title and logos,
+the results and the colour bars. They are The House of the Dead's pictures,
+read by the same routines a year on, so each brings its own tiles and colours
+and opens on a CG of its own with the same number. See [Dynamite Cop's
+cells](TECHNICAL.md#dynamite-cops-cells-jscellsjs).
+
+The **Animation** tab has 94 of the game's characters (Bruno Delinger, Jean
+Ivy and Eddie Brown first; the rest by number), each put together from its 15
+parts on the game's 16-joint skeleton, and its 2284 motions (2134 play on that
+skeleton; the game gives them numbers, not names). The pose of a frame matches
+the joint positions MAME's RAM holds for the same motion and frame, and the
+heroes' outfits match MAME's screen. The motions are the same in all five
+builds; the character tables were found in each. Not drawn yet: the extra
+models some joints carry (the guns and items in a hand, belts and pads),
+mirrored motions and the blend between two motions. Character 80 shows
+nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
+
+Tick **music** and an area starts with the song its descriptor names, as
+the game starts it; the **song** list has all thirty of the song table, by
+the names the program's debug table gives them (bgm1, boss1, happy...). The
+song is listed in each area's details.
+
 ## Air Walkers
 
-`airwlkrs.zip` on its own. The **Models** tab has all 2026 entries of the
+`airwlkrs.zip` on its own. The **Stages** tab has the seventeen courts, one
+for each team, as the game draws them on the team's home games: the arena,
+the stands and their crowd, the court's floor with the team's name and logo
+on it, the two hoops and their scoreboards, in the court's own colours and
+the variant the team plays on. The players are left off. Each court is lit
+the way the game lights it, from the eye, so the light follows the camera.
+
+The **Models** tab has all 2026 entries of the
 model table, with the textures, palette and colour tables the game loads for
 them: the players' bodies, the courts' lines and logos, the text the game
 puts over a play, the intro's city and dome, and each team's kit.
@@ -785,17 +874,40 @@ puts over a play, the intro's city and dome, and each team's kit.
 The game numbers its teams twice, 0..16 for the home side and 17..33 for the
 away side, and each side keeps its team's page on a sheet of its own. A team
 model opens on team 0 of its side; the texture picker's sets 0..33 swap in
-the other teams, and set 34 is the intro's, with its own colours. The colours
-are court 0's, in the variant MAME's game was played on, and match MAME's
-dumps of a game and of the intro entry for entry.
+the other teams, and set 34 is the intro's, with its own colours. A home
+team's set brings its court's colours; an away team's are court 0's, in the
+variant MAME's game was played on. Both match MAME's dumps of a game and of
+the intro entry for entry. See
+[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs)
+and [Air Walkers' courts](TECHNICAL.md#air-walkers-courts-jsairwlkrsjs).
 
-There is no Stages tab yet. The courts' floors and stands are not drawn by
-the routine the rest of the models go through, and it has not been found. See
-[TECHNICAL.md](TECHNICAL.md#air-walkers-jstexturejs-jscolorsjs-jsromsetjs).
+The **Animation** tab has the 173 players: five for each of the seventeen
+teams in its home kit, the same five in the away kit, and the three of team
+34, who have bodies of their own. Each is put together from its 16 part
+models on the game's 15-joint skeleton, the way the game's own draw routine
+does it (the explorer runs that routine), and posed by any of the 619 motions
+(the game gives them numbers, not names). A motion also carries where the hips
+go: they stand at its height, so a dunk leaves the floor, and **root travel**
+lets the player run along its path. A frame's joints match the ones MAME's
+RAM holds for the same motion and frame, and each player wears his own skin
+as in MAME. Not shown: the head's turn toward the play and the hands the
+game swaps in during a play. See
+[Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
+
+The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
+layers, the warning, the quarter and score banners, the team names and the
+rest of the 2D over a game. Data East kept The House of the Dead's picture
+format, so each brings its own tiles and colours and opens on a CG of its own
+with the same number. See [Air Walkers'
+cells](TECHNICAL.md#air-walkers-cells-jscellsjs).
+
+There is no music yet. The sound program is Data East's own, not Sega's
+driver, and in the attract the game sends it nothing but a reset.
 
 ## Power Sled
 
-`powsled.zip` on its own, the Slave Revision A that MAME has. The **Models**
+`powsled.zip` on its own, the Slave Revision A that MAME has, loads with the
+Stages, Models, Animation and Cells tabs. The **Models**
 tab lists the 494 models the program names, with the one texture RAM the game
 loads, its palette and its colour tables: the sleds, the riders, the snow,
 rock and ice of the courses, the signs and the text over a race.
@@ -803,14 +915,53 @@ rock and ice of the courses, the signs and the text over a race.
 There is no model table in this game. The program hands the geometry engine
 its three words from records in both ROMs and from immediates in the code,
 and the list is every one of those. A frame's display list from m2-hle2 names
-nothing that is not in it, but about half the polygon ROM is named by none of
-them, most likely the courses' ground, reached some other way.
+nothing that is not in it, and neither does the course (below), but about
+half the polygon ROM is named by none of them.
 
 Textures, palette, colour tables and luma match m2-hle2's memory byte for
 byte. MAME's game stops at the network check, so the models were checked by
 eye in the Models tab and against m2-hle2, not against MAME's screen.
 
-There is no Stages tab and no lighting yet. See
+The **Cells** tab has the 30 pictures the game lays out on the tile chip:
+WAITING YOUR ENTRY, the SEMI AUTO and MANUAL panels, the course select's
+signs, the big countdown digits, EMERGENCY STOP and the rest of the text over
+a race. The game keeps them as small scripts that write the tilemap a run at
+a time, not as maps, and the tab runs each script and shows what it writes,
+with the one set of tiles and colours the game loads at boot. Eight of them
+are named by no call in the program; searching for `unused` lists those. See
+[Power Sled's cells](TECHNICAL.md#power-sleds-cells-jscellsjs).
+
+The **Stages** tab has the course. There is only one, and the game names it
+nowhere, so it is *The course*. It is not a table: the race draws it with six
+scene routines, each from the run's progress, and the explorer runs those
+routines on the program's own code over the whole run and keeps every piece
+they draw, 298 of them. Each scene is a view, named for the records it draws
+(`HONBAN_sce3_course_1`, `sce7_bridge_1` and on): the start, sce3, the
+tunnel, sce5, the bridges and the goal. A view opens on its scene. Round
+them are the race's sky and mountains, which stand at the eye, and over the
+start the four cranes that hold the sleds. The light and the 32 materials
+are the race's own.
+
+The **Animation** tab has ten figures, each a model a part with every part's
+matrix stored for every frame: a crane carrying a sled, the crane's arm and
+claw, a woman in a yellow suit, two riders on a sled, each in two or three
+takes, and a three-part object, once and mirrored. The attract plays five of
+them; no address in the program names three. The names are the explorer's;
+the game has none.
+
+**music**, on the Stages tab, plays the 31 sounds of the sound driver's
+table on the game's sound board. Nothing names them, so they are numbered;
+sound 25 (A0 13 02) is the longest tune among them and likely the song. The
+course has no song of its own here, as the race's is not found yet.
+
+MAME cannot show the race: as the network's master the board stops at the
+ride ID prompt, and with the ride ID set to a ride it waits for the master
+(*Cannot find network main.*). m2-hle2 can: two of its boards on a local
+comm link, the main unit and a ride, race when the main's panel calls the
+ride and starts it. The course was compared with that race from the board's
+own cameras, at the start (both units), in the tunnel and at the finish
+banners, and matches it there; the race times out before the bridges and the
+goal, so those two scenes are the scene routines' draws, checked by eye. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
 
 ## Running it

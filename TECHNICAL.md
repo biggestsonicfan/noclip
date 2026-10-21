@@ -4341,6 +4341,69 @@ Not read: the course paths, the cars' places, the trackside objects, and the
 CGM blocks in the data ROM, which the dumps show change nothing in palette
 RAM on these three courses.
 
+### Sega Rally Championship's people (`js/srally.js`)
+
+The Animation tab's bodies are the spectators by the course. They are the
+only keyframed things in the game; everything else that moves does so by
+code.
+
+**The cars are not bodies.** The car draw (0x5C2B80 to 0x5C3060) draws the
+body model (object +4), then four wheels: push, translate by the wheel's
+offset from the car's table plus its suspension travel (+0x30), on the front
+two (g13 <= 1) a steering turn from +0x24 (TGP `0x15002A2A`), the spin
+(`0x14802929`), the wheel model, pop. Every value is the car's physics state
+of that frame; there is nothing to play back.
+
+**The figures.** One routine, 0x5CA290 (ROM 0x2B290), draws every jointed
+figure. It takes a figure record, a frame and a step:
+
+| Offset | |
+|---|---|
+| +0x00 | key frames (30 for all three) |
+| +0x04 | parts |
+| +0x08 | the key frames, a main_data address |
+| +0x0C | a model number per part |
+
+The three records are at RAM 0x5CA180, 0x5CA1A0 and 0x5CA1D0 (ROM 0x2B180,
+0x2B1A0, 0x2B1D0): 5 parts, models 284-288, data 0x2057F80; 8 parts, models
+289-296, data 0x2058B40; 12 parts, models 297-308, data 0x2059E00. A key
+frame is 20 bytes a part: the part's place as three floats, then halfwords at
++0x0C and +0x10 that go with the place to the TGP as one command, function
+0x5F (`lda 0x2F805F5F`). +0x0E and +0x12 are never read. Each part is placed
+from the figure's own origin, not from another part, so a key frame is the
+whole pose; the explorer gives every part parent -1.
+
+The TGP's function 0x5F was measured, not guessed: a MAME Lua script read the
+matrix the TGP writes to the geometry buffer for each part (bufferram, at the
+pointer in 0x802008) on all three figures, the second and third forced by
+setting the operation-day count. Against the figure's own matrix, every part's
+is T(place) · Rz(-h0C) · Rx(-h10) on the board's axes, to 3e-5 in the
+translation and exactly in the rotation, at scale 1. The explorer's Z is the
+board's negated, which keeps the Z turn and flips the X one: Rz(-h0C) ·
+Rx(h10). The angles are 0x10000 a turn. The parts are flat quads stood up by
+an X turn of a quarter.
+
+**Playing.** The routine returns frame + step, and with the mode both callers
+pass (g3 = 1) it swings back at the end: keys 0 to 29, then -29 to -1 taken by
+their size, one a video frame. MAME showed key 29 twice and then the count
+down. The explorer unrolls that into one motion of 59 frames a figure.
+
+**Who draws them.** Object classes from the handler table at 0x5DDFC4:
+
+- class 6 (0x5CAAE0, state at +0x60) turns each frame toward the player's
+  car (0x2140CC) and draws the first figure (`lda 0x5CA180` at 0x5CAAAC);
+- classes 5 and 7 (0x5CA6D0, 0x5CA710, draw 0x5CA5B0) face the camera
+  (0x20220C) and take the figure from the four-entry table at 0x5CA280
+  (first, second, third, second), indexed by `(0x1D001B8 / 30) & 3`.
+
+0x1D001B8 is in backup RAM. The self-test report (0x5A8FEC) prints it with
+"OPERATION DAYS %10d Days"; it is set at 0x5A1AF4 and counted up at
+0x5A1D9C. So a cabinet's spectators change every thirty days it is on, and
+MAME, fresh, always shows the first table entry.
+
+The flat crowds (class 3, 0x5CA580, draw 0x5CA420) are single billboard
+models from the table at 0x5CA210 indexed by object +0x5C, and are not jointed.
+
 ### Dynamite Cop (`js/dynamcop.js`)
 
 All five builds share the data, polygon and texture chips and the program's
@@ -4464,6 +4527,69 @@ drawn under its own set. In the attract, 0x51F4A0, 0x51F49C and 0x51F4A4 are
 0, 0 and 28 at frame 2700, and "Course 1-1, area 28" in the explorer is the
 cabin MAME shows then: the double doors, bed, desk and wall lamp, in the
 same colours.
+
+### Dynamite Cop's characters (`readDynamcopBodies` in `js/dynamcop.js`)
+
+The Animation tab runs on The House of the Dead's code (`js/bodies.js`,
+`readMotions` and `poseBody`) with a `dynamcop` rig in `js/games.js`. The
+formats were read off the routines that use them, and differ from HOTD's in
+four places.
+
+**The skeleton is in code.** There is no body record. 0x15210 poses an
+object: 16 joints, parents hard-coded as
+`[-1,0,1,1,3,4,1,6,7,0,9,10,11,9,13,14]` (hips, chest, head, two arms of
+three, two legs of three). Joint j >= 1 sits at entry j-1 of 16 float triples
+at `offsets[char]` from its parent, turned by the parent: `pos = pos_p +
+off * R_p` (row vectors). The matrices land at object +0x6A4 + 48 * j.
+`models[char]` points at 15 model numbers, one for each of joints 1-15, drawn
+by 0x18FC0 (joint 0 has no model). The two tables run in parallel, 96
+characters each; 75 and 79 use other skeleton routines and are left out.
+
+| table | dynamcop | dyndeka2 | dynamcopb | dyndeka2b | dynamcopc |
+|---|---|---|---|---|---|
+| offsets | 0xE1890 | 0xE1880 | 0xCFE90 | 0xCFE80 | 0xF2260 |
+| models | 0xE1A10 | 0xE1A00 | 0xD0010 | 0xD0000 | 0xF23E0 |
+
+Each was found in its build by searching for the 2A tables' bytes. The motion
+tables are in the shared upper half of the program, so they are the same in
+all five: 2284 data pointers at 0x15FA00, frame counts at 0x161DB0 and a flag
+byte per motion at 0x164160. Most data is in the extra ROM (0x06xxxxxx), some
+in main data (0x02E...); the 24 pointing at 0x01... are not motions and are
+skipped. 2134 motions are spaced for 16 joints.
+
+**The frame is reversed.** It has HOTD's size, `((48 * joints + 127) >> 5) *
+4` bytes, but the 16 angle triples come first and the root's x, y, z floats
+after them, at 6 * joints. 0x15000 copies a triple's halfwords (h0, h1, h2)
+to slot +0x40C, +0x40A, +0x408 (slot j at 0x3E4 + 0x2C * j), and 0x15210
+builds `R = Rx(h2) Ry(h1) Rz(h0) R_parent`. Joint 0's triple is the root's
+turn. Only the root's y is used for its position (x and z are travel, shown
+with the travel option); the object's own yaw at +0x40 is outside the pose.
+In the viewer's frame (z negated) this is HOTD's `turn` with ax = h2,
+ay = h1, az = -h0, offsets (x, y, -z) and the root's z negated
+(`readFrame`, `layout: 'dynamcop'`).
+
+**Level joints come from the motion.** Bit 0 of the motion's flag byte sets
+both ankles (joints 12 and 15) level, bits 1 and 2 the wrists (joints 5 and 8):
+the joint's rotation starts again from the body's own and only its angles
+turn it, as HOTD's reset to the scale matrix does. A part's `flatBits` names
+its bit. The wrist bits were read from the code; no motion was found that
+uses them.
+
+**Checked against MAME.** A Lua script read the 16 matrices at +0x6A4 and the
+motion number and frame from RAM in the attract and in play (10 dumps). The
+positions `poseBody` gives for the same motion and frame match to 0.0000 in 6;
+in the others the right ankle is off by up to 0.03 and two dumps by 0.12 and
+0.07, most likely the frame read a tick apart from the matrices. Headless
+Chrome pictures of Bruno (motion 1255, the throw) and Jean (motion 1970, the
+high kick) match MAME's screen at frames 3300 and 4800, outfits included.
+
+Not done: the extra models some joints carry (0xED140 / 0xED2C0, on joints 1,
+3, 4, 6, 7, 9-11, 13, 14), the items in a hand chosen per motion
+(0x164A50 / 0x164A54, drawn by 0x19580 and 0x192E0 on joints 5 and 8), the
+mirror flag at object +0xCD8, the blend between motions, and which motions
+each character plays (lists from 0x1B70A8). Only the three heroes are named.
+Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
+explorer; why was not found.
 
 ### Fighting Vipers' cells (`js/cells.js`)
 
@@ -4697,8 +4823,85 @@ Moon Base, Flooded City, Nirvana and Secret Base.
 What this leaves out: Green Hills draws its sky and no floor, Space Dock
 and Moon Base only a few small pieces, Nirvana a tube and Flooded City a
 plane and its backdrop. The rest of those fields is probably drawn by code
-that follows the camera or culls, which is not run. The robots are not
-posed.
+that follows the camera or culls, which is not run. The robots are on the
+Animation tab (below).
+
+### Virtual-On's robots (`readVonBodies` in `js/von.js`)
+
+The Animation tab has nine robots, `rig: { kind: 'von' }` in the profile.
+Nothing of HOTD's `js/bodies.js` is used but the shape of a body: the parts,
+the motions and the pose are read and built in `js/von.js`, from the draw
+routines (the legs 0x8DD40, the upper body 0x8DFC0, the weapon 0x3403C).
+
+**The robot record.** `ld 0x19360[g3*4]` (0x19D74 and others) reads a table
+of ten pointers to robot records, in the select screen's order: Temjin,
+Viper II, Belgdor, Raiden, Dorkas, Fei-Yen, Apharmd, Bal-Bas-Bow,
+Jaguarandi, Zig-Raht. The name is at +0x6BC. +0x00, +0x08 and +0x10 are
+three lists of parts, each a pointer and a count: the weapons, the upper
+body and the legs. A list entry is 8 bytes:
+
+| first word | second word | the entry |
+|---|---|---|
+| nonzero | variants pointer | a drawn part |
+| 0 | -1 | nothing (the upper body's entry 0, its root) |
+| 0 | 0-5 | a slot: its frame entry is kept at 0x562430 + 12 * slot |
+
+A variant is 16 bytes: the texture point pointer, the header pointer, a
+second header (used when the object's +0x1AA is set) and the mesh word.
+Which variant is a halfword of the object per part (from +0xDA for the legs,
+from +0xB6 for the upper body, +0xB2 for the weapon); the explorer draws
+variant 0. The triples go into the model table through `addModelTriples`,
+as the field code's do. Slot 0 is the waist, the legs list's last entry.
+Slot 1 is the hand the weapon list's entry 1 is drawn in. Zig-Raht's record
+has no weapons or upper body, and one list of 25 parts with 32-byte
+variants that another routine draws; it is left out.
+
+`vonu`'s records are 0xF0 lower, their table at 0x19270; the records and
+lists are the same.
+
+**Motions.** From +0x70 the record holds 103 pairs of record pointers, the
+upper body's then the legs'. The draw (0x2EE70) reads them as
+`0x1D8[n * 40]` and `0x1DC[n * 40]`, the same pairs in groups of five. A
+record is 8 bytes in the data ROM: the data pointer, a u16 frame count and
+an s16 part count. A frame is 12 bytes a part: three s16 angles (x, y, z,
+65536 a turn) and three IEEE half floats, the part's offset, which the copro
+takes with command 0x2F (the low 16 bits of three words). The part count is
+negative where the frames run backwards from the pointer; the draw steps by
+the signed count and loops over its size, so a list entry past the count is
+not drawn on that motion. The frame is clamped to the last. The legs'
+records have 8 parts (Bal-Bas-Bow 9), the upper body's 12 to 17. The two
+records of a pair play on one frame count (0x51AB10 and 0x51AB12). Repeated
+pairs are dropped: Temjin, Viper II, Belgdor, Raiden, Dorkas, Apharmd and
+Jaguarandi have 97 each, Fei-Yen 93 and Bal-Bas-Bow 89. The game names
+none, so a motion is called by its pair's number.
+
+These are not all of a robot's motions. The robots' action code keeps more
+pairs in tables of its own, between 0x42460 and 0x4FFFF (865 different
+pairs, Temjin's ranking-screen pose among them at 0x46950). Telling which
+robot plays them means following each robot's action routines, so they
+are not listed.
+
+**The pose.** Every part is drawn at `T(offset) Rz Ry Rx` of its frame
+entry (copro 0x2F, then 0x16, 0x15, 0x14), each in a push and pop:
+
+- the legs from the robot's place, which is the object's matrix turned by
+  its +0x184, +0xFC, +0xFE and +0x34;
+- then the waist the same way, turned on y by the object's +0x36 (the
+  twist, 0 in the explorer); then the inverse of the upper body's entry 0
+  (`Rx(-x) Ry(-y) Rz(-z) T(-offset)`); then each upper body part;
+- the weapon at the hand's entry under the upper body's root, plus the aim
+  the fight gives it (the object's +0x3A and +0x38 when the record's +0x484
+  is set, which the explorer leaves out).
+
+**Checked against MAME.** A Lua script read the matrix written into the
+geometrizer list for each object (`:bufferram` at the list address) and
+the pair and frame from 0x51AB08-0x51AB12. In the attract fight at frame
+1800 Temjin is on pair 0 with the counter at 16: with the record's entry 17
+every leg and upper body part matches to 5e-5, and the weapon's offset
+exactly (its turn differs by the aim). At frame 2400 (the ranking screen,
+the pose at 0x46950) the legs match to 1e-4, and the upper body, drawn a
+frame earlier, matches part to part to 3e-4. So the counter is one behind
+the entry drawn; the tab's frame 1 is entry 0.
 
 ### The House of the Dead's cells (`js/cells.js`)
 
@@ -4723,6 +4926,175 @@ are reached by number, not by pointer, so there is no unused list.
 Revision A (`hotd`) moved its tables, and its picture table has not been found,
 so it has no Cells tab.
 
+### Sega Rally Championship's cells (`js/cells.js`)
+
+AM3 keeps its 2D art in files of its own, each a CG and its patterns. A file
+starts with the eight bytes "CGM 1.0 ", which the loader (`0x5C8EB0`, in the
+RAM copy of the program) compares before it reads anything else, so a scan
+of the ROMs for them finds every file. After the magic:
+
+- u16, the number of blocks;
+- each block: 16 colours (32 bytes), a u16 the loader does not read, a u16
+  tile count (up to 128), and the tiles, 32 bytes each;
+- u16, the number of patterns;
+- each pattern: a 16-byte name, s16 columns, s16 rows, and a halfword entry a
+  tile.
+
+The loader gives block k the palette group g + k and the 128 characters from
+(g + k) × 128, copying both as they are (`0x5C58B0` and `0x5C5918` queue the
+colours). g is the first free group, which the reset (`0x5C8A60`) sets to 9,
+past the font; the draw (`0x5C8C10`) adds g << 7 to every entry, so the
+group is the block. In m2-hle2 the first writes of the file at 0x28AE89C
+(`sa_push1`, PUSH START BUTTON) are its colour 0x7EA9 to 0x1800120, group 9, and its
+first tile word 0x11110011 to 0x1089000, character 0x480, as the profile
+loads them.
+
+The Cells tab has a CG for each file, loaded from group 9, and a cell for
+each pattern, named as the file names it: 141 files (16 in the program ROM,
+125 in the data ROM) and 853 patterns. MAME's third data pair is 2MB, and the
+region repeats it from 0xA00000 to 0xC00000, so the scan stops at 0xA00000
+(`cells.cgm.dataEnd`); past it would be the same 59 files again. The game
+loads a file by its address, so the 49 files no aligned word in the program
+or data ROM names have their 363 patterns marked unused. The colours go
+through colorxlat, as on the other Model 2 games.
+
+### Virtual-On's cells (`js/cells.js`, `vonCells` in `js/games.js`)
+
+Virtual On's maps carry no header: the draw routines take the map's address,
+its width and its height from the caller, and write each entry to a tilemap
+with bits of their own set.
+
+| routine | tilemap | bits |
+|---|---|---|
+| `0x1DC10` | layer A, 0x1000000 | 0x8000 |
+| `0x1DD80`, `0x1DE00`, `0x1DE80` | 0x1002000, 0x1006000, 0x1004000 | 0x8000 |
+| `0x1DC90` | layer A | 0xC000 |
+| `0x1DD10` | layer A, at a column and row | 0xC000 |
+| `0x1BC90` | any, a row at a time (`memcpy`) | none |
+
+Bit 14 takes the colours from the upper half of the palette. So a cell is a
+call with a constant map: the profile lists every one in vonj (`VON_MAPS`,
+taken from the code, one cell a map, the largest where a map is drawn twice)
+and the two tables:
+
+- the robots, at program 0x20B50 (vonj), 0x68 bytes a robot: +0 the 31 × 35
+  portrait (drawn by `0x211F0`), +0x4C the name plate with its columns and
+  rows at +0x50 and +0x54 (drawn by `0x1DC90`). The plates name the robots;
+- 0x211B0: ten 20 × 15 plans of the stages (`0x21EB8`).
+
+The map at 0x2FDA1D0 is 64 × 64 zeros the game clears a layer with, and is
+left out. So are the calls that take their map from a table of digit glyphs
+(0x2EA1E50 to 0x2EA2090, and 0x2EA289C), a counter's 1 or 2 by 2 tiles each.
+That makes 119 cells.
+
+The tile chip is filled at the start and not again, as Virtua Cop's is
+(`cells.boot`). `InitScroll` (`0x1C220`) draws the 1-bit font at data
+0x2EA0BB8 into characters 0 to 0x7F with pen 1 (`0x1C730`). `SetScrolldata`
+(`0x1BDA0`) does the rest, and its argument picks one of two fills: 0, from
+`InitAll` (`0x18970`) and `InitAdvertize` (`0x2B508`), for the attract mode,
+and 1, from `InitGameMain` (`0x190E4`), for the game. Each copies its
+characters with the bytes of each halfword swapped (`0x1BC20`; the count is in
+halfwords):
+
+- 0: 0x2EA2A74 to characters 0x80, 0x1880 of them; 0x2ED3054 to 0x1900,
+  0x1700; 0x2F4DB14 to 0x3000, 0x680;
+- 1: 0x2EA2A74 to 0x80, 0x1880; 0x2F000D4 to 0x1900, 0x2700;
+- both, after: six runs from the program ROM's second megabyte (0x144CC4,
+  0x146324, 0x144184, 0x145BA4, 0x146C24, 0x146C64) to characters 0x1488,
+  0x3DB0, 0x3D10, 0x3F40, 0x37C and 0x37E, and character 0x1570 filled with
+  0x9999.
+
+The colours are written by `SetScrollcol` (`0x1BB90`), which stores each
+component's low bit apart: a stored colour v is the 555 colour
+`(v >> 12 & 1) | (v & 15) << 1 | (v >> 13 & 1) << 5 | (v >> 4 & 15) << 6 |
+(v >> 14 & 1) << 10 | (v >> 8 & 15) << 11`. Fill 0 writes 0x2FDEF20 (0x31
+groups), 0x2FD6EA0 (0x2E) and 0x2FF7568 (0xD) from group 1, and the same from
+0x2FDF540, 0x2FD7460 and 0x2FF7568 from group 0x81; fill 1 writes 0x2FDEF20
+(0x31) and 0x2FED0E8 (0x4E) from group 1, and 0x2FDF540 and 0x2FEDAA8 from
+0x81. Both then write program 0x1BB50 to group 0xA9 and 0x1BB70 to 0xFA, 0xFB
+and 0xFE.
+
+So the Cells tab has two CGs, the attract mode's and the game's, and every
+cell has one that writes every tile it names. The colours go through
+colorxlat. vonu has the same maps; its program moves the robot and stage
+tables up by 0xA40 (to 0x21590 and 0x21BF0) and the two colour tables down
+by 0xF0 (0x1BA60, 0x1BA80), found by their bytes, and its cells keep vonj's
+call sites as their names. The seventh advice screen of the attract mode
+(0x2FD0464, drawn by `0x20974`) comes out garbled on both CGs; the others
+read, so its characters are probably loaded by something not found yet.
+
+### Dynamite Cop's cells (`js/cells.js`)
+
+Dynamite Cop keeps The House of the Dead's pictures, routines and all, a year
+on. The table is at program 0xE9B10 in the 2A export build (0xE9B00 in the
+Japanese 2A, 0xC9880 and 0xC9870 in the 2B pair, 0xFA230 in the 2C): 971
+entries of three pointers, tiles, colours and map, into the program's upper
+pair and the data ROM, ended by a zero entry. The table's bytes are the same
+in all five builds; only where it sits moves. The code reads the three words
+at `table`, `table + 4` and `table + 8`, indexed by `n * 3` (0xA3B94 to
+0xA43A4 in the export 2A build, and 0x1DD00 and 0x2BA90).
+
+0xA3F30 loads a picture into free blocks the first time it is drawn: 0xA3C50
+finds a run of free 128-tile blocks, 0xA3E70 copies each chunk of tiles into
+a block of its own, and 0xA3DE0 and 0xA3D40 copy that chunk's 16 colours into
+the block's group. The draw (0xA3F90) adds the first block to every map entry,
+and ORs in the category bit (`r5 << 15`) and `r6 << 14`, so the group is the
+block, as in Dead or Alive and The House of the Dead. The panel loads each
+picture from block 0, and the palette goes through colorxlat.
+
+Checked in the explorer on every build: all 971 open, and the stage 4
+briefing (cell 930) and the "2" logo (434) draw whole, as does the mission
+text (600) in the export 2A build. The pictures are reached by number, so there is no unused list.
+
+### Power Sled's cells (`js/cells.js`)
+
+Power Sled has no maps. Its draw, 0x4EE0, takes the tilemap address in g0,
+a script in g1 and a halfword to OR into the entries in g2 (every one of the
+65 calls sets bit 15, the category bit), and walks the script a byte at a
+time. A byte up to 0x7F writes entry b of a dictionary at RAM 0x51AD40; 0x80
+and up index a jump table at 0x4F50, and anything above 0x8D returns. A
+character is built from two bytes as `(0x100 + lo + (hi << 8)) & 0x3FFF`:
+
+| op | arguments | what it does |
+|---|---|---|
+| 80 | x, y | go to `0x1000000 + (y << 9) + x * 2` |
+| 81 | s | move `s * 2` bytes, s signed |
+| 82 | n, lo, hi | n copies of the character, rightwards |
+| 83, 84 | n, lo, hi | n entries counting up (down) from it |
+| 85 | n, hi, b... | n entries, `(0x100 + (hi << 8)) \| b` each |
+| 86 | n, (lo, hi)... | n characters, ORed with the whole of g2 |
+| 87 | the same | and each one added to the dictionary |
+| 88 | k | clear layer `k & 3` from the table at 0x33E0 (0x4890) |
+| 89, 8A | n, lo, hi | n copies downwards, 0x80 bytes a step |
+| 8B, 8C | n, lo, hi | n copies upwards |
+| 8D | a, b | move `(a + b)` signed, times 0x200 bytes |
+
+0x52D0 erases what a script drew by walking it the same way with zeros (30
+calls). Every call loads its script with `lda`; the scripts lie end to end
+from data 0x322500 to 0x323108, each ending with 0x8E, thirty of them. At
+0x323108 there is a table of thirty offsets, each from the table itself,
+which names the same thirty starts; nothing reads it. Eight scripts (cells 0,
+1, 3, 4, 9, 10, 17 and 18) are named by no call, and listed `unused`. A cell
+is what its script writes, run from entry 0, cropped to the entries it
+touches; no script uses 88, and none reads a dictionary entry it did not add.
+
+The tile chip is filled once, by the boot at 0x46F0, and that is the cells'
+only CG:
+
+- 0x48B0 expands the 1bpp font at program 0x33F0, 8 bytes a character with
+  the top bit leftmost, into characters 0-255 at pen 1.
+- 0x4EA0 copies 0x22500 bytes from data 0x300000 to 0x1082000, character 256
+  on, straight: no byte swap, unlike Virtua Cop's.
+- 0xF100 fills groups 0-127 with the 16 colours at 0xF0C0 and groups 128-255
+  with those at 0xF0E0, then 0xF17C copies 0x230 colours from data 0x323180
+  to 0x1800040, group 2 on.
+
+Against m2-hle2's memory in the attract (frames 900 and 3000), the
+characters match byte for byte and the palette in all but colour 0 of group
+0. The interpreter's output for scripts 11, 21, 25 and 28 is found entry for
+entry in the dumped tilemap layer 0, at 0x294, 0xF10, 0x81A and 0x844. The
+palette goes through colorxlat, as MAME's `palette_w` sends every tile colour.
+
 ### Air Walkers (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
 Data East's basketball game on Model 2A shares none of Sega's tables, so each
@@ -4740,8 +5112,8 @@ material word, mesh pointer, polygon count. It runs 2026 entries. The model
 numbers MAME logs at 0x1E8E4 put the parts in groups: the players' bodies at
 3..303, the courts' lines and the HUD text at 384..491, the intro's city and
 dome at 539..555, home-side team models at 556..1291 and away-side ones at
-1292..2025. The court floors and the stands are not drawn through 0x1E8D8,
-and their path has not been found.
+1292..2025. The courts' arena, floors and stands go through it too, by
+0x1E890 (see [the courts](#air-walkers-courts-jsairwlkrsjs)).
 Model 555, the intro's city, is 5440 polygons in one mesh, so the profile
 raises the decoder's cap of 4096 vertex pairs (`maxVertexPairs`).
 
@@ -4779,7 +5151,9 @@ intro's 10 from 0x4D31 (0x256AC). A court's set-up, 0x247D0 (court, variant),
 sends five tables from `ld 0xD440[court*4]` to the slots at 0xF1980, five
 fixed ones from 0x4731 to slots 7..11, and the variant's two
 (`ld 0xD484[v*4]` to slot 0, `ld 0xD494[v*4]` to slot 14). The team's comes
-last.
+last. The court is the home team's (below), so a home team's number, 0..16,
+builds its own court's tables in its own variant; an away team's builds court
+0's in variant 1.
 
 **Checks.** Against MAME's colorxlat and palette RAM in a game on court 0,
 variant 1, with home team 0 against away team 20: every row and entry
@@ -4787,10 +5161,172 @@ matches, except the other side's team slot and block, which the Models tab
 leaves at the intro's. Set 34 is the intro: the two runs and the first block
 only. It matches MAME's dump 20 seconds after boot exactly.
 
-**Not done.** Stages: there are 17 courts (`0xD440` has 17 entries) with 4
-variants each, but the floors and stands are drawn by a path other than
-0x1E8D8, so the court can't be put together yet. Models 534..538 sample the
-same rows as the title page and open on the boot pages, which may be wrong.
+**Not done.** Models 534..538 sample the same rows as the title page and
+open on the boot pages, which may be wrong.
+
+### Air Walkers' courts (`js/airwlkrs.js`)
+
+**Which court.** The match set-up at 0xD048C takes the court from the home
+side's team byte (0x5136D0 + side * 0xB0) and the variant from that team's
+record. The records are 20 bytes at 0xFBA80: +0 the city's name, +4 the
+nickname's, +12 the variant (0..3), the rest the line-up. So there are
+seventeen courts, one a team, and the Legends' is the only one in variant 3.
+A debug cycler at 0x29C88 steps 0..17; 17 is the intro's scene (0x256A0).
+
+**Set-up, 0x247D0 (court, variant).** The court's colours (above), the
+palette block 0x1EAF0, the two boot pages again, and two models by the
+variant: 0x521774 = `ld 0xF8280[v*4]` (0x95, 0xDD, 0x10C, 0x120), drawn on
+each hoop's stand, and 0x52178C = `ld 0xF8290[v*4]` (0x98, 0xDE, 0x10D,
+0x121), drawn on the court. It ends in 0x25750, which sets up the
+backboards' objects.
+
+**Draw, 0x24DA0 (court)**, called each frame from 0xBA4 with `ldob
+0x510980`. Every piece goes through 0x1E890 to the model table, under the
+coprocessor's matrix (the commands js/doa.js keeps: push 0x05, pop 0x06,
+translate 0x12, scale 0x13, turns 0x14..0x16). In order:
+
+- 0x24470 works out from the camera (0x510964..0x510974) whether each hoop
+  is near (1), far (3, drawn plainer by 0x24240) or out of view (0), into
+  0x521768 and 0x521769;
+- the arena 0x99, the crowd frame `ld 0xF19C0[f*4]` (f = 0x521784, which
+  steps the crowd), 0x101, the stands 0x96, 0x94, 0x93, one of 0xDA..0xDC by
+  a counter, and the variant's model;
+- the players, by 0x23850 on each object at 0x510B40 and 0x511D10 (+0x390
+  apart), and 0xB2B70;
+- the floor `ld 0xF8230[court*4]` (0x175..0x185), turned 0x8000 about Y when
+  byte 0x5136C5 is over 2; 0x186 and 0xD9 by flags; 0x8E; the crowd's second
+  frame `ld 0xF19A0[f*4]`;
+- the hoops, 0x24640 (0) and 0x24640 (1) under a turn of 0x8000: 0x9A, 0xD8,
+  the variant's padding, the rim 0x10F at (115.41, 26.99, 0), and 0x24940's
+  scoreboard digits out of 0xF81D0 and 0xF8200;
+- 0x25B90, the ball and what the play has out (0x510990, 0x5109C0; type 7
+  is model 0x18D at the object), and 0x8F..0x92 on a timer.
+
+The explorer runs the set-up and one frame of the draw on js/i960.js with
+js/doa.js's machine, from the identity, so each piece comes out in the
+court's frame. It skips the player draw, the colour, palette and page
+uploads (the explorer builds them from the same tables), and answers 0x24470
+with "near" for both hoops. Each court is 32 pieces, and the run meets no
+coprocessor command it does not know.
+
+**Lighting.** The frame start (0x1C240) sends geometry function 6 with the
+31 material slots at 0x1B3C0, {parameter word, distance coefficient} each,
+and function 0x0A with the light (0, 0, 1), which is in the camera's frame.
+So the light runs down the view wherever the camera is, and the Stages tab
+keeps it there (`headlight`).
+
+**Checks.** MAME's draw log (`bp 1E8D8` with the model number, frame 5000 of
+the attract, a game on court 9 in variant 0) has the same pieces in the same
+order: 153, the crowd, 257, 150, 148, 147, the counter's, 152, the players,
+4, the floor 381, 142, the crowd, then each hoop as 154, 216, 149, 271 and
+its digits. The crowd's frames and the counter's model differ with the
+moment, and the play's ball and objects come after. The court as the Stages
+tab shows it, from a camera behind one baseline, has the same floor, logo,
+lines, boards, banners and stands as MAME's picture.
+
+### Air Walkers' players (`js/airwlkrs.js`)
+
+The Animation tab is a `BODY_RIGS.airwlkrs` rig (`rig` in `js/games.js`):
+`readAirwlkrsBodies`, `readAirwlkrsMotions` and `poseAirwlkrs`, which hands
+the viewer matrices the way `js/doafighters.js` does.
+
+**The skeleton is in code.** There is no tree of parts. 0x23850 draws a
+player object (0x510B40 and on, +0x390 apart); 0x23600 places it (translate
+to its spot, scale `+0x58, +0x5C, +0x58`, translate (0, `+0xB0`, 0), turn
+`+0x14` about Y) and calls 0x214A0 (the legs) and 0x21A70 (the rest), or
+0x20850 for both when the team at `+0xC` is 34. Those push and pop the
+coprocessor's stack down fifteen joints, with the bone lengths as constants
+in the code: the legs at (1.5, 0, ±1.0) from the hips, knee and ankle 4.7
+on; the neck 4.4 over the trunk; the shoulders at (3.6, 0, ±2.3), elbow and
+wrist 2.7 on. Team 34's routine has lengths of its own. Each joint turns by
+three halfwords of the pose at 0x5214C0 (6 bytes a joint): the first to
+command 0x16 (Z), then 0x15 (Y), then 0x14 (X). Each draws one of the sixteen
+models at `+0x120..+0x15C`, plus `ld 0x5215F0`, which is -1 (the plainer
+model before it in the table) when the camera is over 35 units away. The
+explorer runs the routines on js/i960.js with js/doa.js's machine, from the
+identity, and takes each part's matrix at its draw; `PLAYER_PARTS` lists the
+sixteen in their draw order with the field, parent and joint.
+
+**Players.** The set-up 0x1F3F0 (object, team, player) copies sixteen model
+words from `0xF4B20 + 0x190 * team + 0x50 * player` to the object: +0 the
+trunk (`+0x140`), +4 the head (`+0x120`), +8..+0x1C the arms
+(`+0x128..+0x13C`), +0x20 the hips (`+0x144`), +0x24..+0x38 the legs
+(`+0x148..+0x15C`) and +0x3C the head's second model (`+0x124`). Teams 0..16
+wear their home kit and 17..33 the same players' away kit, five each; team 34
+has three records, bodies of their own, which the set-up swaps in for a player
+when a cheat bit (0x5214A4) is set. That is 173 bodies. A team's body is shown
+with its team's texture set and colours (`useAirwlkrsPlayerScene`), team 34's
+with set 0.
+
+**Motions.** The motion start 0x1F1B0 (object, m) takes the angles from
+`ld 0x26E3CA0[m*4]` and the root's track from `ld 0x25BF740[m*4]`, unless the
+byte at `0xF2C68 + 12 * m` is set: then from entry byte - 1 of 0x2CE9750 and
+0x2CE96C0. 35 motions are taken from that second pair, ten of them ones the
+first table has no frames for (64, 80, 81, 85..88, 90, 91). 0x23F94 keeps m at
+or under 0x285. A motion is a halfword n, then n + 1 frames of 45 halfwords
+(0x5A bytes), padded to 16; n = 0xFFFF is no motion. 619 of the 646 numbers
+have frames. The clock `+0xE0` is 8.8 fixed point, and 0x201B0 eases each
+angle from frame `t >> 8` to the next into 0x5214C0. The root's track is a
+float triple a frame, eased into `+0xAC..+0xB4`: y is the hips' height
+(about 12 standing, 34.3 at the top of motion 633's dunk), and 0x23600 lifts
+the player by it; x and z are its path, which the explorer follows only with
+root travel on. A third table, `ld 0x26F8600[m*4]` (0x2CE97E0 for the second
+pair), goes to `+0x110` with a halfword a frame, 0x8000 at the start when
+there is none; it is not read.
+
+**Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
+`+0x11D`), the blend into a new motion, and the hands the game swaps in during
+a play (MAME's log has hands 41 and 47 where the record has 37 and 43).
+
+**Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
+and translates and call 0x1E890, which draws from the model table as it is.
+A skin tone is a set of limb models: the player record names them (33, 56...
+or 122, 139... or 192...), and they differ in their texture word's colour
+base (`th3` 0x3C0, palette 15, for the darker skin; 0x400, palette 16, for
+the lighter) over the same tiles. They came out black because their faces
+use material slots 6 and 7 (diffuse 255, ambient 111 and 48), all diffuse and
+little ambient, and Air Walkers has no game lighting table, so the player
+scene kept whatever light and slots the last tab had set. It now takes the
+court's slots (0x1B3C0) and the court's light down the view. Checked against
+MAME at frame 5000 of the attract (Orlando against Chicago on court 9): its
+palette, luma RAM and colour tables equal the explorer's, the texture sheet
+too where the limb tiles are, and Orlando #7's dark brown and Chicago #22's
+light skin come out as in MAME's picture.
+
+**Checks.** MAME, `bp 0x2373C` logging the pose words and the coprocessor's
+read-backs of five joint ends (0x5215E0..0x521630), on ten players in a game
+on court 9: the pose words are the motion table's frames eased at `+0xE0`
+(but just after a motion changes, while it blends), and with MAME's own pose
+words the explorer's run gives the same distances between those ends to
+0.0001, or within 0.21 where the head is turned. `+0xB0` is the root track's
+y (10.75 at motion 18's first frame), and motion 80 has the 8 frames of its
+second-table entry. The headless page shows 173 bodies and 619 motions with no
+errors; Orlando's #7 (TEDIN, set 9) wears the jersey MAME's screen shows.
+
+### Air Walkers' cells (`js/cells.js`)
+
+Data East's 2D is The House of the Dead's picture format, with its own copy
+of the routines. The table is at data 0xC15220 as the code names it
+(0x2C15220, the 1MB EPROM pair's third repeat; the pair itself starts at
+0x800000): 492 entries of three pointers, tiles, colours and map. The 493rd
+word is no pointer, and no code bounds the table, so the count is where the
+pointers stop. The table is read at 0xC38DC, 0xC3B18, 0xC3BE8, 0xC3CEC,
+0xC3DB0 and 0xC3E6C (tiles and colours) and at 0xC3F3C, 0xC3FC8, 0xCE330,
+0xCE368, 0xD47B0, 0xD47E8 and 0xD4814 (maps).
+
+0xC3CD0 loads a picture the first time it is drawn (its slot holds no block
+yet): after a call to 0xC38D0 (not read), each chunk, a count and that many tiles, goes to a 128-tile
+block of its own (`block << 12` from 0x1080000), and the chunk's 16 colours
+go to every block it takes, at `0x1800000 + block * 32`. The draw, 0xC3F10,
+takes the picture's slot in g0, the tilemap in g1, two bits in g2 and g3,
+the column and row in g4 and g5, and the picture in g6; it adds
+`(g2 << 15) + (g3 << 14) + (firstBlock << 7)` to each map entry, so the
+group is the block. The panel loads each picture from block 0, and the
+palette goes through colorxlat.
+
+Found with m2-hle2: a write watchpoint on the title's tilemap stopped in the
+draw at 0xC3FA0 reading map 40 (the AIR layer, layer 2) and map 41 (the
+WALKERS layer, layer 0); both pictures in the tab match the dumped layers.
 
 ### Power Sled (`js/powsled.js`, `js/texture.js`, `js/colors.js`)
 
@@ -4805,10 +5341,9 @@ texture header address and object address (bit 23 set: a word index into the
 polygon ROM). The program takes the three words from three places, and
 `js/powsled.js` gathers them all:
 
-- 64-byte placement records in the data ROM, {tpa, tha, oba, 0, 3x4 float
-  matrix}. The grid at data 0x4770 is {ptr, 33, 33 offsets} of them, read by
-  0xE47AC through 0xE1F30. Longer runs are at 0x40534, 0xE7270, 0xEDD98,
-  0x13E240, 0x18E6E8, 0x1DEF68 and 0x285CA4.
+- 64-byte part records in the data ROM, {tpa, tha, oba, 0, 3x3, place}:
+  the frames of the figures (see Animation below), such as data 0x4770's,
+  read by 0xE47AC through 0xE1F30.
 - 28-byte named records in the program ROM, 0xD8EA0..0xE19E8: two words, the
   three, a zero and a pointer to a name such as `HONBAN_sce2_course_N_4_1_0`.
 - Immediates: `lda tpa,g6; st g6,0x804000; lda d(g6),g6; st; lda oba,g6; st`,
@@ -4841,9 +5376,141 @@ result matches m2-hle2's colorxlat exactly.
 **Luma.** 0xC8F0 writes two bands of 128, entry i = ((i & 127) + 1) >> 1
 (`halfRamp`). It matches.
 
-**Not done.** Stages: the grid and the runs hold placement matrices, but
-which go together for a course, and where the ground comes from, is not
-worked out. No lighting.
+**The course** (`readPowsledStages`). There is one, and nothing names it.
+The race keeps the sled's progress down the course and hands it to a scene
+routine for each span of it (0x30AF4, and its twins 0x2A01C and 0x35CD0),
+with what is left past the span's start:
+
+| Routine | Progress | Records it draws |
+|---|---|---|
+| 0xDB0C0 | 0x000-0x0DB | `HONBAN_sce1_start`, `HONBAN_sce2_course_1..22` |
+| 0xDBFD0 | 0x0DC-0x171 | `HONBAN_sce3_course_1..15` |
+| 0xDCBF0 | 0x172-0x1B7 | `HONBAN_sce4_course_1..7`, `sce4_tonnel` |
+| 0xDD250 | 0x1B8-0x1C6 | `HONBAN_sce5_course1..2` |
+| 0xDE200 | 0x1C7-0x267 | `HONBAN_sce7_bridge_1..7` |
+| 0xE1AF0 | 0x268-0x347 | `HONBAN_sce8_course1..7`, `_F1..F10`, `GOAL_KANBAN` |
+
+Each one draws the 28-byte named records whose {first, last} span holds the
+progress (0xD8B50: g0 the records, g1 their count, g2 the progress), in
+world space under the camera, and a few pieces under a matrix of their own.
+0x2A034's sce8 is 0xE1C80, the same less the goal (0xE04B0). Past 0x347
+nothing changes.
+
+The explorer runs each routine on the i960 (`js/i960.js`) for every progress
+in its span. The coprocessor here is not the TGP: a command is one word to
+0x884000 with the opcode in its low byte, then its singles. The routines send
+0x04 push, 0x05 pop, 0x1D translate (3), 0x1F times a 3x4 (12), 0x07 hand
+the matrix over (the geometrizer's 0x0B reads its twelve words back), and,
+from the goal's sign only, 0x2C scale (1) and 0x21 turn about Y (1 word).
+The geometrizer's 0x01 then draws {tpa, tha, oba} under that matrix. A piece
+is kept once, at the first place it is drawn, keyed by its model and place,
+with every scene that draws it and the first and last progress that does:
+304 pieces, models 137 to 490, all from the model list. Six of them are
+drawn at progress 0 only (one of them up to 3) and then swapped for another
+on the same spot (m2-hle2's race draws mesh 0x8401B6 up to
+frame 4601 and 0x822070 from 4731, never both); the stage keeps the one the
+race keeps, which leaves 298. One piece, the goal sign's frame (mesh 0x882859), steps its
+material with the frame counter; the stage draws it with the first one it
+is sent, as model `283#608ac`. Every routine finishes, and no unknown
+coprocessor opcode is met.
+
+The scenes are the stage's views, named for their records; each opens on a
+camera framed on its own pieces. The race sends the light straight to the
+geometrizer (function 0xA, at 0x3672C and 0x3740C): (0.1, -1, 0.01). The 32
+material pairs at program 0xEBC0 go with function 6 at boot (0xED04 calls
+0xEB70 with a count of 31 + 1); the rocks are lit by slot 25 (diffuse 0xF7,
+ambient 0x32), which reading only 16 left black. Over the palette's 0x20A
+colours 0xF1F8 greys entries 8 to 63 (0x39CE), as m2-hle2's palette RAM
+holds them through the race (`paletteFixes`); 0xF6E0's per-frame cycle into
+the same entries is not modelled.
+
+Three things the scene routines do not draw go with the stage as objects:
+
+- The sky and the mountains. 0xD8890, which the race loops call through the
+  words at 0x2A144, 0x30C0C and 0x35A4C, stands at the eye unturned and
+  draws the sky (mesh 0x8AB219) 500 above it at three times its size
+  (0xD88E4, 0xD890C), then the mountains (0x89DAE0) 2600 below it (0xD8A48).
+  They follow the camera (display op `ce`, at the eye). The sky is the
+  shell, drawn first; the mountains, whose floor runs under the course,
+  are a backdrop drawn over it with no depth test, as the board's z sort
+  puts the course in front of that floor where a depth buffer would not.
+- The four cranes over the start that hold the sleds before the drop:
+  0xE6DA0 runs r4 from 0 to 3 through 0xE6560, which draws
+  {0xA244, 0xA798, 0x811E36} for an even r4 and {0xA7C8, 0xAD24, 0x8124FF}
+  for an odd one, at a matrix the copro works out. Their places are read off
+  m2-hle2's race: (6.959, 1783.965, 5527.939), (-9.041, 1790.465, 5567.939),
+  (6.959, 1796.965, 5607.939) and (-9.041, 1803.465, 5647.939), unturned and
+  still from frame 3561 to 4900. The sleds hanging from them are the
+  players' and are left out.
+
+The finish banners (the flag's stripes, *1996 KEROLYMPIC*, the vertical
+*KEROAME*) are a plain face with the lettering laid on it as a second,
+cut-out one, so the game takes Daytona's depth arrangement (`depth.layers`);
+without it the two fight.
+
+MAME cannot reach the race. As the network's master (the default) the board
+stops at the RIDE ID prompt. With the ride ID (RAM 0x5293F0, printed by
+0x152D4: 2 BLACK, 3 YELLOW) poked to a ride, it shows THIS IS RED RIDE and
+waits for the master, which it looks for in the comm RAM at 0x1A02180
+(0x24600 on): *Cannot find network main.*
+
+m2-hle2 reaches it with two boards on its comm link: one run with
+`--comm-master`, the other with `--comm-slave PORT:TOKEN` from the first's
+log. On the main unit's panel CALL (input 0x200) at frame 2400, the ride's
+ENTRY (0x100) at 2700, STEP (0x800) at 3000 and 3200 and GO (0x20000) at
+3600 take both to race state 7 (RAM 0x53E744); the race runs to time-over
+at about 7400. Every 130 frames or so the ride's picture and its geometry
+captures (`get_geo_captures`: mesh, tpa and the 3x4 each object was drawn
+under) were taken. In each frame one camera C fits every course capture,
+C times the explorer's matrix for the same mesh to within 0.02 (rotation)
+and 0.2 (translation), so the pieces stand where the race draws them. The
+explorer was then rendered from that camera through the board's projection
+(focal 200, centre 249, 183 of 496x384, which is a vertical field of
+2 atan(192/200)) and set beside the board's picture: the start from the
+ride (frame 3561) and from the main unit, the tunnel (5521) and the finish
+banners (6300) match, but for the HUD and the player's own sled. The race
+times out before the bridges and the goal, so those two scenes are checked
+by eye only.
+
+**Animation** (`readPowsledBodies`). Ten tables in the data ROM, each
+{frame list, parts}; the list is a data offset a frame, ended by
+0xFFFFFFFF, and a frame is a 64-byte record a part:
+
+| Offset | |
+|---|---|
+| +0x00 | tpa, tha, oba (the part's model), then a zero |
+| +0x10 | a 3x3, nine singles, columns X, Y, Z |
+| +0x34 | the place, three singles |
+
+0xE1D70 draws a frame (and 0xE1F30, the same with the ride's colour): per
+part, copro push, translate by +0x34, times the 3x3 with a zero translation
+(op 0x1F, the twelve words being +0x10..+0x30 and three zeros), output, draw,
+pop. Every part is placed from the figure's origin, so a frame is the whole
+pose baked; the explorer gives every part parent -1 and poses it as
+S · T(place) · R · S, S the Z flip. A part's model is the same on every
+frame.
+
+| Table | Parts | Frames | What it shows | Played by |
+|---|---|---|---|---|
+| 0x4770 | 33 | 65 | crane with a sled | attract, 0xE47AC |
+| 0x260C0 | 33 | 25 | crane lowering the sled | - |
+| 0x32F70 | 18 | 46 | crane arm and claw | - |
+| 0x3FF34 | 28 | 381 | woman in a yellow suit | attract |
+| 0xE7034 | 3 | 140 | three-part object | record 0x3B2C0 |
+| 0xEDB70 | 38 | 135 | two riders on a sled | - |
+| 0x13E018 | 38 | 135 | two riders, second take | attract |
+| 0x18E4C0 | 38 | 135 | two riders, third take | attract, 0xE46C0 |
+| 0x1DE968 | 28 | 381 | woman, second take | attract, 0xE45C0 |
+| 0x285A68 | 3 | 140 | the object, mirrored in X | record 0x3B2A0 |
+
+The attract's tasks (from 0xE44B0) pick the frame from their own counter:
+0xE45C0 plays 0x1DE968's frames 0 to 0x17C and then loops 0x138 to 0x17C;
+0xE46C0 holds 0x18E4C0 on frame 0x86 once it gets there. No address in the
+program names the three marked -, which were found by their layout; all ten
+differ. The two three-part ones are named only by two records, {table, 1,
+0x8B, 0}, at 0x3B2A0 and 0x3B2C0, just past a list of places at x = 8 and -8
+by the start (0x3B190, read at 0x3B91C); what plays them is not found. The
+names are the explorer's.
 
 ### Polygon decoding (`js/model.js`)
 
@@ -9005,3 +9672,55 @@ the same times through the board natively (m2-hle2 `f797c4b`, the build of
 Chapter 2's song is read from the scripts and was not played in MAME. In the
 page, the four Stage 1 entries play `A0 10 01` and the four Stage 2 entries play
 `A0 10 02`, at an RMS of about 270–1,000.
+
+### The music of the later games
+
+Sega Rally Championship, Virtual-On, Dynamite Cop and Power Sled run the
+Model 2 sound board (`board.wasm`) with their own programs and samples; the
+specs are in js/games.js. A game whose program names its songs gives the
+list as `music.list` (js/sound/sound.js `listedSongs`), read out of the ROM:
+
+- **Virtual-On** (`named`): the sound test's records at 0xEFF62 in vonj
+  (0xF0BA2 in vonu), 35 of 0x22 bytes: the song number, the command's middle
+  byte and the name (SDB_...). A song is `AE 10 nn`, after `A0 00 01`. Which
+  field plays which song is the fight code's and is not read yet, so a stage
+  has none of its own (`own: 'none'`).
+- **Dynamite Cop** (`codes`): thirty 12-byte records, a song's command
+  (`A0 10 nn`) and two more, the first of them `A0 01 nn`, sent right after
+  it (`then`). The table moves between builds (0xBC8B0 in the 2A export
+  build, 0xBC8A0 in dyndeka2, 0xC92D0 in dyndeka2b), so it is found by its
+  bytes; the debug names (S_BGM_...) are pointers at 0x1AD394, the same in
+  every build. Word +0x1C of an area descriptor is the area's song, which
+  0x4B6A8 sends as the area starts; the stage's details list it.
+- **Sega Rally** (`ids`): the program runs from RAM, 0x59F000 above its ROM
+  address. By ROM address, 0x261B0 sends sound ID g0 as the 3-byte command at
+  0x24CE0 + 3 * ID, named by the pointer at 0x258C0 + 4 * ID; IDs 0x9B to 0xAB
+  are the sound test's B.G.M list, all `AE 10 nn`, and 0x9A (`AE 10 00`,
+  "Off") stops them. The race start, 0x1D0E8, takes the course's song ID
+  from 0x1C6E0 (the championship) or 0x1C700 (practice), indexed by the
+  course at work RAM 0x214354. The championship's are ConditionedReflex,
+  DesertLand, GettingMuddyRef and Ignition, the songs [Sega Retro's
+  credits](https://segaretro.org/Sega_Rally_Championship/Production_credits)
+  give Desert, Forest, Mountain and Lakeside. That is the course records'
+  order too, so the explorer's course 1 is the forest and course 2 the
+  mountain (they were the other way round before); their skies agree, the
+  Alps over a forest road and a village on the cliffs.
+- **Power Sled** (`groups`): the program names nothing. Its driver is
+  CRX_drv 3.0.6 (by HiroF, 1996; Dynamite Cop's is 3.2.8). The UART handler
+  (0x600486) is a MIDI parser with running status; status A0 with a middle
+  byte from 0x10 to 0x5F (0x601B1A) starts entry `last` of group `middle` -
+  0x10 of the table the long at 0x60801C points to. Group 0x10 is empty, and
+  0x11 to 0x14 hold 16, 6, 4 and 5 sounds, all started in the effect slots
+  (first byte bit 7 set), none in the music slot. On the board, 11 0A, 11 0C,
+  12 04, 13 00, 13 02 and 14 01 hold their level; 12 04 and 13 00 have a flat
+  spectrum (wind and snow), and 13 02 is the loudest tonal one, likely the
+  song [Sega Retro](https://segaretro.org/Power_Sled) says Sega Racing Best
+  carries. The attract sends `A0 00 01`, `A0 13 03`, `A0 13 01` and
+  `A0 70 00`, each byte twice.
+
+A game without stages (Power Sled) has the music fields on the Models tab,
+and plays nothing until a song is picked.
+
+Air Walkers has no music yet. Its sound program (`10-18_ic30_30f2.30`) is Data
+East's, not Sega's driver, and in m2-hle2's attract the i960 sent it only a
+reset (`FF`); its command set is not read.

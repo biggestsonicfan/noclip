@@ -4371,6 +4371,181 @@ const VON_CHIPS = {
     },
 };
 
+/*
+ * Virtual On's tile pictures. The maps are bare halfword entries, with no
+ * header: each draw routine takes the map, its width and its height from the
+ * caller and writes the entries to a tilemap with bits set, so the bits come
+ * from the routine. 0x1DC10 (layer A), 0x1DD80, 0x1DE00 and 0x1DE80 (the
+ * other three tilemaps) set 0x8000; 0x1DC90 and 0x1DD10 set 0xC000, which
+ * takes the colours from the upper half of the palette; 0x1BC90 copies the
+ * map as it is. VON_MAPS is every call with a constant map, as [map, width,
+ * height, bits, call site in vonj], the largest where a map is drawn twice;
+ * 0x2FDA1D0, the 64 by 64 zeros the game clears a layer with, is left out,
+ * and so are the calls that index a table of digit glyphs (0x2EA1E50 to
+ * 0x2EA2090, 0x2EA289C), 1 or 2 by 2 tiles of a counter each.
+ * The robot table (program 0x20B50 in vonj, 0x68 bytes a robot) holds each
+ * robot's 31 by 35 portrait (+0, drawn by 0x211F0) and its name plate (+0x4C,
+ * with its width and height at +0x50 and +0x54, drawn by 0x1DC90); 0x211B0
+ * holds ten 20 by 15 plans of the stages, which 0x21EB8 draws.
+ *
+ * The tile chip is filled by InitScroll (0x1C220: the 1bpp font from data
+ * 0x2EA0BB8 as characters 0 to 0x7F, pen 1, through 0x1C730) and
+ * SetScrolldata (0x1BDA0), whose argument picks the attract mode's characters
+ * and colours (0, from InitAll 0x18970 and InitAdvertize 0x2B508) or the
+ * game's (1, from InitGameMain 0x190E4); the rest it copies either way. The
+ * characters are stored byte-swapped. The colours are stored with each
+ * component's low bit apart (SetScrollcol, 0x1BB90): two copies of each set,
+ * from group 1 and group 0x81, and four groups from tables in the program.
+ */
+const VON_MAPS = [
+    [0x2fd8170, 14, 2, 0xc000, 0x1e0f0],
+    [0x2fd81a8, 16, 2, 0xc000, 0x1e128],
+    [0x2fd8872, 1, 2, 0xc000, 0x1e490],
+    [0x2fd8876, 1, 2, 0x8000, 0x1e544],
+    [0x2fd887a, 15, 2, 0x8000, 0x1e774],
+    [0x2fd88b6, 15, 4, 0x8000, 0x1e79c],
+    [0x2fe158c, 1, 1, 0xc000, 0x1e908],
+    [0x2fd8996, 6, 2, 0x8000, 0x1ea14],
+    [0x2fd898e, 1, 2, 0x8000, 0x1ea98],
+    [0x2fd8992, 1, 2, 0x8000, 0x1eb1c],
+    [0x2fd89ae, 15, 1, 0x8000, 0x1eba8],
+    [0x2fead34, 54, 6, 0xc000, 0x1ec4c],
+    [0x2fe277c, 39, 10, 0x8000, 0x1ec80],
+    [0x2fd89d0, 64, 48, 0x0, 0x1ec9c],
+    [0x2fe2d0c, 23, 14, 0x8000, 0x1ecf8],
+    [0x2fe2f90, 23, 14, 0x8000, 0x1edf4],
+    [0x2fd6d20, 32, 6, 0xc000, 0x1efa8],
+    [0x2fd0cd4, 19, 2, 0xc000, 0x1f048],
+    [0x2fd2520, 64, 48, 0x0, 0x1f078],
+    [0x2fe077e, 23, 5, 0xc000, 0x1f0b8],
+    [0x2fd8238, 41, 3, 0xc000, 0x1f124],
+    [0x2fd832e, 58, 3, 0xc000, 0x1f204],
+    [0x2fd848a, 58, 3, 0xc000, 0x1f2e4],
+    [0x2fe01d4, 56, 5, 0x8000, 0x1f4f8],
+    [0x2fde9d0, 55, 8, 0x8000, 0x1f584],
+    [0x2fe1606, 34, 2, 0x8000, 0x1f5d8],
+    [0x2fe158e, 30, 2, 0xc000, 0x1f61c],
+    [0x2fded40, 6, 8, 0xc000, 0x1f650],
+    [0x2fdeda0, 6, 8, 0xc000, 0x1f670],
+    [0x2fe321c, 30, 3, 0xc000, 0x1f768],
+    [0x2fe350e, 36, 3, 0xc000, 0x1f7ac],
+    [0x2fe35e6, 36, 3, 0xc000, 0x1f7f0],
+    [0x2fe343c, 35, 3, 0xc000, 0x1f834],
+    [0x2fe37fa, 31, 3, 0xc000, 0x1f878],
+    [0x2fe33b4, 34, 2, 0xc000, 0x1f8bc],
+    [0x2fe32d0, 38, 3, 0xc000, 0x1f900],
+    [0x2fe3746, 30, 3, 0xc000, 0x1f944],
+    [0x2fe053a, 58, 5, 0x8000, 0x1fa68],
+    [0x2fe099a, 45, 5, 0xc000, 0x1fab8],
+    [0x2fe1350, 43, 5, 0x8000, 0x1fafc],
+    [0x2fe1170, 48, 5, 0xc000, 0x1fb40],
+    [0x2fe0d42, 53, 5, 0x8000, 0x1fb88],
+    [0x2fe0404, 31, 5, 0x8000, 0x1fbd0],
+    [0x2fe17ec, 20, 3, 0x8000, 0x1fbf8],
+    [0x2fe14fe, 31, 2, 0x8000, 0x1fc94],
+    [0x2fe158a, 1, 1, 0x8000, 0x1fd48],
+    [0x2fe157a, 4, 2, 0x8000, 0x1fde8],
+    [0x2fd892e, 7, 2, 0xc000, 0x1fe20],
+    [0x2fd894a, 7, 2, 0x8000, 0x1fe54],
+    [0x2fe0cb0, 20, 2, 0x8000, 0x1fe74],
+    [0x2fe0b5c, 34, 5, 0x8000, 0x1ff34],
+    [0x2fe0f54, 54, 5, 0xc000, 0x1ffcc],
+    [0x2fdff54, 40, 8, 0xc000, 0x20028],
+    [0x2fdfc00, 13, 2, 0x8000, 0x2010c],
+    [0x2fdfbfc, 1, 2, 0x8000, 0x2013c],
+    [0x2fd5520, 64, 48, 0x0, 0x20208],
+    [0x2fefee8, 64, 30, 0x8000, 0x20238],
+    [0x2ff16e8, 64, 39, 0x8000, 0x20264],
+    [0x2ff1568, 64, 4, 0x8000, 0x20294],
+    [0x2fd0d20, 64, 48, 0x0, 0x203a8],
+    [0x2fe0864, 31, 5, 0xc000, 0x203c0],
+    [0x2fd3d20, 64, 48, 0x0, 0x203ec],
+    [0x2fdc9d0, 64, 48, 0x0, 0x20478],
+    [0x2fcf468, 8, 4, 0x8000, 0x204ac],
+    [0x2fcf2c8, 8, 4, 0x8000, 0x204fc],
+    [0x2fcf528, 12, 4, 0x8000, 0x2054c],
+    [0x2fcf828, 12, 4, 0x8000, 0x2059c],
+    [0x2fcf628, 12, 4, 0x8000, 0x205ec],
+    [0x2fcf928, 12, 4, 0x8000, 0x2063c],
+    [0x2fcf9e4, 16, 4, 0x8000, 0x20674],
+    [0x2fcf308, 16, 4, 0x8000, 0x206a4],
+    [0x2fcf388, 28, 4, 0x8000, 0x206d4],
+    [0x2fcf4a8, 16, 4, 0x8000, 0x20704],
+    [0x2fcf7a8, 16, 4, 0x8000, 0x20734],
+    [0x2fcf688, 16, 4, 0x8000, 0x20764],
+    [0x2fcf588, 20, 4, 0x8000, 0x20794],
+    [0x2fcf888, 20, 4, 0x8000, 0x207c4],
+    [0x2fcf708, 20, 4, 0x8000, 0x207f4],
+    [0x2fcf988, 23, 2, 0xc000, 0x20824],
+    [0x2fcfa64, 24, 8, 0xc000, 0x20854],
+    [0x2fcfbe4, 31, 8, 0xc000, 0x20884],
+    [0x2fcfdd4, 36, 8, 0xc000, 0x208b4],
+    [0x2fd0014, 34, 4, 0xc000, 0x208e4],
+    [0x2fd0124, 28, 8, 0xc000, 0x20914],
+    [0x2fd02e4, 24, 8, 0xc000, 0x20944],
+    [0x2fd0464, 29, 8, 0xc000, 0x20974],
+    [0x2fd0634, 29, 8, 0xc000, 0x209a4],
+    [0x2fd09a4, 28, 8, 0xc000, 0x209d4],
+    [0x2fd07f4, 27, 8, 0xc000, 0x20a04],
+    [0x2fe8fc4, 64, 8, 0x8000, 0x219a0],
+    [0x2feab34, 64, 4, 0x8000, 0x21a10],
+    [0x2fe8ec2, 43, 3, 0x8000, 0x21fe8],
+    [0x2fecbec, 41, 3, 0x8000, 0xd41a8],
+    [0x2fece6e, 33, 3, 0x8000, 0xd41e8],
+    [0x2fecce2, 33, 6, 0x8000, 0xd421c],
+    [0x2fed024, 49, 2, 0x8000, 0xd4a28],
+    [0x2fecf34, 24, 5, 0x8000, 0xd4a84],
+];
+
+/* The robot table's order, as its name plates spell it. */
+const VON_ROBOTS = ['Temjin', 'Viper II', 'Belgdor', 'Raiden', 'Dorkas', 'Fei-Yen', 'Apharmd', 'Bal-Bas-Bow', 'Jaguarandi', 'Z-Gradt'];
+
+/* `robots`, `select` and `shuffled` are the program tables, which the US
+ * build moves; `site` heads each call site's name. */
+const vonCells = ({ robots, select, shuffled, site }) => ({
+    maps: VON_MAPS.map(([at, cols, rows, or, call]) => [at, cols, rows, or, `drawn at ${site}0x${call.toString(16).toUpperCase()}`]),
+    mapTables: [
+        { table: robots, stride: 0x68, count: 10, cols: 31, rows: 35, or: 0x8000, what: 'portrait', names: VON_ROBOTS },
+        { table: robots + 0x4c, stride: 0x68, count: 10, or: 0xc000, what: 'name plate', names: VON_ROBOTS },
+        { table: select, stride: 4, count: 10, cols: 20, rows: 15, or: 0x8000, what: `stage plan (${site}0x21EB8)` },
+    ],
+    boot: {
+        font: { src: 0x02ea0bb8, first: 0, count: 0x80, pen: 1 },
+        modes: [
+            {
+                name: 'attract (SetScrolldata 0)',
+                chars: [[0x02ea2a74, 0x80, 0x1880], [0x02ed3054, 0x1900, 0x1700], [0x02f4db14, 0x3000, 0x680]],
+                palette: [
+                    { shuffled: [[0x02fdef20, 0x31], [0x02fd6ea0, 0x2e], [0x02ff7568, 0xd]], group: 1 },
+                    { shuffled: [[0x02fdf540, 0x31], [0x02fd7460, 0x2e], [0x02ff7568, 0xd]], group: 0x81 },
+                ],
+            },
+            {
+                name: 'game (SetScrolldata 1)',
+                chars: [[0x02ea2a74, 0x80, 0x1880], [0x02f000d4, 0x1900, 0x2700]],
+                palette: [
+                    { shuffled: [[0x02fdef20, 0x31], [0x02fed0e8, 0x4e]], group: 1 },
+                    { shuffled: [[0x02fdf540, 0x31], [0x02fedaa8, 0x4e]], group: 0x81 },
+                ],
+            },
+        ],
+        chars: [
+            [0x144cc4, 0x1488, 0x77], [0x146324, 0x3db0, 0x48], [0x144184, 0x3d10, 0x5a],
+            [0x145ba4, 0x3f40, 0x3c], [0x146c24, 0x37c, 2], [0x146c64, 0x37e, 2],
+        ],
+        fill: [[0x1570, 1, 0x9999]],
+        palette: [
+            { shuffled: [[shuffled[0], 1]], group: 0xa9 },
+            { shuffled: [[shuffled[1], 1]], group: 0xfa },
+            { shuffled: [[shuffled[1], 1]], group: 0xfb },
+            { shuffled: [[shuffled[1], 1]], group: 0xfe },
+        ],
+    },
+    programAt0: true,
+    charBytes: 0x80000,
+    colorxlat: true,
+});
+
 const vonj = {
     id: 'vonj',
     name: 'Cyber Troopers Virtual-On (Japan, Revision B)',
@@ -4455,9 +4630,34 @@ const vonj = {
         materials: { at: 0x293b0, count: 32 },
     },
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
+    /* The robots: ten pointers to their records (`ld 0x19360[g3*4]`), the
+     * lists of parts and the motion pairs in each (js/von.js readVonBodies).
+     * The last, Zig-Raht, is drawn by another routine and is left out. */
+    rig: { kind: 'von', robots: 0x19360, count: 10 },
+    /*
+     * The Model 2B's sound board, with two 4 MB sample chips (von.zip's). The
+     * sound test's list is 0xEFF62: 35 records of 0x22 bytes, the song number,
+     * the command's middle byte (0x10) and the name, so a song is AE 10 nn.
+     * The attract starts the demo song as AE 10 1B and the title's as AE 10 1A,
+     * after A0 00 01. Which field plays which song is the fight code's, and is
+     * not read yet: the explorer plays the one picked.
+     */
+    sound: {
+        program: ['epr-18670.31', 0x3e715f76],
+        samples: [['mpr-18652.32', 0x037eee53], ['mpr-18653.34', 0x9ec3e7bf]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        music: {
+            list: { named: true, at: 0xeff62, count: 35, stride: 0x22, status: 0xae, strip: 'SDB_' },
+            own: 'none',
+            hint: 'A song from the sound test\'s list, by the name it gives it. Which field plays which is in the fight code, not read yet',
+        },
+    },
     stageTable: { von: true, flat: true },
     scenes: null,
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+    cells: vonCells({ robots: 0x20b50, select: 0x211b0, shuffled: [0x1bb50, 0x1bb70], site: '' }),
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* The US build (`vonu`, von.zip's vo-prog0.usa and vo-prog1.usa, which MAME
@@ -4483,6 +4683,12 @@ const vonu = {
     texture: { ...vonj.texture, raw: { ...vonj.texture.raw, banks: 0x28cd0, deal: 0x28860, fieldBanks: 0xc9b00 } },
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
+    /* The robot records sit 0xF0 lower, and their table with them. */
+    rig: { ...vonj.rig, robots: 0x19270 },
+    sound: { ...vonj.sound, music: { ...vonj.sound.music, list: { ...vonj.sound.music.list, at: 0xf0ba2 } } },
+    /* The same tables, found by their bytes; the colour tables sit 0xF0
+     * lower, the robot and select tables 0xA40 higher. The maps are data. */
+    cells: vonCells({ robots: 0x21590, select: 0x21bf0, shuffled: [0x1ba60, 0x1ba80], site: 'vonj ' }),
 };
 
 /*
@@ -4604,9 +4810,65 @@ const srallyc = {
     /* Daytona's depth arrangement, for the same reason: no depth buffer, and
      * a road made of plates laid on plates. */
     depth: { recede: 0, nearMin: 0.02, layers: true },
+    /*
+     * The Model 2A's sound board, with four 2 MB sample chips. The program
+     * names every sound it sends. The program runs from RAM, 0x59F000
+     * above its ROM address; by ROM address, 0x261B0 sends sound ID g0 as
+     * the 3-byte command at 0x24CE0 + 3 * ID, and the pointer at
+     * 0x258C0 + 4 * ID names it (the sound test's B.G.M list, IDs 0x9B to
+     * 0xAB, all AE 10 nn; ID 0x9A, AE 10 00, is "Off"). As a race starts,
+     * 0x1D0E8 sends the course's song out of one of two tables of IDs
+     * indexed by the course (work RAM 0x214354): 0x1C6E0 for the
+     * championship, 0x1C700 for practice. The explorer plays the
+     * championship's, the songs Sega Retro's credits give each course.
+     */
+    sound: {
+        program: ['epr-17890a.30', 0x5bac3fa1],
+        samples: [
+            ['mpr-17756.31', 0x7725f111], ['mpr-17757.32', 0x1616e649],
+            ['mpr-17886.36', 0x54a72923], ['mpr-17887.37', 0x38c31fdd],
+        ],
+        boot: [0xAE, 0x10, 0x00],
+        stop: [0xAE, 0x10, 0x00],
+        stageMusic: 0x1c6e0,
+        music: {
+            list: { ids: true, at: 0x24ce0, names: 0x258c0, ramBase: 0x59f000, first: 0x9b, count: 17 },
+            own: "the course's own",
+            hint: 'The song the course plays. The game plays the championship\'s song for the course (practice has its own for some); this plays any of the sound test\'s, by the names the program gives them',
+        },
+    },
+    /*
+     * The 2D pictures are AM3's "CGM 1.0" files (js/cells.js, `cgm`): the
+     * loader 0x5C8EB0 (ROM 0x29EB0) takes a file's address, g2, compares its
+     * first eight bytes with the string at 0x5C8E60, loads its blocks from
+     * the free palette group (work RAM 0x20C950, which the reset 0x5C8A60
+     * sets to 9: groups 0-8 hold the font 0x5C5690 loads) and files its
+     * patterns in the table at 0x20B950; the draw 0x5C8C10 adds the group
+     * << 7 to each entry. Its 96 callers name the files directly, `lda
+     * 0x28AE89C, g2` (the attract's PUSH START, 0x5AB074) and the like. The
+     * files are in the data ROM and, 16 of them, the program ROM past the copy
+     * (0x61004 on). The third data pair is 2MB, which the region repeats up
+     * to 0xC00000 as the board's decoding does, so the scan stops at
+     * 0xA00000 (`dataEnd`). Every colour goes through colorxlat, as MAME's
+     * palette_w puts every tile colour.
+     */
+    cells: { cgm: { dataEnd: 0xa00000 }, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    /*
+     * The people by the course (js/srally.js): three figures of 5, 8 and 12
+     * parts, 30 key frames each, all drawn by 0x5CA290. `figures.table` is
+     * the four figure pointers at ROM 0x2B280 (RAM 0x5CA280) that object
+     * classes 5 and 7 pick from; class 6 draws the first.
+     */
+    rig: {
+        kind: 'srallyc',
+        figures: { table: 0x2b280, count: 4, ramBase: 0x59f000 },
+        /* What each one does; the game has no names for them. */
+        names: ['fist pump', 'overhead clap', 'jump, arms up'],
+    },
     /* The courses but not the cars' placement on them, nor the trackside
-     * objects. */
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+     * objects. The cars are not bodies: code turns and springs their wheels
+     * (0x5C2B80 on), with no motion data. */
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Dynamite Cop / Dynamite Deka 2 (Pinboard #1286) --------------------- */
@@ -4666,24 +4928,48 @@ const DYNAMCOP_AT = {
     dynamcop: {
         tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
         flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
-        materials: 0x6ecc0, missions: 0xe9a70,
+        materials: 0x6ecc0, missions: 0xe9a70, pictures: 0xe9b10, offsets: 0xe1890, models: 0xe1a10,
     },
 };
 DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
-    missions: 0xe9a60,
+    missions: 0xe9a60, pictures: 0xe9b00, offsets: 0xe1880, models: 0xe1a00,
 };
 DYNAMCOP_AT.dynamcopb = {
     tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
     flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
-    materials: 0x17c40, missions: 0xf9370,
+    materials: 0x17c40, missions: 0xf9370, pictures: 0xc9880, offsets: 0xcfe90, models: 0xd0010,
 };
 DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
-    missions: 0xf9360,
+    missions: 0xf9360, pictures: 0xc9870, offsets: 0xcfe80, models: 0xd0000,
 };
 DYNAMCOP_AT.dynamcopc = {
     tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
     flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
-    materials: 0x6f3b0, missions: 0xfa190,
+    materials: 0x6f3b0, missions: 0xfa190, pictures: 0xfa230, offsets: 0xf2260, models: 0xf23e0,
+};
+
+/*
+ * The sound board is the Model 2A's (epr-20811.30 and four 2 MB sample
+ * chips). The program's song table is thirty 12-byte records, each the song's
+ * command (A0 10 nn) and two more; the area descriptors name a record
+ * (js/dynamcop.js), and 0x4B6A8 sends its command as the area starts. The
+ * debug names are a table of pointers in the second megabyte, the same in
+ * every build, S_MUSIC_CLEAR and then one a record. Before a song, the
+ * attract sends A0 00 02 and A0 00 03; the boot, A0 00 01.
+ */
+const DYNAMCOP_SOUND = {
+    program: ['epr-20811.30', 0xa154b83e],
+    samples: [
+        ['mpr-20812.31', 0x695b6088], ['mpr-20813.32', 0x1908679c],
+        ['mpr-20814.36', 0xe8ebc74c], ['mpr-20815.37', 0x1b5aaae4],
+    ],
+    boot: [0xA0, 0x00, 0x01],
+    stop: [0xA0, 0x00, 0x02, 0xA0, 0x00, 0x03],
+    music: {
+        list: { first: 0xa01000, count: 30, stride: 12, then: 4, names: 0x1ad394, strip: 'S_BGM_' },
+        own: "the area's own",
+        hint: 'The song the area plays. The game plays the one its area descriptor names; this plays any of the thirty in its song table, by the names its debug table gives them',
+    },
 };
 
 function dynamcopBuild({ id, name, low, high }) {
@@ -4744,7 +5030,34 @@ function dynamcopBuild({ id, name, low, high }) {
         /* js/dynamcop.js readDynamcopStages: `missions` is the table 0x2B960
          * reads, three pointers a mission to runs of area descriptors. */
         stageTable: { dynamcop: { missions: A.missions, enemySets: 14 }, flat: true },
-        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        sound: DYNAMCOP_SOUND,
+        /* The 2D pictures (js/cells.js): The House of the Dead's, 971 of them
+         * at `pictures` (0xE9B10 in the 2A export build), three pointers
+         * each, tiles, colours and map, into the program's upper pair and
+         * the data ROM; the table is the same bytes in every build, and a
+         * zero entry ends it. The routines are HOTD's: 0xA3F30 loads a
+         * picture into free blocks the first time it is drawn (0xA3C50 finds
+         * the run, 0xA3E70 copies each chunk of tiles to a block of its own,
+         * 0xA3DE0 and 0xA3D40 its 16 colours a block), and the draw (0xA3F90)
+         * adds the first block to every map entry, so the group is the
+         * block. Colours go through colorxlat. */
+        cells: { pictures: { table: A.pictures, count: 971 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+        /*
+         * The characters (js/dynamcop.js readDynamcopBodies, bodies.js for the
+         * motions). Ninety-six of them in two parallel tables, `offsets` the
+         * skeleton sub_15210 reads and `models` the fifteen models sub_18FC0
+         * draws; the skeleton itself is in the code. The motion tables are in
+         * the program's upper half, which every build shares: 2284 motions,
+         * data 0x15FA00 (sub_15000 steps a frame pointer through them), frames
+         * 0x161DB0, and the flag byte 0x164160 the wrists and ankles test.
+         * A frame is HOTD's size, `((48*16+127)>>5)*4`, angles first.
+         */
+        rig: {
+            kind: 'dynamcop',
+            bodies: { count: 96, offsets: A.offsets, models: A.models },
+            motions: { count: 2284, data: 0x15fa00, frames: 0x161db0, flatAnkles: 0x164160, layout: 'dynamcop' },
+        },
+        features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },
     };
 }
@@ -4854,9 +5167,10 @@ const airwlkrs = {
     /*
      * The luma table is the 2A library's, 0x4000 bytes at 0x54C0 in the program
      * ROM. The rest is js/colors.js's Air Walkers section: the ramp, the
-     * boot's and the title's runs, court 0's five tables, the five fixed ones,
-     * the variant's two, then the team's. Variant 1 is the one MAME's game
-     * played on court 0.
+     * boot's and the title's runs, the court's five tables, the five fixed
+     * ones, the variant's two, then the team's. A home team (0..16) brings its
+     * own court and variant; the away side's numbers take court 0 and variant
+     * 1, the one MAME's game played on court 0.
      */
     colors: {
         luma: { source: 'maincpu', data: 0x54c0, bytes: 0x4000 },
@@ -4869,10 +5183,91 @@ const airwlkrs = {
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures (js/cells.js): The House of the Dead's format, Data
+     * East's own copy of it. 492 entries of three pointers, tiles, colours and
+     * map, at data 0xC15220 (the 1MB EPROM pair's third repeat, as the code
+     * names it); the next word is no pointer, and nothing bounds the table.
+     * 0xC3CD0 loads a picture into free blocks the first time it is drawn,
+     * each chunk of tiles to a 128-tile block of its own and its 16 colours to
+     * every block it takes; the draw (0xC3F10) adds `(g2 << 15) + (g3 << 14)
+     * + (firstBlock << 7)` to the map's entries, so the group is the block.
+     * Colours go through colorxlat. */
+    cells: { pictures: { table: 0x02c15220, count: 492 }, charBytes: 0x80000, colorxlat: true },
+    /*
+     * The courts (js/airwlkrs.js): the set-up 0x247D0 (court, variant) and
+     * the draw 0x24DA0 (court) run on js/i960.js. The team records are 20
+     * bytes at 0xFBA80, the city's name, the nickname's, the court variant at
+     * +12. The draw's players (0x23850), the colour and palette uploads
+     * (0x1BAD0, 0x16370) and the page copies (0x1D430) are skipped; 0x24470
+     * puts both hoops' detail in 0x521768/9. The frame start's material
+     * slots are 31 at 0x1B3C0.
+     */
+    airwlkrs: {
+        setup: 0x247d0, draw: 0x24da0, courts: 17, teams: 0xfba80,
+        skip: [0x23850, 0x1bad0, 0x16370, 0x1d430], hoops: 0x24470, hoopShown: 0x521768,
+        materials: { at: 0x1b3c0, count: 31 },
+    },
+    stageTable: { airwlkrs: true, flat: true },
+    /*
+     * The players (js/airwlkrs.js): sixteen models a player at `players`,
+     * five players a team, 34 teams and the three of team 34; the legs'
+     * routine and the rest's run on an object at `object` with the pose at
+     * `pose`. The read-backs are the feet's, the head's and the hands' ends.
+     */
+    rig: {
+        kind: 'airwlkrs',
+        players: 0xf4b20, teamStride: 0x190, playerStride: 0x50, specialTeam: 34, specials: 3,
+        draw: [0x214a0, 0x21a70], drawSpecial: [0x20850],
+        object: 0x510b40, pose: 0x5214c0, modelOffset: 0x5215f0,
+        ends: [0x5215e0, 0x521600, 0x521610, 0x521620, 0x521630],
+        motions: {
+            table: 0x026e3ca0, roots: 0x025bf740, count: 0x286,
+            alternate: 0xf2c68, altTable: 0x02ce9750, altRoots: 0x02ce96c0,
+        },
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Power Sled ----------------------------------------------------------- */
+
+/*
+ * Power Sled's 2D pictures (js/cells.js `scripts`): the attract's panels,
+ * the entry and course select, the ranking, drawn by 0x4EE0 from tilemap
+ * scripts in the data ROM. Its callers load g0 with the tilemap address and g1
+ * with the script, both by `lda`, and set bit 15 of g2; 0x52D0 erases what a
+ * script drew by walking it again. The scripts lie end to end from data
+ * 0x322500 to 0x323108, thirty of them; there a table of thirty offsets
+ * from itself names the same thirty starts, though nothing reads it. No call
+ * names eight of them (`unused`).
+ *
+ * The tile chip is filled once, at boot (0x46F0):
+ *   0x48B0   expands the 1bpp font at 0x33F0 into characters 0-255, pen 1;
+ *   0x4EA0   copies data 0x300000, 0x22500 bytes, to character 256 on,
+ *            straight (no byte swap);
+ *   0xF100   fills groups 0-127 with the 16 colours at 0xF0C0 and 128-255
+ *            with 0xF0E0 (white and grey on black, the font's), then copies
+ *            0x230 colours from data 0x323180 to group 2 on (0xF17C).
+ * The characters match m2-hle2's character RAM in the attract byte for byte,
+ * and the palette all but colour 0 of group 0. The palette goes through
+ * colorxlat, as every Model 2 tile palette does.
+ */
+const POWSLED_CELLS = {
+    scripts: [0x02322500, 0x02323108],
+    unused: [0, 1, 3, 4, 9, 10, 17, 18],
+    boot: {
+        font: { src: 0x33f0, first: 0, count: 256, pen: 1 },
+        chars: [[0x02300000, 0x100, 0x1128]],
+        straight: true,
+        palette: [
+            { colours: 0xf0c0, group: 0, groups: 128 },
+            { colours: 0xf0e0, group: 128, groups: 128 },
+            { block: 0x02323180, group: 2, groups: 35 },
+        ],
+    },
+    charBytes: 0x80000,
+    programAt0: true,
+    colorxlat: true,
+};
 
 /*
  * Sega's sled racer on Model 2B CRX (m2-hle2's src/profiles/powsled.h,
@@ -4914,6 +5309,9 @@ const powsled = {
      * (0x1802000) by 0xF1B0. */
     paletteProgram: 0x128ec,
     paletteOffset: null,
+    /* And then 0xF1F8 greys entries 8 to 63 (0x39CE) over the table's zeros,
+     * as m2-hle2's palette RAM holds them through the race. */
+    paletteFixes: Array.from({ length: 56 }, (_, k) => [8 + k, 0x39ce]),
     /* Data 0x600000 on sheet 0 and 0x700000 on sheet 1, by 0xC540. */
     texture: {
         raw: { layout: 'copy', sheets: [0x02600000, 0x02700000] },
@@ -4928,7 +5326,77 @@ const powsled = {
         powsled: { table: 0xcb50, rows: 15 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* Daytona's depth arrangement too: the banners at the finish are a plain
+     * face with its lettering laid on it as a second, cut-out one (the flag's
+     * stripes, 1996 KEROLYMPIC), which without the layering fight. */
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    /*
+     * The Model 2B's sound board with one 4 MB sample chip, and Sega's
+     * CRX_drv 3.0.6 (by HiroF, 7 May 1996, the string at 0x10 of the program;
+     * Dynamite Cop's is 3.2.8). Its UART handler (0x600486) is a MIDI parser
+     * with running status, and status A0 with a middle byte 0x10 to 0x5F
+     * (0x601B1A) starts entry `last` of group `middle` - 0x10 in the table
+     * 0x60801C points to. That table has five groups: 0x10 is empty (count
+     * -1), 0x11 to 0x14 hold 16, 6, 4 and 5 sounds, and every one of them
+     * starts in the effect slots (first byte bit 7 set), none in the music
+     * slot; A0 00 01 stops them. Nothing names them. Measured on the board,
+     * 11 0A, 11 0C, 12 04, 13 00, 13 02 and 14 01 hold their level; 12 04
+     * and 13 00 are noise (wind and snow, by their flat spectrum), and 13 02
+     * is the loudest tonal one, likely the song Sega Racing Best carries.
+     * The attract mode sends A0 00 01, A0 13 03, A0 13 01 and A0 70 00.
+     */
+    sound: {
+        program: ['epr-19466.31', 0xc42892a5],
+        samples: [['fpr-19459.32', 0xa424743f]],
+        sampleChip: 0x400000,
+        boot: [0xA0, 0x00, 0x01],
+        stop: [0xA0, 0x00, 0x01],
+        music: {
+            list: { groups: [[0x11, 16], [0x12, 6], [0x13, 4], [0x14, 5]], status: 0xa0 },
+            own: 'none',
+            hint: 'Every sound in the sound driver\'s table, by its command: the program names none of them. A0 13 02 is the loudest tune among them, likely the song; A0 12 04 and A0 13 00 are wind',
+        },
+    },
+    /*
+     * The race's light goes to the geometrizer as it is (function 0xA,
+     * 0x3672C and 0x3740C): (0.1, -1, 0.01), near enough straight down.
+     * Z is negated, as for Daytona. The materials are the 32 pairs at
+     * 0xEBC0 that 0xED04 sends with function 6 at boot (0xEB70, count
+     * 31 + 1): the rocks are lit by slot 25, which the first 16 left black.
+     */
+    lighting: {
+        light: [0.1, -1, -0.01],
+        materials: { source: 'maincpu', at: 0xebc0, count: 32, stride: 8 },
+    },
+    /* The one course, run out of the race's own scene routines
+     * (readPowsledStages in js/powsled.js). */
+    stageTable: { powsled: true, flat: true },
+    cells: POWSLED_CELLS,
+    /*
+     * The figures (js/powsled.js): tables in the data ROM of every part's
+     * matrix a frame, drawn by 0xE1D70. `at` is the table's data ROM offset.
+     * The attract's tasks (0xE44B0 on) play 0x4770, 0x3FF34, 0x13E018,
+     * 0x18E4C0 and 0x1DE968; 0xE7034 and 0x285A68 are named by two records
+     * at 0x3B2A0 whose player is not found; no address in the program names
+     * the other three, found by their layout. The game names none: the names
+     * say what they show.
+     */
+    rig: {
+        kind: 'powsled',
+        figures: [
+            { at: 0x4770, name: 'crane with a sled' },
+            { at: 0x260c0, name: 'crane with a sled, lowering it' },
+            { at: 0x32f70, name: 'crane arm and claw' },
+            { at: 0x3ff34, name: 'woman in a yellow suit' },
+            { at: 0xe7034, name: 'three-part object' },
+            { at: 0xedb70, name: 'two riders on a sled' },
+            { at: 0x13e018, name: 'two riders on a sled, second take' },
+            { at: 0x18e4c0, name: 'two riders on a sled, third take' },
+            { at: 0x1de968, name: 'woman in a yellow suit, second take' },
+            { at: 0x285a68, name: 'three-part object, mirrored' },
+        ],
+    },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to

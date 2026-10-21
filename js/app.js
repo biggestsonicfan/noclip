@@ -14,12 +14,17 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages } from './dynamcop.js';
-import { readVonStages } from './von.js';
+import { readDynamcopStages, readDynamcopBodies } from './dynamcop.js';
+import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
+import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
+import {
+    readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
+} from './airwlkrs.js';
+import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
-import { cellCount, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
+import { cellCount, cellName, cgCount, cgLabel, leftoverTiles, readCell, rankCGs, renderCell, unusedCells } from './cells.js';
 import {
     buildStageDisplayList, buildFlatDisplayList, describeOps, opsAt, frameModel, frameBand, frameScroll,
     scrollPeriod, readFrameTables,
@@ -1091,8 +1096,8 @@ function composeOps(out, ops) {
          * the identity here, which leaves the draw standing where it stands
          * unrotated — what the parts panel and the camera bounds want, and what
          * stepBillboards then replaces once a frame with the real thing. The
-         * camera's heading is the same. */
-        if (kind === 'b' || kind === 'cy') continue;
+         * camera's heading is the same, and so is standing at its eye. */
+        if (kind === 'b' || kind === 'cy' || kind === 'ce') continue;
         if (kind === 's') OP_SCRATCH.makeScale(v[0], v[1], v[2]);
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
@@ -1841,7 +1846,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
         state.anim.entries.push(item);
     }
     if (windowed && (entry.block != null || entry.inView)) state.anim.blocks.push({ entry, mesh, lines, item });
-    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy')) {
+    if (opsAt(entry, 0).some((op) => op[0] === 'b' || op[0] === 'cy' || op[0] === 'ce')) {
         state.anim.billboards.push({ entry, mesh, lines });
     }
     return mesh;
@@ -2043,7 +2048,19 @@ function stepBillboards() {
     BB_Q.multiplyQuaternions(BB_ROOT_Q, camera.quaternion);
     for (const it of list) {
         const ops = opsAt(it.entry, state.anim.frame > 0 ? state.anim.frame : 0);
-        let at = ops.findIndex((op) => op[0] === 'b');
+        let at = ops.findIndex((op) => op[0] === 'ce');
+        if (at >= 0) {
+            /* The eye in the root's frame, unturned. */
+            composeOps(BB_HEAD, ops.slice(0, at));
+            BB_INV.copy(root.matrixWorld).invert();
+            BB_POS.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(BB_INV);
+            BB_HEAD.premultiply(BB_YAW.makeTranslation(BB_POS.x, BB_POS.y, BB_POS.z));
+            composeOps(BB_TAIL, ops.slice(at + 1));
+            it.mesh.matrix.multiplyMatrices(BB_HEAD, BB_TAIL);
+            if (it.lines) it.lines.matrix.copy(it.mesh.matrix);
+            continue;
+        }
+        at = ops.findIndex((op) => op[0] === 'b');
         if (at >= 0) {
             composeOps(BB_HEAD, ops.slice(0, at));
             BB_POS.setFromMatrixPosition(BB_HEAD);
@@ -2414,10 +2431,18 @@ function stepStageMaterials(frame) {
  * A light that follows where the camera stands rather than the frame: Virtua
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
  * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
- * its light with the camera's heading instead (js/fvstages.js).
+ * its light with the camera's heading instead (js/fvstages.js), and Air
+ * Walkers' courts and players point it where the camera looks (js/airwlkrs.js).
  */
-function stepEyeLight() {
-    const stage = state.stages[state.stageIndex];
+function stepEyeLight(stage = state.stages[state.stageIndex]) {
+    /* Air Walkers' light is (0, 0, 1) in the camera's frame: down the view. */
+    if (stage?.headlight) {
+        const d = state.viewer.camera.getWorldDirection(new THREE.Vector3());
+        if (state.eyeLightAt?.equals?.(d)) return;
+        state.eyeLightAt = d;
+        state.viewer.material.uniforms.uLight.value.copy(d);
+        return;
+    }
     if (stage?.lightFromHeading) {
         const h = cameraOnCourse().heading;
         if (state.eyeLightAt === h) return;
@@ -3319,6 +3344,22 @@ const BODY_RIGS = {
     },
     vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
     doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
+    /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
+    dynamcop: {
+        read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
+        pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
+    },
+    /* Virtual-On's robots: two part lists and pairs of records (js/von.js). */
+    von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },
+    /* Sega Rally's people: every part placed from the figure, a frame baked. */
+    srallyc: { read: readRallyFigures, motions: readRallyMotions, list: rallyMotionList, pose: poseRallyFigure },
+    /* Air Walkers' players: one skeleton in the code, run as the game runs it. */
+    airwlkrs: {
+        read: readAirwlkrsBodies, motions: readAirwlkrsMotions, list: airwlkrsMotionList,
+        pose: (rom, body, motion, frame, opts) => poseAirwlkrs(rom, body, motion, frame, opts),
+    },
+    /* Power Sled's figures: every part's matrix baked a frame. */
+    powsled: { read: readPowsledBodies, motions: readPowsledMotions, list: powsledMotionList, pose: posePowsledBody },
 };
 
 function bodyRig() {
@@ -3400,6 +3441,25 @@ function useDoaFighterScene(body) {
     if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
+/* An Air Walkers player stands on its team's page, under its team's colour
+ * tables (js/texture.js, js/colors.js), as the court set-up loads them. */
+function useAirwlkrsPlayerScene(body) {
+    const u = state.viewer.material.uniforms;
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    state.eyeLightAt = null;
+    stepEyeLight(body);
+    const set = body.playerSet;
+    useRomTexram([set]);
+    useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
+    u.uUseRamp.value = state.cxlat ? 1 : 0;
+    const status = $('#tex-status');
+    if (status) status.textContent = t('sheets unpacked from ROM (set {set})', { set });
+}
+
 function bodySceneModel(body) {
     const models = body.parts.map((p) => p.model).filter(Boolean);
     if (body.texSet === undefined) return models[0];
@@ -3419,6 +3479,7 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (body.playerSet !== undefined) useAirwlkrsPlayerScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
     else if (first != null) useModelScene(first, colourFighter(body));
@@ -3456,6 +3517,8 @@ function rebuildBody({ keepCamera = true } = {}) {
 /* Whose colour rows a body is shaded with: a fighter's record's, so player
  * 2's look is its own number, whoever else wears the part. */
 function colourFighter(body) {
+    /* A Virtual-On robot names its own rows (SetRoboRamp's). */
+    if (body.colours) return body.colours;
     const first = bodySceneModel(body);
     return body.texSet !== undefined ? body.index : first == null ? null : modelFighter(first);
 }
@@ -4913,8 +4976,10 @@ function renderBodyMotionPanel() {
 
     const d = m.decoded;
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
-    const size = !d ? '' : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
-        : '<span>frame size</span><b>' + frameBytes(d.joints) + ' bytes</b>';
+    /* A Virtual-On motion is two records, the upper body's and the legs'. */
+    const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
+        : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
+        : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
@@ -5257,6 +5322,8 @@ function renderCellList() {
     /* "unused" lists only the cells the game never draws. */
     const unused = unusedCells(state.rom);
     const onlyUnused = /^unused$/i.test(q);
+    /* Other words match the names Sega Rally's and Virtual On's cells have. */
+    const word = !range && !single && !onlyUnused && q ? q.toLowerCase() : '';
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
     lo = Math.max(0, lo); hi = Math.min(n - 1, hi);
@@ -5267,9 +5334,10 @@ function renderCellList() {
     let shown = 0;
     for (let i = lo; i <= hi; i++) {
         const c = readCell(state.rom, i);
-        if (!c || (onlyUnused && !unused.has(i))) continue;
+        const name = cellName(state.rom, i);
+        if (!c || (onlyUnused && !unused.has(i)) || (word && !name.toLowerCase().includes(word))) continue;
         const best = ranks[i][0];
-        const info = `${c.cols * 8}&times;${c.rows * 8} · `
+        const info = (name ? `${name} · ` : '') + `${c.cols * 8}&times;${c.rows * 8} · `
             + (best?.cover === 1 ? cgLabel(state.rom, best.cg) : best ? `CG ${best.cg}, part` : 'no CG')
             + (unused.has(i) ? ' · unused' : '');
         const row = el('div', 'row-item' + (i === state.cell.index ? ' sel' : ''),
@@ -5336,7 +5404,8 @@ function drawCell() {
     canvas.getContext('2d').putImageData(new ImageData(pic.rgba, pic.width, pic.height), 0, 0);
     canvas.classList.toggle('whole', !$('#cell-fit').checked);
     const best = (cellRanks()[c.index] ?? [])[0];
-    info.innerHTML = `<b>cell ${c.index}</b> — ${pic.width}&times;${pic.height}, `
+    const name = cellName(state.rom, c.index);
+    info.innerHTML = `<b>cell ${c.index}${name ? `, ${name}` : ''}</b> — ${pic.width}&times;${pic.height}, `
         + `${pic.width / 8}&times;${pic.height / 8} tiles`
         + (best?.cover === 1 ? '' : `<br>No one CG writes every tile this cell names;`
             + ` the game puts the rest in the tile chip some other way.`)
@@ -5850,15 +5919,17 @@ function playStageMusic() {
     const slot = stage?.soundSlot ?? stage?.slot;
     /* A stage whose song the scripts start rather than a table (House of the
      * Dead's, js/placements.js) carries it. */
-    const { code, index } = !stage ? { code: 0, index: -1 }
+    const pick = +$('#music-song').value;
+    const { code, index, then } = pick >= 0 ? stageMusic(state.rom, slot, pick)
+        : !stage ? { code: 0, index: -1 }
         : stage.song !== undefined ? { code: stage.song, index: -1 }
-        : stageMusic(state.rom, slot, +$('#music-song').value);
+        : stageMusic(state.rom, slot);
     /* A stage built again in place — a texture dump dropped on it, say — is
      * not a new round, and the song carries on. */
     if (code === state.music.playing) return;
     state.music.playing = code;
-    state.music.board.play(code, index);
-    $('#music-status').textContent = code ? songName(code) : t('no music of its own');
+    state.music.board.play(code, index, then);
+    $('#music-status').textContent = code ? songName(code) : t(stage ? 'no music of its own' : 'pick a song');
     playStageSounds(slot);
 }
 
@@ -5935,7 +6006,7 @@ function applyGameFeatures() {
     const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
-    $('#char-travel-field').hidden = !bodies || solved;
+    $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
@@ -5946,11 +6017,20 @@ function applyGameFeatures() {
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
-    $('#anim-note-bodies').hidden = !bodies || solved;
-    /* The solved rig's note names the game's own addresses. */
-    const note = solved ? state.rom.game.rig.note ?? 'vf2' : null;
-    for (const n of ['vf2', 'fv', 'doa']) $(`#anim-note-${n}`).hidden = n !== note;
+    /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
+     * Air Walkers' and Power Sled's, name the game's own addresses; the plain bodies note
+     * is The House of the Dead's. */
+    const kind = state.rom.game.rig?.kind;
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled'];
+    const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
+    $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
+    for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
+    /* The music sits with the stages, or for a game with none at the foot of
+     * the model panel, where it plays the song picked rather than a stage's. */
+    const home = $(`.tabpanel[data-tab="${f.stages ? 'stage' : 'model'}"]`);
+    const anchor = f.stages ? $('#view-field') : null;
+    for (const id of ['music-field', 'stage-sfx-label', 'music-song-field']) home.insertBefore($(`#${id}`), anchor);
     /* One tab left is not a choice; the panel says which game is loaded. */
     $('#tabs').hidden = Object.values(on).filter(Boolean).length < 2;
 
@@ -6009,8 +6089,9 @@ function loadGameContent() {
     if (on.stage) {
         /* The shapes of stage data: a record per arena, a placement
          * table per chapter, Daytona USA's grid of blocks, Virtua Cop's
-         * segments, Virtua Fighter 2's, and what Dead or Alive's and
-         * Virtual-On's own code places, run on js/i960.js. */
+         * segments, Virtua Fighter 2's, and what Dead or Alive's,
+         * Virtual-On's and Air Walkers' own code places, run on
+         * js/i960.js. */
         const T = state.rom.game.stageTable;
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
@@ -6023,14 +6104,18 @@ function loadGameContent() {
             state.stages = readVonStages(state.rom);
             state.modelCache.clear();
         }
+        else if (T.airwlkrs) state.stages = readAirwlkrsStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
+        else if (T.powsled) state.stages = readPowsledStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
     if (on.anim && state.rom.game.rig) {
         state.bodies = bodyRig().read(state.rom);
         state.motion.list = bodyRig().motions(state.rom, state.bodies);
+        /* Virtual-On's robots put right model entries too (js/von.js). */
+        if (state.rom.game.rig.kind === 'von') state.modelCache.clear();
     }
     /* The model the panel opens on is a hand-picked one, and it is only
      * hand-picked for the game it was picked in — in another the same index is
@@ -6223,6 +6308,7 @@ function start() {
         else if (state.tab === 'anim') {
             if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();
+            if (state.character?.headlight) stepEyeLight(state.character);
         }
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */

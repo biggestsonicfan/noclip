@@ -667,8 +667,10 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
  * slot 6 for the away side's 17..33. The other side's slot keeps the title's.
  *
  * `colorSet` is the team, or the profile's `titleSet` for the intro's and the
- * title's colours, the two runs alone. The court and its variant are the
- * profile's.
+ * title's colours, the two runs alone. A home team's number is its court too:
+ * the match set-up (0xD048C) takes the court from the home side's team and the
+ * variant from byte +12 of the team's record (`0xFBA80 + 20 * team`). The away
+ * side's numbers keep the profile's court and variant.
  */
 function buildAirwlkrsColorxlat(rom, colorSet) {
     const A = rom.game.colors.airwlkrs;
@@ -703,7 +705,9 @@ function buildAirwlkrsColorxlat(rom, colorSet) {
     /* The intro and the title stop there: nothing else is sent until a
      * court is set up. */
     if (colorSet === A.titleSet) return out;
-    const stage = A.stage ?? 0, variant = A.variant ?? 0;
+    const home = colorSet >= 0 && colorSet < A.teamCount / 2;
+    const stage = home ? colorSet : A.stage ?? 0;
+    const variant = home ? cpu[rom.game.airwlkrs.teams + colorSet * 20 + 12] : A.variant ?? 0;
     const base = cv.getUint32(A.stages + stage * 4, true);
     for (let i = 0; i < 5; i++) send(base + i * 0xc0, cv.getUint32(A.stageSlots + i * 4, true));
     for (const [src, slot] of A.fixed) send(src, slot);

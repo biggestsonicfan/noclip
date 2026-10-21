@@ -196,3 +196,235 @@ export function readVonStages(rom) {
     }
     return stages;
 }
+
+/* ---- the robots ------------------------------------------------------------ */
+
+/*
+ * A robot is a record in the program (`rig.robots`, ten pointers; the name is
+ * at +0x6BC), and the draw (0x33xxx, the legs 0x8DD40 and the body 0x8DFC0)
+ * reads three part lists out of it, each a pointer and a count:
+ *
+ *   +0x00 the weapons    +0x08 the upper body    +0x10 the legs
+ *
+ * A list entry is 8 bytes. A nonzero first word means the entry is drawn, and
+ * the second points at its variants, 16 bytes each: the texture point, the
+ * header, a second header (for a flag at +0x1AA of the robot's object) and the
+ * mesh word. Which variant is a halfword of the object's per part; the
+ * explorer draws variant 0. A zero first word with -1 is a part that is not
+ * drawn, and with 0-5 a slot: the part's frame entry is kept (0x562430 + slot
+ * * 12) for what is drawn off it later. Slot 0 is the waist, which the legs
+ * list ends on, and slot 1 the hand the weapon list's entry 1 is drawn in.
+ *
+ * Zig-Raht's record, the last, has no upper body or weapons: its one list of
+ * 25 parts, 32-byte variants, is another routine's, not read here.
+ */
+const ROBOT_WEAPONS = 0x00, ROBOT_BODY = 0x08, ROBOT_LEGS = 0x10;
+const ROBOT_MOTIONS = 0x70, ROBOT_PAIRS = 103;
+const ROBOT_NAME = 0x6bc;
+
+/* The data ROM's view of an address, or null off its end. */
+function dataAt(rom, a) {
+    const off = a - DATA_BASE;
+    return off >= 0 && off < rom.mainDataView.byteLength ? off : null;
+}
+
+function readList(rom, struct, at) {
+    const dv = rom.mainCpuView;
+    const ptr = dv.getUint32(struct + at, true), count = dv.getUint32(struct + at + 4, true);
+    if (!ptr || count > 64 || ptr + count * 8 > rom.maincpu.length) return [];
+    return Array.from({ length: count }, (_, i) => {
+        const drawn = dv.getUint32(ptr + i * 8, true), word = dv.getUint32(ptr + i * 8 + 4, true);
+        if (!drawn) return { slot: word <= 5 ? word : -1 };
+        const v = (k) => dv.getUint32(word + k * 4, true);
+        return { slot: -1, triple: word + 16 <= rom.maincpu.length ? [v(0), v(1), v(3)] : null };
+    });
+}
+
+/**
+ * The robots, as bodies.js bodies: the legs' parts hung off a base, the upper
+ * body's off the waist, the weapon off the hand. A part's `joint` is its entry
+ * in its list (`list` says which); the matrices come from `poseVonRobot`.
+ * The triples the draw sends go into the model table first, as the field
+ * code's do (js/romset.js addModelTriples).
+ */
+export function readVonBodies(rom) {
+    const R = rom.game.rig;
+    const dv = rom.mainCpuView;
+    const robots = [];
+    for (let i = 0; i < R.count; i++) {
+        const struct = dv.getUint32(R.robots + i * 4, true);
+        if (struct + ROBOT_NAME + 16 > rom.maincpu.length) continue;
+        const legs = readList(rom, struct, ROBOT_LEGS), upper = readList(rom, struct, ROBOT_BODY);
+        const weapons = readList(rom, struct, ROBOT_WEAPONS);
+        if (!legs.length || !upper.length) continue;
+        let name = '';
+        for (let p = struct + ROBOT_NAME; rom.maincpu[p] && name.length < 16; p++) name += String.fromCharCode(rom.maincpu[p]);
+        robots.push({ i, struct, name, legs, upper, weapon: weapons[1]?.triple ?? null });
+    }
+    addModelTriples(rom, robots.flatMap((r) => [...r.legs, ...r.upper].map((e) => e.triple)
+        .concat([r.weapon]).filter(Boolean)));
+    const byMesh = new Map();
+    for (let k = rom.game.modelTable.count - 1; k >= 0; k--) byMesh.set(readModelEntry(rom, k).meshPtr, k);
+    const model = (e) => (e?.triple ? byMesh.get(e.triple[2]) ?? 0 : 0);
+    return robots.map((r) => {
+        const parts = [{ list: 'base', joint: 0, parent: -1, model: 0 }];
+        r.legs.forEach((e, j) => parts.push({ list: 'legs', joint: j, parent: 0, model: model(e), slot: e.slot }));
+        const waist = parts.findIndex((p) => p.list === 'legs' && p.slot === 0);
+        r.upper.forEach((e, j) => parts.push({ list: 'body', joint: j, parent: waist, model: model(e), slot: e.slot }));
+        const hand = parts.findIndex((p) => p.list === 'body' && p.slot === 1);
+        if (r.weapon && hand >= 0) parts.push({ list: 'weapon', joint: 0, parent: hand, model: model({ triple: r.weapon }) });
+        return {
+            index: r.i,
+            name: r.name,
+            joints: r.legs.length + r.upper.length,
+            scale: 1,
+            roles: [],
+            skin: -1,
+            hitMotions: [],
+            start: -1,
+            root: r.struct,
+            /* Player 1's colour rows, SetRoboRamp's for the robot's first
+             * costume (js/colors.js buildVonColorxlat). */
+            colours: { char: r.i, costume: 0 },
+            parts: parts.map((p, index) => ({
+                ...p, index, depth: p.parent < 0 ? 0 : p.list === 'body' ? 2 : p.list === 'weapon' ? 3 : 1,
+                offset: [0, 0, 0], flags: 0, record: r.struct,
+            })),
+        };
+    });
+}
+
+/* A record: the data's address, the frames and the parts, negative where the
+ * frames run backwards from the address (the draw steps by the signed count
+ * and loops over its size). */
+function readRecord(rom, a) {
+    const off = dataAt(rom, a);
+    if (off === null || off + 8 > rom.mainDataView.byteLength) return null;
+    const dv = rom.mainDataView;
+    const data = dataAt(rom, dv.getUint32(off, true));
+    const frames = dv.getUint16(off + 4, true), parts = dv.getInt16(off + 6, true);
+    if (data === null || !frames || !parts) return null;
+    return { address: a, data, frames, parts };
+}
+
+/**
+ * Each robot's motions: 103 pairs of records from +0x70, the upper body's then
+ * the legs', played together on one frame count. The draw (0x2EE70) reads them
+ * as 0x1D8[n * 40] and 0x1DC[n * 40], groups of five pairs. Repeats of a pair
+ * are dropped; the game names none, so a motion is its first pair's number.
+ */
+export function readVonMotions(rom, bodies) {
+    const dv = rom.mainCpuView;
+    const out = [];
+    for (const body of bodies) {
+        const seen = new Set();
+        for (let n = 0; n < ROBOT_PAIRS; n++) {
+            const at = body.root + ROBOT_MOTIONS + n * 8;
+            const upper = readRecord(rom, dv.getUint32(at, true)), legs = readRecord(rom, dv.getUint32(at + 4, true));
+            if (!upper || !legs) continue;
+            const key = `${upper.address},${legs.address}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({
+                index: out.length,
+                robot: body.index,
+                pair: n,
+                name: `motion ${n}`,
+                joints: body.joints,
+                frames: Math.max(upper.frames, legs.frames),
+                address: upper.address,
+                upper,
+                legs,
+                view: rom.mainDataView,
+            });
+        }
+    }
+    return out;
+}
+
+/** A robot plays its own record's motions and nothing else's. */
+export function vonMotionList(rom, body, motions) {
+    const fits = motions.filter((m) => m.robot === body.index);
+    return { fits, lead: fits, label: 'Its motions, in its record\'s order' };
+}
+
+/* An IEEE half, as the copro's 0x2F reads the low 16 bits of each word. */
+function half(h) {
+    const e = (h >> 10) & 0x1f, f = h & 0x3ff, s = h & 0x8000 ? -1 : 1;
+    if (e === 0) return s * f * 2 ** -24;
+    if (e === 31) return f ? NaN : s * Infinity;
+    return s * (1 + f / 1024) * 2 ** (e - 15);
+}
+
+/* One part's frame entry, 12 bytes: three s16 angles (x, y, z) and three
+ * half-float offsets. Frame 0 is the record's first; past the end it holds
+ * the last. */
+function readEntry(motion, rec, frame, j) {
+    if (!rec || j >= Math.abs(rec.parts)) return null;
+    const at = rec.data + (Math.min(frame, rec.frames - 1) * rec.parts + j) * 12;
+    const v = motion.view;
+    if (at < 0 || at + 12 > v.byteLength) return null;
+    return {
+        r: [0, 2, 4].map((k) => v.getInt16(at + k, true)),
+        t: [6, 8, 10].map((k) => half(v.getUint16(at + k, true))),
+    };
+}
+
+/* T(t)·Rz·Ry·Rx, the order every part is drawn in; and its inverse. */
+function local(cp, e) {
+    cp.translate(e.t);
+    cp.turn('z', e.r[2]); cp.turn('y', e.r[1]); cp.turn('x', e.r[0]);
+}
+function unlocal(cp, e) {
+    cp.turn('x', -e.r[0]); cp.turn('y', -e.r[1]); cp.turn('z', -e.r[2]);
+    cp.translate(e.t.map((x) => -x));
+}
+
+/**
+ * Pose a robot on one frame (from 1) of one of its motions.
+ *
+ * Each leg part is drawn at T·Rz·Ry·Rx of its entry from the robot's place.
+ * Then the waist (the legs' slot 0) the same way, turned on y by the twist
+ * at +0x36 of the object (0 here); then the inverse of the upper body's entry
+ * 0, its root; then each upper body part at its entry. The weapon is drawn at
+ * the hand's (slot 1) entry, under the upper body's root, without the aim
+ * the fight turns it by. Checked against MAME's matrices for Temjin in the
+ * attract (frame 1800): every part to 5e-5.
+ *
+ * The draw loops over the record's own count of parts, so a list entry past
+ * it is not drawn on that motion: Temjin's upper body list has 17 entries,
+ * its records 15, and Dorkas has records of 13 among its 17s.
+ *
+ * @returns {{matrices: number[][], origins: number[][], draws: number[][]}}
+ *   column-major 4x4s, z the board's negated, and the models on each part
+ */
+export function poseVonRobot(rom, body, motion, frame) {
+    const own = motion?.robot === body.index ? motion : null;
+    const f = Math.max(0, frame - 1);
+    const entry = (list, j) => (own ? readEntry(own, list === 'legs' ? own.legs : own.upper, f, j) : null);
+    const cp = new Copro(new Set());
+    const at = (m) => { cp.m = m.slice(); };
+    const base = cp.m.slice();
+    const waist = body.parts.find((p) => p.list === 'legs' && p.slot === 0);
+    at(base);
+    const w = waist && entry('legs', waist.joint);
+    if (w) local(cp, w);
+    const root = entry('body', 0);
+    if (root) unlocal(cp, root);
+    const upper = cp.m.slice();
+    const shown = [];
+    const mats = body.parts.map((p, i) => {
+        if (p.list === 'base') return base;
+        const hand = p.list === 'weapon' ? body.parts[p.parent] : p;
+        at(hand.list === 'legs' ? base : upper);
+        const e = entry(hand.list, hand.joint);
+        if (e) local(cp, e);
+        shown[i] = Boolean(e) || !own;
+        return cp.m;
+    });
+    return {
+        draws: body.parts.map((p, i) => (p.model && shown[i] ? [p.model] : [])),
+        matrices: mats.map((m) => [m[0], m[1], -m[2], 0, m[3], m[4], -m[5], 0, -m[6], -m[7], m[8], 0, m[9], m[10], -m[11], 1]),
+        origins: mats.map((m) => [m[9], m[10], -m[11]]),
+    };
+}
