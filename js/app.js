@@ -137,7 +137,8 @@ const state = {
     /* The opponent in player 2's look, whatever the fighter wears. */
     opponentP2: false,
     /* VF2 and FV: the fighter mirrored (player +0 bit 6), as a fight leaves it
-     * after a move that ends with move flag 21; see mirrorSample. */
+     * after a move that ends with move flag 21; see mirrorSample. Air Walkers:
+     * the motion played mirrored (+0xF4), hands swapped. */
     mirrored: false,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
@@ -3714,7 +3715,7 @@ function bouncedDraws(body, posed, m) {
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
-    const mirrored = state.mirrored && state.rom.game.rig?.kind === 'vf2';
+    const mirrored = state.mirrored && ['vf2', 'airwlkrs'].includes(state.rom.game.rig?.kind);
     const handsPass = playedOver(m);
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass });
     const own = rivalPlays(m);
@@ -6010,7 +6011,8 @@ function applyGameFeatures() {
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
-    $('#char-mirror-field').hidden = !rival;
+    /* Air Walkers' players play some motions mirrored too (+0xF4). */
+    $('#char-mirror-field').hidden = !rival && state.rom.game.rig?.kind !== 'airwlkrs';
     $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();

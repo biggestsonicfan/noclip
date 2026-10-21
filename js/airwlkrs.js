@@ -274,12 +274,13 @@ function playerMachine(rom) {
 }
 
 /**
- * Pose a player on one frame of a motion: the frame's angles at 0x5214C0, the
+ * Pose a player on one frame of a motion: the frame's angles at 0x521520,
+ * copied to 0x5214C0 by the game's own routine (mirrored when asked), the
  * player's models in an object, and the game's draw routines run on them.
  * The model offset 0x5215F0 is 0, the near models: 0x23600 sets it to -1, the
  * model before each in the table, when the camera is 35 units off or more.
  */
-export function poseAirwlkrs(rom, body, motion, frame, { travel = false } = {}) {
+export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false } = {}) {
     const R = rom.game.rig;
     const M = playerMachine(rom);
     const obj = R.object - RAM_BASE;
@@ -294,11 +295,18 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false } = {}) 
      * routine adds nothing. */
     if (motion) {
         const at = R.motions.records + motion.index * 12;
-        M.ram[obj + 0x11e] = rom.maincpu[at + 4];
-        M.ram[obj + 0x11f] = rom.maincpu[at + 5];
+        M.ram[obj + 0x11e] = rom.maincpu[at + (mirrored ? 5 : 4)];
+        M.ram[obj + 0x11f] = rom.maincpu[at + (mirrored ? 4 : 5)];
     }
+    /* Whoever starts a motion says whether it plays mirrored: in a game,
+     * 0x66FA0 takes a player's next step from its move sequence (six
+     * halfwords each at 0x5A300), the motion in the low 12 bits and `+0xF4`
+     * set by bit 12 or 14. 0x1FD10 then copies the eased frame at `eased`
+     * to the pose words as it is or mirrored: the arms and legs change
+     * sides with their turns negated, which is why the hands swap. */
+    M.rv.setUint32(obj + 0xf4, mirrored ? 1 : 0, true);
     M.rv.setInt32(R.modelOffset - RAM_BASE, 0, true);
-    const pose = R.pose - RAM_BASE;
+    const pose = R.eased - RAM_BASE;
     M.ram.fill(0, pose, pose + FRAME_BYTES);
     /* The hips stand at the root's height, and go where it goes when the
      * travel is asked for. */
@@ -310,8 +318,11 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false } = {}) 
         if (motion.root >= 0) {
             for (let k = 0; k < 3; k++) place[k] = rom.mainDataView.getFloat32(motion.root + f * 12 + k * 4, true);
             if (!travel) place[0] = place[2] = 0;
+            /* 0x22800 flips the root's x for a mirrored motion. */
+            if (mirrored) place[0] = -place[0];
         }
     }
+    M.cpu.call(R.mirror, [R.object], { maxSteps: 20_000 });
     M.copro.stack = [];
     M.copro.m = [1, 0, 0, 0, 1, 0, 0, 0, 1, ...place];
     M.geo.draws = [];

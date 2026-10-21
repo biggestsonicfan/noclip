@@ -5212,7 +5212,7 @@ const airwlkrs = {
      * The players (js/airwlkrs.js): sixteen models a player at `players`,
      * five players a team, 34 teams and the three of team 34; the legs'
      * routine and the rest's run on an object at `object` with the pose at
-     * `pose`. The read-backs are the feet's, the head's and the hands' ends.
+     * `pose`, which `mirror` copies from `eased`, mirrored or not. The read-backs are the feet's, the head's and the hands' ends.
      * Each motion has a 12-byte record at `motions.records`: the hands it
      * holds (+4, +5), its flags (+3) and its second-table entry (+8).
      */
@@ -5220,7 +5220,7 @@ const airwlkrs = {
         kind: 'airwlkrs',
         players: 0xf4b20, teamStride: 0x190, playerStride: 0x50, specialTeam: 34, specials: 3,
         draw: [0x214a0, 0x21a70], drawSpecial: [0x20850],
-        object: 0x510b40, pose: 0x5214c0, modelOffset: 0x5215f0,
+        object: 0x510b40, pose: 0x5214c0, modelOffset: 0x5215f0, eased: 0x521520, mirror: 0x1fd10,
         ends: [0x5215e0, 0x521600, 0x521610, 0x521620, 0x521630],
         motions: {
             table: 0x026e3ca0, roots: 0x025bf740, count: 0x286,

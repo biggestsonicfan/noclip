@@ -890,9 +890,10 @@ does it (the explorer runs that routine), and posed by any of the 619 motions
 go: they stand at its height, so a dunk leaves the floor, and **root travel**
 lets the player run along its path. A frame's joints match the ones MAME's
 RAM holds for the same motion and frame, and each player wears his own skin
-as in MAME. Each motion also picks the hands the player holds, and he
-wears those, as MAME draws them. Not shown: the head's turn toward the
-play. See
+as in MAME. Each motion also picks the hands the player holds, and the
+explorer draws those, as MAME does. **mirrored** plays the motion the other
+way round, as the game plays many of them, the hands swapped with the arms.
+Not shown: the head's turn toward the play. See
 [Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
 The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
