@@ -4392,7 +4392,10 @@ instead, given the run (g1), the frame clock 0x20A7FC (g2) and an end (g3). A
 run is the car itself, 0x58 bytes, every fourth frame. The clock's top bits
 are the sample and its low two the quarter toward the next, and every value
 is eased as (1 - t) a in double plus f32(b t), rounded to a float; on a sample
-it is copied (0x28DDC). The seven runs are in main_data at 0x201F410 and
+it is copied (0x28DDC). The three angles, +0x18 to +0x20, are eased instead as
+a + f32(t d), with d = b - a brought within half a turn by 0x27BD8, so a
+heading eases the short way round; +0x50 to +0x57 are taken whole from the
+sample it eases toward. The seven runs are in main_data at 0x201F410 and
 0x203E420 (scene 1), 0x290A100 (scene 2, one car, played with either),
 0x28E9258 and 0x28F99AC (scene 3), 0x200FBE0 and 0x202EBF0 (scene 4). They
 lie end to end, and a scene's clock runs a sample or two past its run, so a
@@ -4414,6 +4417,51 @@ Logged again with every matrix read once more one and two frames later
 `poseRallyCar` gives, all 64,608 within the usual error; 23 frame-end reads
 were off again, and not on the same draws as the first run, which read 7 of
 its 10 unexplained ones cleanly this time.
+
+**The body, the shadow and the models** (`poseRallyCar`, `rallyCarModels`).
+The draw's first push is the shadow's: a translate to the car's X and Z at
+the mean of the ground under the four wheels (+0x40 on, in the order of the
+places) less 0.02, the heading +0x1C (function 0x2A), the ground's tilt front
+to back, (FL + FR - RL - RR) x 0.2380952, as function 0x29, and side to side,
+(FL + RL - FR - RR) / 3, as 0x2B; then the shadow model, pop. The body's
+matrix is the car's place, the heading, the pitch +0x18 (0x29) and the roll
++0x20 (0x2B), and the wheels are drawn inside it. In the viewer, whose Z is
+the board's negated, the three functions are Ry(a), Rx(a) and Rz(-a). The
+view stands the car over the ground's mean with the heading taken off; with
+root travel it drives the run from where it starts, turned as it starts, and
+the camera follows it.
+
+The body model is the record's +0xC, or +0x10 while +0x52 & 0x8888 is set; a
+record with a model at +0x14 adds +0x51 & 3 to the body's number, and draws
+that model on the body's matrix while +0x50 bit 4 is set. The run's flags
+are not what the draw sees. The first and fourth scenes (0x10AE0, 0x116F4)
+rewrite the word as ((w << 1) & 0xFFF0) | (w & 7), the first with 0x2222 put
+over the top halfword, the fourth clearing bit 4; 0x12968 sets +0x51's low
+two bits to 1 on the car in slot 1 and clears them on the other (a one-car
+scene: 1 if 0x12968 made it the Delta, else 0); 0x247D0 clears +0x50 bits 5
+and 6 before the near draw. Watched in MAME: the run's `0xFFF1` becomes
+`0x2222FFE1`, then `0x2222FDE1`, then `0x2222FD81`. So the Delta always draws
+body 0x61 (0x6B with the second body), the Celica 0x6E (0x77), the second body
+shows only in the third scene (+0x52 = 0x9999) and the extra model (0x75 on
+the Celica, 0x67 on the Delta) only in the second and third, a few frames at
+a time.
+
+Graded on the same attract run, frames 300 to 12500, tapping the shadow's and
+the body's matrices (re-read a frame later), the body model and the extra
+model: 19,058 car draws matched to a run and clock, over all seven runs. The
+body and extra models are the draw's on all 19,058 (alt bodies on 934, extra
+models on 203). The body relative to the shadow, inv(S) B, is within 2.8e-5
+radians (median), 9.4e-5 (99%) and 1.1e-5 units (median), 8.1e-5 (99%);
+5,617 of the draws have the pitch or roll past 0.1 radians, up to a roll of
+1.58. Five are off, by up to 0.48 units: the last five clocks of the second
+scene (1517 to 1521), whose next sample is past the run's end and is the
+following table's data, drawn on the frames the scene cuts away. For the
+heading and the place, the two cars on one frame against each other, inv(B1)
+B2 with each run placed at its first sample: 8,511 pairs within 1.2e-7
+radians and 1.2e-5 units (median), 4.1e-5 and 1.2e-4 (99%); the one pair off
+is that same cut, where the cars are from two scenes. Before this the body
+stood level; easing the heading straight across, not the short way, put the
+pairs up to half a turn out on the samples where it crosses a half turn.
 
 **The figures.** One routine, 0x5CA290 (ROM 0x2B290), draws every jointed
 figure. It takes a figure record, a frame and a step:
@@ -4786,8 +4834,13 @@ object's 16 read-back joint matrices on the same frame:
 Not checked: the left hand (no character in the logs held anything there)
 and characters 0x47 and 0x48's scale of 2.
 
-Not done: the mirror flag at object +0xCD8, the blend between motions, and which motions
-each character plays (lists from 0x1B70A8). Only the three heroes are named.
+Not done: the blend between motions, and which motions each character plays
+(lists from 0x1B70A8). +0xCD8, once taken for a mirror flag, is the blend's
+counter: 0x14690 starts a blend, storing +0xCD8 and +0xCD4 and each joint's
+old and new angles from +0xCFC and +0xD7C, 8 bytes a joint; 0x14C10 eases the
+angles and 0x14DA0 the root, and while +0xCD8 is set 0x15210 sends the joints
+with copro commands 0x30 and 0x31, in another angle order, not 0x32 and 0x33.
+No mirror was found. Only the three heroes are named.
 Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
 explorer; why was not found.
 

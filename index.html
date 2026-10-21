@@ -654,7 +654,11 @@
         (<code>+0x2C</code>) and sprung (<code>+0x30</code> on). There is no
         motion data; what plays here is the attract mode's recorded runs, a
         car's state every fourth frame, eased between as <code>0x28990</code>
-        eases it.
+        eases it. The body pitches (<code>+0x18</code>) and rolls
+        (<code>+0x20</code>), the shadow tilts with the ground under the
+        wheels (<code>+0x40</code> on), and the body model is the one the draw
+        picks from the car's flags (<code>+0x50</code>); <em>root travel</em>
+        drives the run, the camera following.
       </div>
       <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
         Every player has the same fifteen-joint skeleton, which is in the

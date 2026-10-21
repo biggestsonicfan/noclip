@@ -754,6 +754,15 @@ seven runs with the wheels turned the way the car draw turns them. Checked
 against the wheel matrices MAME's TGP writes over four attract scenes (19,059
 car draws, 17,478 of them steered): the car state is the same bit for bit,
 and the wheels' turn is within 1e-5 of a radian (median) and 1.3e-3 (99%).
+The body pitches and rolls with the run, the shadow lies on the ground under
+the wheels at its own tilt, and the body model changes as the car draw changes
+it: the Delta's own body number, the second body in the third scene and the
+extra model laid over the body in the second and third. Tick *root travel* to
+drive the run, the camera following the car. Checked against MAME over all
+seven runs (19,058 car draws): the models are the draw's on every one, the
+body against the shadow is within 3e-5 of a radian (median) and 1e-4 (99%),
+up to a roll of 1.58, and the two cars on one frame are placed and turned
+against each other within 1.2e-4 units and 4e-5 of a radian (99%).
 See [Sega Rally's people](TECHNICAL.md#sega-rally-championships-people-jssrallyjs).
 
 Not read yet: the low-detail copy as a view of its own, the trackside objects

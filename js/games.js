@@ -4719,16 +4719,18 @@ const RALLY_CARS = ['Toyota Celica', 'Lancia Delta'];
  * scene's clock runs a sample or two past its run's end into the next, so a
  * run's length is the clock's last value in MAME's attract plus one, not the
  * gap. `car` is the slot of the car that drives it; the third scene plays its
- * one run with either car.
+ * one run with either car. `shift`: the scene moves the flags' low halfword up a
+ * bit, all but the low three (0x10AE0, 0x116F4), puts `high` over the top one
+ * and clears `clear`; the other scenes draw the run's flags as they are.
  */
 const RALLY_RUNS = [
-    { name: 'scene 1, Celica', at: 0x201f410, car: 0, frames: 1580 },
-    { name: 'scene 1, Delta', at: 0x203e420, car: 1, frames: 1580 },
+    { name: 'scene 1, Celica', at: 0x201f410, car: 0, frames: 1580, flags: { shift: true, high: 0x2222, clear: 0 } },
+    { name: 'scene 1, Delta', at: 0x203e420, car: 1, frames: 1580, flags: { shift: true, high: 0x2222, clear: 0 } },
     { name: 'scene 2', at: 0x290a100, car: [0, 1], frames: 1522 },
     { name: 'scene 3, Celica', at: 0x28e9258, car: 0, frames: 3065 },
     { name: 'scene 3, Delta', at: 0x28f99ac, car: 1, frames: 3065 },
-    { name: 'scene 4, Celica', at: 0x200fbe0, car: 0, frames: 2896 },
-    { name: 'scene 4, Delta', at: 0x202ebf0, car: 1, frames: 2896 },
+    { name: 'scene 4, Celica', at: 0x200fbe0, car: 0, frames: 2896, flags: { shift: true, high: 0, clear: 0x10 } },
+    { name: 'scene 4, Delta', at: 0x202ebf0, car: 1, frames: 2896, flags: { shift: true, high: 0, clear: 0x10 } },
 ];
 
 const srallyc = {
