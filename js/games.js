@@ -4168,6 +4168,28 @@ const doa2A = (chip) => chip.map((x) => DOA_2A_SOCKETS[x] ?? x);
 const doa2ARegions = (regions) => Object.fromEntries(Object.entries(regions)
     .map(([k, r]) => [k, { ...r, parts: r.parts.map(doa2A) }]));
 
+/* The fight code's routines: every one a program address. */
+const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
+    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
+
+/*
+ * Revision A's fight code, from Revision B's. Revision A is an older program,
+ * not B moved: the fight code between 0x40000 and 0x56000 differs in many
+ * small places, so these runs are not the whole program's. Each was found by
+ * looking for 24-byte windows round one of the addresses the fighters'
+ * profile names (routines, tables, the attract's camera path) and taking the
+ * shift on which they matched once; every named address falls in the run it
+ * is shifted by, and the routines' first instructions are Revision B's but
+ * for their call targets. The frame start (0x4DF20, 0x46660 here) is the
+ * same code with moved calls. The RAM is the same.
+ */
+const DOAA_FIGHT_PROGRAM = [
+    [0x00000, 0x0], [0x08000, 0x20], [0x1b000, -0x7430], [0x40000, -0x7490],
+    [0x41800, -0x74b0], [0x4dd00, -0x78c0], [0x51d00, -0x79d0], [0x54000, -0x7a40],
+    [0x7d000, -0x7a20], [0x89000, -0x79c0], [0xd8000, 0x0],
+];
+const doaaFight = (a) => relocate({ relocation: DOAA_FIGHT_PROGRAM }, a);
+
 /*
  * The `doaa` set: Revision A on the Model 2A board. Only the program differs;
  * the data, model and texture chips are doab's, in the 2A's sockets. The
@@ -4198,11 +4220,17 @@ const doaa = {
         ...doab.doa, routines: 0x69fa0, visible: [0x6abc0, 0x6ac40], fixes: doaConveyorFix(0x7a40),
         sky: { ...doab.doa.sky, stages: 0xbfca0 },
         stageSetup: { ...doab.doa.stageSetup, common: 0x68a40, table: 0x68a00, after: { 11: [0x688a0] }, tick: 0x696f8 },
-        /* 2A's fight code sits elsewhere and has not been mapped: no fighters yet. */
-        fighters: undefined, attract: undefined,
+        fighters: relocateDoaFighters(doab.doa.fighters, doaaFight, (a) => a),
+        /* Revision B's attract scene, for the Animation tab's fighters: its
+         * stage, light, frame count and camera. Revision A's own attract
+         * fight has not been checked against MAME, so stage 1 is drawn
+         * without it (`onStage`), from the stage setup as before. */
+        attract: { ...relocateDoaAttract(doab.doa.attract, doaaFight, (a) => a), onStage: false },
     },
-    rig: undefined,
-    features: { ...doab.features, motions: false, bodies: false },
+    rig: {
+        ...doab.rig,
+        banks: doaaFight(doab.rig.banks), loads: doaaFight(doab.rig.loads), scripts: doaaFight(doab.rig.scripts),
+    },
     /* The same songs, the table 0x79C0 lower; the name entry's at 0x152D0. */
     sound: {
         ...doab.sound, program: doa2A(doab.sound.program), samples: doab.sound.samples.map(doa2A),
@@ -4218,7 +4246,8 @@ const doaa = {
  * the first block that matched with that shift, and everything the explorer
  * names falls well inside one (checked address by address). Revision C also
  * moved its RAM: the runs `ram` gives, found by pairing the RAM addresses the
- * two programs' matched instructions name. The 2A builds keep doaa's RAM.
+ * two programs' matched instructions name. The 2A builds keep doaa's RAM but
+ * for a few globals (below).
  */
 const DOA_C_PROGRAM = [
     [0x00000, 0x0], [0x02780, 0x10], [0x08430, 0x20], [0x09370, 0x30],
@@ -4240,10 +4269,6 @@ const DOAAE_PROGRAM = [
     [0x82750, 0x34], [0x82890, 0x30], [0x82ba0, -0x30], [0x83550, -0x180],
     [0x88cb0, -0x1b0], [0xd8000, 0x0],
 ];
-
-/* The fight code's routines: every one a program address. */
-const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
-    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
 
 function relocateDoaFighters(F, at, ram) {
     if (!F) return F;
@@ -4329,18 +4354,33 @@ const doa = relocateDoa(doab, {
     ram: DOA_C_RAM,
 });
 
-/* The two other 2A builds: Nov 3 1996, the Japanese one and the export. */
+/* The two other 2A builds: Nov 3 1996, the Japanese one and the export.
+ * Their RAM is doaa's but for a few globals, found by pairing the RAM
+ * addresses matched instructions name (three or more pairs each): both move
+ * the words at 0x54FD84-0x54FD97 down 4, and the export also moves the bytes
+ * 0x54FC91-0x54FC94 down one (the fight's body-path and slant pokes,
+ * 0x54FC93 and 0x54FC94, are 0x54FC92 and 0x54FC93 there), 0x54FCF3-F7 up
+ * one, 0x54FC90 past them, and swaps the words 0x588288 and 0x58828C (the
+ * face model). */
+const DOAAB_RAM = [[0x500000, 0x0], [0x54fd84, -0x4], [0x54fd98, 0x0], [0x600000, 0x0]];
+const DOAAE_RAM = [
+    [0x500000, 0x0], [0x54fc90, 0x63], [0x54fc91, -0x1], [0x54fc95, 0x0], [0x54fcf3, 0x1],
+    [0x54fcf8, 0x0], [0x54fd84, -0x4], [0x54fd98, 0x0], [0x588288, 0x4], [0x58828c, -0x4],
+    [0x588290, 0x0], [0x600000, 0x0],
+];
 const doaab = relocateDoa(doaa, {
     id: 'doaab',
     name: 'Dead or Alive (Model 2A)',
     maincpu: [0x00000, 'epr-19310.12', 0x3c571e75, 'epr-19311.13', 0x8818363d],
     program: DOAAB_PROGRAM,
+    ram: DOAAB_RAM,
 });
 const doaae = relocateDoa(doaa, {
     id: 'doaae',
     name: 'Dead or Alive (Export, Model 2A, Revision A)',
     maincpu: [0x00000, 'epr-19383a.12', 0x42e61481, 'epr-19384a.13', 0x034a3ab9],
     program: DOAAE_PROGRAM,
+    ram: DOAAE_RAM,
 });
 
 /*
