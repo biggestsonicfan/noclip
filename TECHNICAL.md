@@ -4343,16 +4343,53 @@ RAM on these three courses.
 
 ### Sega Rally Championship's people (`js/srally.js`)
 
-The Animation tab's bodies are the spectators by the course. They are the
-only keyframed things in the game; everything else that moves does so by
-code.
+The Animation tab's bodies are the spectators by the course and the cars.
+The spectators are the only keyframed things in the game; everything else
+that moves does so by code.
 
-**The cars are not bodies.** The car draw (0x5C2B80 to 0x5C3060) draws the
-body model (object +4), then four wheels: push, translate by the wheel's
-offset from the car's table plus its suspension travel (+0x30), on the front
-two (g13 <= 1) a steering turn from +0x24 (TGP `0x15002A2A`), the spin
-(`0x14802929`), the wheel model, pop. Every value is the car's physics state
-of that frame; there is nothing to play back.
+**The cars.** The car draw, 0x5C2A80 (ROM 0x23A80), takes the car's record
+in g0 and the car in g1. The records are a table at ROM 0x23780, 0x30 bytes a
+car picked by +0x50 & 0xF: a near record and a far one, 0x18 bytes each
+(0x24800 picks; the far draws, 0x5C30C0 and 0x5C3560, leave the wheels out
+or unturned). Near record: +0 the wheels' places (a RAM address, four of
+three floats: front left, front right, rear left, rear right), +4 the shadow,
++8 the wheel, +0xC the body, +0x10 a second body, +0x14 an extra model. Slot
+0 is the Celica (body 110, wheel 116), slot 1 the Delta (body 96, wheel 102).
+
+The draw lays the shadow, then pushes, translates to the car (+0..+8), turns
+it by +0x1C, +0x18 and +0x20 (TGP 0x2A, 0x29, 0x2B) and draws the body. Then
+each wheel: push, translate by the wheel's place plus its suspension travel
+(+0x30 + 4i) on Y, on the front two (g13 <= 1) a turn by the steer +0x24
+(`0x15002A2A`), the spin +0x2C negated (`notbit 31`, `0x14802929`), the wheel
+model, pop. On the board's axes, measured against the matrices the TGP writes
+(function 5, read from bufferram at the geo write pointer 0x802008), a wheel
+is T(place + travel) · Ry(-steer) · Rx(spin). The spin only goes up, past
+8192 radians; the TGP takes the whole turns off in single floats, which
+`wrapTurn` does too.
+
+None of this is motion data: in play the physics writes the car each frame.
+In the attract mode, 0x28990 (RAM 0x5C7990) writes it from a recorded run
+instead, given the run (g1), the frame clock 0x20A7FC (g2) and an end (g3). A
+run is the car itself, 0x58 bytes, every fourth frame. The clock's top bits
+are the sample and its low two the quarter toward the next, and every value
+is eased as (1 - t) a in double plus f32(b t), rounded to a float; on a sample
+it is copied (0x28DDC). The seven runs are in main_data at 0x201F410 and
+0x203E420 (scene 1), 0x290A100 (scene 2, one car, played with either),
+0x28E9258 and 0x28F99AC (scene 3), 0x200FBE0 and 0x202EBF0 (scene 4). They
+lie end to end, and a scene's clock runs a sample or two past its run, so a
+run's length is the last clock MAME's attract reached, plus one.
+
+Graded on MAME's attract, frames 300 to 12500: 19,062 car draws, 19,059 of
+them matched to a run and clock; 17,478 with the front wheels steered and
+17,399 with a wheel off its rest. The steer, spin and travel `poseRallyCar`
+reads are the ones the draw read, 114,354 of 114,354 bit for bit. The wheel
+matrices, relative to the body's: turn error median 8.5e-6 radians, 99%
+1.3e-3 (the larger ones are spins past 8192, where a float's step is 1e-3);
+wheel centres and rim points 1.4e-6 apart (median), 3.1e-4 (99%). With the
+wheels left straight, as before, the turn error's median was 1.57. 49 of the
+76,236 wheel matrices are off by more than 0.1 radians, all front wheels of
+the Delta in scenes 3 and 4; 39 of them match that wheel three frames before,
+a buffer the logger read before the TGP had written it.
 
 **The figures.** One routine, 0x5CA290 (ROM 0x2B290), draws every jointed
 figure. It takes a figure record, a frame and a step:

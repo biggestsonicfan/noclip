@@ -724,9 +724,18 @@ leg, and each figure has one motion of 30 frames, which the game plays
 forward and back, so the tab's motion is 59 frames. The names are the
 explorer's; the game has none. Which figure a spectator is depends on the
 cabinet's OPERATION DAYS count, so it changes every thirty days the cabinet
-is switched on. The cars have no Animation entry: their wheels are steered,
-spun and sprung by code each frame, with no motion data to read. See [Sega
-Rally's people](TECHNICAL.md#sega-rally-championships-people-jssrallyjs).
+is switched on.
+
+The cars are in the tab too, as a body and four wheels: the Toyota Celica,
+the Lancia Delta and the CPU cars' liveries. The game has no motion data for
+them; it steers the front wheels, spins all four and springs them by code
+each frame, from the car's state. In the attract mode that state comes from
+recorded runs, a car's state every fourth frame, and the tab plays those
+seven runs with the wheels turned the way the car draw turns them. Checked
+against the wheel matrices MAME's TGP writes over four attract scenes (19,059
+car draws, 17,478 of them steered): the car state is the same bit for bit,
+and the wheels' turn is within 1e-5 of a radian (median) and 1.3e-3 (99%).
+See [Sega Rally's people](TECHNICAL.md#sega-rally-championships-people-jssrallyjs).
 
 Not read yet: the low-detail copy as a view of its own, the trackside objects
 and the cars' places on the grid, and the ground beyond the course, which the

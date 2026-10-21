@@ -625,8 +625,13 @@
         two turns; there are 30, which the game plays forward and back, one
         a frame. The figure a spectator shows comes from the table at
         <code>0x5CA280</code>, picked by the cabinet's operation days over
-        thirty. The cars are not here: their wheels are turned by code, with
-        no motion data.
+        thirty. The cars are bodies too, a body and four wheels, which
+        <code>0x5C2A80</code> turns by code each frame from the car's state:
+        the front two steered (<code>+0x24</code>), all four spun
+        (<code>+0x2C</code>) and sprung (<code>+0x30</code> on). There is no
+        motion data; what plays here is the attract mode's recorded runs, a
+        car's state every fourth frame, eased between as <code>0x28990</code>
+        eases it.
       </div>
       <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
         Every player has the same fifteen-joint skeleton, which is in the

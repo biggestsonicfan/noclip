@@ -4703,6 +4703,29 @@ const vonu = {
  * and runs there, so a RAM address in the code is the ROM offset plus
  * 0x59F000.
  */
+/* The cars by their record's slot: the two the player picks from (bodies 110
+ * and 96). The rest are the CPU cars' liveries, named by slot. */
+const RALLY_CARS = ['Toyota Celica', 'Lancia Delta'];
+
+/*
+ * The runs the attract scenes play (0x10A9C on, by the scene in 0x20A800),
+ * each handed to 0x28990 as a main_data address with the frame clock
+ * 0x20A7FC. The tables lie end to end, 0xF830 and 0x10754 bytes apart, and a
+ * scene's clock runs a sample or two past its run's end into the next, so a
+ * run's length is the clock's last value in MAME's attract plus one, not the
+ * gap. `car` is the slot of the car that drives it; the third scene plays its
+ * one run with either car.
+ */
+const RALLY_RUNS = [
+    { name: 'scene 1, Celica', at: 0x201f410, car: 0, frames: 1580 },
+    { name: 'scene 1, Delta', at: 0x203e420, car: 1, frames: 1580 },
+    { name: 'scene 2', at: 0x290a100, car: [0, 1], frames: 1522 },
+    { name: 'scene 3, Celica', at: 0x28e9258, car: 0, frames: 3065 },
+    { name: 'scene 3, Delta', at: 0x28f99ac, car: 1, frames: 3065 },
+    { name: 'scene 4, Celica', at: 0x200fbe0, car: 0, frames: 2896 },
+    { name: 'scene 4, Delta', at: 0x202ebf0, car: 1, frames: 2896 },
+];
+
 const srallyc = {
     id: 'srallyc',
     name: 'Sega Rally Championship (Revision C)',
@@ -4864,10 +4887,15 @@ const srallyc = {
         figures: { table: 0x2b280, count: 4, ramBase: 0x59f000 },
         /* What each one does; the game has no names for them. */
         names: ['fist pump', 'overhead clap', 'jump, arms up'],
+        /* The cars' records, 0x30 bytes each at ROM 0x23780, which 0x24800
+         * picks by +0x50 & 15 (see carRecords in js/srally.js). */
+        cars: { table: 0x23780, count: 12, ramBase: 0x59f000, names: RALLY_CARS },
+        /* The attract mode's recorded runs (readRallyRuns). */
+        runs: { list: RALLY_RUNS },
     },
     /* The courses but not the cars' placement on them, nor the trackside
-     * objects. The cars are not bodies: code turns and springs their wheels
-     * (0x5C2B80 on), with no motion data. */
+     * objects. The cars are bodies whose wheels turn as 0x5C2A80 turns them,
+     * playing the attract mode's recorded runs. */
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
