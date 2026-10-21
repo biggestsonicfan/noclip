@@ -5337,7 +5337,26 @@ pair is one `airwlkrsHeadTurn` leaves as it is. With MAME's eased angles,
 ends, the head's included, agree to 0.00003 on all 3000 draws; with the head
 left straight the turned draws are off by up to 0.35.
 
-**Not shown.** The blend into a new motion.
+**No blend.** The game doesn't blend one motion into the next. In play a
+new motion starts from 0x23F94 when the player's state word is 0x287: the
+motion start 0x1F1B0 sets the clock `+0xE0` to 0 (to `+0xE8`, the last
+frame, when `+0xEC` is set; 0x24144 then counts it down and the motion plays
+backward), and 0x201B0 eases the new motion's own frames at that clock, the
+same frame the motion has anywhere else. The program does have a blend:
+0x20340 saves the pose words to 0x521580, poses the new motion's first frame
+and sets `+0xE8` to a quarter of the biggest angle change, and 0x20560 eases
+from the saved pose to it, printing the angles as it goes. Nothing calls
+either: no call, no `lda` of their address, no word holding it in the program
+or data ROM, nor 0x20820, the per-frame step that would go with them, so
+they are left from development. Checked in MAME: over the attract window
+above (2940 easings, 440 motion starts) and a game played from a coin for
+8300 frames (5515 motion starts over 179 motions), neither 0x20340 nor
+0x20560 nor 0x20820 ran once. In the attract, 0x201B0's output is the frame
+pair at its clock, eased, on all 2940 easings to the last bit, and the
+first draw after each of the 326 changes is the new motion at clock 0 to 0xB00.
+Most changes are made to meet (the angles move 3.8° a word at the median
+there, 3.1° within a motion), but one in ten jumps 23° or more. The explorer
+shows each motion from its first frame, as the game does.
 
 **Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
 and translates and call 0x1E890, which draws from the model table as it is.
@@ -5357,7 +5376,7 @@ light skin come out as in MAME's picture.
 **Checks.** MAME, `bp 0x2373C` logging the pose words and the coprocessor's
 read-backs of five joint ends (0x5215E0..0x521630), on ten players in a game
 on court 9: the pose words are the motion table's frames eased at `+0xE0`
-(but just after a motion changes, while it blends), and with MAME's own pose
+(also just after a motion changes; there is no blend, see **No blend**), and with MAME's own pose
 words the explorer's run gives the same distances between those ends to
 0.0001 (0.21 where the head was turned, before the head turn was in; see
 **Head turn**). `+0xB0` is the root track's
