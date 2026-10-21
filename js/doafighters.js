@@ -111,8 +111,10 @@ function toThree(m) {
     return [m[0], m[1], -m[2], 0, m[3], m[4], -m[5], 0, -m[6], -m[7], m[8], 0, m[9], m[10], -m[11], 1];
 }
 
-/* The shadow is the body again, its matrices squashed flat onto the floor
- * (the first fifteen draws, determinant near 0): the explorer leaves it out. */
+/* The shadow is the first fifteen draws (0x56180 from the body routine
+ * 0x45B24): a piece for each bone, laid on the floor between its two ends
+ * cast along the stage's light, and squashed to 0.01 high (determinant near
+ * 0). It is kept apart from the parts, as `shadows`. */
 const det3 = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[3] * (m[1] * m[8] - m[2] * m[7])
     + m[6] * (m[1] * m[5] - m[2] * m[4]);
 
@@ -128,6 +130,7 @@ function framesOf(rom, body, motion) {
         const frames = runDoaMotion(rom, { char: body.index, base: body.base }, motion.index, motion.frames);
         const kept = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) > 0.5));
         kept.joints = jointsOf(rom, kept);
+        kept.shadows = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) <= 0.5));
         cache.set(key, kept);
     }
     return cache.get(key);
@@ -212,9 +215,13 @@ function jointsOf(rom, frames) {
  * mesh (js/doa.js modelTracker; js/app.js getModel decodes it). */
 const drawKey = (d) => (d.mesh === undefined ? d.model : `${d.model}/${d.mesh.toString(16)}`);
 
-/** The draws of a frame of the motion, a place in the draw order a part. */
+/** The draws of a frame of the motion, a place in the draw order a part;
+ * `shadows` the frame's shadow pieces, each a model and its board matrix
+ * (`r`, `t`). */
 export function poseDoaFighter(rom, body, motion, frame) {
-    const draws = motion ? framesOf(rom, body, motion)[Math.max(0, Math.min(frame, motion.frames) - 1)] : [];
+    const at = Math.max(0, Math.min(frame, motion?.frames ?? 0) - 1);
+    const draws = motion ? framesOf(rom, body, motion)[at] : [];
+    const shadows = motion ? framesOf(rom, body, motion).shadows[at] ?? [] : [];
     const matrices = body.parts.map((p) => toThree(draws[p.index]?.m ?? IDENTITY));
     const origins = matrices.map((e) => [e[12], e[13], e[14]]);
     const joints = motion ? framesOf(rom, body, motion).joints : { parents: [], joined: [] };
@@ -224,5 +231,6 @@ export function poseDoaFighter(rom, body, motion, frame) {
         draws: body.parts.map((p) => (draws[p.index] ? [drawKey(draws[p.index])] : [])),
         parents: body.parts.map((p) => joints.parents[p.index] ?? -1),
         joined: body.parts.map((p) => joints.joined[p.index] ?? false),
+        shadows: shadows.map((d) => ({ model: drawKey(d), r: d.m.slice(0, 9), t: d.m.slice(9, 12) })),
     };
 }
