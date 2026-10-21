@@ -4964,6 +4964,7 @@ const DYNAMCOP_AT = {
         tables: 0x42840, top: 0x428e0, extra: 0x42920, ramps: 0x42930, banks: 0x429d0,
         flags: 0x756b0, luma: 0x36b40, weights: 0x70270, rects: 0xe4390, patches: 0xe4440,
         materials: 0x6ecc0, missions: 0xe9a70, pictures: 0xe9b10, offsets: 0xe1890, models: 0xe1a10, shadows: 0xed140,
+        quad: { copy: 0x169e0, skeleton: 0x16bc0 },
     },
 };
 DYNAMCOP_AT.dyndeka2 = { ...DYNAMCOP_AT.dynamcop, flags: 0x756a0, weights: 0x70260, rects: 0xe4380, patches: 0xe4430, materials: 0x6ecb0,
@@ -4973,14 +4974,17 @@ DYNAMCOP_AT.dynamcopb = {
     tables: 0x10ba0, top: 0x10c40, extra: 0x10c80, ramps: 0x10c90, banks: 0x10d30,
     flags: 0x62330, luma: 0x4ea0, weights: 0x191e0, rects: 0xfa5b0, patches: 0xd5ca0,
     materials: 0x17c40, missions: 0xf9370, pictures: 0xc9880, offsets: 0xcfe90, models: 0xd0010, shadows: 0xfa400,
+    quad: { copy: 0x32da0, skeleton: 0x32f80 },
 };
 DYNAMCOP_AT.dyndeka2b = { ...DYNAMCOP_AT.dynamcopb, flags: 0x62320, weights: 0x191d0, rects: 0xfa5a0, patches: 0xd5c90, materials: 0x17c30,
     missions: 0xf9360, pictures: 0xc9870, offsets: 0xcfe80, models: 0xd0000, shadows: 0xfa3f0,
+    quad: { copy: 0x32d90, skeleton: 0x32f70 },
 };
 DYNAMCOP_AT.dynamcopc = {
     tables: 0x42e30, top: 0x42ed0, extra: 0x42f10, ramps: 0x42f20, banks: 0x42fc0,
     flags: 0x75ef0, luma: 0x37130, weights: 0x70a20, rects: 0xf4ab0, patches: 0xf4b60,
     materials: 0x6f3b0, missions: 0xfa190, pictures: 0xfa230, offsets: 0xf2260, models: 0xf23e0, shadows: 0xfd860,
+    quad: { copy: 0x16e50, skeleton: 0x17030 },
 };
 
 /*
@@ -5100,6 +5104,9 @@ function dynamcopBuild({ id, name, low, high }) {
              * one a joint; the joints that draw one at `joints`, how many at
              * `count`. Each build's code loads its own three. */
             shadows: { tables: A.shadows, joints: A.shadows + 0x180, count: A.shadows + 0x1a8 },
+            /* Character 79's own frame copy and skeleton (js/dynamcop.js
+             * poseDynamcopQuad). */
+            quad: A.quad,
         },
         features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
         dynamcop: { stages: 14, enemies: 11, enemyFlags: A.flags, defaultStage: 1, defaultEnemy: 0 },

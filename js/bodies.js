@@ -164,7 +164,7 @@ function saneFloat(v) {
 
 function rootsSane(view, off, frames, joints, end, layout) {
     const step = frameBytes(joints);
-    const root = layout === 'dynamcop' ? 6 * joints : 0;
+    const root = layout === 'dynamcop' ? step - 12 : 0;
     if (off + frames * step > end) return false;
     for (let f = 0; f < frames; f++) {
         for (let a = 0; a < 12; a += 4) {
@@ -317,7 +317,8 @@ function turn(r, ax, ay, az) {
  * and stands at the origin, which is the tree as modelled.
  *
  * Dynamite Cop's frames are the same size but the other way round: the angles
- * first, then the root. sub_15000 copies a joint's three halfwords to its
+ * first, then the root in the frame's last 12 bytes (after two bytes of
+ * padding in character 79's thirteen-joint frames). sub_15000 copies a joint's three halfwords to its
  * slot's +0x28, +0x26 and +0x24 (in that order), and sub_15210 turns by them
  * as Rx(+0x24)·Ry(+0x26)·Rz(+0x28) on row vectors, which in the viewer, its z
  * the board's negated, is the HOTD order with x the third halfword, y the
@@ -330,7 +331,7 @@ function readFrame(motion, frame, joints) {
     const at = motion.offset + (Math.max(1, Math.min(frame, motion.frames)) - 1) * frameBytes(joints);
     const v = motion.view;
     if (motion.layout === 'dynamcop') {
-        for (let a = 0; a < 3; a++) root[a] = v.getFloat32(at + 6 * joints + a * 4, true);
+        for (let a = 0; a < 3; a++) root[a] = v.getFloat32(at + frameBytes(joints) - 12 + a * 4, true);
         root[2] = -root[2];
         for (let j = 0; j < joints; j++) {
             angles[j * 3] = v.getInt16(at + j * 6 + 4, true);

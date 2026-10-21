@@ -19,6 +19,9 @@ import { SHEET_BYTES } from './atlas.js';
 import { bankTextureSet } from './texture.js';
 import { gameLighting } from './stages.js';
 import { musicChoices } from './sound/sound.js';
+import { doaMachine } from './doa.js';
+import { floatToBits } from './i960.js';
+import { frameBytes } from './bodies.js';
 
 const SHEET0 = 0;
 const SHEET1 = SHEET_BYTES;
@@ -411,7 +414,7 @@ const DYNAMCOP_PARENTS = [-1, 0, 1, 1, 3, 4, 1, 6, 7, 0, 9, 10, 11, 9, 13, 14];
 const DYNAMCOP_FLAT = { 5: 2, 8: 4, 12: 1, 15: 1 };
 
 /* The skeletons that are not this one: character 75's table is not sixteen
- * offsets and 79's is laid out for another body. */
+ * offsets, and 79 has a routine of its own (dynamcopQuadBody). */
 const DYNAMCOP_OTHER_SKELETONS = new Set([75, 79]);
 
 const DYNAMCOP_NAMES = ['Bruno Delinger', 'Jean Ivy', 'Eddie Brown'];
@@ -434,6 +437,7 @@ export function readDynamcopBodies(rom) {
     const dv = rom.mainCpuView;
     const out = [];
     for (let i = 0; i < B.count; i++) {
+        if (i === QUAD && rom.game.rig.quad) out.push(dynamcopQuadBody(rom, i));
         if (DYNAMCOP_OTHER_SKELETONS.has(i)) continue;
         const skel = dv.getUint32(B.offsets + i * 4, true);
         const list = dv.getUint32(B.models + i * 4, true);
@@ -469,6 +473,157 @@ export function readDynamcopBodies(rom) {
         });
     }
     return out;
+}
+
+/*
+ * Character 79, a red bird, has a skeleton routine of its own
+ * (sub_16BC0; the object's handler, sub_1A9BC, sends char 0x4F there). Its
+ * motions have thirteen joints, 0x5C bytes a frame (2093 and 2097-2107), and
+ * sub_169E0 copies their angles to slots 0, 1, 2, 3, 6, 9, 5 and 10-15 in
+ * that order. The routine turns the root a quarter (-0x4000 about y) unless
+ * the motion is 2093, then steps out with copro 0x33 (push, move by an
+ * offset, turn by the slot's three angles) and reads each joint back to
+ * +0x6A4. Its tree, fitted to those matrices against the offsets at
+ * 0x1F4EFC: chest 1 on the root, head 2 and wings 3 and 6 on the chest,
+ * hips 9 on the root, tail 5 and legs 10-12 and 13-15 on the hips.
+ * Slots 4, 7 and 8 get the tail's matrix, and the draw (sub_17950) skips
+ * them.
+ *
+ * The explorer runs the game's two routines on the i960 (js/i960.js), with
+ * the copro commands they send (QUAD_COPRO). Graded against MAME's own copro
+ * on 60 frames of the twelve motions: 0.04 degrees and 1e-5 at worst.
+ */
+const QUAD = 79;
+const QUAD_PARENTS = [-1, 0, 1, 1, 9, 9, 1, 9, 9, 0, 9, 10, 11, 9, 13, 14];
+/* The entry of the offset table each joint steps out by. */
+const QUAD_OFFSETS = [-1, 0, 1, 2, 5, 5, 3, 5, 5, 4, 6, 7, 8, 9, 10, 11];
+const QUAD_UNDRAWN = new Set([0, 4, 7, 8]);
+const QUAD_JOINTS = 13;
+/* The motion the routine leaves the quarter turn off for: a flight path in
+ * the stage's own coordinates (height 98, z -568 to -650). */
+const QUAD_PATH = 0x82d;
+const QUAD_RAM = 0x500000;
+/* A stretch of work RAM nothing else in the two routines touches. */
+const QUAD_OBJECT = 0x5e0000;
+
+const angleOf = (f) => (floatToBits(f) << 16) >> 16;
+function turnZYX(cp, [z, y, x]) {
+    cp.turn('z', angleOf(z));
+    cp.turn('y', angleOf(y));
+    cp.turn('x', angleOf(x));
+}
+
+/* The commands sub_16BC0 sends beyond DOA's: 0x21 starts a list whose words
+ * name their own commands (0x12 move, 0x15 and 0x16 turns), 0x32 turns by
+ * three angles and 0x33 pushes, moves and turns. 0x30 and 0x31, the same
+ * blended with the last motion, are only sent while +0xCD8 counts a blend.
+ * The Model 2B builds' copro program numbers the two 0x6B and 0x65, and
+ * sends them in the list words after a 0x19. */
+function pushMoveTurn(cp, a) {
+    cp.stack.push(cp.m);
+    cp.translate(a.slice(0, 3));
+    turnZYX(cp, a.slice(3));
+}
+const QUAD_COPRO = {
+    0x21: [0, () => {}],
+    0x32: [3, (cp, a) => turnZYX(cp, a)],
+    0x33: [6, pushMoveTurn],
+    0x6b: [3, (cp, a) => turnZYX(cp, a)],
+    0x65: [6, pushMoveTurn],
+};
+
+function dynamcopQuadBody(rom, i) {
+    const B = rom.game.rig.bodies;
+    const dv = rom.mainCpuView;
+    const skel = dv.getUint32(B.offsets + i * 4, true);
+    const list = dv.getUint32(B.models + i * 4, true);
+    const parts = QUAD_PARENTS.map((parent, j) => {
+        const at = skel + Math.max(0, QUAD_OFFSETS[j]) * 12;
+        const offset = j ? [dv.getFloat32(at, true), dv.getFloat32(at + 4, true), -dv.getFloat32(at + 8, true)] : [0, 0, 0];
+        let depth = 0;
+        for (let p = parent; p >= 0; p = QUAD_PARENTS[p]) depth++;
+        return {
+            index: j,
+            parent,
+            depth,
+            model: QUAD_UNDRAWN.has(j) ? 0 : dv.getUint32(list + (j - 1) * 4, true),
+            offset,
+            flags: 0,
+            joint: j,
+            record: skel,
+        };
+    });
+    return {
+        index: i,
+        name: `character ${i}`,
+        joints: QUAD_JOINTS,
+        quad: true,
+        scale: 1,
+        roles: [],
+        skin: -1,
+        hitMotions: [],
+        start: -1,
+        root: skel,
+        parts,
+    };
+}
+
+const quadMachines = new WeakMap();
+
+/**
+ * Character 79 on one frame of a motion, as sub_169E0 and sub_16BC0 pose it.
+ *
+ * @param {object} rom loaded ROM set
+ * @param {object} body from readDynamcopBodies (its `quad` one)
+ * @param {object|null} motion from readMotions
+ * @param {number} frame 1-based
+ * @param {{travel?: boolean}} [opts]
+ * @returns {{matrices: number[][], origins: number[][]}} as bodies.js poseBody
+ */
+export function poseDynamcopQuad(rom, body, motion, frame, { travel = false } = {}) {
+    const Q = rom.game.rig.quad;
+    let machine = quadMachines.get(rom);
+    if (!machine) quadMachines.set(rom, machine = doaMachine(rom, { copro: QUAD_COPRO }));
+    const { cpu, ram, rv, copro } = machine;
+    const at = (off) => QUAD_OBJECT - QUAD_RAM + off;
+    ram.fill(0, at(0), at(0x1000));
+    if (motion && motion.joints === body.joints) {
+        const f = Math.max(1, Math.min(frame, motion.frames)) - 1;
+        const step = frameBytes(body.joints);
+        const rootAt = motion.offset + f * step + step - 12;
+        rv.setUint32(at(0x2c4), motion.index, true);
+        rv.setUint32(at(0x3e0), rom.mainCpuView.getUint32(rom.game.rig.motions.data + motion.index * 4, true) + f * step, true);
+        cpu.call(Q.copy, [QUAD_OBJECT]);
+        /* sub_16880 hands the frame's height to +0x100, which the root adds
+         * to +0x34; its travel goes to the object. On the spot, the flight
+         * path is held where it starts. */
+        const first = motion.offset + step - 12;
+        const from = motion.index === QUAD_PATH && !travel ? first : -1;
+        const root = (k) => motion.view.getFloat32(rootAt + 4 * k, true) - (from < 0 ? 0 : motion.view.getFloat32(from + 4 * k, true));
+        rv.setFloat32(at(0x100), root(1), true);
+        if (travel) {
+            rv.setFloat32(at(0x30), root(0), true);
+            rv.setFloat32(at(0x38), root(2), true);
+        }
+    }
+    Object.assign(copro, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], stack: [], outQ: [], pending: null });
+    cpu.call(Q.skeleton, [QUAD_OBJECT], { maxSteps: 1_000_000 });
+    /* The viewer's z is the board's negated. The root is never read back;
+     * it is shown where the chest is, which steps out from it by nothing. */
+    const read = (j) => Array.from({ length: 12 }, (_, k) => rv.getFloat32(at(0x6a4 + 0x30 * j + 4 * k), true));
+    const matrices = [], origins = [];
+    for (let j = 0; j < 16; j++) {
+        const m = read(j || 1);
+        const t = [m[9], m[10], -m[11]];
+        matrices.push([
+            m[0], m[1], -m[2], 0,
+            m[3], m[4], -m[5], 0,
+            -m[6], -m[7], m[8], 0,
+            t[0], t[1], t[2], 1,
+        ]);
+        origins.push(t);
+    }
+    return { matrices, origins };
 }
 
 /*
@@ -515,7 +670,7 @@ function handSwap(rom, base) {
  */
 export function dynamcopHands(rom, body, motion, frame) {
     const H = rom.game.rig.hands;
-    if (!H || !motion) return [];
+    if (!H || !motion || body.quad) return [];
     const out = [];
     for (const [joint, side] of [[5, 0], [8, 1]]) {
         const t = handTable(rom, rom.mainCpuView.getUint32(H.frames + motion.index * 8 + side * 4, true));
@@ -573,7 +728,7 @@ function shadowTable(rom, body, variant) {
  */
 export function dynamcopShadows(rom, body, variant = 0) {
     const S = rom.game.rig.shadows;
-    if (!S || !body) return [];
+    if (!S || !body || body.quad) return [];
     const table = shadowTable(rom, body, variant);
     if (!table) return [];
     const dv = rom.mainCpuView;
@@ -709,6 +864,7 @@ export function dynamcopItems(rom) {
  */
 export function dynamcopHeld(body, held, frame) {
     const out = [];
+    if (body.quad) return out;
     for (const { joint, model } of held) {
         if (joint === 8 && PICKUPS.has(model)) {
             if (frame - 1 > PICKUP_AFTER) out.push({ joint, model, offset: PICKUP_OFFSET, scale: PICKUP_SCALE });

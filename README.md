@@ -899,7 +899,10 @@ as the game does. Against MAME (the attract and two played runs), the held
 model sits where MAME's hand puts it on every frame of each motion. One
 exception: Bruno's pickup motion is off for some frames, because his whole
 pose already differs there. Not drawn yet:
-mirrored motions and the blend between two motions. Character 80 shows
+the blend between two motions, and character 79's own shadow. Character 79,
+a red bird, has a skeleton routine of its own; the explorer runs it and
+poses the bird in its twelve motions, matching MAME within 0.04°.
+Character 75 (another skeleton) is left out, and character 80 shows
 nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 
 Tick **music** and an area starts with the song its descriptor names, as
