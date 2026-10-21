@@ -661,7 +661,12 @@
         (<code>+0x20</code>), the shadow tilts with the ground under the
         wheels (<code>+0x40</code> on), and the body model is the one the draw
         picks from the car's flags (<code>+0x50</code>); <em>root travel</em>
-        drives the run, the camera following.
+        drives the run, the camera following. The desert's animals (zebra,
+        ostrich, birds, elephant) are figures too, drawn by
+        <code>0x5C70D0</code>, which turns each part on three axes. Each
+        figure keeps its own clock: the zebra's two swing there and back
+        (the game rests them a random time at each end, left out here), the
+        rest loop.
       </div>
       <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
         Every player has the same fifteen-joint skeleton, which is in the

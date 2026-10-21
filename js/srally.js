@@ -40,6 +40,10 @@
  * game's physics writes that state; in the attract mode it is played back from
  * runs recorded in the data ROM (readRallyRuns), and those are the cars'
  * motions here.
+ *
+ * The desert's animals come last: figures in the same layout drawn by a
+ * second routine, 0x5C70D0, which turns each part on three axes (see "The
+ * animals" below).
  */
 
 import { MAIN_DATA_BASE } from './romset.js';
@@ -55,13 +59,18 @@ function figureRecords(rom) {
         const at = dv.getUint32(F.table + i * 4, true) - F.ramBase;
         if (!seen.includes(at)) seen.push(at);
     }
-    return seen.map((at) => ({
+    return seen.map((at) => figureAt(dv, at));
+}
+
+/* A figure record at ROM `at`: key frames, parts, their data, a model each. */
+function figureAt(dv, at) {
+    return {
         at,
         keys: dv.getUint32(at, true),
         parts: dv.getUint32(at + 4, true),
         data: dv.getUint32(at + 8, true),
         models: Array.from({ length: dv.getUint32(at + 4, true) }, (_, j) => dv.getUint32(at + 12 + j * 4, true)),
-    }));
+    };
 }
 
 function readPart(rom, data, keys, parts, key, part) {
@@ -70,6 +79,7 @@ function readPart(rom, data, keys, parts, key, part) {
     return {
         place: [dv.getFloat32(at, true), dv.getFloat32(at + 4, true), -dv.getFloat32(at + 8, true)],
         z: dv.getInt16(at + 12, true),
+        y: dv.getInt16(at + 14, true),
         x: dv.getInt16(at + 16, true),
     };
 }
@@ -100,7 +110,8 @@ export function readRallyFigures(rom) {
             record: r.at,
         })),
     }));
-    return [...figures, ...readRallyCars(rom, figures.length)];
+    const cars = readRallyCars(rom, figures.length);
+    return [...figures, ...cars, ...readRallyAnimals(rom, figures.length + cars.length)];
 }
 
 /** One motion a figure, its key frames swung there and back, then the
@@ -118,10 +129,15 @@ export function readRallyMotions(rom) {
         joints: r.parts,
         layout: 'srallyc',
     }));
-    return [...figures, ...readRallyRuns(rom, figures.length)];
+    const runs = readRallyRuns(rom, figures.length);
+    return [...figures, ...runs, ...readAnimalMotions(rom, figures.length + runs.length)];
 }
 
 export function rallyMotionList(rom, body, motions) {
+    if (body.animal) {
+        const fits = motions.filter((m) => m.animal && sameModels(m.animal, body.animal));
+        return { fits, lead: fits.filter((m) => m.animal.lead === body.animal.name), label: 'Played by its routine' };
+    }
     if (body.car) {
         const fits = motions.filter((m) => m.run);
         const lead = fits.filter((m) => [].concat(m.car).includes(body.car.slot));
@@ -142,6 +158,7 @@ const turn = (a) => (a * 2 * Math.PI) / 0x10000;
 /** Every part's matrix on one frame, Rz(-h0C) · Rx(h10) at its place. */
 export function poseRallyFigure(rom, body, motion, frame, opts = {}) {
     if (body.car) return poseRallyCar(rom, body, motion?.run ? motion : null, frame, opts);
+    if (body.animal) return poseRallyAnimal(rom, body, motion?.animal ? motion : null, frame);
     const r = figureRecords(rom)[body.index];
     const key = motion && motion.joints === body.joints ? keyAt(motion, frame) : 0;
     const origins = [];
@@ -452,4 +469,154 @@ export function poseRallyCar(rom, body, motion, frame, { travel: moving = false 
         draws: [overlay ? [model, overlay] : [model], ...wheels, [body.car.shadow]],
         follow: moving ? root.slice(12, 15) : undefined,
     };
+}
+
+/* ---- The animals --------------------------------------------------------- */
+
+/*
+ * The desert's animals are figures too, in the same record layout, drawn by
+ * a second routine, 0x5C70D0 (ROM 0x280D0). It differs from 0x5CA290 in two
+ * places: a part takes all three of its halfwords, +0x0C, +0x0E and +0x10, as
+ * three TGP functions of their own (0x34, 0x33 and 0x32, in that order), and
+ * the model goes to the geometry FIFO straight out of the model table. Its
+ * mode, g3, is 0 for a loop (back to key 0 at the end), 1 to swing back as
+ * the people do, and anything else to stop on the last key.
+ *
+ * The handlers are classes 0, 1, 2, 4 and 8 of the table at 0x5DDFC4; the
+ * class names after it say what they are (Zebra, Ostrich, Bird1, Elephant,
+ * Bird2). Each stands the figure at the object's place (+0x18) turned by its
+ * heading (+0x28, function 0x2A) and draws it:
+ *
+ *   Zebra    0x5E29D0: two figures, 0x5E2890 and 0x5E2900, each on its own
+ *            clock (+0x54, +0x5C), both swinging; at either end the first
+ *            rests a random 0-383 frames (+0x60), the second 0-255 (+0x64)
+ *   Ostrich  0x5E2B70: 0x5E2920, looping
+ *   Bird1    0x5E2EA0: by its state (+0x60), 0x5E2830 hopping, 0x5E2860
+ *            pecking or 0x5E2840 flying, all looping; it flies up when the
+ *            player's car comes near
+ *   Elephant 0x5E32D0: model 118 0.1 up, then 0x5E2960, looping
+ *   Bird2    0x5E3590: 0x5E2870 at 0.3 of its size (function 0x28), looping
+ *
+ * `rig.animals` names them (RAM addresses). The explorer gives each figure
+ * its own clock and plays a looping one over its keys and a swinging one
+ * there and back, as keyAt does the people's; the zebra's rests are random
+ * and are left out.
+ */
+function animalFigure(rom, at) {
+    return figureAt(rom.mainCpuView, at - rom.game.rig.animals.ramBase);
+}
+
+function sameModels(a, b) {
+    return a.models.length === b.models.length && a.models.every((m, i) => m === b.models[i]);
+}
+
+function readRallyAnimals(rom, first) {
+    const A = rom.game.rig.animals;
+    if (!A) return [];
+    return A.bodies.map((b, i) => {
+        const figures = b.figures.map((at) => animalFigure(rom, at));
+        const extra = b.extra ?? [];
+        const scale = b.scale ?? 1;
+        const parts = [];
+        for (const r of figures) {
+            r.models.forEach((model, j) => parts.push({ model, offset: readPart(rom, r.data, r.keys, r.parts, 0, j).place.map((v) => v * scale) }));
+        }
+        extra.forEach((e) => parts.push({ model: e.model, offset: toView(e.place).map((v) => v * scale) }));
+        const models = parts.map((p) => p.model);
+        return {
+            index: first + i,
+            name: b.name,
+            animal: { name: b.name, models, extra, scale, figures: figures.length },
+            joints: parts.length,
+            scale,
+            roles: [],
+            skin: -1,
+            hitMotions: [],
+            start: first + i,
+            root: figures[0].at,
+            parts: parts.map((p, j) => ({
+                index: j,
+                parent: -1,
+                depth: 0,
+                model: p.model,
+                offset: p.offset,
+                flags: 0,
+                joint: j,
+                record: figures[0].at,
+            })),
+        };
+    });
+}
+
+/* One motion per thing a handler plays: its figures, each on its own clock. */
+function readAnimalMotions(rom, first) {
+    const A = rom.game.rig.animals;
+    if (!A) return [];
+    return A.motions.map((m, i) => {
+        const figures = m.figures.map((at) => ({ ...animalFigure(rom, at), swing: Boolean(m.swing) }));
+        const body = A.bodies.find((b) => b.name === m.body);
+        const cycle = (r) => (r.swing ? 2 * r.keys - 1 : r.keys);
+        const models = [...figures.flatMap((r) => r.models), ...(body?.extra ?? []).map((e) => e.model)];
+        return {
+            index: first + i,
+            name: m.name,
+            animal: { lead: m.body, figures, models },
+            address: figures[0].data,
+            offset: figures[0].data - MAIN_DATA_BASE,
+            view: rom.mainDataView,
+            keys: figures[0].keys,
+            frames: Math.max(...figures.map(cycle)),
+            frameSize: figures[0].parts * PART_BYTES,
+            joints: models.length,
+            layout: 'srallyc',
+        };
+    });
+}
+
+/* A figure's key on a frame of the motion: a loop starts again after its
+ * last key, a swing comes back down (keyAt) and then starts again. */
+function animalKey(r, frame) {
+    const cycle = r.swing ? 2 * r.keys - 1 : r.keys;
+    const f = ((Math.max(1, frame) - 1) % cycle) + 1;
+    return r.swing ? keyAt({ keys: r.keys, frames: cycle }, f) : f - 1;
+}
+
+/*
+ * Every part's matrix on one frame. 0x5C70D0 sends a part's place
+ * (function 0x27), then +0x0C as function 0x34, +0x0E as 0x33 and +0x10 as
+ * 0x32: T(place) · Rz(-h0C) · Ry(-h0E) · Rx(-h10) on the board's axes,
+ * against the figure's own matrix. With the viewer's Z negated that is
+ * Rz(-h0C) · Ry(h0E) · Rx(h10).
+ *
+ * Graded on MAME's attract (frames 2820-3440): every part's TGP matrix, taken
+ * back through the camera (solved from a car's body matrix) and the handler's
+ * own frame, T(+0x18) · Ry(-heading), lands on this one within 0.0001 and
+ * 0.001 degrees, on every key of every record, parts turned up to 180 degrees
+ * from rest. The attract draws only the zebra and Bird1; the others were
+ * drawn by handing the zebra's second call their records.
+ */
+export function poseRallyAnimal(rom, body, motion, frame) {
+    const A = body.animal;
+    const figures = motion ? motion.animal.figures : null;
+    const base = A.scale === 1 ? null : [A.scale, 0, 0, 0, 0, A.scale, 0, 0, 0, 0, A.scale, 0, 0, 0, 0, 1];
+    const matrices = [];
+    const origins = [];
+    const put = (m) => {
+        const w = base ? mul(base, m) : m;
+        matrices.push(w);
+        origins.push(w.slice(12, 15));
+    };
+    if (figures) {
+        for (const r of figures) {
+            const key = animalKey(r, frame);
+            for (let j = 0; j < r.parts; j++) {
+                const { place, z, y, x } = readPart(rom, r.data, r.keys, r.parts, key, j);
+                put(mul(move(...place), mul(rz(turn(-z)), mul(ry(turn(y)), rx(turn(x))))));
+            }
+        }
+    } else {
+        body.parts.slice(0, body.parts.length - A.extra.length).forEach((p) => put(move(...p.offset.map((v) => v / A.scale))));
+    }
+    for (const e of A.extra) put(move(...toView(e.place)));
+    return { matrices, origins };
 }
