@@ -628,7 +628,10 @@
         position. A flag byte per motion (<code>0x164160</code>) keeps the
         ankles, and sometimes a wrist, level with the body instead of turning
         them with the leg or arm. Motion numbers are the table's at
-        <code>0x15FA00</code>; the game has no names for them.
+        <code>0x15FA00</code>; the game has no names for them. The list starts
+        with the motions the character plays in the cut scenes, from each
+        area's actor list (<code>+0xFC</code> of the record at word
+        <code>+0xC</code> of its descriptor).
       </div>
       <div class="note" id="anim-note-von" data-i18n="note.von" hidden>
         Each robot is a record in the program (the table at

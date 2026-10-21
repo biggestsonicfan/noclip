@@ -4836,14 +4836,52 @@ Not checked: the left hand (no character in the logs held anything there)
 and characters 0x47 and 0x48's scale of 2.
 
 Not done: the blend between motions, and which motions each character plays
-(lists from 0x1B70A8). +0xCD8, once taken for a mirror flag, is the blend's
+in a fight (lists from 0x1B70A8). +0xCD8, once taken for a mirror flag, is the blend's
 counter: 0x14690 starts a blend, storing +0xCD8 and +0xCD4 and each joint's
 old and new angles from +0xCFC and +0xD7C, 8 bytes a joint; 0x14C10 eases the
 angles and 0x14DA0 the root, and while +0xCD8 is set 0x15210 sends the joints
 with copro commands 0x30 and 0x31, in another angle order, not 0x32 and 0x33.
 No mirror was found. Only the three heroes are named.
-Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
-explorer; why was not found.
+**Cut-scene motions** (`dynamcopSceneMotions`). Word +0xC of an area
+descriptor is the area's actor record. 0x84960 spawns one object (handler
+0x85370) for each 36-byte entry from its +0xFC (char, x, y, z, turn, a
+script, the task, two words), until an entry's script is 0. The object
+takes the char in +0xDC and +0xE0, the entry's place + 2 in +0xBC, and the
+entry in +0x1AC. 0x1AF00 starts it on the script:
+
+| offset | field |
+|---|---|
+| +0 | s16, how long the scene runs (to +0xE48) |
+| +2 | s16, the first frame, from 0 (to +0x2C8) |
+| +4 | s16, the motion (to +0x2C4) |
+| +6 | the next step, eight bytes a step, until a motion of 0xFFFF |
+
+0x1AFD0 stops on 0xFFFE. The 402 entries are the same in all five builds.
+The explorer leads each character's motion list with the motions its
+entries name ("Played in its cut scenes"), the first one opening. So
+Bruno opens on 1322, a skydive.
+
+**Character 80** (offsets at 0x1F4F9C, models 199-213, about a fifth of a
+person's size) looks like a small monkey. It appears only in course 4-1's ending
+areas 46, 47 and 48, before the staff roll. Its entries' scripts are
+0xC9BB0, 0xC9DA0 and 0xCA060: 510 frames of motion 2094 (16 joints, 25
+frames). The tasks 0x80FC0 and 0x810B0 move it relative to the object at
+[0x513450], and all three wrap +0x2C8 at 24. It is posed by 0x15210 like
+any character. 0x197E0 draws it: joint routine 0x1D104 reads the model
+from the list (+0xE4) and writes it straight to the display list (model
+table 0x2D40000), not through 0x9A980. It also draws ten shadow pieces
+from the shadow table, which character 80 shares with Jean (1838-1847
+at +0xBC = 2 in area 46). Before this, the explorer opened it on motion 0
+with the shadow over it, so nothing showed.
+
+Checked against MAME by jumping to the ending: a breakpoint on 0x6E3E0
+sets 0x51F4A0 = 3, 0x51F49C = 0 and area 0x2E. The object's 16
+read-back matrices (+0x6A4) were dumped every 10 frames, 96 dumps over
+areas 46-48, 12 of the loop's frames. Each joint's world rotation and its
+position from joint 1 match the explorer's pose at frame +0x2C8: within
+0.05° and 0.00001, where the joints turn up to 179° from rest. The
+object's turn (+0x40) is 0 there, so world axes are the routine's own
+frame. Joint 0 is not read back.
 
 **Character 79, the bird** (`dynamcopQuadBody`, `poseDynamcopQuad`). The
 object's handler 0x1A9BC sends char 0x4F to a skeleton routine of its own,

@@ -286,7 +286,7 @@ function areaRuns(rom) {
         for (let d = p; d + 40 <= end; d += 40) {
             const list = cv.getUint32(d + 0x10, true);
             if (list < LISTS[0] || list >= LISTS[1]) break;
-            areas.push({ list, song: cv.getUint32(d + 0x1c, true) });
+            areas.push({ list, song: cv.getUint32(d + 0x1c, true), actors: cv.getUint32(d + 0xc, true) });
         }
         out.set(p, areas);
     });
@@ -394,6 +394,53 @@ export function readDynamcopStages(rom) {
 /* ---- characters ------------------------------------------------------------ */
 
 /*
+ * The motions each character plays in the areas' cut scenes. Word +0xC of an
+ * area descriptor is the area's actor record; 0x84960 spawns one object for
+ * each 36-byte entry from its +0xFC (char, x, y, z, turn, a script, the task
+ * it runs, two words), until an entry's script is 0. Each object stores its
+ * char in +0xDC, and 0x1AF00 starts it on its script (the object's +0x1AC
+ * is the entry):
+ *
+ *   +0     s16  how long the scene runs (to +0xE48)
+ *   +2     s16  first frame, from 0 (to +0x2C8)
+ *   +4     s16  motion (to +0x2C4)
+ *   +6          the next step's two halfwords, eight bytes a step, until a
+ *               motion of 0xFFFF (0xFFFE: 0x1AFD0 stops on it)
+ *
+ * The 402 entries are the same in all five builds. Character 80, a small
+ * figure in the ending (areas 46-48 of course 4-1), plays only motion 2094.
+ */
+const SCENE_STEPS = 16;
+const sceneCache = new WeakMap();
+
+function dynamcopSceneMotions(rom) {
+    if (sceneCache.has(rom)) return sceneCache.get(rom);
+    const cv = rom.mainCpuView;
+    const count = rom.game.rig.motions.count;
+    const inRom = (a, n) => a > 0 && a + n <= rom.maincpu.length;
+    const out = new Map();
+    for (const areas of areaRuns(rom).values()) {
+        for (const { actors } of areas) {
+            if (!inRom(actors, 0x100)) continue;
+            for (let e = actors + 0xfc; inRom(e, 0x24); e += 0x24) {
+                const script = cv.getUint32(e + 0x14, true);
+                if (!script) break;
+                if (!inRom(script, 2 + 8 * SCENE_STEPS)) continue;
+                const char = cv.getUint32(e, true);
+                const list = out.get(char) ?? out.set(char, []).get(char);
+                for (let k = 0; k < SCENE_STEPS; k++) {
+                    const motion = cv.getUint16(script + 4 + 8 * k, true);
+                    if (motion >= 0xfffe || motion >= count) break;
+                    if (!list.includes(motion)) list.push(motion);
+                }
+            }
+        }
+    }
+    sceneCache.set(rom, out);
+    return out;
+}
+
+/*
  * The skeleton every character is drawn on, as sub_15210 builds it. There is
  * no tree of part records as in The House of the Dead: the routine walks
  * sixteen joints in a fixed order, pushing and popping the coprocessor's
@@ -458,6 +505,7 @@ const DYNAMCOP_OTHER_SKELETONS = new Set([CHAIN, 79]);
 export function readDynamcopBodies(rom) {
     const B = rom.game.rig.bodies;
     const dv = rom.mainCpuView;
+    const scenes = dynamcopSceneMotions(rom);
     const out = [];
     for (let i = 0; i < B.count; i++) {
         if (i === QUAD && rom.game.rig.quad) out.push(dynamcopQuadBody(rom, i));
@@ -491,7 +539,9 @@ export function readDynamcopBodies(rom) {
             roles: [],
             skin: -1,
             hitMotions: [],
-            start: -1,
+            /* The motions its cut scenes play (dynamcopSceneMotions). */
+            played: scenes.get(i) ?? [],
+            start: scenes.get(i)?.[0] ?? -1,
             root: skel,
             parts,
         });
