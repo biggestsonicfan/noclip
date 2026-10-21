@@ -19,6 +19,7 @@ import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } 
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
+    airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
@@ -145,6 +146,9 @@ const state = {
     /* Air Walkers: the head's turn toward the play, its turn and tilt
      * (+0xC6, +0xC8) in 0x10000 a turn; see airwlkrsHeadTurn. */
     headTurn: [0, 0],
+    /* Air Walkers: the player's pace (+0x16, 0x1000 = 1), which scales the
+     * speed the motion's clock runs at; see airwlkrsSpeed. */
+    pace: 0x1000,
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
@@ -2730,6 +2734,7 @@ function setMotion(id, slot, { rebuild = true } = {}) {
     m.frame = 1;
     m.tick = 0;
     m.start = performance.now();
+    syncClock(m);
     if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
 }
 
@@ -3363,6 +3368,10 @@ const BODY_RIGS = {
     airwlkrs: {
         read: readAirwlkrsBodies, motions: readAirwlkrsMotions, list: airwlkrsMotionList,
         pose: (rom, body, motion, frame, opts) => poseAirwlkrs(rom, body, motion, frame, opts),
+        /* Its clock runs at the motion's own speed, not a frame a draw, and
+         * the players move every other frame (a draw each 1/30 s in MAME). */
+        hz: 30,
+        clocks: (rom, motion, { backward, pace }) => airwlkrsClocks(motion, airwlkrsSpeed(rom, motion, pace), backward),
     },
     /* Power Sled's figures: every part's matrix baked a frame. */
     powsled: { read: readPowsledBodies, motions: readPowsledMotions, list: powsledMotionList, pose: posePowsledBody },
@@ -3724,7 +3733,8 @@ function poseFighterAndRival(body, m) {
     const handsPass = playedOver(m);
     const head = state.rom.game.rig?.kind === 'airwlkrs' ? state.headTurn : null;
     const backward = playsBackward();
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward });
+    const clock = m.clocks ? m.clock : null;
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -4463,8 +4473,33 @@ function poseBodyRig() {
 
 /* Air Walkers plays a motion backward when its step says so (+0xEC): the clock
  * starts at the last frame and counts down to the first. */
+/* Ticks a second for the Animation view: a body rig's own, else the game's. */
+function motionHz() {
+    return (state.bodies && bodyRig().hz) || GAME_HZ;
+}
+
 function playsBackward() {
     return state.backward && state.rom.game.rig?.kind === 'airwlkrs';
+}
+
+/* A rig whose clock runs at the motion's own speed (Air Walkers') draws the
+ * motion at `m.clocks`, one clock a tick, and the frame is the one the clock
+ * is on; the others step a whole frame a tick. */
+/* After the backward box or the pace changes the clocks: the same draw of the
+ * new list, the slider's length to match. */
+function resyncClock() {
+    syncClock(state.motion);
+    renderMotionPanel();
+    poseRig();
+}
+
+function syncClock(m) {
+    const clocks = state.bodies && m.decoded && !m.chain ? bodyRig().clocks : null;
+    m.clocks = clocks ? clocks(state.rom, m.decoded, { backward: playsBackward(), pace: state.pace }) : null;
+    if (!m.clocks) return;
+    const n = m.clocks.length;
+    m.clock = m.clocks[((m.tick % n) + n) % n];
+    m.frame = Math.min(m.clock >> 8, m.decoded.frames - 1) + 1;
 }
 
 /** Advance the motion to whatever frame elapsed time puts us on, and loop. */
@@ -4476,12 +4511,13 @@ function stepMotion(now) {
      * length, so the cycle is `len` frames long. The display counter under it
      * does not fold, and it is what steps the tails — so it, not the frame, is
      * what says whether anything has moved. */
-    const tick = Math.floor(((now - m.start) / 1000) * GAME_HZ);
+    const tick = Math.floor(((now - m.start) / 1000) * motionHz());
     if (tick === m.tick) return;
     m.tick = tick;
     const link = m.link;
     if (m.chain) enterLink(m);
     else m.frame = playsBackward() ? len - (tick % len) : 1 + (tick % len);
+    syncClock(m);
     poseRig();
     if (m.chain && m.link !== link) showLink();
     updateMotionFrameReadout();
@@ -5000,6 +5036,7 @@ function renderBodyMotionPanel() {
     if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
     const d = m.decoded;
+    syncClock(m);
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
     /* A Virtual-On motion is two records, the upper body's and the legs'. */
     const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
@@ -5010,11 +5047,12 @@ function renderBodyMotionPanel() {
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
         ${size}
+        ${m.clocks ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
     ` : '<span>motion</span><b>none fits this body</b>';
 
     const scrub = $('#motion-frame');
-    scrub.max = String(d ? d.frames : 1);
-    scrub.value = String(m.frame);
+    scrub.max = String(d ? m.clocks?.length ?? d.frames : 1);
+    scrub.value = String(scrubValue(m));
     scrub.disabled = !d;
     $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
@@ -5113,7 +5151,16 @@ const sameEntries = (a, b) => a.length === b.length && a.every((e, i) => e === b
 
 /* The frame slider: the motion's frame, or in a chain the tick through it. */
 function scrubValue(m) {
+    if (m.clocks) return (m.tick % m.clocks.length + m.clocks.length) % m.clocks.length + 1;
     return m.chain ? (m.tick % m.chain.total + m.chain.total) % m.chain.total + 1 : m.frame;
+}
+
+/* An 8.8 clock as a frame from 1, with its part of the way to the next. A
+ * clock run past the last frame is posed as the last (0x201B0), so the
+ * caller holds it there. */
+function clockFrame(clock) {
+    const f = (clock >> 8) + 1, part = clock & 0xff;
+    return part ? `${f}+${part}/256` : String(f);
 }
 
 /* What is playing: the motion's block, and for a move its input and timing. */
@@ -5299,7 +5346,9 @@ function updateMotionFrameReadout() {
     const m = state.motion;
     const n = m.decoded ? m.decoded.frames : 0;
     $('#motion-frame-val').textContent = !m.decoded ? '—'
-        : m.chain ? `${scrubValue(m)} / ${m.chain.total}` : `${m.frame} / ${n}`;
+        : m.chain ? `${scrubValue(m)} / ${m.chain.total}`
+        : m.clocks ? `${scrubValue(m)} / ${m.clocks.length} · ${t('frame')} ${clockFrame(Math.min(m.clock, (n - 1) << 8))} / ${n}`
+        : `${m.frame} / ${n}`;
     updateStringReadout();
     const jet = $('#exhaust-now');
     if (jet && m.exhaust) {
@@ -5635,7 +5684,12 @@ function wireOptions() {
     });
     $('#char-backward').addEventListener('change', (e) => {
         state.backward = e.target.checked;
-        poseRig();
+        resyncClock();
+    });
+    $('#motion-pace').addEventListener('change', (e) => {
+        const pace = Math.round(+e.target.value * 0x1000);
+        state.pace = Number.isFinite(pace) && pace > 0 ? Math.min(pace, 0xffff) : 0x1000;
+        resyncClock();
     });
     for (const [k, id] of [[0, '#head-turn'], [1, '#head-tilt']]) {
         $(id).addEventListener('input', (e) => {
@@ -5725,7 +5779,7 @@ function wireOptions() {
         /* Pick the clock up where the counter already is, so play resumes from
          * wherever a scrub left it rather than jumping. The counter is where a
          * scrub left the frame too, so neither the pose nor the tails move. */
-        if (m.playing) m.start = performance.now() - (m.tick / GAME_HZ) * 1000;
+        if (m.playing) m.start = performance.now() - (m.tick / motionHz()) * 1000;
         $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     });
     $('#motion-frame').addEventListener('input', (e) => {
@@ -5737,6 +5791,7 @@ function wireOptions() {
         const link = m.link;
         m.tick += +e.target.value - scrubValue(m);
         if (m.chain) enterLink(m);
+        else if (m.clocks) syncClock(m);
         else m.frame = +e.target.value;
         poseRig();
         if (m.chain && m.link !== link) showLink();
@@ -6052,6 +6107,8 @@ function applyGameFeatures() {
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
+    /* And run the motion's clock at its speed times the player's pace. */
+    $('#pace-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();
@@ -6276,7 +6333,8 @@ function restoreLinkedView() {
             m.tick = link.tick;
             if (m.chain) enterLink(m);
             else m.frame = 1 + (link.tick % m.decoded.frames);
-            m.start = performance.now() - (m.tick / GAME_HZ) * 1000;
+            syncClock(m);
+            m.start = performance.now() - (m.tick / motionHz()) * 1000;
             m.playing = !link.paused;
             poseRig();
             renderMotionPanel();

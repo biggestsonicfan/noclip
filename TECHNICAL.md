@@ -5329,9 +5329,8 @@ step (0x22560) measures the track from where the motion started: from 0
 forward, from the last frame's x and z backward. Nothing in the draw reads
 `+0xEC`. The explorer's **backward** box shows frame `len - (tick % len)`
 in place of `1 + (tick % len)`, sets `+0xEC`, and with root travel on takes
-the last frame's x and z off the track (`poseAirwlkrs`). The speed
-`+0xE4` isn't one frame a tick in the game (0x108 to 0x252 in the attract),
-here or forward; the explorer steps one frame a tick.
+the last frame's x and z off the track (`poseAirwlkrs`); the clock it shows
+runs as **Clock** below says.
 
 Checked against MAME, attract frames 4980 to 5580, logging at 0x2373C the
 clock, speed, `+0xE8`, `+0xEC` and `+0xF4` with the rest, and each step
@@ -5348,6 +5347,55 @@ distances between the five read-back joint ends agree to 0.00002; the 16
 on a whole frame, posed from the explorer's own frame as the Animation view
 shows it, to 0.00001. The same draws played forward (the clock counted up
 from 0) are off by 0.06 to 10.4, 2.0 at the median.
+
+**Clock.** The speed `+0xE4` is 8.8 too, 0x100 a frame. 0x1FAF0 (and the
+same lines at 0x230C0 and 0x23F54) sets it each frame the player moves to
+the halfword that starts the motion's record (`0xF2C60 + 12 * m`, 0x80 to
+0x4C0 over the table, 0x200 the most common) times the player's pace `+0x16`
+shifted down 12, times the frame's length at 0x5214A0 (1.0; 0 while play
+stands still), cut to a whole number (`airwlkrsSpeed`). The pace is 0x1000
+when a player is made (0x1F410); the play code from 0x64B9C sets it a step at
+a time, a base at 0x56DE6C plus 0x80 to 0xC00 for what the player is doing.
+The players move every other frame, a draw each 1/30 s. Each draw 0x201B0
+holds the clock to `+0xE8` and eases frame `t >> 8` to the next by
+`(t & 0xFF) / 256`, in single floats, each angle the short way round and cut
+toward 0, except in the last step: when `t + 0x100` reaches `+0xE8` it
+doesn't ease, and frame `t >> 8` stays until the clock gets to `+0xE8`. The
+root's height (0x22560) eases between the same two frames in the last step
+too. Then 0x24144 moves the clock: forward it adds the speed while the clock
+is short of `+0xE8`, so the last draw is at `+0xE8` or past it, posed as the
+last frame, and the motion ends; backward it takes the speed off while that
+leaves 0 or more, so the first frame shows only when the clock lands on it.
+The speed is set before the motion start in the same frame, so a motion's
+first step runs at the speed of the one before; from the second step it runs
+at its own.
+
+The explorer does the same: the Animation view ticks at 30 a second, one
+draw a tick, through the clocks `airwlkrsClocks` lists for the motion, its
+speed and the **backward** box, and `poseAirwlkrs` takes the clock and eases
+the angles and the root as above (`airwlkrsEased`). **pace** sets `+0x16`
+(1 is 0x1000). The slider steps draws, and its readout gives the draw and
+the frame the clock is on, with its part of the way to the next.
+
+Checked against MAME over the same attract (frames 4980 to 5580, 3000 draws,
+logging the clock, speed, `+0xE8`, pace and frame length on entry to 0x201B0
+as well as at the draw). The players draw every other frame, and the frame
+length is 1.0 throughout; the paces are 0xF80, 0x1000, 0x1080 and 0x1280.
+`+0xE4` is the record's speed times the pace on 2744 draws; the other 256
+are the first draw of a motion, still at the speed of the one before. Of
+2364 steps within a motion, 2280 add or take off the motion's own speed,
+197 (the first step) the speed before, and 87 hold the clock where a player
+stands still. 284 forward runs end at `+0xE8` or past it, the other 116 are
+cut off by the next action; 15 backward runs end with the clock under one
+step from 0, or at 0. On all 2940 draws whose angles 0x201B0 eased that frame
+(the other 60, players held through a pause, draw the angles of an earlier
+frame), `airwlkrsEased` at the logged clock gives MAME's angles to the bit,
+174 of them in a last step that holds its frame (eased there anyway they
+would be off by up to 2.5), and `poseAirwlkrs` at that clock gives joint
+distances that agree to 0.00003: 2477 of the draws between two frames, 73
+backward (57 between frames, to 0.00002). Posed at the whole frame the
+clock is on, as the view did before, the draws between frames are off by up
+to 3.6, 0.06 at the median.
 
 **Head turn.** The motion start copies the motion record's flags (byte 3 of
 `0xF2C60 + 12 * m`) to `+0x11D`; when bit 5 is set (58 of the 646 records,

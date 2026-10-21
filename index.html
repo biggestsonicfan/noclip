@@ -499,6 +499,10 @@
         <label class="axis grow"><input type="range" id="motion-frame" min="1" max="1" step="1">
           <span id="motion-frame-val" class="axis-val">—</span></label>
       </div>
+      <div class="field row" id="pace-field" hidden>
+        <label class="axis" title="The player's pace (+0x16): the motion's clock runs at its speed times this. Play sets it a step at a time; 1 when a player is made" data-i18n-title="pace.title"><span data-i18n="pace">pace</span>
+          <input type="number" id="motion-pace" min="0.0625" max="15" step="0.0625" value="1"></label>
+      </div>
       <div class="field" id="head-field" hidden>
         <label data-i18n="f.head">Head turn</label>
         <label class="axis" title="The turn: the bearing of what the player watches, from his facing (+0xC6), held to ±67.5°" data-i18n-title="head.turn"><input type="range" id="head-turn" min="-12288" max="12288" step="256" value="0">
@@ -642,7 +646,10 @@
         either way and tilted up to 22.5°: <em>Head turn</em> sets that
         turn. The game doesn't blend one motion into the next; a new
         motion starts at its first frame (its last, played backward), as
-        here.
+        here. The motion's clock doesn't move a frame a draw (1/30 s): it
+        moves by the speed in the record (0x80 to 0x4C0, 0x100 a frame)
+        times the player's <em>pace</em> (<code>+0x16</code>), easing
+        between frames as the game does.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of
