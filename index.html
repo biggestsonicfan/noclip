@@ -511,6 +511,16 @@
           <span id="head-tilt-val" class="axis-val">0.0°</span></label>
         <div class="meta" id="head-note"></div>
       </div>
+      <div class="field" id="aim-field" hidden>
+        <label data-i18n="f.aim">Aim</label>
+        <label class="axis" title="The twist: the upper body turned on the waist toward the opponent (+0x36)" data-i18n-title="aim.twist"><input type="range" id="aim-twist" min="-16384" max="16384" step="256" value="0">
+          <span id="aim-twist-val" class="axis-val">0.0°</span></label>
+        <label class="axis" title="The weapon's turn toward the opponent (+0x3A), held to ±67.5° and then nudged ±5.6° by the height" data-i18n-title="aim.turn"><input type="range" id="aim-turn" min="-13312" max="13312" step="256" value="0">
+          <span id="aim-turn-val" class="axis-val">0.0°</span></label>
+        <label class="axis" title="The weapon's tilt (+0x38), up or down toward the opponent" data-i18n-title="aim.tilt"><input type="range" id="aim-tilt" min="-4864" max="12288" step="128" value="0">
+          <span id="aim-tilt-val" class="axis-val">0.0°</span></label>
+        <div class="meta" id="aim-note"></div>
+      </div>
       <div class="field" id="string-field" hidden>
         <label data-i18n="f.string">String &mdash; moves one after another</label>
         <div id="string-chain" class="chain"></div>

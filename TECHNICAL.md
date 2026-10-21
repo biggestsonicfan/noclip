@@ -4956,11 +4956,23 @@ entry (copro 0x2F, then 0x16, 0x15, 0x14), each in a push and pop:
 - the legs from the robot's place, which is the object's matrix turned by
   its +0x184, +0xFC, +0xFE and +0x34;
 - then the waist the same way, turned on y by the object's +0x36 (the
-  twist, 0 in the explorer); then the inverse of the upper body's entry 0
+  twist, `0x33F70`); then the inverse of the upper body's entry 0
   (`Rx(-x) Ry(-y) Rz(-z) T(-offset)`); then each upper body part;
-- the weapon at the hand's entry under the upper body's root, plus the aim
-  the fight gives it (the object's +0x3A and +0x38 when the record's +0x484
-  is set, which the explorer leaves out).
+- the weapon at the hand's entry under the upper body's root; for Fei-Yen
+  (the object's +0x64 is 5) moved (0, 0.3, 0) first (`0x340E4`); then, when
+  the record's +0x484 is not 0, turned on y by the object's +0x3A and on x by
+  its +0x38 (`0x3412C`). +0x484 is 0 for Fei-Yen and Bal-Bas-Bow, so their
+  weapons never turn.
+
+**The aim.** The fight sets +0x3A each frame (`0x339A0`-`0x33A74`): the
+bearing to the opponent (+0x84) less the robot's facing (+0x2E) and the
+twist, held to ±0x3000 and then nudged ±0x400 by the difference in height.
++0x36 and +0x38 follow the opponent a step at a time in the routines run
+while +0x170 is 5 or 6 (`0x389F0`, `0x38B30`; the tilt is held to
+-0x1300..0x3000 there). They start when the object's byte +0x13C, or +0x13B
+while the counter 0x51ACA8 runs, is 0xFF (`0x3EBA4`). Neither came
+up in the attract or in played runs. The explorer's Aim sliders set all
+three (`poseVonRobot`'s `aim` option); their ranges are the clamps above.
 
 **Checked against MAME.** A Lua script read the matrix written into the
 geometrizer list for each object (`:bufferram` at the list address) and
@@ -4971,6 +4983,26 @@ exactly (its turn differs by the aim). At frame 2400 (the ranking screen,
 the pose at 0x46950) the legs match to 1e-4, and the upper body, drawn a
 frame earlier, matches part to part to 3e-4. So the counter is one behind
 the entry drawn; the tab's frame 1 is entry 0.
+
+The aim was checked the same way, but reading `:bufferram` at the end of the
+frame: read at the object write, a few matrices are the previous frame's.
+The comparison is each part's matrix relative to the first leg part, MAME's
+against the explorer's, for every robot drawn on every other frame:
+
+- the attract, frames 1500-7000 (Temjin, Viper II, Fei-Yen, Bal-Bas-Bow,
+  3219 robots): of the 2974 whose legs and upper body match, all but 7
+  weapons match to 2.3e-3. Without the aim, 1251 Temjin and Viper II weapons
+  miss. Without
+  the 0.3 lift, Fei-Yen's weapon misses by 0.21. The 7 (Temjin at 1736,
+  Bal-Bas-Bow at 6386-6480, whose +0x3A is 0) miss the same way without the
+  aim, so the aim is not what they lack.
+- a played fight (random held inputs, frames 1500-9000, 6693 robots): one
+  weapon of the 6255 whose legs and upper body match misses.
+- twists and tilts fed to the board's own draw by a read tap on +0x34-+0x3B
+  that answers only inside the draw (`0x33D74`-`0x342FF`), twist ±0x3000 and
+  tilt -0x1300..0x4B00 (3170 robots): every weapon whose legs and upper body
+  match is within 1.3e-3. Without the aim, the upper body's median miss is
+  4.4 and the weapon's 1.0.
 
 ### The House of the Dead's cells (`js/cells.js`)
 

@@ -221,6 +221,12 @@ export function readVonStages(rom) {
 const ROBOT_WEAPONS = 0x00, ROBOT_BODY = 0x08, ROBOT_LEGS = 0x10;
 const ROBOT_MOTIONS = 0x70, ROBOT_PAIRS = 103;
 const ROBOT_NAME = 0x6bc;
+/* Nonzero where the weapon turns with the aim (0x34124); Fei-Yen's and
+ * Bal-Bas-Bow's are 0. */
+const ROBOT_AIMS = 0x484;
+/* The robot whose weapon is drawn 0.3 up from its hand (the object's +0x64,
+ * its index in the table, 5: Fei-Yen; 0x340E4). */
+const RAISED_WEAPON = 5;
 
 /* The data ROM's view of an address, or null off its end. */
 function dataAt(rom, a) {
@@ -259,7 +265,8 @@ export function readVonBodies(rom) {
         if (!legs.length || !upper.length) continue;
         let name = '';
         for (let p = struct + ROBOT_NAME; rom.maincpu[p] && name.length < 16; p++) name += String.fromCharCode(rom.maincpu[p]);
-        robots.push({ i, struct, name, legs, upper, weapon: weapons[1]?.triple ?? null });
+        const aims = dv.getUint32(struct + ROBOT_AIMS, true) !== 0;
+        robots.push({ i, struct, name, legs, upper, aims, weapon: weapons[1]?.triple ?? null });
     }
     addModelTriples(rom, robots.flatMap((r) => [...r.legs, ...r.upper].map((e) => e.triple)
         .concat([r.weapon]).filter(Boolean)));
@@ -283,6 +290,8 @@ export function readVonBodies(rom) {
             hitMotions: [],
             start: -1,
             root: r.struct,
+            /* The weapon turns with the aim (record +0x484). */
+            aims: r.aims,
             /* Player 1's colour rows, SetRoboRamp's for the robot's first
              * costume (js/colors.js buildVonColorxlat). */
             colours: { char: r.i, costume: 0 },
@@ -385,11 +394,13 @@ function unlocal(cp, e) {
  *
  * Each leg part is drawn at T·Rz·Ry·Rx of its entry from the robot's place.
  * Then the waist (the legs' slot 0) the same way, turned on y by the twist
- * at +0x36 of the object (0 here); then the inverse of the upper body's entry
- * 0, its root; then each upper body part at its entry. The weapon is drawn at
- * the hand's (slot 1) entry, under the upper body's root, without the aim
- * the fight turns it by. Checked against MAME's matrices for Temjin in the
- * attract (frame 1800): every part to 5e-5.
+ * the fight gives the upper body (the object's +0x36, `aim.twist`; 0x33F70);
+ * then the inverse of the upper body's entry 0, its root; then each upper
+ * body part at its entry. The weapon is drawn at the hand's (slot 1) entry,
+ * under the upper body's root, Fei-Yen's 0.3 up from it (0x340E4), and then,
+ * where the record lets it (+0x484), turned on y by the aim's turn (+0x3A)
+ * and on x by its tilt (+0x38) (0x3412C). The fight sets the three as the
+ * robot turns toward its opponent; `aim` holds them, 0x10000 a turn.
  *
  * The draw loops over the record's own count of parts, so a list entry past
  * it is not drawn on that motion: Temjin's upper body list has 17 entries,
@@ -398,7 +409,7 @@ function unlocal(cp, e) {
  * @returns {{matrices: number[][], origins: number[][], draws: number[][]}}
  *   column-major 4x4s, z the board's negated, and the models on each part
  */
-export function poseVonRobot(rom, body, motion, frame) {
+export function poseVonRobot(rom, body, motion, frame, { aim = null } = {}) {
     const own = motion?.robot === body.index ? motion : null;
     const f = Math.max(0, frame - 1);
     const entry = (list, j) => (own ? readEntry(own, list === 'legs' ? own.legs : own.upper, f, j) : null);
@@ -409,6 +420,7 @@ export function poseVonRobot(rom, body, motion, frame) {
     at(base);
     const w = waist && entry('legs', waist.joint);
     if (w) local(cp, w);
+    if (aim?.twist) cp.turn('y', aim.twist);
     const root = entry('body', 0);
     if (root) unlocal(cp, root);
     const upper = cp.m.slice();
@@ -419,6 +431,10 @@ export function poseVonRobot(rom, body, motion, frame) {
         at(hand.list === 'legs' ? base : upper);
         const e = entry(hand.list, hand.joint);
         if (e) local(cp, e);
+        if (p.list === 'weapon') {
+            if (body.index === RAISED_WEAPON) cp.translate([0, 0.3, 0]);
+            if (body.aims && aim) { cp.turn('y', aim.turn ?? 0); cp.turn('x', aim.tilt ?? 0); }
+        }
         shown[i] = Boolean(e) || !own;
         return cp.m;
     });
