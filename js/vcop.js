@@ -399,18 +399,28 @@ const ENEMY_TASK = 0x14ad0;
 const MAX_WAVES = 64;
 const MAX_ENEMIES = 32;
 const ENEMY_SHADOW = 0xac;
-/* TGP function 3, which the board's program has and Dead or Alive's has not:
- * a divide (the enemy's screen point, x times the focal length over z, for
- * the shot test). */
-const VCOP_COPRO = { 0x03: [2, (cp, [a, b]) => cp.out([a / b])] };
+/* TGP functions the board's program has and Dead or Alive's has not: the
+ * float sum, difference, product and quotient (3, the enemy's screen point,
+ * x times the focal length over z, for the shot test), 0x2D one over the
+ * square root, and 0x43 the distance between two points on the ground, which
+ * the enemy's moves ask for from its second frame on (js/vcopbodies.js). */
+export const VCOP_COPRO = {
+    0x00: [2, (cp, [a, b]) => cp.out([a + b])],
+    0x01: [2, (cp, [a, b]) => cp.out([a - b])],
+    0x02: [2, (cp, [a, b]) => cp.out([a * b])],
+    0x03: [2, (cp, [a, b]) => cp.out([a / b])],
+    0x2d: [1, (cp, [a]) => cp.out([1 / Math.sqrt(a)])],
+    0x43: [4, (cp, [x0, z0, x1, z1]) => cp.out([Math.hypot(x1 - x0, z1 - z0)])],
+};
 
 function dataU8(rom, addr) {
     const off = addr - MAIN_DATA_BASE;
     return off < 0 || off >= rom.mainData.length ? 0 : rom.mainData[off];
 }
 
-/* The stage's waves: the rail count each comes at, and its enemies' records. */
-function stageWaves(rom, n) {
+/* The stage's waves: the rail count each comes at, and its enemies' records;
+ * `all` keeps the other waves and the enemies on objects too. */
+export function stageWaves(rom, n, { all = false } = {}) {
     const counts = dataU32(rom, WAVE_COUNTS + n * 4);
     const records = dataU32(rom, WAVE_RECORDS + n * 4);
     const waves = [];
@@ -424,6 +434,10 @@ function stageWaves(rom, n) {
             if (count === null || count === END || !at) break;
             const recs = [];
             for (let k = 0; k < MAX_ENEMIES && dataU8(rom, at + k * ENEMY_BYTES); k++) recs.push(at + k * ENEMY_BYTES);
+            if (all) {
+                waves.push({ count, records: recs.filter((r) => dataU8(rom, r) !== WAIT) });
+                continue;
+            }
             if (dataU8(rom, at) & OTHER_WAVE) continue;
             waves.push({ count, records: recs.filter((r) => dataU8(rom, r) !== WAIT && (dataU32(rom, r + 0x18) | 0) === -1) });
         }

@@ -3496,7 +3496,10 @@ const vcop = {
     /* js/vcop.js: 0x28390D0[stage] is the stage's segment array. */
     stageTable: { flat: true, segments: { at: 0x28390d0, count: 4 } },
     cells: VCOP_CELLS,
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+    /* The wave records' bodies, playing the motion table through the enemy's
+     * own draw (js/vcopbodies.js). */
+    rig: { kind: 'vcop' },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- Virtua Fighter 2 ----------------------------------------------------- */
