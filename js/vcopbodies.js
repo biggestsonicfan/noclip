@@ -32,6 +32,20 @@
  * those are past the body's own (+0x24, +0x20), under an upper body (9 to
  * 15) left as it was. The explorer sets the same.
  *
+ * The cut scenes spawn their people from records of their own, through the
+ * same spawn, and give each a chain of motions instead of a script: the
+ * attract's (0x10400, scene 0x515B98: records 0x2817220[scene], chains
+ * 0x2817320, lengths 0x28173B0), stages 1 and 2's (0x5A780: 0x283A1D8,
+ * 0x283A3A8 and 0x283A488, each [stage][scene]), and the ending's (0x74400,
+ * once all three stages are cleared (0x5A2E0), for the stage cleared last,
+ * scene 0x5C99E4: records 0x28713F0[stage][scene], chains 0x2871550 and
+ * lengths 0x2871610[scene]). An actor's chain follows the ones before it in
+ * the scene's list. A step is a motion, -1 the motion before it again, or -2
+ * to stay where it is; the next step is taken when the motion ends (+0x3C
+ * clear). Bodies 53, 55 and 57 are only in the scenes. Their frames are
+ * drawn as the scenes draw them: 0x1EAD0, 0x1F258, 0x21A70 and 0x21C10, without
+ * the enemy draw's hit and gun routines.
+ *
  * The draw keeps its skeleton to itself, as Dead or Alive's does: the parts'
  * parents are worked out from the frames (js/doafighters.js jointsOf).
  */
@@ -54,6 +68,13 @@ const STAGE_NOW = 0x50f2a8;
 const POSE_COPY = 0x23090;
 const SPAWN = 0x13a90;
 const ENEMY_DRAW = 0x21a20;
+/* What a cut scene calls for each of its people a frame (0x10594). */
+const MOTION_STEP = 0x1ead0;
+const JOINT_MATRICES = 0x1f258;
+const PART_DRAW = 0x21a70;
+const SHADOW_DRAW = 0x21c10;
+/* 0x1F258 is reached by bal and returns through g14: a ret to return to. */
+const A_RET = 0x21a68;
 const SHADOW = 0xac;
 const MIRROR = 0x8a0;
 /* The aim's mode (1 turns the upper body, 0x1F258), and its yaw and pitch. */
@@ -67,6 +88,16 @@ const RECORD_BYTES = 0x2c;
 const MODEL_LIST = 0x42c;
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
 const END = 0xffffffff;
+
+/* The cut scenes: each list is [scene] of a table (or [stage][scene] of
+ * one), records, chains and chain lengths. */
+const SCENE_SETS = [
+    { name: 'attract', stages: [0], scenes: 10, records: 0x2817220, chains: 0x2817320, lengths: 0x28173b0 },
+    { name: 'stage 1 and 2', stages: [0, 1], scenes: 5, records: 0x283a1d8, chains: 0x283a3a8, lengths: 0x283a488, perStage: true },
+    { name: 'ending', stages: [0, 1, 2], scenes: 7, records: 0x28713f0, chains: 0x2871550, lengths: 0x2871610, perStageRecords: true },
+];
+const SCENE_AGAIN = -1;
+const SCENE_STAY = -2;
 
 /* The record's kinds (+0x00): an enemy, a hostage, and the bosses' four. */
 const KIND_NAMES = { 1: 'enemy', 2: 'hostage', 16: 'boss', 32: 'boss', 64: 'boss', 128: 'boss' };
@@ -102,36 +133,84 @@ function scriptMotions(rom, script) {
     return out;
 }
 
-/** Every body a wave record names, with the records' kinds and scripts. */
+/** Every cut scene's people: the record, the stage, and the motions its
+ * chain plays, in order (a -1 step plays the one before again, so it adds
+ * none). */
+export function vcopSceneActors(rom) {
+    const out = [];
+    const at = (table, i) => (table ? u32(rom, table + i * 4) : null);
+    for (const set of SCENE_SETS) {
+        for (const stage of set.stages) {
+            const records = set.perStage || set.perStageRecords ? at(set.records, stage) : set.records;
+            const chains = set.perStage ? at(set.chains, stage) : set.chains;
+            const lengths = set.perStage ? at(set.lengths, stage) : set.lengths;
+            for (let scene = 0; scene < set.scenes; scene++) {
+                const recs = at(records, scene);
+                const chain = at(chains, scene);
+                const length = at(lengths, scene);
+                if (!recs || !chain || !length) continue;
+                let step = 0;
+                for (let k = 0, rec = recs; rom.mainData[rec - MAIN_DATA_BASE]; k++, rec += RECORD_BYTES) {
+                    const n = u32(rom, length + k * 4);
+                    const motions = [];
+                    for (let i = 0; i < n; i++) {
+                        const m = u32(rom, chain + (step + i) * 4) | 0;
+                        if (m > 0 && m <= MOTION_COUNT) motions.push(m);
+                        else if (m !== SCENE_AGAIN && m !== SCENE_STAY) break;
+                    }
+                    step += n;
+                    out.push({ set: set.name, stage, scene, rec, body: rom.mainData[rec + 0x13 - MAIN_DATA_BASE], motions });
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/** Every body a wave record or a cut scene names, with the records' kinds
+ * and scripts, and the scenes' motions. */
 export function readVcopBodies(rom) {
     const uses = new Map();
+    const use = (body) => {
+        if (!uses.has(body)) uses.set(body, { records: [], kinds: new Set(), stages: new Set(), scripts: new Set(), aims: false, scenes: [], sceneNames: new Set() });
+        return uses.get(body);
+    };
     for (let s = 0; s < STAGES; s++) {
         for (const wave of stageWaves(rom, s, { all: true })) {
             for (const rec of wave.records) {
                 const kind = rom.mainData[rec - MAIN_DATA_BASE];
                 const body = rom.mainData[rec + 0x13 - MAIN_DATA_BASE];
                 if (body >= BODY_COUNT) continue;
-                const u = uses.get(body) ?? { records: [], kinds: new Set(), stages: new Set(), scripts: new Set(), aims: false };
+                const u = use(body);
                 u.records.push({ rec, stage: s });
                 u.kinds.add(kind);
                 u.stages.add(s);
                 u.scripts.add(rom.mainData[rec + 0x14 - MAIN_DATA_BASE]);
                 /* +0x1D 2 has the aim turn the upper body. */
                 if (rom.mainData[rec + 0x1d - MAIN_DATA_BASE] === 2) u.aims = true;
-                uses.set(body, u);
             }
         }
+    }
+    /* The scenes run no script and no aim, so only their motions are kept,
+     * and a record for the bodies no wave has. */
+    for (const a of vcopSceneActors(rom)) {
+        if (a.body >= BODY_COUNT) continue;
+        const u = use(a.body);
+        u.scenes.push(...a.motions);
+        u.sceneNames.add(a.set);
+        u.sceneRecord ??= { rec: a.rec, stage: a.stage };
     }
     return [...uses.keys()].sort((a, b) => a - b).map((index) => {
         const u = uses.get(index);
         const row = u32(rom, BODY_TABLE + index * 4);
         const kind = [...new Set([...u.kinds].map((k) => KIND_NAMES[k] ?? `kind ${k}`))].join(', ');
         const stages = [...u.stages].sort().map((s) => s + 1).join(', ');
-        /* The first record off any object, for the spawn. */
-        const first = u.records[0];
+        /* The first wave record, else the first scene's, for the spawn. */
+        const first = u.records[0] ?? u.sceneRecord;
+        const name = u.records.length ? `${kind}, stage ${stages}` : `cut scenes: ${[...u.sceneNames].join(', ')}`;
         const body = {
             index,
-            name: `body ${index} (${kind}, stage ${stages})`,
+            name: `body ${index} (${name})`,
             joints: 16,
             scale: 1,
             roles: [],
@@ -143,6 +222,9 @@ export function readVcopBodies(rom) {
             stage: first.stage,
             scripts: [...u.scripts],
             aims: u.aims,
+            scenes: [...new Set(u.scenes)],
+            /* Drawn as the scenes draw their people, if no wave has it. */
+            scene: !u.records.length,
         };
         body.parts = [];
         slotModels(rom, body).forEach((model, joint) => {
@@ -165,14 +247,17 @@ export function readVcopMotions(rom) {
     return list;
 }
 
-/** The motions the body's scripts ask for, then the rest. */
+/** The motions the body's cut scenes play, in order, and those its scripts
+ * ask for, then the rest. */
 export function vcopMotionList(rom, body, motions) {
     const ids = new Set(body.scripts.flatMap((s) => [...scriptMotions(rom, s)]));
     const fits = motions.filter(Boolean);
+    const scened = body.scenes.map((i) => motions[i]).filter(Boolean);
     return {
         fits,
-        lead: fits.filter((m) => ids.has(m.index)),
-        label: 'Motions its scripts ask for',
+        /* A body in the waves opens on its scripts' motions, as before. */
+        lead: body.scene ? scened : [...fits.filter((m) => ids.has(m.index)), ...scened.filter((m) => !ids.has(m.index))],
+        label: body.scene ? 'Motions its cut scenes play' : body.scenes.length ? 'Motions its scripts and cut scenes ask for' : 'Motions its scripts ask for',
         every: 'Every motion in the table',
         other: 'Every other motion in the table',
     };
@@ -241,7 +326,7 @@ export function runVcopMotion(rom, body, motion, frames, { aim = null, mirror = 
             rv.setInt32(o + AIM_YAW, rv.getInt32(o + 0x24, true) + aim.yaw, true);
             rv.setInt32(o + AIM_PITCH, rv.getInt32(o + 0x20, true) + aim.pitch, true);
         }
-        if (!cpu.call(ENEMY_DRAW, [at], { maxSteps: 5_000_000 })) break;
+        if (body.scene ? !sceneDraw(cpu, at) : !cpu.call(ENEMY_DRAW, [at], { maxSteps: 5_000_000 })) break;
         const draws = geo.draws.filter((d) => d.m && d.m.every(Number.isFinite)).map((d) => ({ model: d.model, m: d.m }));
         const parts = draws.filter((d) => d.model !== SHADOW);
         parts.shadows = draws.filter((d) => d.model === SHADOW);
@@ -249,6 +334,16 @@ export function runVcopMotion(rom, body, motion, frames, { aim = null, mirror = 
         out.push(parts);
     }
     return out;
+}
+
+/* A cut scene's frame for one of its people (0x10594): the motion, the
+ * joints, the parts and the shadow. */
+function sceneDraw(cpu, at) {
+    const g14 = Array(15).fill(0);
+    g14[0] = at;
+    g14[14] = A_RET;
+    return cpu.call(MOTION_STEP, [at]) && cpu.call(JOINT_MATRICES, g14, { maxSteps: 5_000_000 })
+        && cpu.call(PART_DRAW, [at]) && cpu.call(SHADOW_DRAW, [at]);
 }
 
 const runs = new WeakMap();

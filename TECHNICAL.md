@@ -10685,7 +10685,81 @@ Those rows cover 24 body and motion pairs over bodies 0, 1, 8, 10, 12 and 49
 The aiming twists seen ran from -17.5° to +10° in yaw.
 
 64 rows were bodies 53 and 55, which no wave record names. They were not
-graded.
+graded then; they are graded under the cut scenes, next.
+
+### Virtua Cop's cut scenes on the Animation tab
+
+The cut scenes add three bodies to the tab: 53 and 55, and 57, which only
+the ending uses. There are three tables, each run by a mode routine:
+
+| Set | Run by | Scene index | Records | Chains | Lengths |
+| --- | --- | --- | --- | --- | --- |
+| Attract (mode 6) | 0x10400, step 0x10960 | 0x515B98, 0..9 | `0x2817220[scene]` | `0x2817320` | `0x28173B0` |
+| Stage 1 and 2 | 0x5A780, step 0x5AD70 | 0..4 | `0x283A1D8[stage][scene]` | `0x283A3A8` | `0x283A488` |
+| Ending | 0x74400 | 0x5C99E4, 0..6 | `0x28713F0[stage][scene]` | `0x2871550[scene]` | `0x2871610[scene]` |
+
+The stage scenes exist for stages 1 and 2 only. After a stage's scene 4,
+0x5AD70 sets `0x5C9930[stage]` to 1. 0x5A2E0 multiplies the three flags,
+and when the product is 1, 0x5A3A8 calls the ending (through 0x71D90).
+The ending then goes to mode 12. The ending's records are per stage; its
+chains and lengths are per scene only.
+
+A scene's records are the same 0x2C-byte spawn records the waves use. The
+body is at +0x13, and they go through the same spawn, 0x13A90. Each actor has
+a chain of motion steps, starting after the chains of the actors before it in
+the scene's list. A step is either:
+
+- a motion number;
+- -1, which asks again for +0x640 (the last motion asked for);
+- -2, which holds.
+
+The chain moves on when the slot's +0x3C is clear (0x1EED0 clears it when the
+clock reaches +0x610).
+
+The scenes draw an actor with 0x1EAD0, 0x1F258 (reached by `bal`, so it
+returns through g14), 0x21A70 and 0x21C10. They skip the enemy draw's hit and
+gun routines (0x21220, 0x14E30, 0x21090 and 0x221F0), and so does the
+explorer, for a body no wave names. Such a body is listed as "cut scenes:"
+followed by its sets, and it leads with the motions its chains name:
+
+| Body | Motions its cut scenes play |
+| --- | --- |
+| 53 | 102 119 135 139 60 9 86 79 1 45 97 152 169 161 8 13 |
+| 55 | 120 8 13 60 79 144 149 145 161 10 12 |
+| 57 | 161 96 151 150 159 60 167 109 79 |
+
+A body that also has waves lists its scene motions after its scripts' motions.
+
+**The scene hooks.** Each attract scene also runs a per-frame hook from
+`0x2817410[scene]`. Scene 7's hook (0xFFC0) pins clocks at fixed slot
+addresses after the draw: slot 0 and slot 2 to 15, slot 5 to 13. Body 55,
+in slot 2 on motion 120, therefore decodes clock 1, then 2, then 16 on every
+following frame. 0x1EF10 refetches its keys only on a new motion (+0x40
+against +0x44) or past +0x48, and the jump leaves joint 5's (the head's)
+channels interpolated from the segment fetched at clock 2. For 299 frames the head is turned 69° from the
+motion's own frame 16. The tab plays motion 120 from its start, so it shows
+the motion's own head.
+
+**Graded against MAME.** I ran the attract mode for 9000 frames with the
+same tap. Joint 15's slot block is written three times per frame: the full
+matrix, then an identity, then a rotation only, because the slot is reused as
+scratch after 0x1F258. So the tap now takes the matrices at the second +0x20
+write after +0x2C. The earlier grade's "last word" rule happened to fall on
+the right write.
+
+| Rows | Count |
+| --- | --- |
+| Graded, mode 6 | 2582 |
+| Bodies 53 and 55, scenes 5, 6, 7, 9 | 1008 |
+| More than 10° from the motion's first frame | 542 |
+
+- Worst angle: 0.086°, leaving out scene 7's pinned hold.
+- Worst place: 1.2e-3 (body 53, motion 119); the others are within 1.3e-5.
+- Scene 7's 299 held rows of body 55: when the explorer's machine is given
+  the same pin (clock 15 written after each draw), they agree to 0.011°.
+
+Body 57 appears only in the ending, which the attract mode never reaches, so
+it is not graded. It is spawned and drawn by the same routines as 53 and 55.
 
 ### The House of the Dead's music
 
