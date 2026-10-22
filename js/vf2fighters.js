@@ -292,10 +292,13 @@ export const STREAK_WINS = 100;
  * +0x10 motion 0x180's (indexed by frame, unbounded: read for the motion's
  * frames), +0x18 Honey's broken hips, +0x1C a list of (motion, list) ending
  * in motion 0, each list a count and then that many pairs. A pair is the
- * intact model and the broken one. +4, +8 and +0x14 need move flags or fight
- * state the explorer lacks (TECHNICAL.md, "The hips"), so they are not read.
+ * intact model and the broken one. +8 points at two lists of pairs for a
+ * fighter in the air (+0x1A4 bit 4): 48 by the air counter +0x7FA and 12 by
+ * +0xAEC under move flag bit 14 (`air`, hipsInAir). +4 and +0x14 need move
+ * flags or fight state the explorer lacks (TECHNICAL.md, "The hips"), so they
+ * are not read.
  */
-const HIPS_M31 = 0x31, HIPS_M180 = 0x180, HIPS_M31_LAST = 40;
+const HIPS_M31 = 0x31, HIPS_M180 = 0x180, HIPS_M31_LAST = 40, HIPS_AIR = [48, 12];
 
 function readHalves(rom, addr, n) {
     const r = addr ? dataAt(rom, addr) : null;
@@ -322,6 +325,7 @@ function readHips(rom, A, i) {
         m31: readHalves(rom, u32(t + 0xC), HIPS_M31_LAST + 1),
         m180: m180 ? readHalves(rom, u32(t + 0x10), m180.frames + 1) : null,
         broken: readHalves(rom, u32(t + 0x18), 1)?.[0] ?? null,
+        air: u32(t + 8) ? HIPS_AIR.map((n, k) => toPairs(readHalves(rom, u32(u32(t + 8) + k * 4), n * 2))) : null,
     };
 }
 
@@ -329,7 +333,7 @@ function readHips(rom, A, i) {
 export function hipModels(H) {
     if (!H) return [];
     const out = [...(H.base ?? []), ...(H.low ?? []), ...(H.m31 ?? []), ...(H.m180 ?? [])];
-    for (const list of H.byMotion.values()) for (const p of list) out.push(...p);
+    for (const list of [...H.byMotion.values(), H.air?.[0]]) for (const p of list ?? []) out.push(...p);
     if (H.broken != null) out.push(H.broken);
     return [...new Set(out)].filter((m) => m > 0);
 }
@@ -1373,6 +1377,8 @@ function blendFor(live, rom, body, motion, frame, sample, mirrored) {
  * kick.
  */
 const f32 = Math.fround;
+const bits = new Uint32Array(1), real = new Float32Array(bits.buffer);
+const fromBits = (u) => { bits[0] = u; return real[0]; };
 const KICK = f32(160), KICK_CAP = f32(4.2), DAMP = f32(0.935);
 const WALL = 15, BOUNCE_BACK = f32(0.78), PULL_UP = f32(0.14), PULL_DOWN = f32(-0.1);
 const BOUNCE_REST = 15;
@@ -1423,18 +1429,23 @@ const WORD_TAIL = 1 << 7, FLAG_TAIL = 1 << 5;
 
 /* The setup ops after the head: op 2's three frames, op 3's +0x850, the
  * turn ops 5, 6 and 7 leave at +0x812 (null where none does), and where the
- * script starts. */
-const SETUP_TURN = { 5: 8, 6: 3, 7: 1 };
+ * script starts. FV's op 3 (0x1BAB0) and op 9 (0x1BCC0) also give a jump
+ * its flight, `air` and `flight` (flightClocks). */
+const SETUP_TURN = { 5: 8, 6: 3, 7: 1 }, SETUP_FLIGHT = 9;
 
 function readMoveSetup(rom, R, dv, at) {
     const len = (op) => rom.mainCpuView.getUint8(R.lengths + op);
-    const out = { times: null, window: 0, turn: null };
+    const out = { times: null, window: 0, turn: null, air: null, flight: null };
     for (let op = dv.getUint8(at); ; op = dv.getUint8(at)) {
         if (op === SETUP_END) return { ...out, script: at };
         if (op === SETUP_LAST) return { ...out, script: at + 1 };
         if (op >= R.ops) return null;
         if (op === SETUP_TIMES) out.times = [1, 3, 5].map((k) => dv.getInt16(at + k, true));
-        if (op === SETUP_WINDOW) out.window = dv.getUint16(at + 12, true);
+        if (op === SETUP_WINDOW) {
+            out.window = dv.getUint16(at + 12, true);
+            out.air = { launch: dv.getInt16(at + 1, true), hold: dv.getInt16(at + 3, true), land: dv.getInt16(at + 5, true), height: dv.getFloat32(at + 7, true) };
+        }
+        if (op === SETUP_FLIGHT) out.flight = { steps: dv.getUint8(at + 9), pull: dv.getFloat32(at + 10, true) };
         if (SETUP_TURN[op]) out.turn = dv.getInt16(at + SETUP_TURN[op], true);
         at += op === SETUP_TABLE ? 2 + 2 * dv.getUint8(at + 1) : len(op);
     }
@@ -1615,18 +1626,19 @@ function chestFromList(body, s, flags, frame) {
 /*
  * The hips (TECHNICAL.md, "The hips"): koshi_unit_change (0x31ADC) swaps slot
  * 9's model on the hips' own matrix, as mune_unit_change does the chest's.
- * In its order, with the move flags (+0x1A4) all clear, as the explorer has
- * them: Honey's win-streak hips, where the streak switch asks for them
- * (STREAK_WINS); motion 0x31's list by frame (to 40); motion 0x180's by
- * frame, also only on the streak switch (it needs a streak of 10); the
- * motion's own list by frame (to its last), taken only when it differs from the slot's model; then the standing
- * pair, or the low one while the waist (+0x1F8) is under 0.4. A missing list
+ * In its order, with the move flags (+0x1A4) all clear but bit 4 in an
+ * own-flight jump, as the explorer has them: Honey's win-streak hips, where
+ * the streak switch asks for them (STREAK_WINS); motion 0x31's list by frame
+ * (to 40); motion 0x180's by frame, also only on the streak switch (it needs
+ * a streak of 10); the motion's own list by frame (to its last), taken only
+ * when it differs from the slot's model; in the air, hipsInAir; then the
+ * standing pair, or the low one while the waist (+0x1F8) is under 0.4. A missing list
  * leaves the slot's model. The frame is +0x1AA, which set_motion starts at 1,
  * as the explorer does.
  */
 const HIPS_LOW = 0.4;
 
-function hipsModel(body, motion, frame, waistY) {
+function hipsModel(body, motion, frame, waistY, air) {
     const H = body.armour.hips, k = body.hipsBroken ? 1 : 0;
     const own = body.parts[HIPS].model;
     const id = motion?.id;
@@ -1636,8 +1648,102 @@ function hipsModel(body, motion, frame, waistY) {
     const list = H.byMotion.get(id);
     const listed = list ? list[Math.min(frame, list.length - 1)][k] : own;
     if (listed !== own) return listed;
+    if (air !== undefined) return hipsInAir(H, own, air, k);
     if (!H.base) return own;
     return (waistY < HIPS_LOW ? H.low : H.base)[k];
+}
+
+/*
+ * The hips in the air (TECHNICAL.md, "The hips in the air"). While +0x1A4
+ * bit 4 is set, koshi_unit_change (0x31D64) draws the slot's own model while
+ * the fighter is still rising (status bit 3) or the counter +0x7FA is 0, else
+ * pair `count` of +8's first list, or past 30 pair 31 + count mod 17. `air`
+ * is that counter, as flightClocks leaves it on the tick; 0 is the own model.
+ * Its second list, taken under move flag bit 14, no own-flight motion sets.
+ */
+const AIR_STRAIGHT = 31, AIR_LOOP = 17;
+
+function hipsInAir(H, own, air, k) {
+    const list = H.air?.[0];
+    if (!air || !list) return own;
+    return list[air < AIR_STRAIGHT ? air : AIR_STRAIGHT + (air % AIR_LOOP)][k];
+}
+
+/*
+ * A jump that flies on its own: a motion whose setup has op 3 (0x1BAB0: the
+ * frame it leaves the ground +0x80E, the frame it holds +0x816, the frame it
+ * lands +0x818 and the height it lands at +0x81C) and op 9 (0x1BCC0: the
+ * steps it is in the air +0x5BE and its pull, -(pull * g) at +0x5CC). The
+ * other airborne motions take their steps from the command or a hit, which
+ * is fight state, so they play as they did. The routines, one tick each:
+ *
+ * - the jump's action (0x14204) launches once the frame (+0x1AA) reaches
+ *   +0x80E: fix_hara (0x19B44) sets +0x1A4 bit 4 and status bits 2 (in the
+ *   air) and 3 (rising), and the speed is
+ *   (g - +0x5CC) * (1 + n) / 2 + (+0x81C - waist y) / n, with g the boot's
+ *   0x50A000 (`armour.flight.gravity`), so the n'th step lands at +0x81C;
+ * - each step (0x1880C) takes g from the speed, adds +0x5CC and moves the
+ *   height; rob_check_stage (0x18950) lands it below +0x81C + 0.02 (0x18A4C),
+ *   which clears bit 4 (0x19B88);
+ * - before the step, 0x1CCAC clears status bit 3 once the speed is below 0
+ *   and holds the frame at +0x816, or at +0x818 + 1 less the steps left
+ *   where that is later;
+ * - rob_disp (0x19F10) counts +0x7FA up while bit 4 is set and bit 3 clear,
+ *   and sets it to 0 while bit 4 is clear. It runs `draws` times a frame:
+ *   0x1FB50 draws the fighters inside the walls first, on every stage but
+ *   the one whose flags (0x6CE1048) have bit 25, and 0x1FE10 again, the
+ *   pass whose hips are seen.
+ *
+ * Returns the motion's ticks as 8.8 clocks with `air` beside them, the
+ * counter each tick sees (undefined where bit 4 is clear), or null for any
+ * other motion or fighter. The waist it launches from is the explorer's on
+ * the frame before; the explorer's fighter does not leave the ground.
+ */
+const LAND_MARGIN = f32(0.02), FLIGHT_TICKS = 1000;
+
+export function flightClocks(rom, body, motion) {
+    const F = rom.game.rig?.fighters?.armour?.flight;
+    if (!F || !body?.armour?.hips?.air || motion?.id == null) return null;
+    const m = moveSetup(rom, motion.id);
+    if (!m?.air || !m.flight?.steps) return null;
+    const { hold, land, height } = m.air, n = m.flight.steps;
+    const g = fromBits(F.gravity), pull = f32(-f32(m.flight.pull * g));
+    const launch = Math.max(1, m.air.launch);
+    const clocks = [], air = [];
+    const tick = (frame, count) => { clocks.push((frame - 1) << 8); air.push(count); };
+    for (let f = 1; f < launch; f++) tick(f, undefined);
+    const y0 = waistHeight(rom, body, motion, Math.max(1, launch - 1));
+    let v = f32(f32(f32(f32(g - pull) * f32(1 + n)) * 0.5) + f32(f32(height - y0) / n));
+    let y = y0, f = launch, rising = true, count = 0;
+    for (let t = 0; t < FLIGHT_TICKS; t++) {
+        if (t > 0) {
+            if (v < 0) rising = false;
+            const r = land + 1 - (n - t);
+            f = f + 1 > Math.max(hold, r) ? f : f + 1;
+        }
+        v = f32(f32(v - g) + pull);
+        const was = y;
+        y = f32(y + v);
+        if (y < f32(height + LAND_MARGIN)) break;
+        if (!rising) count += F.draws;
+        tick(f, y === was ? 0 : count);
+    }
+    /* One that lands on its first step starts above its landing height (71,
+     * 72, 128, 806 land at 1.5): not a jump from the floor, so left as it was. */
+    if (air.length < launch) return null;
+    tick(f, undefined);
+    for (f = Math.max(f + 1, land); f <= motion.frames; f++) tick(f, undefined);
+    clocks.air = air;
+    return clocks;
+}
+
+/* The waist's height on a frame, as poseFighter stands it. */
+function waistHeight(rom, body, motion, frame) {
+    rom.vf2Rig ??= standardRig(rom);
+    const sample = sampleFor(rom, motion, frame, false);
+    const pose = buildPose(rom.vf2Rig, sample, { levelFeet: true });
+    const crouch = (rom.game.rig.crouch ?? CROUCH)[body.char ?? body.index];
+    return pose[WAIST_SLOT].t[1] + (crouch ? sample.targets[1] * (crouch - 1) : 0);
 }
 
 /*
@@ -1713,12 +1819,12 @@ function hairSwing(live, pose, stepped, fresh) {
 
 /* The chest's and hips' models this frame, for the fighters whose chest
  * bounces or whose hips koshi_unit_change (or VF2's low hips) names. */
-function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) {
+function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh, air }) {
     const held = !fresh && live.spring?.model != null;
     const flags = () => moveFlags(rom, motion)?.[frame] ?? 0;
     const chest = body.bounce ? (held ? live.spring.model : bounceChest(body, live, pose, frame, stepped, flags())) : undefined;
     const waistY = pose[WAIST_SLOT].t[1];
-    const hips = body.armour?.hips ? hipsModel(body, motion, frame, waistY)
+    const hips = body.armour?.hips ? hipsModel(body, motion, frame, waistY, air)
         : body.lowHips ? lowHipsModel(body, waistY, flags()) : undefined;
     return { chest, hips, spring: live.spring };
 }
@@ -1796,7 +1902,7 @@ function sampleFor(rom, motion, frame, mirrored) {
  *   `pose`, the bones in the board's frame, which the sway chains hang off
  *   (js/osage.js).
  */
-export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirrored = false, handsFrom = null, handsPass = 0 } = {}) {
+export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirrored = false, handsFrom = null, handsPass = 0, air } = {}) {
     rom.vf2Rig ??= standardRig(rom);
     const faceTarget = looksAtOther(rom, motion, frame, other);
     const live = liveFor(body);
@@ -1827,7 +1933,7 @@ export function poseFighter(rom, body, motion, frame, { faceTarget: other, mirro
     const hands = handsAt(scripted, frame);
     const item = itemAt(scripted, frame);
     const shown = swung.map((e) => !e.item || item);
-    return { matrices, origins, extras, shown, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh }) };
+    return { matrices, origins, extras, shown, pose, skirt: swings, pads, hair, hands, ...swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh, air }) };
 }
 
 /*
@@ -1907,7 +2013,7 @@ function headSeenFrom(other, across) {
  */
 export function poseBout(rom, [first, second], place = opponentMatrix()) {
     const one = poseFighter(rom, first.body, first.motion, first.frame,
-        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored, handsPass: first.handsPass });
+        { faceTarget: headSeenFrom(second.body, (h) => placed(place, h)), mirrored: first.mirrored, handsPass: first.handsPass, air: first.air });
     const two = poseFighter(rom, second.body, second.motion, second.frame,
         { faceTarget: headSeenFrom(first.body, (h) => unplaced(place, h)), mirrored: second.mirrored, handsFrom: second.handsFrom, handsPass: second.handsPass });
     return [one, two];

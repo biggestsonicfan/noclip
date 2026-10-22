@@ -61,7 +61,7 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots, headPieceReflection,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
@@ -3367,7 +3367,12 @@ const BODY_RIGS = {
         read: readBodies, motions: readMotions, list: bodyMotionList,
         pose: (rom, body, motion, frame, opts) => poseBody(body, motion, frame, opts),
     },
-    vf2: { read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter },
+    /* Fighting Vipers' own-flight jumps hold frames in the air, and the
+     * hips swing by the air's ticks (flightClocks). */
+    vf2: {
+        read: readFighters, motions: readFighterMotions, list: fighterMotionList, pose: poseFighter,
+        clocks: (rom, motion, { body }) => flightClocks(rom, body, motion),
+    },
     doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
     /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
     dynamcop: {
@@ -3758,7 +3763,8 @@ function poseFighterAndRival(body, m) {
     const aim = { von: state.aim, vcop: state.vcopAim }[state.rom.game.rig?.kind] ?? null;
     const backward = playsBackward();
     const clock = m.clocks ? m.clock : null;
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim });
+    const air = m.clocks?.air?.[scrubValue(m) - 1];
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim, air });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -3767,7 +3773,7 @@ function poseFighterAndRival(body, m) {
      * so the one thrown is mirrored with the fighter. Otherwise the opponent's
      * own bit is fight state, and left clear. */
     const [mine, theirs] = poseBout(state.rom, [
-        { body, motion: m.decoded, frame: m.frame, mirrored, handsPass },
+        { body, motion: m.decoded, frame: m.frame, mirrored, handsPass, air },
         { body: m.rival.body, motion: own.decoded, frame: own.frame, mirrored: mirrored && Boolean(own.thrown), handsFrom: own.handsFrom, handsPass: own.handsPass ?? 0 },
     ], at);
     const place = new THREE.Matrix4().fromArray(at);
@@ -4690,7 +4696,7 @@ function resyncClock() {
 
 function syncClock(m) {
     const clocks = state.bodies && m.decoded && !m.chain ? bodyRig().clocks : null;
-    m.clocks = clocks ? clocks(state.rom, m.decoded, { backward: playsBackward(), pace: state.pace }) : null;
+    m.clocks = clocks ? clocks(state.rom, m.decoded, { backward: playsBackward(), pace: state.pace, body: state.character }) : null;
     if (!m.clocks) return;
     const n = m.clocks.length;
     m.clock = m.clocks[((m.tick % n) + n) % n];
@@ -5245,7 +5251,7 @@ function renderBodyMotionPanel() {
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
         ${size}
-        ${m.clocks ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
+        ${m.clocks && !m.clocks.air ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
     ` : '<span>motion</span><b>none fits this body</b>';
 
     const scrub = $('#motion-frame');
@@ -5537,7 +5543,8 @@ function updateBounceReadout(m) {
 /* The hips' model koshi_unit_change picks on this frame. */
 function updateHipsReadout(m) {
     const out = $('#hips-now');
-    if (out && m.hips != null) out.textContent = `frame ${m.frame}: hips ${m.hips}`;
+    const air = m.clocks?.air?.[scrubValue(m) - 1];
+    if (out && m.hips != null) out.textContent = `frame ${m.frame}: hips ${m.hips}` + (air !== undefined ? `, in the air (count ${air})` : '');
 }
 
 function updateMotionFrameReadout() {

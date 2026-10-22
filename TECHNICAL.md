@@ -2856,7 +2856,7 @@ offset or scale; it is a model swap.
 |---|---|---|---|
 | `+0` | two pairs: standing, low | 2927/2927, 2931/2931 | 2405/690, 2407/1788 |
 | `+4` | 80 pairs by frame (move flag bit 9) | none | none |
-| `+8` | two pointers: 48 pairs by `+0x7FA`, 12 pairs by `+0xAEC` (move flag bit 4) | 2932..2962; 2932..2937 | 3189..3219/3243..3273; 3179..3184/3233..3238 |
+| `+8` | two pointers: 48 pairs by `+0x7FA`, 12 pairs by `+0xAEC` (move flag bit 4; the second with bit 14) | 2932..2962; 2932..2937 | 3189..3219/3243..3273; 3179..3184/3233..3238 |
 | `+0xC` | motion `0x31`: halfwords by frame | none | 3223 to frame 30, then 3224..3232 from 31 to 39 |
 | `+0x10` | motion `0x180`: halfwords by frame | 2932, up to 2962 at 21, back to 2932 | none |
 | `+0x14` | 50 halfwords, a count at `+0xC8C` | 2932..2962..2932 | none |
@@ -2902,11 +2902,12 @@ is the side that won before (`0x500066`), and starts it again otherwise):
    `+0x624` is set).
 
 **What the explorer draws** (`readHips`, `hipsModel` in `js/vf2fighters.js`).
-`readHips` reads `+0`, `+0xC`, `+0x10` (as many entries as motion `0x180`
+`readHips` reads `+0`, `+8`, `+0xC`, `+0x10` (as many entries as motion `0x180`
 has frames, plus one), `+0x18` and `+0x1C`; `hipsModel` follows steps 2 to 5
-and 7 every frame, the hips broken when the Armour switch breaks the lower
-half. The hips do not use the move flags, and the explorer has no other fighter or game state, so it
-takes `+0x1A4` as 0 (step 6 never runs, 0.4 in step 7), the streak as under
+and 7 every frame, and step 6's bit 4 in an own-flight jump (below, "The hips
+in the air"), the hips broken when the Armour switch breaks the lower
+half. Otherwise the hips do not use the move flags, and the explorer has no other fighter or game state, so it
+takes `+0x1A4` as 0 (0.4 in step 7), the streak as under
 10 unless the 100-win switch (`?hentai=baka`, Honey only) asks for 100, no
 ring (`+0xC8C` 0) and no raised floor. The waist
 height is the explorer's slot 0 `y`, which is the board's `+0x1F8` above a
@@ -2921,17 +2922,62 @@ floor at 0. So:
   plays 3223..3232 through motion 49 and his coat swings through 3179..3188
   (3233..3242 broken) in motions 548, 632, 633, 656 and 832.
 
-The Animation panel's armour readout shows the hips' model per frame. Not
-checked against MAME. Every list picked by motion id (with or without the
-frame) is drawn; the three left out hang on fight state, not on the motion:
+The Animation panel's armour readout shows the hips' model per frame, and in
+the air the count. Only the hips in the air are checked against MAME. Every
+list picked by motion id (with or without the frame) is drawn; what is left
+out hangs on fight state, not on the motion:
 
-- `+8`, the swing: needs `+0x1A4` bit 4, in the air (set by `fix_hara`,
-  `0x19B44`, cleared on landing by `rob_check_stage`, `0x18950`). Its index
-  is `+0x7FA`, which `rob_disp` (`0x19F44`) counts up only while that bit is
-  set, or with bit 14 `+0xAEC`, `rob_disp`'s count of frames drawn (`0x19F38`).
+- `+8` outside the own-flight jumps: the jumps a command or a hit launches
+  (Honey's in attract are all of these) take their air steps from the
+  command record or the hit, and `+8`'s second list needs move flag bit 14,
+  which no own-flight jump sets.
 - `+0x14`, the ring: needs `+0xC8C`, set by `kuc_sukebo_check` (`0x31DEC`)
   from the ring at `0x50A420`/`0x50A42C`.
 - `+4`: needs `+0x1A4` bit 9; neither Honey nor Bahn has the list.
+
+**The hips in the air (read from the ROM; drawn; checked against MAME).**
+`+8`'s first list swings Honey's skirt and Bahn's coat tail while the fighter
+falls. Motions 78, 79, 81, 83, 85, 88, 96 and 98 fly on their own: their
+setups have op 3 (`0x1BAB0`: the launch frame `+0x80E`, the frame held
+`+0x816`, the landing frame `+0x818`, the landing height `+0x81C`) and op 9
+(`0x1BCC0`: the steps in the air `+0x5BE`, n, and a pull, stored as
+-(pull × g) at `+0x5CC`). `flightClocks` runs the routines that move them a
+tick at a time:
+
+1. The jump's action (`0x14204`) launches once the frame reaches `+0x80E`:
+   `fix_hara` (`0x19B44`) puts the place on the waist and sets `+0x1A4` bit 4
+   and status bits 2 (in the air) and 3 (rising). The speed `+0x30` is
+   (g - `+0x5CC`) × (1 + n) / 2 + (`+0x81C` - waist y) / n, with g the boot's
+   `0x50A000` (`0x3BAB1F2D`, set at `0x7284`), so the n'th step lands at
+   `+0x81C`.
+2. Each step (`0x1880C`) takes g from the speed, adds `+0x5CC`, and moves
+   the height by it; `rob_check_stage` lands the fighter once it is under
+   `+0x81C` + 0.02 (`0x18A4C`), which clears bit 4.
+3. Before the step, `0x1CCAC` clears status bit 3 once the speed is below 0,
+   and holds the frame at `+0x816`, or at `+0x818` + 1 less the steps left
+   where that is later.
+4. `rob_disp` (`0x19F10`) counts `+0x7FA` up while bit 4 is set and bit 3 is
+   clear, and sets it to 0 while bit 4 is clear. It runs twice a frame:
+   `0x1FB50` draws the fighters inside the walls first (`0x21C14`), on every
+   stage but the one whose flags (`0x6CE1048[stage]`) have bit 25 (stage 6),
+   and `koshi_unit_change` is not reached on that pass; then `0x1FE10`, whose
+   hips are the ones seen. So the hips step two entries a frame.
+
+While rising the hips are the slot's own model (Bahn 2405, Honey 2460), not
+the standing pair. The playback holds the frames as the board does; the
+explorer's fighter does not leave the ground. Motions 71, 72, 128 and 806
+have both ops but land at 1.5, above where they start, so they land on the
+first step and play as before.
+
+Graded against MAME's attract (`fvipers`, the shared build): Bahn plays
+motion 98 at frame 3470, launches at frame 7, rises to frame 26, holds 27
+for 16 frames and lands on 29. On every one of the 44 frames from the start
+to the landing the explorer has the same motion frame and hips model (2405
+rising; then 3191, 3193, ... 3217, 3219, 3219, 3218 at counts 2 to 34), and
+the hips' place (`+0x260`) equals the waist's (`+0x1F4`) in MAME as slot 9's
+origin equals slot 0's in the explorer. Honey's airborne motions in attract
+are all hits and command jumps (589, 798, 706, 511, 624, 804, 606, 593, 346,
+621), so her flight is the same code on her table, not graded.
 
 **The hip matrix.** `koshi_unit_change` only picks the model; the matrix it
 is drawn on is slot 9's, built by `calc_unit_mat` (`0x17160`) once a frame
