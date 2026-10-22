@@ -292,7 +292,7 @@ export function airwlkrsHeadTurn(bearing, tilt) {
     return [(b << 16) >> 16, pitch];
 }
 
-export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false, head = null } = {}) {
+export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false, head = null, backward = false } = {}) {
     const R = rom.game.rig;
     const M = playerMachine(rom);
     const obj = R.object - RAM_BASE;
@@ -325,11 +325,18 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrore
     }
     /* Whoever starts a motion says whether it plays mirrored: in a game,
      * 0x66FA0 takes a player's next step from its move sequence (six
-     * halfwords each at 0x5A300), the motion in the low 12 bits and `+0xF4`
-     * set by bit 12 or 14. 0x1FD10 then copies the eased frame at `eased`
+     * halfwords each at 0x5A300), an action in the low 12 bits (its record
+     * at 0x57FF0 names the motion) and `+0xF4` set by bit 12 or 14. 0x1FD10 then copies the eased frame at `eased`
      * to the pose words as it is or mirrored: the arms and legs change
      * sides with their turns negated, which is why the hands swap. */
     M.rv.setUint32(obj + 0xf4, mirrored ? 1 : 0, true);
+    /* And whether it plays backward: the same step's bit 13 or 14 sets `+0xEC`
+     * (bit 12 mirrored, 13 backward, 14 both). The motion start (0x1F1B0)
+     * then sets the clock `+0xE0` to `+0xE8`, the last frame, and 0x24144
+     * takes the speed `+0xE4` off it each frame until it would pass 0, when
+     * the clock is 0, the first frame, and the motion ends. Only the frame
+     * changes: the draw never reads `+0xEC`. */
+    M.rv.setUint32(obj + 0xec, backward ? 1 : 0, true);
     M.rv.setInt32(R.modelOffset - RAM_BASE, 0, true);
     const pose = R.eased - RAM_BASE;
     M.ram.fill(0, pose, pose + FRAME_BYTES);
@@ -342,6 +349,13 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrore
         M.ram.set(rom.mainData.subarray(at, at + FRAME_BYTES), pose);
         if (motion.root >= 0) {
             for (let k = 0; k < 3; k++) place[k] = rom.mainDataView.getFloat32(motion.root + f * 12 + k * 4, true);
+            /* 0x22560 steps the player by the track from where the motion
+             * started: frame 0 forward, the last frame backward. */
+            if (backward) {
+                const end = motion.root + (motion.frames - 1) * 12;
+                place[0] -= rom.mainDataView.getFloat32(end, true);
+                place[2] -= rom.mainDataView.getFloat32(end + 8, true);
+            }
             if (!travel) place[0] = place[2] = 0;
             /* 0x22800 flips the root's x for a mirrored motion. */
             if (mirrored) place[0] = -place[0];

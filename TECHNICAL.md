@@ -5290,11 +5290,14 @@ game's routine draws (`poseAirwlkrs`, `motions.records` in the rig).
 whoever starts it does, in `+0xF4`. In a game that is 0x66FA0 (and 0x66EE0,
 the same on a word it is given): it takes the player's next step from its
 move sequence, six halfwords each at `0x5A300 + 12 * (+0x348)`, step
-`+0x34C`, and stores the low 12 bits at `+0x33C` as the motion to start.
-Bit 14 sets `+0xF4` and `+0xEC`, bit 13 only `+0xEC`, bit 12 only `+0xF4`;
-0xF000 ends the sequence. Of the 1124 steps in the table 480 are mirrored
-(bit 12: sequence 1 is motion 18 and then 18 mirrored), over 431 motions,
-all but 279, 572 and 589 also played straight elsewhere. The players' motion
+`+0x34C`, and stores the low 12 bits at `+0x33C`, the action to start: its
+six-byte record at `0x57FF0 + 6 * action` (0x66830) names the motion in its
+first halfword (action 0x1B0 is motion 179). Bit 14 sets `+0xF4` and `+0xEC`,
+bit 13 only `+0xEC`, bit 12 only `+0xF4`; 0xF000 ends the sequence. Of the
+1100 steps in the 1024 sequences 478 are mirrored (bit 12 or 14: sequence 1 is
+motion 18 and then 18 mirrored), over 430 motions, all but 313, 438 and 447
+also played straight elsewhere. `+0xEC` plays the motion backward; see
+**Backward**. The players' motion
 scripts (0x28080) have their own bit for it, 15, and 0x26CF0 copies it back,
 with the rest of a player's state, from the record at 0x5138A0 that 0x26BB0
 fills. Each frame 0x201B0 eases the motion's angles into 0x521520, and 0x1FD10 copies them
@@ -5310,6 +5313,41 @@ two record bytes (0x1F374). 0x22800 negates the root's x step. The explorer's
 **mirrored** box sets `+0xF4`, swaps the two bytes, writes the frame to
 0x521520 and runs 0x1FD10 itself (`eased` and `mirror` in the rig), and
 negates the root's x when the travel is on.
+
+**Backward.** `+0xEC` is the step's other flag: bit 13 sets it alone, bit
+14 with `+0xF4`, so a motion can play backward mirrored or not. Of the 1100
+steps at 0x5A300, 592 are plain, 460 mirrored, 30 backward and 18 backward and
+mirrored, over 31 motions, each also played forward somewhere. The motion
+start 0x1F1B0 sets `+0xE8` to (frames - 1) times 0x100, the last frame on the
+8.8 clock, and the clock `+0xE0` to 0, or
+to `+0xE8` when `+0xEC` is set. Each frame 0x24144 then takes the speed
+`+0xE4` off the clock, where forward adds it; when the clock would pass 0
+it is set to 0, the first frame, and the motion ends. 0x201B0 eases
+frame `t >> 8` to the next by `(t & 0xFF) / 256` either way, so a backward
+motion shows the same frames as a forward one, in the other order. The root's
+step (0x22560) measures the track from where the motion started: from 0
+forward, from the last frame's x and z backward. Nothing in the draw reads
+`+0xEC`. The explorer's **backward** box shows frame `len - (tick % len)`
+in place of `1 + (tick % len)`, sets `+0xEC`, and with root travel on takes
+the last frame's x and z off the track (`poseAirwlkrs`). The speed
+`+0xE4` isn't one frame a tick in the game (0x108 to 0x252 in the attract),
+here or forward; the explorer steps one frame a tick.
+
+Checked against MAME, attract frames 4980 to 5580, logging at 0x2373C the
+clock, speed, `+0xE8`, `+0xEC` and `+0xF4` with the rest, and each step
+0x66FA0 takes: all 440 steps set `+0xF4` and `+0xEC` by the rule above (336
+plain, 88 bit 12, 7 bit 13, 9 bit 14), and on all 3000 draws `+0xE8` is the
+motion's (frames - 1) times 0x100. 79 draws in 17 stretches play backward, over motions
+5, 24, 94, 179, 187 and 189, mirrored and not; each starts with the clock at
+`+0xE8` and takes `+0xE4` off it each frame (motion 179: 0x900, 0x710 ...
+0x140, then the next step). On 70 of them MAME's eased angles are the
+motion's frames eased at the clock the draw has, to the bit (three at a
+clock 8 away where the speed changed between, six a player held at clock 0
+at the end), and with those angles and the explorer's backward pose the
+distances between the five read-back joint ends agree to 0.00002; the 16
+on a whole frame, posed from the explorer's own frame as the Animation view
+shows it, to 0.00001. The same draws played forward (the clock counted up
+from 0) are off by 0.06 to 10.4, 2.0 at the median.
 
 **Head turn.** The motion start copies the motion record's flags (byte 3 of
 `0xF2C60 + 12 * m`) to `+0x11D`; when bit 5 is set (58 of the 646 records,
@@ -5353,10 +5391,12 @@ above (2940 easings, 440 motion starts) and a game played from a coin for
 8300 frames (5515 motion starts over 179 motions), neither 0x20340 nor
 0x20560 nor 0x20820 ran once. In the attract, 0x201B0's output is the frame
 pair at its clock, eased, on all 2940 easings to the last bit, and the
-first draw after each of the 326 changes is the new motion at clock 0 to 0xB00.
+first draw after each of the 326 changes is the new motion at clock 0 to 0xB00
+(at `+0xE8`, its last frame, after a backward step; see **Backward**).
 Most changes are made to meet (the angles move 3.8° a word at the median
 there, 3.1° within a motion), but one in ten jumps 23° or more. The explorer
-shows each motion from its first frame, as the game does.
+shows each motion from its first frame (its last, played backward), as the
+game does.
 
 **Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
 and translates and call 0x1E890, which draws from the model table as it is.

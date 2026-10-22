@@ -893,11 +893,13 @@ RAM holds for the same motion and frame, and each player wears his own skin
 as in MAME. Each motion also picks the hands the player holds, and the
 explorer draws those, as MAME does. **mirrored** plays the motion the other
 way round, as the game plays many of them, the hands swapped with the arms.
+**backward** plays it from its last frame to its first, as the game plays
+some of them; on MAME's backward stretches the joints match frame for frame.
 **Head turn** turns the head as the game turns it toward the play, in the
 motions that let it (58 of them, the attract's two most played among them);
 with the turn MAME's frames had, the joints match MAME's head included. The
 game doesn't blend one motion into the next: in MAME a new motion starts at
-its first frame, as here, and the blend routine the program has is never
+its first frame (its last, played backward), as here, and the blend routine the program has is never
 called. See
 [Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
