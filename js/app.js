@@ -1359,17 +1359,18 @@ function applyStageLight(stage) {
  * lights a fighter by in a fight. Set here rather than left to whatever the
  * Stages tab put up last: a link that opens on another tab has drawn no stage,
  * and its figures stood under the shader's placeholder light, every face at
- * full ambient and no shading at all (issue 184).
+ * full ambient and no shading at all (issue 184). Virtua Fighter 2 keeps a
+ * light block for its material table, but lights by the stage (`stageLit`).
  */
 function useFigureLight() {
     const u = state.viewer.material.uniforms;
+    const stage = state.stages[state.stageIndex];
     const lit = gameLighting(state.rom);
-    if (lit) {
+    if (lit && !(stage && state.rom.game.lighting.stageLit)) {
         u.uLight.value.set(...lit.light);
         lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
         return;
     }
-    const stage = state.stages[state.stageIndex];
     if (stage) applyStageLight(stage);
 }
 
