@@ -4632,8 +4632,10 @@ const vonj = {
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
     /* The robots: ten pointers to their records (`ld 0x19360[g3*4]`), the
      * lists of parts and the motion pairs in each (js/von.js readVonBodies).
-     * The last, Zig-Raht, is drawn by another routine and is left out. */
-    rig: { kind: 'von', robots: 0x19360, count: 10 },
+     * The last, Zig-Raht, is drawn by another routine and is left out.
+     * `random` is the game's random draw (bal 0xF5058), which a win asks
+     * for its pose (js/von.js runVonAction). */
+    rig: { kind: 'von', robots: 0x19360, count: 10, random: 0xf5058 },
     /*
      * The Model 2B's sound board, with two 4 MB sample chips (von.zip's). The
      * sound test's list is 0xEFF62: 35 records of 0x22 bytes, the song number,
@@ -4684,7 +4686,7 @@ const vonu = {
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
     /* The robot records sit 0xF0 lower, and their table with them. */
-    rig: { ...vonj.rig, robots: 0x19270 },
+    rig: { ...vonj.rig, robots: 0x19270, random: 0xf5c98 },
     sound: { ...vonj.sound, music: { ...vonj.sound.music, list: { ...vonj.sound.music.list, at: 0xf0ba2 } } },
     /* The same tables, found by their bytes; the colour tables sit 0xF0
      * lower, the robot and select tables 0xA40 higher. The maps are data. */

@@ -242,7 +242,7 @@ function readList(rom, struct, at) {
         const drawn = dv.getUint32(ptr + i * 8, true), word = dv.getUint32(ptr + i * 8 + 4, true);
         if (!drawn) return { slot: word <= 5 ? word : -1 };
         const v = (k) => dv.getUint32(word + k * 4, true);
-        return { slot: -1, triple: word + 16 <= rom.maincpu.length ? [v(0), v(1), v(3)] : null };
+        return { slot: -1, variants: word, triple: word + 16 <= rom.maincpu.length ? [v(0), v(1), v(3)] : null };
     });
 }
 
@@ -266,7 +266,7 @@ export function readVonBodies(rom) {
         let name = '';
         for (let p = struct + ROBOT_NAME; rom.maincpu[p] && name.length < 16; p++) name += String.fromCharCode(rom.maincpu[p]);
         const aims = dv.getUint32(struct + ROBOT_AIMS, true) !== 0;
-        robots.push({ i, struct, name, legs, upper, aims, weapon: weapons[1]?.triple ?? null });
+        robots.push({ i, struct, name, legs, upper, aims, weapon: weapons[1]?.triple ?? null, weaponVariants: weapons[1]?.variants });
     }
     addModelTriples(rom, robots.flatMap((r) => [...r.legs, ...r.upper].map((e) => e.triple)
         .concat([r.weapon]).filter(Boolean)));
@@ -275,11 +275,11 @@ export function readVonBodies(rom) {
     const model = (e) => (e?.triple ? byMesh.get(e.triple[2]) ?? 0 : 0);
     return robots.map((r) => {
         const parts = [{ list: 'base', joint: 0, parent: -1, model: 0 }];
-        r.legs.forEach((e, j) => parts.push({ list: 'legs', joint: j, parent: 0, model: model(e), slot: e.slot }));
+        r.legs.forEach((e, j) => parts.push({ list: 'legs', joint: j, parent: 0, model: model(e), slot: e.slot, variants: e.variants }));
         const waist = parts.findIndex((p) => p.list === 'legs' && p.slot === 0);
-        r.upper.forEach((e, j) => parts.push({ list: 'body', joint: j, parent: waist, model: model(e), slot: e.slot }));
+        r.upper.forEach((e, j) => parts.push({ list: 'body', joint: j, parent: waist, model: model(e), slot: e.slot, variants: e.variants }));
         const hand = parts.findIndex((p) => p.list === 'body' && p.slot === 1);
-        if (r.weapon && hand >= 0) parts.push({ list: 'weapon', joint: 0, parent: hand, model: model({ triple: r.weapon }) });
+        if (r.weapon && hand >= 0) parts.push({ list: 'weapon', joint: 0, parent: hand, model: model({ triple: r.weapon }), variants: r.weaponVariants });
         return {
             index: r.i,
             name: r.name,
@@ -316,6 +316,68 @@ function readRecord(rom, a) {
     return { address: a, data, frames, parts };
 }
 
+/* The object a robot's own routines are run on (player 1's), and what they
+ * read and write besides it: the game's frame count, the scene, the robot's
+ * record, and the pair and frames the draw takes (legs, upper body). */
+const OBJECT = 0x503ad0;
+const OBJ_ROBOT = 0x6c, OBJ_ACTION = 0x172;
+const GAME_FRAME = 0x5024e8, SCENE = 0x503a00, ROBOT = 0x51ab14;
+const POSE_LEGS = 0x51ab08, POSE_UPPER = 0x51ab0c, POSE_LEGS_FRAME = 0x51ab10, POSE_UPPER_FRAME = 0x51ab12;
+/* A part's variant, a halfword of the object (the draws at 0x8DF3C, 0x8E28C
+ * and 0x3428C): the legs' from +0xDA, the upper body's from +0xB6, the
+ * weapon's at +0xB2. */
+const VARIANTS = { legs: 0xda, body: 0xb6, weapon: 0xb2 };
+/* The record's routines: the one the draw calls first (0x33C40), which steps
+ * the parts' variants, and the actions 42 and 41 call (0x32540, 0x324E0). */
+const ROBOT_PARTS = 0x434, ROBOT_WIN = 0x43c, ROBOT_LOSS = 0x440;
+/* 0x503A00 in a played fight (the attract's is 7): Temjin's loss and others
+ * pose their parts only in it. */
+const FIGHT_SCENE = 12;
+
+/**
+ * Run one of a robot's action routines as the fight does, a call a frame on
+ * player 1's object, then its parts routine as the draw does. `choice` is
+ * what the game's random draw (rig.random) answers: a win picks one of two
+ * pairs by it on its first frame. Returns per frame the pair, the frames and
+ * each part's variant.
+ */
+function runVonAction(rom, body, routine, action, { choice = 0, scene = FIGHT_SCENE, frames = 0, maxSteps = 200_000 } = {}) {
+    const ram = new Uint8Array(RAM_SIZE);
+    const rv = new DataView(ram.buffer);
+    const copro = new Copro(new Set());
+    const cpu = new I960(makeBus(rom, ram, copro, new Geo(copro, meshModels(rom))));
+    cpu.hooks.set(rom.game.rig.random, (c) => { c.setReg(16, choice); });
+    const put = (a, v) => rv.setUint32(a - RAM_BASE, v, true);
+    const u32 = (a) => rv.getUint32(a - RAM_BASE, true), u16 = (a) => rv.getUint16(a - RAM_BASE, true);
+    put(OBJECT + OBJ_ROBOT, body.root);
+    rv.setUint16(OBJECT + OBJ_ACTION - RAM_BASE, action, true);
+    put(ROBOT, body.root);
+    put(SCENE, scene);
+    const parts = rom.mainCpuView.getUint32(body.root + ROBOT_PARTS, true);
+    const out = [];
+    for (let f = 0; f === 0 || f < frames; f++) {
+        put(GAME_FRAME, f);
+        if (!cpu.call(routine, [OBJECT], { maxSteps })) return null;
+        if (parts && !cpu.call(parts, [OBJECT], { maxSteps })) return null;
+        out.push({
+            legs: u32(POSE_LEGS), upper: u32(POSE_UPPER),
+            legsFrame: u16(POSE_LEGS_FRAME), upperFrame: u16(POSE_UPPER_FRAME),
+            variants: body.parts.map((p) => (p.list === 'base' ? 0 : u16(OBJECT + VARIANTS[p.list] + 2 * p.joint))),
+        });
+        if (!frames) frames = readRecord(rom, out[0].legs)?.frames ?? 1;
+    }
+    return out;
+}
+
+/* The model a part's variant draws, 0 for none (its mesh word is 0). */
+function variantTriple(rom, part, v) {
+    if (!part.variants) return null;
+    const at = part.variants + v * 16, dv = rom.mainCpuView;
+    if (at + 16 > rom.maincpu.length) return null;
+    const mesh = dv.getUint32(at + 12, true);
+    return mesh ? [dv.getUint32(at, true), dv.getUint32(at + 4, true), mesh] : null;
+}
+
 /**
  * Each robot's motions: 103 pairs of records from +0x70, the upper body's then
  * the legs', played together on one frame count. The draw (0x2EE70) reads them
@@ -346,6 +408,42 @@ export function readVonMotions(rom, bodies) {
                 legs,
                 view: rom.mainDataView,
             });
+        }
+        for (const [name, routine, action, opts] of [
+            ['win 1', ROBOT_WIN, 42, { choice: 0 }],
+            ['win 2', ROBOT_WIN, 42, { choice: 1 }],
+            ['loss', ROBOT_LOSS, 41, {}],
+        ]) {
+            const at = dv.getUint32(body.root + routine, true);
+            const script = at ? runVonAction(rom, body, at, action, opts) : null;
+            if (!script) continue;
+            const upper = readRecord(rom, script[0].upper), legs = readRecord(rom, script[0].legs);
+            if (!upper || !legs) continue;
+            out.push({
+                index: out.length, robot: body.index, pair: -1, routine: at, name, joints: body.joints,
+                frames: script.length, address: upper.address, upper, legs, view: rom.mainDataView, script,
+            });
+        }
+    }
+    /* The variants the runs show go into the model table as the rest do. */
+    const scripted = out.filter((m) => m.script);
+    const triples = [];
+    for (const m of scripted) {
+        const body = bodies.find((b) => b.index === m.robot);
+        for (const s of m.script) {
+            s.triples = body.parts.map((p, i) => variantTriple(rom, p, s.variants[i]));
+            triples.push(...s.triples.filter(Boolean));
+        }
+    }
+    addModelTriples(rom, triples);
+    const byMesh = new Map();
+    for (let k = rom.game.modelTable.count - 1; k >= 0; k--) byMesh.set(readModelEntry(rom, k).meshPtr, k);
+    for (const m of scripted) {
+        for (const s of m.script) {
+            s.models = s.triples.map((t) => (t ? byMesh.get(t[2]) ?? 0 : 0));
+            s.upper = readRecord(rom, s.upper);
+            s.legs = readRecord(rom, s.legs);
+            delete s.triples;
         }
     }
     return out;
@@ -412,7 +510,13 @@ function unlocal(cp, e) {
 export function poseVonRobot(rom, body, motion, frame, { aim = null } = {}) {
     const own = motion?.robot === body.index ? motion : null;
     const f = Math.max(0, frame - 1);
-    const entry = (list, j) => (own ? readEntry(own, list === 'legs' ? own.legs : own.upper, f, j) : null);
+    /* A run's frame names its own pair, frames and variants. */
+    const run = own?.script?.[Math.min(f, own.script.length - 1)];
+    const entry = (list, j) => {
+        if (!own) return null;
+        if (run) return list === 'legs' ? readEntry(own, run.legs, run.legsFrame, j) : readEntry(own, run.upper, run.upperFrame, j);
+        return readEntry(own, list === 'legs' ? own.legs : own.upper, f, j);
+    };
     const cp = new Copro(new Set());
     const at = (m) => { cp.m = m.slice(); };
     const base = cp.m.slice();
@@ -439,7 +543,10 @@ export function poseVonRobot(rom, body, motion, frame, { aim = null } = {}) {
         return cp.m;
     });
     return {
-        draws: body.parts.map((p, i) => (p.model && shown[i] ? [p.model] : [])),
+        draws: body.parts.map((p, i) => {
+            const m = run && p.list !== 'base' ? run.models[i] : p.model;
+            return m && shown[i] ? [m] : [];
+        }),
         matrices: mats.map((m) => [m[0], m[1], -m[2], 0, m[3], m[4], -m[5], 0, -m[6], -m[7], m[8], 0, m[9], m[10], -m[11], 1]),
         origins: mats.map((m) => [m[9], m[10], -m[11]]),
     };

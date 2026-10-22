@@ -5172,7 +5172,8 @@ function renderBodyMotionPanel() {
     syncClock(m);
     /* A keyframed motion is a block of keys; a baked one is frames of a size. */
     /* A Virtual-On motion is two records, the upper body's and the legs'. */
-    const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
+    /* A win or a loss is the routine that picks its pair (js/von.js runVonAction). */
+    const size = !d ? '' : d.legs ? `${d.routine ? `<span>routine</span><b>0x${d.routine.toString(16)}</b>` : `<span>pair</span><b>${d.pair}</b>`}<span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
         : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
         /* A Power Sled ride scene is its task's clock, not frames of data. */
         : d.phase ? '<span>clock</span><b>' + d.phase + '</b>'
