@@ -267,6 +267,71 @@ export function airwlkrsMotionList(rom, body, motions) {
     return { fits, lead: fits, label: 'Every motion in the table' };
 }
 
+/**
+ * The speed a motion's clock runs at, `+0xE4` (8.8, 0x100 a frame): 0x1FAF0
+ * takes the halfword that starts the motion's record (`0xF2C60 + 12 * m`),
+ * times the player's pace `+0x16` over 0x1000, times the frame's length
+ * at 0x5214A0 (1.0, 0 while play stands still), cut to a whole number. The
+ * records hold 0x80 to 0x4C0; the pace is 0x1000 when a player is made
+ * (0x1F410) and the play code (0x64B9C on) sets it a step at a time from a
+ * base at 0x56DE6C.
+ */
+export function airwlkrsSpeed(rom, motion, pace = 0x1000) {
+    const R = rom.game.rig;
+    const at = R.motions.records + motion.index * 12;
+    const base = rom.maincpu[at] | (rom.maincpu[at + 1] << 8);
+    return Math.trunc(Math.imul(base, pace) >>> 12) & 0xffff;
+}
+
+/**
+ * The clock at each draw of one play of a motion, first to last. The motion
+ * start (0x1F1B0) sets `+0xE8` to the last frame, (frames - 1) << 8, and the
+ * clock `+0xE0` to 0, or to `+0xE8` when `+0xEC` plays it backward. Each
+ * frame the player is posed at the clock (0x201B0) and then 0x24144 moves
+ * it: forward it adds the speed while the clock is short of `+0xE8`, so the
+ * last draw is at `+0xE8` or past it (posed as `+0xE8`), and the motion ends
+ * the frame after; backward it takes the speed off while that leaves it at 0
+ * or more, and ends the motion when it would pass 0, so the first frame is
+ * drawn only when the clock lands on it.
+ */
+export function airwlkrsClocks(motion, speed, backward = false) {
+    const end = (motion.frames - 1) << 8;
+    if (speed <= 0) return [backward ? end : 0];
+    const out = [];
+    if (backward) {
+        for (let t = end; t >= 0; t -= speed) out.push(t);
+    } else {
+        let t = 0;
+        out.push(t);
+        while (t < end) out.push(t += speed);
+    }
+    return out;
+}
+
+/**
+ * The angles 0x201B0 eases for clock `t`: t held to `+0xE8`, frame `t >> 8`
+ * eased to the next by `(t & 0xFF) / 256`, each angle the short way round in
+ * single floats and cut toward 0. In the last step, where `t + 0x100` reaches
+ * `+0xE8`, it doesn't ease: the frame before the last is held until the
+ * clock gets to the last.
+ */
+export function airwlkrsEased(rom, motion, t) {
+    const dv = rom.mainDataView;
+    const end = (motion.frames - 1) << 8;
+    const c = Math.min(t, end);
+    const frac = c + 0x100 < end ? Math.fround((c & 0xff) / 256) : 0;
+    const a = motion.offset + (c >> 8) * FRAME_BYTES;
+    const out = new Uint8Array(FRAME_BYTES);
+    const ov = new DataView(out.buffer);
+    for (let k = 0; k < FRAME_BYTES; k += 2) {
+        const x = dv.getInt16(a + k, true);
+        if (!frac) { ov.setInt16(k, x, true); continue; }
+        const d = (((dv.getInt16(a + FRAME_BYTES + k, true) - x) << 16) >> 16);
+        ov.setInt16(k, Math.trunc(Math.fround(x + Math.fround(d * frac))), true);
+    }
+    return out;
+}
+
 const machines = new WeakMap();
 function playerMachine(rom) {
     if (!machines.has(rom)) machines.set(rom, doaMachine(rom));
@@ -292,7 +357,9 @@ export function airwlkrsHeadTurn(bearing, tilt) {
     return [(b << 16) >> 16, pitch];
 }
 
-export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false, head = null, backward = false } = {}) {
+/* Pose a player at a whole frame (1 the first), or at `clock`, the game's own
+ * 8.8 clock `+0xE0`, eased between frames as 0x201B0 eases it. */
+export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrored = false, head = null, backward = false, clock = null } = {}) {
     const R = rom.game.rig;
     const M = playerMachine(rom);
     const obj = R.object - RAM_BASE;
@@ -333,9 +400,9 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrore
     /* And whether it plays backward: the same step's bit 13 or 14 sets `+0xEC`
      * (bit 12 mirrored, 13 backward, 14 both). The motion start (0x1F1B0)
      * then sets the clock `+0xE0` to `+0xE8`, the last frame, and 0x24144
-     * takes the speed `+0xE4` off it each frame until it would pass 0, when
-     * the clock is 0, the first frame, and the motion ends. Only the frame
-     * changes: the draw never reads `+0xEC`. */
+     * takes the speed `+0xE4` off it each draw while that leaves 0 or more;
+     * then the motion ends. Only the clock changes: the draw never reads
+     * `+0xEC`. */
     M.rv.setUint32(obj + 0xec, backward ? 1 : 0, true);
     M.rv.setInt32(R.modelOffset - RAM_BASE, 0, true);
     const pose = R.eased - RAM_BASE;
@@ -344,11 +411,19 @@ export function poseAirwlkrs(rom, body, motion, frame, { travel = false, mirrore
      * travel is asked for. */
     const place = [0, 0, 0];
     if (motion?.offset) {
-        const f = Math.max(1, Math.min(frame, motion.frames)) - 1;
-        const at = motion.offset + f * FRAME_BYTES;
-        M.ram.set(rom.mainData.subarray(at, at + FRAME_BYTES), pose);
+        const t = clock ?? (Math.max(1, Math.min(frame, motion.frames)) - 1) << 8;
+        M.ram.set(airwlkrsEased(rom, motion, t), pose);
         if (motion.root >= 0) {
-            for (let k = 0; k < 3; k++) place[k] = rom.mainDataView.getFloat32(motion.root + f * 12 + k * 4, true);
+            /* 0x22560 eases the root from frame `t >> 8` to the next (held at
+             * the last) by `(t & 0xFF) / 256`, in the last step too. */
+            const last = motion.frames - 1;
+            const f = Math.min(t >> 8, last), g = Math.min(f + 1, last);
+            const frac = Math.fround((t & 0xff) / 256);
+            for (let k = 0; k < 3; k++) {
+                const a = rom.mainDataView.getFloat32(motion.root + f * 12 + k * 4, true);
+                const b = rom.mainDataView.getFloat32(motion.root + g * 12 + k * 4, true);
+                place[k] = Math.fround(a + Math.fround(Math.fround(b - a) * frac));
+            }
             /* 0x22560 steps the player by the track from where the motion
              * started: frame 0 forward, the last frame backward. */
             if (backward) {

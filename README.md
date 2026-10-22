@@ -895,6 +895,10 @@ explorer draws those, as MAME does. **mirrored** plays the motion the other
 way round, as the game plays many of them, the hands swapped with the arms.
 **backward** plays it from its last frame to its first, as the game plays
 some of them; on MAME's backward stretches the joints match frame for frame.
+The motion runs at its own speed, a draw every 1/30 s as in MAME, eased
+between frames as the game eases it; **pace** is the player's pace, which
+play changes as it goes. On every pose MAME's attract drew, in between frames
+or on one, forward or backward, the joints match.
 **Head turn** turns the head as the game turns it toward the play, in the
 motions that let it (58 of them, the attract's two most played among them);
 with the turn MAME's frames had, the joints match MAME's head included. The
