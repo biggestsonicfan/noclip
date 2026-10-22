@@ -14,7 +14,7 @@
  * build its own.
  */
 
-import { MAIN_DATA_BASE } from './romset.js';
+import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { SHEET_BYTES } from './atlas.js';
 import { bankTextureSet } from './texture.js';
 import { gameLighting } from './stages.js';
@@ -467,6 +467,71 @@ export function readDynamcopBodies(rom) {
             root: skel,
             parts,
         });
+    }
+    return out;
+}
+
+/*
+ * The hand each motion frame asks for (sub_192E0 and sub_19580; sub_19350,
+ * sub_19600, sub_1D3C0 and sub_1D4B0 are the same code). The draw loop
+ * (sub_18FC0) hands joint 8 to the first and joint 5 to the second when the
+ * motion has a table at `rig.hands.frames` + 8 * motion (+4 for joint 8):
+ * a halfword a frame, indexed by the object's +0x2C8 (the frame from 0, the
+ * one sub_14FD0 points the pose at). Its top five bits pick the hand:
+ *
+ *   n = halfword >> 11, joint 8 r = n, joint 5 r = 32 - n
+ *   alt = sub_7F0A0(base): the pair list at `rig.hands.swaps`
+ *         ({base, alt} words, ending with -1), else base itself
+ *   alt == base: base;  r <= 0 or r > 23: alt;  r <= 15: alt + r;  else base
+ *
+ * The models after alt are the hand turned through fifteen steps (open
+ * and flat); a hand the list does not name keeps its own model. The
+ * halfword's lower bits are never read.
+ */
+function handTable(rom, address) {
+    if (!address) return null;
+    if ((address >>> 24) === 0x06) return xtraResolve(rom, address);
+    if (address < rom.maincpu.length) return { view: rom.mainCpuView, off: address };
+    const off = address - MAIN_DATA_BASE;
+    return off >= 0 && off < rom.mainData.length ? { view: rom.mainDataView, off } : null;
+}
+
+function handSwap(rom, base) {
+    const dv = rom.mainCpuView;
+    for (let at = rom.game.rig.hands.swaps; dv.getInt32(at, true) !== -1; at += 8) {
+        if (dv.getInt32(at, true) === base) return dv.getInt32(at + 4, true);
+    }
+    return base;
+}
+
+/**
+ * The hand models a Dynamite Cop body draws on one frame of a motion.
+ *
+ * @param {object} rom loaded ROM set
+ * @param {object} body from readDynamcopBodies
+ * @param {object|null} motion from readMotions
+ * @param {number} frame 1-based
+ * @returns {[number, number][]} [joint, model] for each hand the motion sets
+ */
+export function dynamcopHands(rom, body, motion, frame) {
+    const H = rom.game.rig.hands;
+    if (!H || !motion) return [];
+    const out = [];
+    for (const [joint, side] of [[5, 0], [8, 1]]) {
+        const t = handTable(rom, rom.mainCpuView.getUint32(H.frames + motion.index * 8 + side * 4, true));
+        if (!t) continue;
+        const f = Math.max(1, Math.min(frame, motion.frames)) - 1;
+        if (t.off + 2 * f + 2 > t.view.byteLength) continue;
+        const n = t.view.getUint16(t.off + 2 * f, true) >> 11;
+        const r = side ? n : 32 - n;
+        const base = body.parts[joint].model;
+        const alt = handSwap(rom, base);
+        let model = base;
+        if (alt !== base) {
+            if (r <= 0 || r > 23) model = alt;
+            else if (r <= 15) model = alt + r;
+        }
+        out.push([joint, model]);
     }
     return out;
 }

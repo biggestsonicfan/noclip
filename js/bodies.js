@@ -214,13 +214,29 @@ export function readMotions(rom, bodies) {
         });
     }
     const starts = [...new Set(list.filter((m) => m.view).map((m) => m.offset))].sort((a, b) => a - b);
+    /* Dynamite Cop puts a motion's hand tables (rig.hands, a halfword a
+     * frame) straight after its frames, padded or not, so a motion with them
+     * ends where the first of them starts. */
+    const H = rom.game.rig.hands;
+    const handsAt = new Map();
+    if (H) {
+        for (const m of list) {
+            for (const side of [0, 1]) {
+                const r = m.view && motionResolve(rom, dv.getUint32(H.frames + m.index * 8 + side * 4, true));
+                if (r?.view === m.view && r.off > m.offset) handsAt.set(m.index, Math.min(handsAt.get(m.index) ?? Infinity, r.off));
+            }
+        }
+    }
     for (const m of list) {
         if (!m.view) continue;
-        const next = starts.find((s) => s > m.offset);
+        const hands = handsAt.get(m.index);
+        const next = hands ?? starts.find((s) => s > m.offset);
         const end = next ?? m.view.byteLength;
         const fits = next === undefined
             ? counts.filter((j) => rootsSane(m.view, m.offset, m.frames, j, end, m.layout))
-            : counts.filter((j) => ((m.frames * frameBytes(j) + 15) & ~15) === next - m.offset);
+            : hands !== undefined
+                ? counts.filter((j) => next - m.offset >= m.frames * frameBytes(j) && next - m.offset <= ((m.frames * frameBytes(j) + 15) & ~15))
+                : counts.filter((j) => ((m.frames * frameBytes(j) + 15) & ~15) === next - m.offset);
         if (fits.length === 1) m.joints = fits[0];
     }
     return list;
