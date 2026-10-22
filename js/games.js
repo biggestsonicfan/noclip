@@ -836,6 +836,10 @@ const fvipers = {
                  * flags (+0x1A4) the chest's per-frame list is gated on;
                  * js/vf2fighters.js, moveFlags. */
                 setups: 0x06411e94,
+                /* A jump's flight, for the hips in the air: g, which the boot
+                 * leaves at 0x50A000 (0x7284), and rob_disp's runs a frame;
+                 * js/vf2fighters.js, flightClocks. */
+                flight: { gravity: 0x3bab1f2d, draws: 2 },
                 /* The flying pieces: 0x2D614's outward and upward speeds by
                  * attack kind, its sixteen headings and speed jitters, and
                  * 0x2D390's sixteen spins; js/fvdebris.js. `flipbook` is
