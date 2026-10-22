@@ -529,6 +529,12 @@
           <span id="vcop-aim-pitch-val" class="axis-val">0.0°</span></label>
         <div class="meta" id="vcop-aim-note"></div>
       </div>
+      <div class="field" id="wounds-field" hidden>
+        <label data-i18n="f.wounds">Wounds</label>
+        <label class="axis" title="The shots taken on each part: each draws the part's next wound in place of its model, as the hit (0x68010) writes it over the part's +0" data-i18n-title="wounds.title"><input type="range" id="wounds-shots" min="0" max="1" step="1" value="0">
+          <span id="wounds-shots-val" class="axis-val">0</span></label>
+        <div class="meta" id="wounds-note"></div>
+      </div>
       <div class="field" id="held-field" hidden>
         <label data-i18n="f.held">Held</label>
         <select id="held-select" title="What the hands hold: the right hand's model (+0x1CC), the left's (+0x1D0). An enemy's own is the one its spawn records give it" data-i18n-title="held.title"></select>

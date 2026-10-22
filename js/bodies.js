@@ -131,6 +131,7 @@ export function readBodies(rom) {
             root,
             parts: readParts(rom, root),
         });
+        out[i].wounds = readWounds(rom, out[i]);
     }
     return out;
 }
@@ -447,16 +448,22 @@ const ROLE_HEAD = 1, ROLE_CAPE = 2, ROLE_GUN_HAND = 6, ROLE_OTHER_HAND = 7, ROLE
  * Sophie here, so she drew the spider's legs, and its 35 is Samson there and
  * BO_hyum here, so he drew Samson's hand.
  *
+ * A part the player has shot (`shots`, readWounds) draws its wound in place of
+ * its own model before any of this: the hit writes the wound over the part's
+ * model, and the callback draws whatever the part holds.
+ *
  * @param {object} rom loaded ROM set
  * @param {object} body from readBodies
  * @param {object|null} motion from readMotions
  * @param {number} frame the motion frame, from 1
  * @param {number} tick the vsync counter (0x51EFE8), which also counts loops
+ * @param {number} [shots] the shots taken on each part, for readWounds
  * @returns {number[][]} per part, the model numbers drawn on it
  */
-export function partDraws(rom, body, motion, frame, tick) {
+export function partDraws(rom, body, motion, frame, tick, shots = 0) {
     const C = rom.game.rig?.callback;
-    if (!C) return body.parts.map((p) => (p.model ? [p.model] : []));
+    const model = (p) => woundModel(body.wounds?.[p.index], shots) ?? p.model;
+    if (!C) return body.parts.map((p) => (model(p) ? [model(p)] : []));
     const BD = C.bodies, MO = C.motions, MD = C.models;
     const id = motion?.index ?? -1;
     const frames = Math.max(1, motion?.frames ?? 1);
@@ -466,7 +473,7 @@ export function partDraws(rom, body, motion, frame, tick) {
     const loops = Math.floor(tick / frames);
     const b = body.index;
     return body.parts.map((p) => {
-        const own = p.model ? [p.model] : [];
+        const own = model(p) ? [model(p)] : [];
         const role = body.roles[p.joint] ?? 0;
         /* `is` and `on` keep a null from matching: a build without BO_gman has
          * no body number for it, and -1 is not a motion. */
@@ -514,6 +521,71 @@ export function partDraws(rom, body, motion, frame, tick) {
         }
         return own;
     });
+}
+
+/* ---- wounds ---------------------------------------------------------------- */
+
+/**
+ * The wounds a shot body's parts take, part by part: each step the shots on
+ * the part that bring it and the model it then draws.
+ *
+ * sub_68010 runs on a hit part. The part's +0x79 counts the shots still to go,
+ * signed: a shot takes one off a count above 0, and a count left at 0 wounds
+ * the part. +0x78 is how many wounds it has; the next is
+ *
+ *   ld 0x11DFF0[body * 0x200 + zone * 0x20 + wounds * 4]
+ *
+ * and when that is not 0 it is stored over the part's model (+0) and +0x78 goes
+ * up by one. `zone` is byte 3 of the part's joint record (0x1184E0, eight bytes
+ * a joint, 31 joints to a body — the record `roles` reads). Byte 2 of the same
+ * record is the count the part starts with: 0 or 1, a wound on the first
+ * shot; 255, which is -1 and never reaches 0, so the part never wounds; once
+ * 4, BO_kage's chest. After each wound the count is reloaded from `ldob
+ * 0x129BF0[body * 256 + zone * 16 + wounds * 2]`, 0 or 1 for one more shot or
+ * 255 for none. A zone with no model
+ * left ends the list (and on a head or an arm, byte 4 of 1 or 2, sets the
+ * part's +0x3C bit 31).
+ *
+ * Model 1, PN_spaceB, draws nothing: a head's last wound is its being gone.
+ * One model is never stored (`cmpibe g7, 0x7B0`), PN_zonbimana_mune_dam03a,
+ * so the chest keeps its third wound where that one would be the fourth.
+ *
+ * The same routine leaves a head and an arm (byte 4 of 1 or 2) as they are
+ * when 0x51F520+0x3C5 has bit 1 set, a flag not followed further here.
+ *
+ * @param {object} rom loaded ROM set
+ * @param {object} body from readBodies, with `parts`
+ * @returns {null|{shots: number, model: number}[][]} per part, or null
+ */
+export function readWounds(rom, body) {
+    const W = rom.game.rig?.wounds;
+    if (!W) return null;
+    const dv = rom.mainCpuView;
+    const byte = (at) => (rom.maincpu[at] << 24) >> 24;
+    return body.parts.map((p) => {
+        const at = W.parts + (body.index * 31 + p.joint) * 8;
+        const first = byte(at + 2), zone = byte(at + 3);
+        const steps = [];
+        if (first < 0 || zone < 0) return steps;
+        let shots = Math.max(1, first), model = p.model;
+        for (let wounds = 0; wounds < 8; wounds++) {
+            const next = dv.getInt32(W.models + body.index * 0x200 + zone * 0x20 + wounds * 4, true);
+            if (next === 0) break;
+            if (next !== W.kept) model = next;
+            steps.push({ shots, model });
+            const more = byte(W.shots + body.index * 256 + zone * 16 + (wounds + 1) * 2);
+            if (more < 0) break;
+            shots += Math.max(1, more);
+        }
+        return steps;
+    });
+}
+
+/* The model a part draws after `shots` shots, or null for its own. */
+export function woundModel(steps, shots) {
+    let model = null;
+    for (const s of steps ?? []) if (s.shots <= shots) model = s.model;
+    return model;
 }
 
 /* ---- skins ----------------------------------------------------------------- */
