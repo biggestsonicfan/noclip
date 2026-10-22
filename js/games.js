@@ -4707,10 +4707,30 @@ const vonj = {
     von: { fieldRoutines: 0xc8e10, fields: 14, lights: 0x142fd4, names: 0x21060, named: 10 },
     /* The robots: ten pointers to their records (`ld 0x19360[g3*4]`), the
      * lists of parts and the motion pairs in each (js/von.js readVonBodies).
-     * The last, Zig-Raht, is drawn by another routine and is left out.
      * `random` is the game's random draw (bal 0xF5058), which a win asks
-     * for its pose (js/von.js runVonAction). */
-    rig: { kind: 'von', robots: 0x19360, count: 10, random: 0xf5058 },
+     * for its pose (js/von.js runVonAction).
+     *
+     * The last, Zig-Raht, is drawn by its own routine (0x3A510): its legs
+     * list alone, 26 parts, through the same part draw (0x8DD40). Its record's
+     * pairs are other robots' legs; the records it plays are set by its own
+     * code (0x37FC4-0x399A0), as literals or out of a table at 0x382F0, each
+     * a 26-part record stored at 0x51ACFC. `boss.records` are those, with
+     * where each is set or loaded. The data ROM is the same in vonu, and
+     * its code the same, 0xC30 on (the table at 0x38F20). */
+    rig: {
+        kind: 'von', robots: 0x19360, count: 10, random: 0xf5058,
+        boss: {
+            robot: 9,
+            records: [
+                [0x37fc4, 0x2b1d9dc], [0x3808c, 0x2b2257c], [0x380ac, 0x2b22304], [0x3819c, 0x2b227f4],
+                [0x381cc, 0x2b2711c], [0x38224, 0x2b2ba44], [0x38284, 0x2adc154], [0x39994, 0x2ac7824],
+                [0x38350, 0x2ae22e4], [0x38350, 0x2adf21c], [0x38350, 0x2ae53ac], [0x38350, 0x2ae8474],
+                [0x384a0, 0x2afa904], [0x384a0, 0x2af16bc], [0x384a0, 0x2b03b4c], [0x384a0, 0x2b0cd94],
+                [0x38610, 0x2b12f24], [0x38610, 0x2b0fe5c], [0x38610, 0x2b15fec], [0x38610, 0x2b190b4],
+                [0x386cc, 0x2acc14c], [0x386cc, 0x2ace5e4], [0x388f4, 0x2ad2f0c],
+            ],
+        },
+    },
     /*
      * The Model 2B's sound board, with two 4 MB sample chips (von.zip's). The
      * sound test's list is 0xEFF62: 35 records of 0x22 bytes, the song number,
@@ -4761,7 +4781,11 @@ const vonu = {
     lighting: { ...vonj.lighting, materials: { ...vonj.lighting.materials, at: 0x29fc0 } },
     von: { ...vonj.von, fieldRoutines: 0xc9a40, names: 0x21aa0 },
     /* The robot records sit 0xF0 lower, and their table with them. */
-    rig: { ...vonj.rig, robots: 0x19270, random: 0xf5c98 },
+    rig: {
+        ...vonj.rig, robots: 0x19270, random: 0xf5c98,
+        /* Zig-Raht's code sits 0xC30 later; its records are the same. */
+        boss: { ...vonj.rig.boss, records: vonj.rig.boss.records.map(([at, rec]) => [at + 0xc30, rec]) },
+    },
     sound: { ...vonj.sound, music: { ...vonj.sound.music, list: { ...vonj.sound.music.list, at: 0xf0ba2 } } },
     /* The same tables, found by their bytes; the colour tables sit 0xF0
      * lower, the robot and select tables 0xA40 higher. The maps are data. */
