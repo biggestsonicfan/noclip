@@ -266,7 +266,8 @@ function motionResolve(rom, address) {
  *
  * The finished game's table is the prototype's, carried over by name
  * (`rig.bodyMotionsLabel` says so); a body with no row there leads with its
- * hit reactions alone.
+ * hit reactions alone. A body that carries its own list (`played`, Dynamite
+ * Cop's cut-scene motions) leads with that where the game has no table.
  *
  * @param {object} rom loaded ROM set
  * @param {object} body from readBodies
@@ -275,7 +276,7 @@ function motionResolve(rom, address) {
  */
 export function bodyMotionList(rom, body, motions) {
     const fits = motions.filter((m) => m.joints === body.joints);
-    const table = rom.game.rig.bodyMotions?.[body.index];
+    const table = rom.game.rig.bodyMotions?.[body.index] ?? body.played;
     const own = new Set([...(table ?? []), ...body.hitMotions]);
     const lead = fits.filter((m) => own.has(m.index));
     const start = lead.findIndex((m) => m.index === body.start);

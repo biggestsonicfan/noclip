@@ -5099,6 +5099,9 @@ function dynamcopBuild({ id, name, low, high }) {
              * motion at `frames`, in the shared upper half, and the list of
              * hands that have turned models, 0x5B0 past `offsets`. */
             hands: { frames: 0x164a50, swaps: A.offsets + 0x5b0 },
+            /* No table of motions per character: the list leads with the
+             * ones the areas' cut scenes play (dynamcopSceneMotions). */
+            bodyMotionsLabel: 'Played in its cut scenes',
             /* The shadow pieces (dynamcopShadows): a table a character at
              * `tables`, each six pointers (one a player) to sixteen models,
              * one a joint; the joints that draw one at `joints`, how many at
