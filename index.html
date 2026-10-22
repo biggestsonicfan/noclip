@@ -668,6 +668,19 @@
         (the game rests them a random time at each end, left out here), the
         rest loop.
       </div>
+      <div class="note" id="anim-note-daytona" data-i18n="note.daytona" hidden>
+        The player's car: a body and four wheels, placed by code each frame
+        from the car's state (<code>0x78C8</code>). The body is turned by the
+        car's roll, heading and pitch; <code>0x7DA4</code> draws the wheels
+        from the places at <code>0x230D54</code>, the front two steered and
+        all four spun; the shadow is the body's outline squashed flat on the
+        ground. There is no motion data; what plays here is the attract
+        mode's recorded runs, one record a frame from the data ROM's
+        <code>D.K.</code> table: two cars on each course, their steering
+        from two runs of their own. The body is the one the draw picks from
+        <code>0x501488</code>; a linked cabinet's car carries its number
+        plate. <em>Root travel</em> drives the run, the camera following.
+      </div>
       <div class="note" id="anim-note-airwlkrs" data-i18n="note.airwlkrs" hidden>
         Every player has the same fifteen-joint skeleton, which is in the
         code (<code>0x214A0</code> for the legs, <code>0x21A70</code> for the
