@@ -14,7 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows } from './dynamcop.js';
+import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
@@ -150,6 +150,8 @@ const state = {
      * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
      * 0x10000 a turn; see poseVonRobot. */
     aim: { twist: 0, turn: 0, tilt: 0 },
+    /* What a Dynamite Cop character holds: 'own:k', 'item:k' or 'none'. */
+    held: 'none',
     /* Air Walkers: the player's pace (+0x16, 0x1000 = 1), which scales the
      * speed the motion's clock runs at; see airwlkrsSpeed. */
     pace: 0x1000,
@@ -3417,6 +3419,7 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     const body = shownBody(index);
     state.charIndex = body.char ?? body.index;
     state.character = body;
+    renderHeld(body);
     const m = state.motion;
     /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
      * are in its motion list with their inputs (fighterMotionList); the
@@ -4263,6 +4266,74 @@ function placeDynamcopShadows(holder, body, matrices) {
 }
 
 /*
+ * What a Dynamite Cop character holds (js/dynamcop.js dynamcopHeld): each
+ * model in its hand joint's matrix, moved and scaled in it as the board's
+ * joint routines do. `matrices` are the viewer's (z the board's negated).
+ */
+const DYNAMCOP_HELD_POOL = 2;
+
+function heldChoice(body) {
+    if (state.rom.game.rig?.kind !== 'dynamcop' || !body) return [];
+    const { items, own } = dynamcopItems(state.rom);
+    const [kind, k] = state.held.split(':');
+    if (kind === 'own') return own.get(body.index)?.[+k] ?? [];
+    if (kind === 'item') return items[+k] ? [items[+k]] : [];
+    return [];
+}
+
+function placeDynamcopHeld(holder, body, matrices, frame) {
+    if (state.rom.game.rig?.kind !== 'dynamcop') return;
+    if (holder.dcHeld?.rom !== state.rom) holder.dcHeld = { rom: state.rom, geoms: new Map() };
+    const { geoms } = holder.dcHeld;
+    const draws = [];
+    for (const { joint, model, offset, scale } of dynamcopHeld(body, heldChoice(body), frame)) {
+        if (!geoms.has(model)) {
+            const d = getModel(model);
+            geoms.set(model, d ? geomBundle(d) : null);
+        }
+        const e = matrices[joint];
+        if (!geoms.get(model) || !e) continue;
+        const x = [e[0], e[1], -e[2]], y = [e[4], e[5], -e[6]], z = [-e[8], -e[9], e[10]];
+        const t = [0, 1, 2].map((i) => [e[12], e[13], -e[14]][i] + x[i] * offset[0] + y[i] * offset[1] + z[i] * offset[2]);
+        draws.push({ model, r: [...x, ...y, ...z].map((v) => v * scale), t });
+    }
+    const usable = new Map([...geoms].filter(([, g]) => g));
+    placeEffectPool(holder, 'dcHeldPool', DYNAMCOP_HELD_POOL, usable, draws);
+}
+
+/* The Held list for this character: its own sets first, then every model
+ * the program puts in a hand. A new character starts on its own first set. */
+function renderHeld(body) {
+    const shown = state.rom.game.rig?.kind === 'dynamcop' && Boolean(body);
+    $('#held-field').hidden = !shown;
+    if (!shown) return;
+    const { items, own } = dynamcopItems(state.rom);
+    const sets = own.get(body.index) ?? [];
+    const name = (i) => (i.joint === 8 ? `${i.model}` : t('left {model}', { model: i.model }));
+    const options = [
+        ...sets.map((set, k) => [`own:${k}`, t('own: {models}', { models: set.map(name).join(' + ') })]),
+        ['none', t('None')],
+        ...items.map((i, k) => [`item:${k}`, t(i.joint === 8 ? 'model {model}, right hand' : 'model {model}, left hand', { model: i.model })]),
+    ];
+    if (state.heldBody !== body.index || !options.some(([v]) => v === state.held)) state.held = options[0][0];
+    state.heldBody = body.index;
+    const sel = $('#held-select');
+    sel.replaceChildren(...options.map(([v, label]) => new Option(label, v, false, v === state.held)));
+    noteHeld(body);
+}
+
+function noteHeld(body) {
+    const held = heldChoice(body);
+    const notes = [];
+    if (held.some((h) => h.joint === 8 && [0xb9d, 0xba5, 0xbab].includes(h.model))) {
+        notes.push(t('A pickup: the game draws it from frame 10 of its pickup action (0x38E), moved 0.05, -0.1 in the hand and 1.2 times the size.'));
+    } else if (held.some((h) => h.joint === 8) && [0x47, 0x48].includes(body.index)) {
+        notes.push(t('This character draws what it holds twice the size.'));
+    }
+    $('#held-note').textContent = notes.join(' ');
+}
+
+/*
  * Dead or Alive's shadows (js/doafighters.js poseDoaFighter): the pieces the
  * fight code drew with the frame, one a bone, on the floor.
  */
@@ -4518,6 +4589,7 @@ function poseBodyRig() {
     placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2', null, m.flash);
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
     placeDynamcopShadows(m, body, matrices);
+    placeDynamcopHeld(m, body, matrices, m.frame);
     placeDoaShadows(m, pose);
     placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeReflection(m, body, pose.pose);
@@ -5761,6 +5833,11 @@ function wireOptions() {
             poseRig();
         });
     }
+    $('#held-select').addEventListener('change', (e) => {
+        state.held = e.target.value;
+        noteHeld(state.character);
+        poseRig();
+    });
     for (const k of ['twist', 'turn', 'tilt']) {
         $(`#aim-${k}`).addEventListener('input', (e) => {
             state.aim = { ...state.aim, [k]: +e.target.value };
@@ -6179,6 +6256,8 @@ function applyGameFeatures() {
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
     $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
+    /* Dynamite Cop's characters hold guns and things (renderHeld, per body). */
+    $('#held-field').hidden = state.rom.game.rig?.kind !== 'dynamcop';
     /* And run the motion's clock at its speed times the player's pace. */
     $('#pace-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     $('#char-behind-field').hidden = !rival || !state.opponent;
