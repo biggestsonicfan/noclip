@@ -3672,9 +3672,13 @@ const vf2 = {
     /* js/vf2.js reads the records and draws them the way the board does. */
     /* One material table for every stage: 0x117F8 uploads the 32 slots at
      * 0x118F0 (the count and first slot are the two words before them). The
-     * light is per stage — see js/vf2.js. */
+     * light is per stage — see js/vf2.js — and the fighters take it too: in
+     * MAME's Colosseum fight each frame sends one light, the record's (length
+     * 1.2, or its lightning's 9999), to every draw. `vecter` is only for a
+     * model no stage is loaded under. */
     lighting: {
         vecter: [0xe000, 0xc000],
+        stageLit: true,
         materials: { at: 0x118f0, count: 32, stride: 4 },
     },
     stageTable: { vf2: { at: 0x6ee38, stride: 256, count: 16, ringSize: 8 }, flat: true },

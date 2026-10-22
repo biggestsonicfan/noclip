@@ -1337,14 +1337,41 @@ function modelFighter(idx) {
  */
 function applyStageShading(stage) {
     const u = state.viewer.material.uniforms;
+    applyStageLight(stage);
+    u.uTint.value.set(...(state.lutsPinned ? stage.tint : [1, 1, 1]));
+    u.uBright.value = stage.bright > 0 && stage.bright < 8 ? stage.bright : 1;
+}
+
+/* The stage record's light and material slots, without its trim. */
+function applyStageLight(stage) {
+    const u = state.viewer.material.uniforms;
     u.uLight.value.set(...stage.light);
     /* A light kept by the eye (stepEyeLight) is looked up afresh. */
     state.eyeLightAt = null;
     for (let i = 0; i < stage.materials.length; i++) {
         u.uMaterial.value[i].set(stage.materials[i].diffuse, stage.materials[i].ambient);
     }
-    u.uTint.value.set(...(state.lutsPinned ? stage.tint : [1, 1, 1]));
-    u.uBright.value = stage.bright > 0 && stage.bright < 8 ? stage.bright : 1;
+}
+
+/*
+ * The light a figure no scene of its own claims is drawn under: the game's one
+ * light where it keeps one, else the loaded stage's, which is what the board
+ * lights a fighter by in a fight. Set here rather than left to whatever the
+ * Stages tab put up last: a link that opens on another tab has drawn no stage,
+ * and its figures stood under the shader's placeholder light, every face at
+ * full ambient and no shading at all (issue 184). Virtua Fighter 2 keeps a
+ * light block for its material table, but lights by the stage (`stageLit`).
+ */
+function useFigureLight() {
+    const u = state.viewer.material.uniforms;
+    const stage = state.stages[state.stageIndex];
+    const lit = gameLighting(state.rom);
+    if (lit && !(stage && state.rom.game.lighting.stageLit)) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+        return;
+    }
+    if (stage) applyStageLight(stage);
 }
 
 /*
@@ -1366,12 +1393,7 @@ function useModelScene(idx, fighter = modelFighter(idx)) {
     if (!slots || slots[0] === SCENE_ANY) {
         u.uTint.value.set(1, 1, 1);
         u.uBright.value = 1;
-        /* A game that lights everything the same way needs no scene to say how. */
-        const lit = gameLighting(state.rom);
-        if (lit) {
-            u.uLight.value.set(...lit.light);
-            lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
-        }
+        useFigureLight();
         /*
          * Which sheets to stand a model on that no stage draws.
          *
@@ -2869,7 +2891,13 @@ function rebuildRig({ keepCamera = true } = {}) {
     u.uTint.value.set(1, 1, 1);
     u.uBright.value = 1;
     u.uFogDensity.value = 0;
-    useRomColorLuts(state.stages[state.stageIndex], c.charIndex);
+    /* They are lit by the stage's light, too. The sheets and the light are put
+     * up here from the loaded stage rather than left from the Stages tab, which
+     * a link straight to this tab never draws (issue 184). */
+    const stage = state.stages[state.stageIndex];
+    if (stage) useRomTexram(stage.texSets);
+    useFigureLight();
+    useRomColorLuts(stage, c.charIndex);
     u.uUseRamp.value = state.cxlat ? 1 : 0;
     v.scene.background = new THREE.Color(NEUTRAL_BG);
 
