@@ -324,7 +324,7 @@ function readRecord(rom, a) {
  * read and write besides it: the game's frame count, the scene, the robot's
  * record, and the pair and frames the draw takes (legs, upper body). */
 const OBJECT = 0x503ad0;
-const OBJ_ROBOT = 0x6c, OBJ_ACTION = 0x172;
+const OBJ_ROBOT = 0x6c, OBJ_ACTION = 0x172, OBJ_STATE = 0x170, OBJ_SECTOR = 0x188;
 const GAME_FRAME = 0x5024e8, SCENE = 0x503a00, ROBOT = 0x51ab14;
 const POSE_LEGS = 0x51ab08, POSE_UPPER = 0x51ab0c, POSE_LEGS_FRAME = 0x51ab10, POSE_UPPER_FRAME = 0x51ab12;
 /* A part's variant, a halfword of the object (the draws at 0x8DF3C, 0x8E28C
@@ -334,6 +334,13 @@ const VARIANTS = { legs: 0xda, body: 0xb6, weapon: 0xb2 };
 /* The record's routines: the one the draw calls first (0x33C40), which steps
  * the parts' variants, and the actions 42 and 41 call (0x32540, 0x324E0). */
 const ROBOT_PARTS = 0x434, ROBOT_WIN = 0x43c, ROBOT_LOSS = 0x440;
+/* The attack's routines (action 16, 0x2FB20) the record holds for a robot on
+ * the move, by the object's +0x170: 2 dashing (+0x3AC), 3 jumping (+0x3B4).
+ * The fight picks one of four by where its opponent is (+0x188, set from the
+ * angle at +0x102 at 0x36578-0x365E8). */
+const ATTACK = 16;
+const MOVING_ATTACKS = [['dash attack', 2, 0x3ac], ['jump attack', 3, 0x3b4]];
+const SECTORS = 4;
 /* 0x503A00 in a played fight (the attract's is 7): Temjin's loss and others
  * pose their parts only in it. */
 const FIGHT_SCENE = 12;
@@ -342,10 +349,12 @@ const FIGHT_SCENE = 12;
  * Run one of a robot's action routines as the fight does, a call a frame on
  * player 1's object, then its parts routine as the draw does. `choice` is
  * what the game's random draw (rig.random) answers: a win picks one of two
- * pairs by it on its first frame. Returns per frame the pair, the frames and
- * each part's variant.
+ * pairs by it on its first frame. `state` and `sector` start the object's
+ * +0x170 and +0x188; with `state`, the run lasts until the routine moves the
+ * object out of it or out of the action. Returns per frame the pair, the
+ * frames and each part's variant.
  */
-function runVonAction(rom, body, routine, action, { choice = 0, scene = FIGHT_SCENE, frames = 0, maxSteps = 200_000 } = {}) {
+function runVonAction(rom, body, routine, action, { choice = 0, scene = FIGHT_SCENE, frames = 0, state = 0, sector = 0, maxSteps = 200_000 } = {}) {
     const ram = new Uint8Array(RAM_SIZE);
     const rv = new DataView(ram.buffer);
     const copro = new Copro(new Set());
@@ -355,6 +364,8 @@ function runVonAction(rom, body, routine, action, { choice = 0, scene = FIGHT_SC
     const u32 = (a) => rv.getUint32(a - RAM_BASE, true), u16 = (a) => rv.getUint16(a - RAM_BASE, true);
     put(OBJECT + OBJ_ROBOT, body.root);
     rv.setUint16(OBJECT + OBJ_ACTION - RAM_BASE, action, true);
+    rv.setUint16(OBJECT + OBJ_STATE - RAM_BASE, state, true);
+    rv.setUint16(OBJECT + OBJ_SECTOR - RAM_BASE, sector, true);
     put(ROBOT, body.root);
     put(SCENE, scene);
     const parts = rom.mainCpuView.getUint32(body.root + ROBOT_PARTS, true);
@@ -368,7 +379,11 @@ function runVonAction(rom, body, routine, action, { choice = 0, scene = FIGHT_SC
             legsFrame: u16(POSE_LEGS_FRAME), upperFrame: u16(POSE_UPPER_FRAME),
             variants: body.parts.map((p) => (p.list === 'base' ? 0 : u16(OBJECT + VARIANTS[p.list] + 2 * p.joint))),
         });
-        if (!frames) frames = readRecord(rom, out[0].legs)?.frames ?? 1;
+        if (state) {
+            if (u16(OBJECT + OBJ_STATE) !== state || u16(OBJECT + OBJ_ACTION) !== action) break;
+            if (f >= 1000) return null;
+            frames = f + 2;
+        } else if (!frames) frames = readRecord(rom, out[0].legs)?.frames ?? 1;
     }
     return out;
 }
@@ -427,14 +442,24 @@ export function readVonMotions(rom, bodies) {
                 view: rom.mainDataView,
             });
         }
-        for (const [name, routine, action, opts] of [
+        const runs = [
             ['win 1', ROBOT_WIN, 42, { choice: 0 }],
             ['win 2', ROBOT_WIN, 42, { choice: 1 }],
             ['loss', ROBOT_LOSS, 41, {}],
-        ]) {
+        ];
+        for (const [name, state, routine] of MOVING_ATTACKS) {
+            for (let sector = 0; sector < SECTORS; sector++) runs.push([`${name} ${sector}`, routine, ATTACK, { state, sector }]);
+        }
+        /* A routine that ignores the sector plays the same run for each:
+         * one is kept. */
+        const played = new Set();
+        for (const [name, routine, action, opts] of runs) {
             const at = dv.getUint32(body.root + routine, true);
             const script = at ? runVonAction(rom, body, at, action, opts) : null;
             if (!script) continue;
+            const key = `${at}:${script.map((s) => [s.legs, s.upper, s.legsFrame, s.upperFrame, ...s.variants].join()).join(';')}`;
+            if (played.has(key)) continue;
+            played.add(key);
             const upper = readRecord(rom, script[0].upper), legs = readRecord(rom, script[0].legs);
             if (!upper || !legs) continue;
             out.push({
