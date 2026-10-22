@@ -895,7 +895,10 @@ explorer draws those, as MAME does. **mirrored** plays the motion the other
 way round, as the game plays many of them, the hands swapped with the arms.
 **Head turn** turns the head as the game turns it toward the play, in the
 motions that let it (58 of them, the attract's two most played among them);
-with the turn MAME's frames had, the joints match MAME's head included. See
+with the turn MAME's frames had, the joints match MAME's head included. The
+game doesn't blend one motion into the next: in MAME a new motion starts at
+its first frame, as here, and the blend routine the program has is never
+called. See
 [Air Walkers' players](TECHNICAL.md#air-walkers-players-jsairwlkrsjs).
 
 The **Cells** tab has the game's 492 pictures: the AIR and WALKERS title
