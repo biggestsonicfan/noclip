@@ -4589,6 +4589,25 @@ callback, and the zebra's figure 1 repeats while it rests, which hides a
 frame's slip on it alone. The zebra's keys ran 0-59, held, then 59 down to 1
 and 0, held: the explorer's swing without the random rests.
 
+**The flags.** The desert's start line has eight flags, class 17 (Flag;
+0x5E4550 init, 0x5E4380 per frame). They are not figures: each frame draws
+one whole model, `table[+0x64]`, from 0x5E3B90 (models 321-395, a red R&D AM3
+cloth) while the variant +0x5C is 0, or 0x5E3CC0 (396-470, a blue one)
+otherwise, at the object's place (+0x18) turned by its heading (+0x28). Then
++0x64 goes up one and back to 0 past 0x4A, so the waving loops every 75
+frames; the init starts it at `rand & 0x3F`. Both tables end in a 0. The
+object records are the course's list at 0x5DE190[course] (0x20 bytes each,
+ended by 99999), and their class field is one more than the class used here:
+the creator, 0x5DE220, reads the handler at 0x5DDFC0[+4 & 31]. The desert's
+list has the eight flags at x -364 and -374, alternately variant 0 and 1, all
+mode +0x60 = 0, which draws only while the race is on (0x202230 = 0, 0x217184
+bit 2 clear, 0x202098 not 2): the attract mode runs the handler and never
+draws them, so +0x64 stays put. Graded with breakpoints at the two model
+loads (0x5E4498, 0x5E44EC) on MAME, a championship started from two credits:
+all eight flags, 4,497 draws each, every one table[+0x64] with +0x64 one up
+on the draw before. The Animation tab lists them as `red AM3 flag` and `blue
+flag`, each playing its table.
+
 ### Dynamite Cop (`js/dynamcop.js`)
 
 All five builds share the data, polygon and texture chips and the program's
