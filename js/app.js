@@ -4593,6 +4593,7 @@ function poseBodyRig() {
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
     placeExtras(m.extras, body, extras ?? [], null, m.flash, pose.shown);
+    followRoot(m, pose.follow);
 
     placeSkin(m, matrices, m.flash);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
@@ -4618,6 +4619,23 @@ function poseBodyRig() {
         a.needsUpdate = true;
         m.skeleton.visible = state.showSkeleton;
     }
+}
+
+/* A rig whose root goes a long way (Sega Rally's cars along a recorded run)
+ * names the place to keep in view, and the camera and its orbit target move
+ * with it, so the car stays where it was on screen and can still be orbited.
+ * With none the root is at the origin, so the camera comes back with it. */
+const FOLLOW_STEP = new THREE.Vector3();
+function followRoot(m, at = [0, 0, 0]) {
+    const was = m.followAt ?? [0, 0, 0];
+    m.followAt = at;
+    FOLLOW_STEP.set(at[0] - was[0], at[1] - was[1], at[2] - was[2]);
+    if (!FOLLOW_STEP.lengthSq()) return;
+    const v = state.viewer;
+    v.camera.position.add(FOLLOW_STEP);
+    v.orbit.target.add(FOLLOW_STEP);
+    v.fly.syncFromCamera();
+    v.orbit.update();
 }
 
 /* Air Walkers plays a motion backward when its step says so (+0xEC): the clock
