@@ -797,11 +797,14 @@ Jaguarandi, each built from its own record's lists of parts: the legs, the
 upper body and the weapon in its hand, in player one's colours. Each plays the
 motions its record lists, 89 to 97 of them. A motion is a pair, one for the
 upper body and one for the legs, and the game gives them numbers, not names.
-The pose matches the matrices MAME's board draws Temjin with in the attract
-mode. Not shown yet: Zig-Raht, the boss, which another routine draws; the
-motions the robots' action code keeps in tables of its own (the ranking
-screen's pose among them); and the turns the fight gives the upper body and
-the weapon as a robot aims. See
+The **Aim** sliders give the turns the fight adds as a robot aims: the upper
+body twisted on the waist, and the weapon turned and tilted toward the
+opponent (Fei-Yen's and Bal-Bas-Bow's weapons do not turn; Fei-Yen holds hers
+a little higher). The pose matches the matrices MAME's board draws in the
+attract mode, in played fights and with twists and tilts fed to the board's
+own draw. Not shown yet: Zig-Raht, the boss, which another routine draws; and
+the motions the robots' action code keeps in tables of its own (the ranking
+screen's pose among them). See
 [TECHNICAL.md](TECHNICAL.md#virtual-ons-robots-readvonbodies-in-jsvonjs).
 
 The **Cells** tab has the 2D art, 119 pictures: the title logos, the SEGA

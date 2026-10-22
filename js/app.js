@@ -146,6 +146,10 @@ const state = {
     /* Air Walkers: the head's turn toward the play, its turn and tilt
      * (+0xC6, +0xC8) in 0x10000 a turn; see airwlkrsHeadTurn. */
     headTurn: [0, 0],
+    /* Virtual-On: the aim the fight gives a robot, the upper body's twist on
+     * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
+     * 0x10000 a turn; see poseVonRobot. */
+    aim: { twist: 0, turn: 0, tilt: 0 },
     /* Air Walkers: the player's pace (+0x16, 0x1000 = 1), which scales the
      * speed the motion's clock runs at; see airwlkrsSpeed. */
     pace: 0x1000,
@@ -3733,9 +3737,10 @@ function poseFighterAndRival(body, m) {
     const mirrored = state.mirrored && ['vf2', 'airwlkrs'].includes(state.rom.game.rig?.kind);
     const handsPass = playedOver(m);
     const head = state.rom.game.rig?.kind === 'airwlkrs' ? state.headTurn : null;
+    const aim = state.rom.game.rig?.kind === 'von' ? state.aim : null;
     const backward = playsBackward();
     const clock = m.clocks ? m.clock : null;
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock });
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -4436,12 +4441,21 @@ function noteHeadTurn(motion) {
     if ($('#head-note').textContent !== text) $('#head-note').textContent = text;
 }
 
+/* Fei-Yen's and Bal-Bas-Bow's records keep the weapon still (+0x484 is 0):
+ * only the twist turns them. */
+function noteAim(body) {
+    if (state.rom.game.rig?.kind !== 'von') return;
+    const text = body && !body.aims ? t('This robot\'s weapon does not turn with the aim: its record\'s +0x484 is 0.') : '';
+    if ($('#aim-note').textContent !== text) $('#aim-note').textContent = text;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
     m.flash = flashMaterial(state.rom, m.decoded, m.frame);
     noteHeadTurn(m.decoded);
+    noteAim(body);
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
@@ -5699,6 +5713,13 @@ function wireOptions() {
             poseRig();
         });
     }
+    for (const k of ['twist', 'turn', 'tilt']) {
+        $(`#aim-${k}`).addEventListener('input', (e) => {
+            state.aim = { ...state.aim, [k]: +e.target.value };
+            $(`#aim-${k}-val`).textContent = `${(+e.target.value * 360 / 0x10000).toFixed(1)}°`;
+            poseRig();
+        });
+    }
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
         $('#char-behind-field').hidden = !state.opponent;
@@ -6108,6 +6129,8 @@ function applyGameFeatures() {
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
+    /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
+    $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
     /* And run the motion's clock at its speed times the player's pace. */
     $('#pace-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     $('#char-behind-field').hidden = !rival || !state.opponent;
