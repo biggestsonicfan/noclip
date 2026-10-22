@@ -902,8 +902,9 @@ pose already differs there. Not drawn yet:
 the blend between two motions, and character 79's own shadow. Character 79,
 a red bird, has a skeleton routine of its own; the explorer runs it and
 poses the bird in its twelve motions, matching MAME within 0.04°.
-Character 75 (another skeleton) is left out, and character 80 shows
-nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
+Character 75, a chain of nine red links, has its own skeleton routine too;
+the explorer poses it in its ten motions, with a flat shadow piece under
+each link, matching MAME within 0.015°. Character 80 shows nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 
 Tick **music** and an area starts with the song its descriptor names, as
 the game starts it; the **song** list has all thirty of the song table, by

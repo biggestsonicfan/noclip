@@ -4874,6 +4874,41 @@ distances. All five builds give the same matrices. Not done: 0x17950 also
 draws each part flattened through 0x54ECF0 with 0x9AA50, the bird's own
 shadow; the standard shadows, hands and held items are off for it.
 
+**Character 75, the chain** (`dynamcopChainBody`). Its skeleton routine is
+0x17FD0 (g0 the object, g1 the chain, 0 or 1), not the bird's 0x16D64 or
+0x179A0. The record is 0x5430B0 + 0x2CC * g1: motion +0x2C, frame +0x30, and
+the frame pointer +0x2C4. It turns by the frame's first three halfwords
+(copro 0x32), then nine times: move by the char's next offset (0xE1890[75],
+0x12), turn by the next three halfwords (0x32), and read the matrix back to
++0x48 + 0x30 * j. There is no push or pop, so it is a plain chain of ten parts,
+link j on link j-1, and `poseBody` poses it as it is. Frames are 72 bytes:
+ten angle triples and the root's three floats.
+
+Two callers. sub_23D40 (spawned by 0x23F30 with char 0x4B and +0x56 bit 3)
+runs motion 2245, moves by the frame's root, runs 0x17FD0 for chain 0 and
+draws models 8039, 8037 ... 8025, 8024 (0xE0260[75]) on the links, with no
+shadow. An enemy whose +0x56 has bit 3 runs sub_184D0 from its handler: two
+chains, each pushed, moved to (+-0.75, 0.19, 0.75) (0xBECF0) on the body and
+turned by 0x5430C4 (copro 0x14) and 0x5430C0 (0x15). sub_187E0 then draws
+them, and the shadow under each link: 0x54ECF0, then the link's matrix, then
+piece k of ED140[75][+0xBC] (7909 down to 7901), the same push, multiply and
+pop as the standard shadows. The explorer shows one chain at the root, with
+its shadows. The pieces' texture is on sheet 1 and comes out pale; its colour
+was not checked against MAME.
+
+The action table 0x1B70A0 (36 bytes an entry, motion at +8) names motions
+2245-2257 for char 75. With the chain in `readMotions`, 2245-2250, 2252 and
+2254-2256 fit ten joints, and no other motion changed its joint count. 2251
+and 2253 have 16 joints, and 2257, the last motion, does not fit. 0x17DB0
+blends one frame when the motion changes; the explorer does not.
+
+Graded with a MAME hijack (break at 0x15210, set the object's +0xDC to 0x4B
+and the record's +0x2C4 to the frame, run 0x17FD0 with g1 = 0, save
++0x48..+0x1F8 at its `ret`): 70 frames of the ten motions, up to 180° from a
+straight chain, worst 0.014° in relative link turns and 2.7e-6 in link
+distances. The root's own turn is not covered, since everything is measured
+between links. All five builds read the same chain, motions and shadows.
+
 ### Fighting Vipers' cells (`js/cells.js`)
 
 Sonic The Fighters' two tables a year earlier, at the addresses the stage sky

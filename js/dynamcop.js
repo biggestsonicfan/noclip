@@ -413,11 +413,34 @@ const DYNAMCOP_PARENTS = [-1, 0, 1, 1, 3, 4, 1, 6, 7, 0, 9, 10, 11, 9, 13, 14];
  */
 const DYNAMCOP_FLAT = { 5: 2, 8: 4, 12: 1, 15: 1 };
 
-/* The skeletons that are not this one: character 75's table is not sixteen
- * offsets, and 79 has a routine of its own (dynamcopQuadBody). */
-const DYNAMCOP_OTHER_SKELETONS = new Set([75, 79]);
-
 const DYNAMCOP_NAMES = ['Bruno Delinger', 'Jean Ivy', 'Eddie Brown'];
+
+/*
+ * Character 75 is a chain of nine links, posed by sub_17FD0 (g0 the object,
+ * g1 which of two chains): the record at 0x5430B0 + 0x2CC * g1 holds the
+ * motion (+0x2C), its frame (+0x30) and the frame's address (+0x2C4). The
+ * routine turns by the frame's first three halfwords (copro 0x32), then for
+ * each link moves by the next of the nine offsets at rig.bodies.offsets[75]
+ * (0x12), turns by the next three halfwords, and reads the matrix back to
+ * the record's +0x48 + 0x30 * link. No push or pop: each link hangs off the
+ * one before. Its frames are ten joints', 72 bytes, the root last
+ * (motions 2245-2250, 2252 and 2254-2256, the ones the action table at
+ * 0x1B70A0 names for it).
+ *
+ * Two routines draw it. sub_23D40 (the task sub_23F30 starts) moves by the
+ * frame's root (+0x3C), poses chain 0 on motion 2245 and draws the nine
+ * models at rig.bodies.models[75], link by link. sub_187E0, for the enemy
+ * that carries two (its skeleton, sub_184D0, steps out to each from the
+ * object by the offsets at 0xBECF0 and turns it by the record's +0x10 and
+ * +0x14 first), also lays a shadow under each link: the matrix at 0x54ECF0,
+ * then the link's, then the link's piece from the shadow table, nine of them.
+ */
+const CHAIN = 75;
+const CHAIN_LINKS = 9;
+
+/* The skeletons that are not this one: 75 is a chain (dynamcopChainBody)
+ * and 79 has a routine of its own (dynamcopQuadBody). */
+const DYNAMCOP_OTHER_SKELETONS = new Set([CHAIN, 79]);
 
 /**
  * Every character in the program's two parallel tables, as bodies.js bodies.
@@ -438,6 +461,7 @@ export function readDynamcopBodies(rom) {
     const out = [];
     for (let i = 0; i < B.count; i++) {
         if (i === QUAD && rom.game.rig.quad) out.push(dynamcopQuadBody(rom, i));
+        if (i === CHAIN) out.push(dynamcopChainBody(rom, i));
         if (DYNAMCOP_OTHER_SKELETONS.has(i)) continue;
         const skel = dv.getUint32(B.offsets + i * 4, true);
         const list = dv.getUint32(B.models + i * 4, true);
@@ -473,6 +497,40 @@ export function readDynamcopBodies(rom) {
         });
     }
     return out;
+}
+
+function dynamcopChainBody(rom, i) {
+    const B = rom.game.rig.bodies;
+    const dv = rom.mainCpuView;
+    const skel = dv.getUint32(B.offsets + i * 4, true);
+    const list = dv.getUint32(B.models + i * 4, true);
+    const parts = Array.from({ length: CHAIN_LINKS + 1 }, (_, j) => {
+        const at = skel + (j - 1) * 12;
+        return {
+            index: j,
+            parent: j - 1,
+            depth: j,
+            model: j ? dv.getUint32(list + (j - 1) * 4, true) : 0,
+            offset: j ? [dv.getFloat32(at, true), dv.getFloat32(at + 4, true), -dv.getFloat32(at + 8, true)] : [0, 0, 0],
+            flags: 0,
+            flatBits: 0,
+            joint: j,
+            record: skel,
+        };
+    });
+    return {
+        index: i,
+        name: `character ${i}`,
+        joints: CHAIN_LINKS + 1,
+        chain: true,
+        scale: 1,
+        roles: [],
+        skin: -1,
+        hitMotions: [],
+        start: -1,
+        root: skel,
+        parts,
+    };
 }
 
 /*
@@ -670,7 +728,7 @@ function handSwap(rom, base) {
  */
 export function dynamcopHands(rom, body, motion, frame) {
     const H = rom.game.rig.hands;
-    if (!H || !motion || body.quad) return [];
+    if (!H || !motion || body.quad || body.chain) return [];
     const out = [];
     for (const [joint, side] of [[5, 0], [8, 1]]) {
         const t = handTable(rom, rom.mainCpuView.getUint32(H.frames + motion.index * 8 + side * 4, true));
@@ -732,6 +790,10 @@ export function dynamcopShadows(rom, body, variant = 0) {
     const table = shadowTable(rom, body, variant);
     if (!table) return [];
     const dv = rom.mainCpuView;
+    /* Character 75's table is one piece a link, in link order (sub_187E0). */
+    if (body.chain) {
+        return Array.from({ length: CHAIN_LINKS }, (_, k) => [k + 1, dv.getUint32(table + k * 4, true)]).filter(([, m]) => m);
+    }
     const count = dv.getUint32(S.count, true);
     const out = [];
     for (let i = 0; i < Math.min(count, 16); i++) {
@@ -864,7 +926,7 @@ export function dynamcopItems(rom) {
  */
 export function dynamcopHeld(body, held, frame) {
     const out = [];
-    if (body.quad) return out;
+    if (body.quad || body.chain) return out;
     for (const { joint, model } of held) {
         if (joint === 8 && PICKUPS.has(model)) {
             if (frame - 1 > PICKUP_AFTER) out.push({ joint, model, offset: PICKUP_OFFSET, scale: PICKUP_SCALE });
