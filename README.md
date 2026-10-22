@@ -861,8 +861,9 @@ the joint positions MAME's RAM holds for the same motion and frame, and the
 heroes' outfits match MAME's screen. The motions are the same in all five
 builds; the character tables were found in each. The hands open, close and
 turn frame by frame as the game picks them, matching every hand MAME drew in
-the attract and two played runs. Not drawn yet: the extra models some joints
-carry (the guns and items held, belts and pads),
+the attract and two played runs. Each character's shadow is drawn as the
+game draws it: ten flat pieces on the floor, each under a limb, and the same
+models MAME drew. Not drawn yet: the guns and items held,
 mirrored motions and the blend between two motions. Character 80 shows
 nothing. See [TECHNICAL.md](TECHNICAL.md#dynamite-cops-characters-readdynamcopbodies-in-jsdynamcopjs).
 

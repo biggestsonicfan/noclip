@@ -4635,8 +4635,8 @@ frame, indexed by the object's frame from 0 (+0x2C8). Only its top five bits
 are read: n = h >> 11, r = n for joint 8 and 32 - n for joint 5. 0x7F0A0
 looks the part's model up in a list of {base, alt} words ending with -1
 (offsets + 0x5B0: 0xE1E40 in dynamcop, 0xE1E30 in dyndeka2, 0xD0430 in
-dyndeka2b; dynamcopb and dynamcopc by the same distance, their ROMs were not
-at hand). A model not listed is drawn as it is; otherwise r <= 0 or r > 23
+dyndeka2b, 0xD0440 in dynamcopb, 0xF2810 in dynamcopc; the same 32 pairs in
+all five). A model not listed is drawn as it is; otherwise r <= 0 or r > 23
 draws alt, r <= 15 alt + r and the rest base. Bruno's hands 18 and 19 turn to
 20 and 36, Jean's 226 and 227 to 228 and 244, Eddie's 355 and 356 to 357 and
 373; the models after alt are the glove opened and flat. 96 motions
@@ -4653,8 +4653,46 @@ distances differ by 0.016 at the median (90% under 0.05, on a body 1.3 tall)
 in the 2333 samples where the frame moves; 2056 matches to 0.000. At frame 0
 the game is still blending out of the motion before, which is not drawn.
 
-Not done: the extra models some joints carry (0xED140 / 0xED2C0, on joints 1,
-3, 4, 6, 7, 9-11, 13, 14), the guns and items held (the hand is drawn, not
+**The shadows** (`dynamcopShadows`, drawn by `placeDynamcopShadows` in
+js/app.js). After the parts, the draw routine 0x197E0 calls 0x19B70 unless the
+object's +0x54 has bit 5. It multiplies by the matrix at 0x54ECF0, then for each
+joint in the list at 0xED2C0 (10 long, the count at 0xED2E8: joints 1, 3, 4,
+6, 7, 9, 10, 11, 13 and 14) it pushes the joint's matrix (+0x6A4) and draws
+`table[joint]` with 0x9A980. The table is `t[+0xBC]` (`t[0]` above 5), where
+`t = 0xED140[char]`: six tables of 16 models per character. +0xBC is a hero's
+player number, or an enemy's spawn record's +0x18 (0x1F130), so it picks one
+of six copies of the pieces, each with its own textures. Bruno's first copy
+is 1666-1675. The matrix at 0x54ECF0 is set once: 0xA6850 stores the angles
+0x4000 and 0, and 0xA68D0 builds diag(1, 0, 1) from them, with no
+translation. Nothing else writes it. So each piece is its joint's matrix with
+world y set to 0: the joint laid flat on the floor, lit from straight above.
+The view does the same to the posed joints. It always uses the first copy;
+the view has no player or spawn record to pick another.
+Each build loads its own addresses: tables 0xED140 (dynamcop), 0xED130
+(dyndeka2), 0xFA400 (dynamcopb), 0xFA3F0 (dyndeka2b) and 0xFD860 (dynamcopc).
+In every build the joint list is the tables + 0x180 and the count + 0x1A8. All
+five builds' tables were read and found the same.
+
+Checked against MAME. Breakpoints on 0x19B70 and 0x19ACC logged every shadow
+draw. Every frame, a frame-done hook read each drawn object's 16 matrices,
+character, motion and frame, and the matrix at 0x54ECF0. The runs were the
+attract (frames 100-12000) and a coined run (to 20000):
+
+- 0x54ECF0 held diag(1, 0, 1) in all 72279 object frames.
+- In 800 random samples, `dynamcopShadows` gave the joints and models MAME drew
+  in 799. The other one was cut off when its log ended.
+- In the 410 samples whose posed joints match MAME's to 1 cm (296 of them
+  away from the motion's first frames), the flattened pieces agree to 0.0085
+  in position. Their axes agree to 0.035 (one sample at 0.11, Jean's joint 4),
+  after one turn about y fits each body to MAME's.
+- In the other samples, the whole pose already differs (characters 27, 45 and
+  the played hero). That is the blend and the game's own turns, not the
+  shadow.
+
+MAME's picture with the 0x19B70 call patched out differs from the normal one
+by exactly the floor shadows (frames 3300, 4800 and 5400).
+
+Not done: the guns and items held (the hand is drawn, not
 what it holds), the mirror flag at object +0xCD8, the blend between motions, and which motions
 each character plays (lists from 0x1B70A8). Only the three heroes are named.
 Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
