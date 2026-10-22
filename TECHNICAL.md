@@ -5352,7 +5352,7 @@ pairs in tables of its own, between 0x42460 and 0x4FFFF (865 different
 pairs; the one Temjin is on at the attract's frame 2400 is at 0x46950, an
 action indexed by the object's +0x188). Telling which robot plays them
 means following each robot's action routines, so they are not listed, but
-for the wins and losses.
+for the wins, the losses and the attacks on the move.
 
 **Wins and losses.** The object's +0x172 is its action, dispatched at
 0x33B0C through the table at 0x32560 (16 bytes an action). Action 41 is the
@@ -5407,6 +5407,44 @@ What is left out:
   8 meshes and 4 variants that miss;
 - Viper II's thrusters in its win, which its routine draws itself
   (0x6ECE0).
+
+**Attacks on the move.** Action 16 (0x2FB20) is the attack. On the ground
+it plays the record's listed pairs (+0xB8/+0xBC, 8 bytes a sector), but
+when the object is moving it calls a routine the record holds, chosen by
+the object's +0x170: +0x3AC while dashing (2, the state that leaves the
+ground trail), +0x3B4 while jumping (3), +0x3C4 and +0x3BC for 4 and 5.
+The routine picks its pairs by +0x188, one of four sectors from the angle
+to the opponent at +0x102 (0x36578-0x365E8: 0x1001-0x2000 is 2,
+0x2001-0x6000 is 1, 0x6000-0x6FFF is 3, the rest 0). Temjin's dash attack
+(0x4A990) reads 0x46950, 24 bytes a sector: phase 0 plays the first pair,
+phase 1 repeats while fire is held (+0x141, +0x1DE), then the third pair;
+at its end it sets +0x170 back to 1. None of these pairs is among the
+record's +0x70 pairs. Raiden's jump attack table (0x46E20) holds the same
+records as Belgdor's (0x47660); the game shares them.
+
+`runVonAction` takes the state and sector, sets +0x170 and +0x188 after
+the action's entry, and runs the routine while the object stays in that
+state and action. The Animation tab lists `dash attack 0`-`3` and `jump
+attack 0`-`3` for every robot (72 runs of 29 to 80 frames; Temjin's dash
+attack is 63 frames, his jump attack 43). States 4 and 5 are not listed: no
+run showed them.
+
+Checked against MAME (`vonj`): the attract (20000 frames), and the attract
+again with Belgdor and Dorkas written into the robot choice (0x503A98,
+0x503A9C) every frame, logged each frame's object and 0x51AB08-0x51AB12.
+Each attack frame was stepped from MAME's object of the frame before. Of
+1408 frames (Temjin, Viper II, Raiden, Fei-Yen, Apharmd and Bal-Bas-Bow,
+both attacks) 1378 match the pair and both frames, and every part variant
+of those frames matches. Of the 30 others, 23 are frames where MAME's frame
+callback straddles a game frame (every 30th) and 7 are first frames, where
+the action's entry (0x365EC clears +0x17A) ran before the routine. With
+Belgdor and Dorkas 768 of 789 frames match; the 21 others are on the same
+pair, one frame off. 19,892 of 19,968 variants match; the 76 others are
+the body's part 6 cycling 2-5 every frame, which the attack routine does
+not write. The 23 attract attacks that started from frame 0 follow the
+tab's runs frame for frame until they are cut off, the fire is held or the
+straddle; most attacks there start part-way, from a counter carried over.
+Jaguarandi never attacked on the move in either run.
 
 **The pose.** Every part is drawn at `T(offset) Rz Ry Rx` of its frame
 entry (copro 0x2F, then 0x16, 0x15, 0x14), each in a push and pop:
