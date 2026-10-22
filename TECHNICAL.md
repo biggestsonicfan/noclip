@@ -4546,6 +4546,49 @@ MAME, fresh, always shows the first table entry.
 The flat crowds (class 3, 0x5CA580, draw 0x5CA420) are single billboard
 models from the table at 0x5CA210 indexed by object +0x5C, and are not jointed.
 
+**The animals.** The desert's animals are figures in the same record layout,
+drawn by a second routine, 0x5C70D0 (ROM 0x280D0; g0 record, g1 key, g2
+step, g3 mode). Each part sends its place (function 0x27), then +0x0C as
+function 0x34, +0x0E as 0x33 and +0x10 as 0x32, each between a push and a
+pop, and the model header from the table at 0x2864B40 goes straight to the
+geometry FIFO. Mode 0 loops back to key 0, mode 1 swings back as the people
+do (the next key becomes 1 - keys, read by its size), anything else stops on
+the last key. The handlers are classes of the table at 0x5DDFC4, whose class
+names follow it:
+
+| Class | Name | Per frame | Records (RAM) | Keys, parts | Models | Mode |
+|---|---|---|---|---|---|---|
+| 0 | Zebra | 0x5E29D0 | 0x5E2890 | 60, 24 | 1061-1084 | swing, rests rand & 0x17F |
+| | | | 0x5E2900 | 120, 3 | 1085-1087 | swing, rests rand & 0xFF |
+| 1 | Ostrich | 0x5E2B70 | 0x5E2920 | 60, 13 | 1097-1109 | loop |
+| 2 | Bird1 | 0x5E2EA0 | 0x5E2830 hop, 0x5E2860 peck | 21, 1; 32, 1 | 283 | loop |
+| | | | 0x5E2840 flying | 7, 5 | 279-283 | loop |
+| 4 | Elephant | 0x5E32D0 | 0x5E2960 | 180, 25 | 1110-1134 | loop |
+| 8 | Bird2 | 0x5E3590 | 0x5E2870 | 40, 5 | 1501-1505 | loop |
+
+Every handler pushes, moves to the object's place (+0x18) and turns by its
+heading (+0x28, function 0x2A). Bird1 adds pi to the heading and picks the
+record by its state (+0x60); the elephant first draws model 118 0.1 up;
+Bird2 scales by 0.3 (function 0x28) after the heading.
+
+Measured on MAME's attract, frames 2820-3440, with the geometry-buffer tap
+the people were graded with, a car's body matrix (0x5C2DCC) to solve the
+camera, and each handler's object read at its entry: every part's matrix,
+taken back through the camera and T(+0x18) · Ry(-heading), is
+T(place) · Rz(-h0C) · Ry(-h0E) · Rx(-h10) on the board's axes, to 1e-4 in
+the translation and 0.001 degrees in the rotation, on every key the run
+reached (all of them but 0x5E2900's and 0x5E2960's, which were sampled every
+seventh), with parts turned up to 180 degrees from rest. In the viewer's
+axes that is Rz(-h0C) · Ry(h0E) · Rx(h10). The attract draws only the zebra
+and Bird1. The other records were drawn by changing g0 and g1 at the
+zebra's second call on alternate frames, so they were measured in the
+zebra's frame; Bird2's 0.3 and the elephant's model 118 are read from the
+code, not measured. Two things to know when tapping: a game frame straddles
+MAME's frame callbacks, so group the calls by the car's draw, not by the
+callback, and the zebra's figure 1 repeats while it rests, which hides a
+frame's slip on it alone. The zebra's keys ran 0-59, held, then 59 down to 1
+and 0, held: the explorer's swing without the random rests.
+
 ### Dynamite Cop (`js/dynamcop.js`)
 
 All five builds share the data, polygon and texture chips and the program's

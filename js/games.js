@@ -4939,10 +4939,35 @@ const srallyc = {
         cars: { table: 0x23780, count: 12, ramBase: 0x59f000, names: RALLY_CARS },
         /* The attract mode's recorded runs (readRallyRuns). */
         runs: { list: RALLY_RUNS },
+        /* The desert's animals, figures drawn by 0x5C70D0 (see the animals in
+         * js/srally.js): the figure records each handler names, as RAM
+         * addresses. A body is what one handler draws at once, a motion one
+         * thing it plays; `swing` for the figures it plays there and back. */
+        animals: {
+            ramBase: 0x59f000,
+            bodies: [
+                { name: 'zebra', figures: [0x5e2890, 0x5e2900] },
+                { name: 'ostrich', figures: [0x5e2920] },
+                { name: 'bird', figures: [0x5e2830] },
+                { name: 'bird, flying', figures: [0x5e2840] },
+                { name: 'elephant', figures: [0x5e2960], extra: [{ model: 118, place: [0, 0.1, 0] }] },
+                { name: 'small bird', figures: [0x5e2870], scale: 0.3 },
+            ],
+            motions: [
+                { name: 'zebra', body: 'zebra', figures: [0x5e2890, 0x5e2900], swing: true },
+                { name: 'ostrich', body: 'ostrich', figures: [0x5e2920] },
+                { name: 'bird hopping', body: 'bird', figures: [0x5e2830] },
+                { name: 'bird pecking', body: 'bird', figures: [0x5e2860] },
+                { name: 'bird flying', body: 'bird, flying', figures: [0x5e2840] },
+                { name: 'elephant', body: 'elephant', figures: [0x5e2960] },
+                { name: 'small bird', body: 'small bird', figures: [0x5e2870] },
+            ],
+        },
     },
     /* The courses but not the cars' placement on them, nor the trackside
      * objects. The cars are bodies whose wheels turn as 0x5C2A80 turns them,
-     * playing the attract mode's recorded runs. */
+     * playing the attract mode's recorded runs; the animals play their
+     * figures as 0x5C70D0 does. */
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
