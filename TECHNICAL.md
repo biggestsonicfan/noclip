@@ -5787,25 +5787,82 @@ frame.
 
 | Table | Parts | Frames | What it shows | Played by |
 |---|---|---|---|---|
-| 0x4770 | 33 | 65 | crane with a sled | attract, 0xE47AC |
+| 0x4770 | 33 | 65 | crane with a sled | ride scenes, 0xE47AC |
 | 0x260C0 | 33 | 25 | crane lowering the sled | - |
 | 0x32F70 | 18 | 46 | crane arm and claw | - |
-| 0x3FF34 | 28 | 381 | woman in a yellow suit | attract |
+| 0x3FF34 | 28 | 381 | woman in a yellow suit | ride scenes 2 and 0 |
 | 0xE7034 | 3 | 140 | three-part object | record 0x3B2C0 |
 | 0xEDB70 | 38 | 135 | two riders on a sled | - |
-| 0x13E018 | 38 | 135 | two riders, second take | attract |
-| 0x18E4C0 | 38 | 135 | two riders, third take | attract, 0xE46C0 |
-| 0x1DE968 | 28 | 381 | woman, second take | attract, 0xE45C0 |
+| 0x13E018 | 38 | 135 | two riders, second take | ride scenes 2 and 0 |
+| 0x18E4C0 | 38 | 135 | two riders, third take | ride scenes 1 and 3, 0xE46C0 |
+| 0x1DE968 | 28 | 381 | woman, second take | ride scenes 1 and 3, 0xE45C0 |
 | 0x285A68 | 3 | 140 | the object, mirrored in X | record 0x3B2A0 |
 
-The attract's tasks (from 0xE44B0) pick the frame from their own counter:
-0xE45C0 plays 0x1DE968's frames 0 to 0x17C and then loops 0x138 to 0x17C;
-0xE46C0 holds 0x18E4C0 on frame 0x86 once it gets there. No address in the
-program names the three marked -, which were found by their layout; all ten
-differ. The two three-part ones are named only by two records, {table, 1,
+No address in the program names the three marked -, which were found by
+their layout; all ten differ. The two three-part ones are named only by two records, {table, 1,
 0x8B, 0}, at 0x3B2A0 and 0x3B2C0, just past a list of places at x = 8 and -8
 by the start (0x3B190, read at 0x3B91C); what plays them is not found. The
 names are the explorer's.
+
+**The ride scenes** (`rideScenes`, `rideMatrices`; `rig.rides` in
+`js/games.js`). The five played tables are not an attract: they are mode 5
+(0x32F40, the mode word at 0x53E744), the ride's own screen before the race.
+Its tasks include 0x33780, which picks a handler by the ride's number at
+0x5293F0, and the handler draws the whole scene each frame, the camera and
+the hangar first, with the task's clock at +0xC0:
+
+| Ride | Waiting | After Entry | Camera | Colour |
+|---|---|---|---|---|
+| 1 | 0xE5760 | 0xE44B0 | 0xE2830 (a) | red |
+| 2 | 0xE5AA0 | 0xE4820 | 0xE2E00 (b) | black |
+| 3 | 0xE6190 | 0xE4BE0 | 0xE2830 (a) | yellow |
+| 0 | 0xE5E30 | 0xE4F50 | 0xE2E00 (b) | - |
+
+The waiting handler counts t up, wrapping at 0xE11, and on Entry (the input
+edge 0x529368 & 0x500, either player) sets t to 0 and the handler to the
+scene's. Both draw, under the camera, the woman, the riders and the crane,
+each through 0xE1D70 at a frame the clock picks:
+
+| | Layout a | Layout b | Frame after Entry | Waiting |
+|---|---|---|---|---|
+| woman | 0x1DE968 at T(0.85, 0, 0) | 0x3FF34 under turn-Y 0x7000, then T(1.4, 0, 0) | t to 0x17C, then 0x138 + (t - 0x137) % 0x45 | 0 |
+| riders | 0x18E4C0 | 0x13E018 at T(0, 0, -0.1) | t to 0x86, then 0x86; none past 0xC7 | t & 1 |
+| crane | 0x4770 | 0x4770 | 0 to 0x86, t - 0x87 (the lift) to 0xC7, then 64 | 0 |
+| slide | 0xE2510: X (t - 0xDC) / 10 | 0xE2670: the negative | none to 0xDB, to 0x18F, then 18 | none |
+
+The slide is a translate in front of the crane's frame. The crane goes
+through 0xE1F30 (g2 the ride), which after each part's matrix pushes
+T(0, -0.32, -4.1) and, for part 2, draws the colour piece there (ride 0
+{0x30D62, 0x30EA6, 0x8459CB}, 1 {0x30AAA, 0x30BEE, 0x845625}, 2 {0x30C06,
+0x30D4A, 0x8457F8}, 3 {0x30EBE, 0x31002, 0x845B9E}), then pops. Under the
+part's own matrix, part 2 draws the sled's body in the colour instead of its
+own model (ride 0 {0x36372, 0x36876, 0x84D714}, ride 2 {0x35E16, 0x3631A,
+0x84D05F}, each with {0x9C0C, 0x9D44, 0x81166F}; ride 3 {0x368CE, 0x36DD2,
+0x84DDC9}; ride 1 its own), parts 4 to 11 are drawn for ride 1 only, and
+part 0 not for rides 0 and 2. The explorer has a body a ride, the three
+figures' parts and the colour piece, and two motions, the wait (2 frames)
+and the scene (t 0 to 0x1D4: the crane is still from 0x190, one loop of the
+woman after that; the game's scene has no end of its own).
+
+Copro op 0x21 (one word, 0x10000 a turn) here turns with columns
+X = (c, 0, s), Z = (-s, 0, c): the other sign from the `Copro` class the
+course runs on, which uses it for one spinning piece (70 angles from 0x64
+by 0x65); that piece is not checked.
+
+Graded against MAME (shared build), which stops at the network check: a Lua
+script sets the ride number at 0x5293F0, presses Cancel Network Check, at
+frame 1200 writes mode 5 (0x53E744 = 5, 0x53E74C = 0), from then writes
+0x529464 = 0x1E4400 every frame (a zeroed span of ROM, so the comm
+watchdogs 0xBD640 on read no shutdown), and presses P1 Entry at 1500. A
+write tap on the geometrizer logs every model with the matrix it is drawn
+under, and the scene's clock. Each game frame's draws, from the hangar on,
+taken into the hangar's frame (the camera; rides 2 and 3 draw the hangar at
+T(0, 0, -33.6)), against the explorer's at the same clock: all four rides,
+the wait (t 96 to 297) and the scene (t 1 to 468, through the lift, the
+riders' hiding, the slide and the woman's loop), 670 frames each, 51,418 to
+56,778 draws; the same models every frame and the worst entry off by 5e-4.
+MAME drops a frame at t 200, after which the logged clock is a frame ahead
+of the one drawn.
 
 ### Polygon decoding (`js/model.js`)
 

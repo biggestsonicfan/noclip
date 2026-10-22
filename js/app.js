@@ -5056,6 +5056,8 @@ function renderBodyMotionPanel() {
     /* A Virtual-On motion is two records, the upper body's and the legs'. */
     const size = !d ? '' : d.legs ? `<span>pair</span><b>${d.pair}</b><span>legs</span><b>0x${d.legs.address.toString(16)}</b>`
         : d.channels ? '<span>block</span><b>' + (d.end - d.offset) + ' bytes of keys</b>'
+        /* A Power Sled ride scene is its task's clock, not frames of data. */
+        : d.phase ? '<span>clock</span><b>' + d.phase + '</b>'
         : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
     $('#motion-meta').innerHTML = d ? `
         <span>motion</span><b>${d.index}</b>

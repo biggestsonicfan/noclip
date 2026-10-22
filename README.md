@@ -972,9 +972,14 @@ are the race's own.
 The **Animation** tab has ten figures, each a model a part with every part's
 matrix stored for every frame: a crane carrying a sled, the crane's arm and
 claw, a woman in a yellow suit, two riders on a sled, each in two or three
-takes, and a three-part object, once and mirrored. The attract plays five of
-them; no address in the program names three. The names are the explorer's;
-the game has none.
+takes, and a three-part object, once and mirrored. No address in the
+program names three. The names are the explorer's; the game has none.
+After them come the four ride scenes, the ride's own screen before the race:
+the woman, the two riders and the crane with the sled in the ride's colour,
+placed as the game places them and played on its clock, waiting (the riders
+bob) and after Entry (the woman waves, the crane lifts the sled, the riders
+go, the crane slides away). They match MAME's draws, every model and matrix,
+for all four rides.
 
 **music**, on the Stages tab, plays the 31 sounds of the sound driver's
 table on the game's sound board. Nothing names them, so they are numbered;

@@ -5409,8 +5409,8 @@ const powsled = {
     /*
      * The figures (js/powsled.js): tables in the data ROM of every part's
      * matrix a frame, drawn by 0xE1D70. `at` is the table's data ROM offset.
-     * The attract's tasks (0xE44B0 on) play 0x4770, 0x3FF34, 0x13E018,
-     * 0x18E4C0 and 0x1DE968; 0xE7034 and 0x285A68 are named by two records
+     * The ride scenes (0xE44B0 on, `rides` below) play 0x4770, 0x3FF34,
+     * 0x13E018, 0x18E4C0 and 0x1DE968; 0xE7034 and 0x285A68 are named by two records
      * at 0x3B2A0 whose player is not found; no address in the program names
      * the other three, found by their layout. The game names none: the names
      * say what they show.
@@ -5428,6 +5428,19 @@ const powsled = {
             { at: 0x18e4c0, name: 'two riders on a sled, third take' },
             { at: 0x1de968, name: 'woman in a yellow suit, second take' },
             { at: 0x285a68, name: 'three-part object, mirrored' },
+        ],
+        /*
+         * The ride scenes of mode 5 (js/powsled.js, rideScenes): `ride` is
+         * the number at 0x5293F0 that 0x33780 picks the task by, and the
+         * colour 0xE1F30 dresses the sled in; `waiting` the task's handler
+         * until Entry and `scene` the one after; `layout` a for the camera
+         * 0xE2830, b for 0xE2E00.
+         */
+        rides: [
+            { ride: 1, name: 'ride 1, red', waiting: 0xe5760, scene: 0xe44b0, layout: 'a' },
+            { ride: 2, name: 'ride 2, black', waiting: 0xe5aa0, scene: 0xe4820, layout: 'b' },
+            { ride: 3, name: 'ride 3, yellow', waiting: 0xe6190, scene: 0xe4be0, layout: 'a' },
+            { ride: 0, name: 'ride 0', waiting: 0xe5e30, scene: 0xe4f50, layout: 'b' },
         ],
     },
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
