@@ -5019,11 +5019,21 @@ const srallyc = {
                 { name: 'small bird', body: 'small bird', figures: [0x5e2870] },
             ],
         },
+        /* The desert's start-line flags, class 17 (see the flags in
+         * js/srally.js): one model a frame out of a table of model numbers
+         * (RAM addresses), the variant, +0x5C, picking the table. */
+        flags: {
+            ramBase: 0x59f000,
+            tables: [
+                { name: 'red AM3 flag', at: 0x5e3b90 },
+                { name: 'blue flag', at: 0x5e3cc0 },
+            ],
+        },
     },
     /* The courses but not the cars' placement on them, nor the trackside
      * objects. The cars are bodies whose wheels turn as 0x5C2A80 turns them,
      * playing the attract mode's recorded runs; the animals play their
-     * figures as 0x5C70D0 does. */
+     * figures as 0x5C70D0 does; the flags wave as 0x5E4380 swaps them. */
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 

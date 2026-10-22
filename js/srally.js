@@ -111,7 +111,8 @@ export function readRallyFigures(rom) {
         })),
     }));
     const cars = readRallyCars(rom, figures.length);
-    return [...figures, ...cars, ...readRallyAnimals(rom, figures.length + cars.length)];
+    const animals = readRallyAnimals(rom, figures.length + cars.length);
+    return [...figures, ...cars, ...animals, ...readRallyFlags(rom, figures.length + cars.length + animals.length)];
 }
 
 /** One motion a figure, its key frames swung there and back, then the
@@ -130,10 +131,15 @@ export function readRallyMotions(rom) {
         layout: 'srallyc',
     }));
     const runs = readRallyRuns(rom, figures.length);
-    return [...figures, ...runs, ...readAnimalMotions(rom, figures.length + runs.length)];
+    const animals = readAnimalMotions(rom, figures.length + runs.length);
+    return [...figures, ...runs, ...animals, ...readFlagMotions(rom, figures.length + runs.length + animals.length)];
 }
 
 export function rallyMotionList(rom, body, motions) {
+    if (body.flag) {
+        const fits = motions.filter((m) => m.flag);
+        return { fits, lead: fits.filter((m) => m.flag.at === body.flag.at), label: 'Played by its routine' };
+    }
     if (body.animal) {
         const fits = motions.filter((m) => m.animal && sameModels(m.animal, body.animal));
         return { fits, lead: fits.filter((m) => m.animal.lead === body.animal.name), label: 'Played by its routine' };
@@ -143,7 +149,7 @@ export function rallyMotionList(rom, body, motions) {
         const lead = fits.filter((m) => [].concat(m.car).includes(body.car.slot));
         return { fits, lead, label: 'Driven by this car in the attract', other: 'Other recorded runs', every: 'Recorded runs' };
     }
-    const fits = motions.filter((m) => !m.run && m.joints === body.joints);
+    const fits = motions.filter((m) => !m.run && !m.flag && m.joints === body.joints);
     return { fits, lead: fits.filter((m) => m.index === body.index), label: 'Played by its routine' };
 }
 
@@ -159,6 +165,7 @@ const turn = (a) => (a * 2 * Math.PI) / 0x10000;
 export function poseRallyFigure(rom, body, motion, frame, opts = {}) {
     if (body.car) return poseRallyCar(rom, body, motion?.run ? motion : null, frame, opts);
     if (body.animal) return poseRallyAnimal(rom, body, motion?.animal ? motion : null, frame);
+    if (body.flag) return poseRallyFlag(body, motion?.flag ? motion : null, frame);
     const r = figureRecords(rom)[body.index];
     const key = motion && motion.joints === body.joints ? keyAt(motion, frame) : 0;
     const origins = [];
@@ -619,4 +626,86 @@ export function poseRallyAnimal(rom, body, motion, frame) {
     }
     for (const e of A.extra) put(move(...toView(e.place)));
     return { matrices, origins };
+}
+
+/* ---- The flags ----------------------------------------------------------- */
+
+/*
+ * The desert's start line has eight flags, class 17 of the table at 0x5DDFC4
+ * (Flag in its names). Each is one model a frame, not a figure: the waving is
+ * 75 models, 321-395 and 396-470, two cloths of one shape. The per-frame
+ * handler, 0x5E4380, stands the object at its place (+0x18) turned by its
+ * heading (+0x28, function 0x2A) and draws model `table[+0x64]`, the table
+ * 0x5E3B90 while +0x5C is 0 and 0x5E3CC0 otherwise; then +0x64 goes up one
+ * and back to 0 past 0x4A. Its init, 0x5E4550, starts +0x64 at a random
+ * 0-63, so the flags along the line are out of step. Both tables end in a 0
+ * after their 75 entries, which is where the explorer stops reading.
+ *
+ * Mode +0x60 = 0, all eight of them, draws only while the race is on
+ * (0x202230 = 0, 0x217184 bit 2 clear, 0x202098 not 2); the attract mode
+ * runs the handler but never draws them, so +0x64 stays put there.
+ *
+ * Graded on MAME, a championship started from credit: all eight flags,
+ * 4,497 draws each, every draw the model at table[+0x64] and +0x64 one up on
+ * the draw before, round from 74 to 0.
+ */
+function flagModels(rom, at) {
+    const F = rom.game.rig.flags;
+    const dv = rom.mainCpuView;
+    const models = [];
+    for (let a = at - F.ramBase; models.length < 0x100; a += 4) {
+        const m = dv.getUint32(a, true);
+        if (!m) break;
+        models.push(m);
+    }
+    return models;
+}
+
+function readRallyFlags(rom, first) {
+    const F = rom.game.rig.flags;
+    if (!F) return [];
+    return F.tables.map((t, i) => {
+        const models = flagModels(rom, t.at);
+        return {
+            index: first + i,
+            name: t.name,
+            flag: { at: t.at, models },
+            joints: 1,
+            scale: 1,
+            roles: [],
+            skin: -1,
+            hitMotions: [],
+            start: first + i,
+            root: t.at,
+            parts: [{ index: 0, parent: -1, depth: 0, model: models[0], offset: [0, 0, 0], flags: 0, joint: 0, record: t.at }],
+        };
+    });
+}
+
+/* One motion a table: the cloth waving, a model a frame, round and round. */
+function readFlagMotions(rom, first) {
+    const F = rom.game.rig.flags;
+    if (!F) return [];
+    return F.tables.map((t, i) => {
+        const models = flagModels(rom, t.at);
+        return {
+            index: first + i,
+            name: `${t.name} waving`,
+            flag: { at: t.at, models },
+            address: t.at,
+            offset: t.at - F.ramBase,
+            view: rom.mainCpuView,
+            frames: models.length,
+            frameSize: 4,
+            joints: 1,
+            layout: 'srallyc-flag',
+        };
+    });
+}
+
+/* The cloth where it stands, the model the frame's table entry names. */
+function poseRallyFlag(body, motion, frame) {
+    const models = motion ? motion.flag.models : body.flag.models;
+    const f = motion ? (Math.max(1, frame) - 1) % models.length : 0;
+    return { matrices: [move(0, 0, 0)], origins: [[0, 0, 0]], draws: [[models[f]]] };
 }
