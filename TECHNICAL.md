@@ -5305,9 +5305,28 @@ come from counters on the object (+0x17A, +0x194). The explorer lists the
 23 as Zig-Raht's motions (`rig.boss`), each its record's address, and
 poses them on the legs path: one record's last frame is the next one's
 first. vonu's code is the same 0xC30 on (the table at 0x38F20), and the
-records, in the shared data ROM, the same. Not graded against MAME. The
-effects the draw hangs before the parts (table 0x2BE31DC, by the
-countdown at 0x51ACE4) and off slot 0 after them (0x51ACE8) are not drawn.
+records, in the shared data ROM, the same. The effects the draw hangs
+before the parts (table 0x2BE31DC, by the countdown at 0x51ACE4) and off
+slot 0 after them (0x51ACE8) are not drawn.
+
+Zig-Raht is a fight object like the others: the fight's setup reads each
+player's robot from 0x503A98/0x503A9C (`ld 0x19360[g3*4]` at 0x19DC0), and
+the object's init (0x27550) gives index 9 its own handler (0x274A0, which
+runs the actions at 0x3D520 and the draw) and init (0x3D5D0). So writing 9
+to 0x503A9C each frame puts it in the attract's fights as player 2, with
+its own controller. Checked against MAME that way (upstream MAME, vonj,
+20000 frames): a write tap on 0x801008 (the list address the copro writes
+the matrix at, + 0x34) and 0x804000-0x80400F (the object's words, matched
+to Zig-Raht's 25 meshes) logged each part, with 0x51ACFC and 0x51AD00 as it
+was sent; the 12 floats after the 0x0580xxxx word at that address in
+bufferram, read at the end of the frame, are its matrix. On all 10135
+frames it was drawn, each part's matrix relative to part 0 matches the
+explorer's on entry 0x51AD00 (the tab's frame + 1) to 0.064 degrees and
+0.0041 units. Player 1's Temjin legs in the same run show the same floor
+(95% of frames within 0.07 degrees), with or without `-nodrc`, so that is
+the copro's arithmetic. 21 of the 23 records played, every entry of the
+long ones. Two never did: 0x2B2BA44 (0x38224, when the counter +0x194 is
+negative) and 0x2AC7824 (action 6, 0x39980).
 
 `vonu`'s records are 0xF0 lower, their table at 0x19270; the records and
 lists are the same.
