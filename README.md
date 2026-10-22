@@ -675,6 +675,12 @@ at that frame, Tina's ribbon included. The stage's ropes and banners hang as
 they swing at that frame too. They hold that one pose; the 2A builds' fighters
 are not read yet.
 
+On the **Animation** tab each fighter casts the shadow the fight code draws
+for it under every frame of the motion: a flat piece for each of the fifteen
+bones, laid on the floor along the stage's light. Against MAME's attract fight
+all 1740 pieces drawn over 58 of its frames are the same models, in place to
+0.0003, while Zack and Tina move.
+
 Stages 0, 2, 3, 4, 8, 10 and 11 have pieces of their own that move (stage 4 is
 a conveyor). The game's own stage code runs them from its setup to the same
 moment of a fight, on both revisions, and keeps running them a frame at a time

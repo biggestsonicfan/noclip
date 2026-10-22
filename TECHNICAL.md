@@ -4171,10 +4171,18 @@ way the fight start does (Revision B addresses):
   `0x589DC0..C8` from the light at `0x5555B0` plus, with `0x54FC94 = 4`, the
   stage's entry of the table at `0xC32A0`, and closes with `0x4DDC0`, which
   copies the low bit of the frame count `0x54B158` to `0x589DB1`;
-- the shadows (models 136-150 and 1493-1507, drawn by `0x45B24` from the body
-  routine, before the skeleton moves: they are the frame before's) project
-  each joint along `0x589DC0` onto the floor at `0x58BA80` if it lies inside
-  the ring at `0x550100..0x550114`, else onto y 0. The round start `0x54660`
+- the shadows (models 136-150 and 1493-1507) are drawn first by the body
+  routine `0x45B24`, before the skeleton moves, so they are the frame
+  before's: when `0x5555B4` < 0 and `0x54FC93` is set it calls `0x56180`
+  (`0x568B0` or `0x56FE0` by byte +2 of the record). For each of the fifteen
+  bones that takes its two ends from the joint table `0x5552B0`, 0.1 lower,
+  projects them along `0x589DC0` onto the floor at `0x58BA80` if they lie
+  inside the ring at `0x550100..0x550114`, else onto y 0, and draws model
+  `0x203A160 + 16 * (0xC1F80[char] + bone + 0x5A6ED0[p])` on the copro's
+  matrix: translate to the midpoint, turn about y by the arctangent, scale by
+  (length, 0.01, 1). It projects anew only on the frames where `0x589DB1` is
+  the player's number; on the others it sends the pieces it kept at
+  `0x589F50` (copro `0x57`). The round start `0x54660`
   sets the floor (1.0) and the ring, half of the size the boot sets at
   `0x54FD5C/60` (24.0, at `0x44B8`).
 
@@ -4239,6 +4247,17 @@ drawn on its parent's very matrix in every frame is laid on it: the face
 those over the skin in the order they are sent, so the explorer ranks each
 such group's coplanar faces together (`rankJoinedParts` in `js/app.js`);
 ranked one part at a time, the head's skin hid the eyes.
+
+The fifteen squashed draws (determinant near 0) that come first in a frame
+are the shadow; `framesOf` keeps them apart as `shadows`, and the tab lays
+them on the floor with the fighter (`placeDoaShadows` in `js/app.js`).
+Graded against MAME's doab attract on stage 1 (a Lua tap on the geometrizer's
+FIFO logging every squashed object and the camera at `0x5888C0`), every third
+frame from 0x6B1 to 0x75E: 1740 pieces, all the same models, in place to
+0.0003 and in their matrices to 0.0009, with the bones from 1.0 to 1.8 long
+as the fighters move. The fight's very first frame (0x6B0) is the one that
+differs: MAME's pieces lie at the floor's 1.0 and the explorer's at y 0;
+the tab never shows that frame.
 
 ### Sega Rally Championship (`js/games.js`, `readRallyStages` in `js/stages.js`)
 

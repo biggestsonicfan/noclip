@@ -4263,6 +4263,25 @@ function placeDynamcopShadows(holder, body, matrices) {
 }
 
 /*
+ * Dead or Alive's shadows (js/doafighters.js poseDoaFighter): the pieces the
+ * fight code drew with the frame, one a bone, on the floor.
+ */
+const DOA_SHADOW_POOL = 16;
+
+function placeDoaShadows(holder, pose) {
+    if (state.rom.game.rig?.kind !== 'doa') return;
+    if (holder.doaShadow?.rom !== state.rom) holder.doaShadow = { rom: state.rom, geoms: new Map() };
+    const { geoms } = holder.doaShadow;
+    for (const { model } of pose.shadows ?? []) {
+        if (geoms.has(model)) continue;
+        const d = getModel(model);
+        geoms.set(model, d ? geomBundle(d) : null);
+    }
+    const usable = new Map([...geoms].filter(([, g]) => g));
+    placeEffectPool(holder, 'doaShadowPool', DOA_SHADOW_POOL, usable, pose.shadows ?? []);
+}
+
+/*
  * Fighting Vipers' shadows on Bay Side's walls (js/fvwallshadow.js), on the
  * fighter and on the opponent, each from the motion it plays: lit from the
  * explorer camera's yaw, as the board lights them from the fight camera's.
@@ -4499,6 +4518,7 @@ function poseBodyRig() {
     placeCarried(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2', null, m.flash);
     placeShadows(m, body, pose.pose, m.decoded, m.frame);
     placeDynamcopShadows(m, body, matrices);
+    placeDoaShadows(m, pose);
     placeWallShadows(m, body, pose.pose, m.decoded, m.frame, state.mirrored && state.rom.game.rig?.kind === 'vf2');
     placeReflection(m, body, pose.pose);
     const base = stageFighterLight(state.rom, state.sparkStage, body.index);
