@@ -425,6 +425,50 @@ runs (0x9E030, 0x9E05C) but have no joint with role 2, so they draw no cape.
 Read from the ROM, not checked in MAME. The cases for bodies 48, 60, 64, 76, 78
 and 84 have not been read yet.
 
+#### The wounds a shot part takes
+
+The callback draws whatever model a part holds, and a hit changes that model.
+`sub_68010` runs on the part a shot lands on. The part's `+0x79` is a signed
+count of the shots still to go: a shot takes one off a count above 0, and a
+count left at 0 wounds the part. `+0x78` counts the wounds it has, and the next
+one is
+
+    ld 0x11DFF0[body * 0x200 + zone * 0x20 + wounds * 4]
+
+stored over the part's model (`+0`) when it is not 0, with `+0x78` one up.
+`zone` is byte 3 of the part's joint record (`0x1184E0`, eight bytes a joint,
+31 joints a body; the same byte `roles` reads). Byte 2 of that record is the
+count the part starts with: 0 or 1, a wound on the first shot; 255, which is
+-1 and never reaches 0, so the part never wounds; and once 4, `BO_kage`'s chest,
+which wounds on the fourth. After each wound the count is reloaded from
+`ldob 0x129BF0[body * 256 + zone * 16 + wounds * 2]`, which is 0, 1 or 255 in
+every entry, so after the first each shot on a part draws its next wound until
+the list runs out. A zone with no model left ends it; on a head or
+an arm (byte 4 of 1 or 2) that also sets the part's `+0x3C` bit 31.
+
+- The last wound of most heads is model 1, `PN_spaceB`, which draws nothing: the
+  head is gone. A head reaching `0x135940[body]` wounds also calls `0x69540`.
+- One model is never stored: `cmpibe g7, 0x7B0` skips `PN_zonbimana_mune_dam03a`,
+  so that chest keeps its third wound when it takes its fourth.
+- A head or an arm is left as it is while `0x51F520+0x3C5` has bit 1 set. That
+  flag was not followed further.
+- Zones are shared across bodies freely: `BO_siriru`'s hands wound into
+  `BO_zom`'s, which hold no axe, and `BO_samson`'s left arm starts at
+  `PN_zonbisan_udel_dam01a`.
+- 50 of the 94 bodies wound. `BO_boss3`'s every joint names a zone but starts at
+  255, so it never does.
+
+All four tables are in the second program pair (`epr-19694`/`19695`), which
+both revisions share, so `rig.wounds` is the same for both. The Animation tab's
+**Wounds** slider is the shots on each part (`readWounds`, `woundModel`,
+`partDraws`' `shots`).
+
+Graded against MAME (shared build, `hotdo` attract, 300 s): a breakpoint on the
+store at `0x68154` logged body `[0x520220]`, joint `+0x38`, wounds `+0x78` and
+the model, 65 stores over `BO_zom`, `BO_zonbiman`, `BO_neil`, `BO_siriru`,
+`BO_samson` and `BO_mon_kihon`. All 65 are the model `readWounds` gives for that
+part and that many shots.
+
 #### The bodies were never given their layers
 
 `js/layers.js` exists because this game's art lays one face on another in the

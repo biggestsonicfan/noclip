@@ -2110,6 +2110,16 @@ const hotdo = {
             pointers: 0x63d20, pointersSource: 'maincpu', pointersBy: 'body',
         },
         /*
+         * The wounds a shot part takes (readWounds), read off sub_68010: the
+         * joint records it takes the zone and the first count from
+         * (`lda 0x1184E0[g4*8]` with g4 = body * 31), the models (`lda
+         * 0x11DFF0(g4)[g5]`, body << 9 and zone << 5), the counts after each
+         * wound (`ldob 0x129BF0(g4)[g6]`, body << 8) and the one model it
+         * never stores (`lda 0x7B0` before `cmpibe g7, g13`). All four are in
+         * the second program pair, epr-19694/19695, which Revision A shares.
+         */
+        wounds: { parts: 0x1184e0, models: 0x11dff0, shots: 0x129bf0, kept: 0x7b0 },
+        /*
          * The same routine's bodies, read across by name rather than by number:
          * every index below renumbered, and taking the prototype's would not be
          * a near miss. Its body 34 is the spider and this build's is BO_sophi,
@@ -2516,6 +2526,8 @@ const hotd = {
          * tables are the same names in the same order, and only the tables'
          * addresses moved. */
         callback: hotdo.rig.callback,
+        /* In the program pair the two revisions share. */
+        wounds: hotdo.rig.wounds,
         bodyMotions: hotdo.rig.bodyMotions,
         bodyMotionsLabel: hotdo.rig.bodyMotionsLabel,
     },

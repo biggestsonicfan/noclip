@@ -155,6 +155,9 @@ const state = {
     /* Virtua Cop's enemy's aim: the upper body's yaw and pitch toward the
      * player past the body's own. */
     vcopAim: { yaw: 0, pitch: 0 },
+    /* The House of the Dead: the shots taken on each part, each of which
+     * draws the part's next wound (readWounds). */
+    shots: 0,
     /* What a Dynamite Cop character holds: 'own:k', 'item:k' or 'none'. */
     held: 'none',
     /* Air Walkers: the player's pace (+0x16, 0x1000 = 1), which scales the
@@ -3737,7 +3740,7 @@ function placeExtras(parts, body, matrices, material = null, flash = null, shown
  * whose pose says what each part draws (Dead or Alive's) is taken at its
  * word. */
 function bouncedDraws(body, posed, m) {
-    const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick);
+    const draws = posed.draws ?? partDraws(state.rom, body, m.decoded, m.frame, m.tick, state.shots);
     if (posed.chest != null) draws[1] = posed.chest > 0 ? [posed.chest] : [];
     if (posed.hips != null) draws[9] = posed.hips > 0 ? [posed.hips] : [];
     for (const [slot, model] of posed.hands ?? []) draws[slot] = [model];
@@ -4585,6 +4588,24 @@ function noteVcopAim(body) {
     if ($('#vcop-aim-note').textContent !== text) $('#vcop-aim-note').textContent = text;
 }
 
+/* The House of the Dead's wounds: the slider runs to the most shots any of
+ * the body's parts takes a wound on, and the field shows only for a body the
+ * game wounds. */
+function renderWounds(body) {
+    const steps = body?.wounds?.flatMap((w) => w) ?? [];
+    $('#wounds-field').hidden = !steps.length;
+    if (!steps.length) return;
+    const most = Math.max(...steps.map((w) => w.shots));
+    const input = $('#wounds-shots');
+    if (+input.max !== most) input.max = most;
+    if (state.shots > most) state.shots = most;
+    input.value = state.shots;
+    $('#wounds-shots-val').textContent = String(state.shots);
+    const parts = body.wounds.filter((w) => w.some((x) => x.shots <= state.shots)).length;
+    const text = state.shots ? t('{n} of the body\'s parts drawn wounded.', { n: parts }) : '';
+    if ($('#wounds-note').textContent !== text) $('#wounds-note').textContent = text;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
@@ -4593,6 +4614,7 @@ function poseBodyRig() {
     noteHeadTurn(m.decoded);
     noteAim(body);
     noteVcopAim(body);
+    renderWounds(body);
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
@@ -5886,6 +5908,10 @@ function wireOptions() {
             poseRig();
         });
     }
+    $('#wounds-shots').addEventListener('input', (e) => {
+        state.shots = +e.target.value;
+        poseRig();
+    });
     for (const k of ['twist', 'turn', 'tilt']) {
         $(`#aim-${k}`).addEventListener('input', (e) => {
             state.aim = { ...state.aim, [k]: +e.target.value };
