@@ -662,8 +662,8 @@ draw goes through `0x7C60` with the colour left as it is.
 
 Every build MAME has loads: `doa.zip` (Revision C, Model 2B), `doab.zip`
 (Revision B), and the Model 2A builds `doaa.zip` (Revision A), `doaab.zip` and
-`doaae.zip` (export). The 2B builds have all four tabs, fighters included; the
-2A builds the Stages, Models and Cells tabs. A merged set, or several zips dropped at
+`doaae.zip` (export). Every build has all four tabs, fighters included (the
+2A builds run Revision A's own fight code). A merged set, or several zips dropped at
 once, opens as Revision C, and the Build list at the top of the sidebar picks
 another. Tecmo's game keeps no
 stage records: each stage is a routine of its own that places its pieces and

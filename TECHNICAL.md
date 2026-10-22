@@ -3863,8 +3863,8 @@ Revision A (`doaa`, Model 2A) is the same game a build earlier. Its data,
 model and texture chips are Revision B's; its RAM is laid out the same, and
 everything the explorer reads from the program sits 0x7A40 lower (the sky's
 stage table 0x79C0). All twelve stages draw the same pieces and render pixel
-for pixel the same as Revision B's. Revision A has no attract fight mapped,
-so stage 1 runs from its setups like the other moving stages
+for pixel the same as Revision B's. Revision A has no attract fight of its own
+mapped (its fighters take Revision B's scene, below), so stage 1 runs from its setups like the other moving stages
 (`stageSetup.moving`): before that its 32 rope and banner pieces hung
 straight and still, up to 2.8 units from where the board's swing puts them.
 The two revisions now draw it the same, still and moving.
@@ -3880,7 +3880,8 @@ profile names falls well inside a run (checked one by one), and nothing else in
 it moves. Revision C moved its RAM as well: 0x20 on from 0x5420D0 and 0x30
 from 0x557C60, found by pairing the RAM addresses that the two programs'
 matched instructions name; the RAM `js/doa.js` sets by hand is the profile's
-`doa.ram` for that reason. The 2A builds keep Revision A's RAM. Revision C
+`doa.ram` for that reason. The 2A builds keep Revision A's RAM but for a few
+globals (`DOAAB_RAM`, `DOAAE_RAM`, below). Revision C
 draws every stage, the attract fight on stage 1 included, pixel for pixel as
 Revision B does, and `doaab` and `doaae` every stage as Revision A does. The
 2A board seats the shared chips in other sockets, so its sets name them
@@ -4230,7 +4231,39 @@ and 0x74A, the frames MAME has them on. Against MAME's
 display list for that frame all 69 draws match, the ribbon's links
 included, to 0.001 radians in their turn and 0.001 in place.
 
-Not read yet: Revision A's fight code.
+Revision A's fight code (`doaa`, and through it `doaab` and `doaae`) is an
+older build of Revision B's, not Revision B's moved: the same routines, with
+code taken out or put in between them, so the shift runs from 0x20 to −0x7A40
+(`DOAA_FIGHT_PROGRAM` in `js/games.js`, found by matching 24 bytes round each
+address the profile names; the frame start 0x4DF20 is 0x46660 here). Its
+fight RAM is Revision B's, the camera at 0x5888C0 included, so the fighter
+profile, the rig and the attract scene are Revision B's with their program
+addresses moved. `doaab` takes its own program from `doaa`'s by runs as
+before, and moves one RAM global (0x54FD84, 4 back). The export `doaae` moves
+a few more (`DOAAE_RAM`): its body routine asks 0x54FC92 where the others ask
+0x54FC93, and without that run it drew no shadows. With them every
+character's motions and bodies come out of all five builds bit for bit the
+same (Zack, Tina, Kasumi and Leifang, three motions each).
+
+The attract scene is Revision B's: Revision A's own attract fight on stage 1
+(Zack against Tina from 0x6B0, as on Revision B) has not been copied out of
+its RAM, so `attract.onStage` is false and the stage still runs from its
+setups. Graded the same way as Revision B against MAME's `doaa` display
+list (every third frame from 0x6B1 to 0x75E, 58 frames, 3991 draws, the
+geo FIFO under `M2_GEO_SHARC_OFF=1`, in the stage's frame through the camera
+at 0x5888C0), Zack's body and shadow are within 6.1e-4 radians in their turn
+(median 9e-5) and 6.4e-4 in place, Tina's within 1.2e-3 and 3.3e-4, and her
+ribbon's three links within 1e-4 (median) but for 0x6E4–0x702 (up to 0.024)
+and 0x744–0x75C (up to 0.053, 2.8e-3 in place). Revision B's run is within
+5.9e-4 everywhere. Those spans, and Tina's 1.1e-3 on 0x6C3–0x6CC, are where
+the board's own revisions part: MAME's `doaa` against its
+`doab`, draw for draw, differs by the same amounts there and by about 3e-4
+elsewhere. The two boards' fights drift apart by about 1e-5 in the players' places
+from the first frames (the counters at 0x54FBD0 and 0x54FD78 differ as the
+fight starts), and the ribbon swings that far out where Tina whips it. Giving
+the explorer Revision A's camera state from MAME's RAM at 0x6B0 changes
+nothing. One draw a frame (the 49th) is not in MAME's list on either
+revision.
 
 On the Animation tab a part is a place in that draw order, and the body
 routine works out every matrix whole (the copro's stack stays flat), so the

@@ -736,7 +736,7 @@ export function readDoaStages(rom) {
 function stageClock(rom, n) {
     const D = rom.game.doa, A = D.attract, S = D.stageSetup;
     const after = S?.after?.[n] ?? [];
-    if (A?.stage === n && A.stageInit) return { init: A.stageInit, frames: A.stageFrames, after, tick: S?.tick };
+    if (A?.stage === n && A.stageInit && A.onStage !== false) return { init: A.stageInit, frames: A.stageFrames, after, tick: S?.tick };
     if (!S?.moving.includes(n)) return {};
     const own = rom.mainCpuView.getUint32(S.table + 4 * n, true);
     return { init: [S.common, own], frames: S.frames, clock: S.clock, after, tick: S.tick };
@@ -744,7 +744,7 @@ function stageClock(rom, n) {
 
 function stageMoves(rom, n) {
     const D = rom.game.doa;
-    return D.attract?.stage === n || !!D.stageSetup?.moving.includes(n);
+    return (D.attract?.stage === n && D.attract.onStage !== false) || !!D.stageSetup?.moving.includes(n);
 }
 
 /*
@@ -811,7 +811,7 @@ function doaSky(rom, n, run, at) {
 /* The attract fight's two fighters, posed, if this is its stage. */
 function attractOf(rom, n) {
     const A = rom.game.doa.attract;
-    if (!A || A.stage !== n || !rom.game.doa.fighters) return null;
+    if (!A || A.stage !== n || A.onStage === false || !rom.game.doa.fighters) return null;
     try {
         return { fighters: A.fighters, run: runDoaFighters(rom, A.fighters, A) };
     } catch (e) {
