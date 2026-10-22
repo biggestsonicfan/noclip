@@ -465,7 +465,7 @@
         <label class="check"><input type="checkbox" id="char-skel" checked> <span data-i18n="char.skel">skeleton</span></label>
         <label class="check" id="char-squish-field"><input type="checkbox" id="char-squish"> <span data-i18n="char.squish">hammer squished</span></label>
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
-        <label class="check" id="char-mirror-field" hidden title="The motions played the other way round: VF2's player +0 bit 6, Air Walkers' player +0xF4"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
+        <label class="check" id="char-mirror-field" hidden title="The motions played the other way round: VF2's player +0 bit 6, Air Walkers' player +0xF4, a Virtua Cop enemy's +0x8A0"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
         <label class="check" id="char-backward-field" hidden title="The motion played backward, last frame first: Air Walkers' player +0xEC" data-i18n-title="char.backward.title"><input type="checkbox" id="char-backward"> <span data-i18n="char.backward">backward</span></label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
         <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
@@ -520,6 +520,14 @@
         <label class="axis" title="The weapon's tilt (+0x38), up or down toward the opponent" data-i18n-title="aim.tilt"><input type="range" id="aim-tilt" min="-4864" max="12288" step="128" value="0">
           <span id="aim-tilt-val" class="axis-val">0.0°</span></label>
         <div class="meta" id="aim-note"></div>
+      </div>
+      <div class="field" id="vcop-aim-field" hidden>
+        <label data-i18n="f.aim">Aim</label>
+        <label class="axis" title="The bearing toward the player past the body's own (+0x61C less +0x24), as an enemy whose record's +0x1D is 2 aims: the hips and legs turn by it under the upper body" data-i18n-title="vcopaim.yaw"><input type="range" id="vcop-aim-yaw" min="-16384" max="16384" step="128" value="0">
+          <span id="vcop-aim-yaw-val" class="axis-val">0.0°</span></label>
+        <label class="axis" title="The tilt toward the player past the body's own (+0x618 less +0x20)" data-i18n-title="vcopaim.pitch"><input type="range" id="vcop-aim-pitch" min="-8192" max="8192" step="128" value="0">
+          <span id="vcop-aim-pitch-val" class="axis-val">0.0°</span></label>
+        <div class="meta" id="vcop-aim-note"></div>
       </div>
       <div class="field" id="held-field" hidden>
         <label data-i18n="f.held">Held</label>
@@ -682,6 +690,26 @@
         race (mode 5, <code>0xE44B0</code> and on): the woman, the riders and
         the crane, placed and clocked as the game does, the sled in the
         ride's colour (<code>0xE1F30</code>), waiting and after Entry.
+      </div>
+      <div class="note" id="anim-note-vcop" data-i18n="note.vcop" hidden>
+        The enemies and hostages: the bodies the stages' wave records name
+        (<code>+0x13</code>, the table at <code>0x281EDF0</code>), each a
+        skeleton and a model a joint. The explorer does what the game does
+        to put one in a wave (<code>0x13A90</code>), at the origin, and
+        then runs the enemy's own draw (<code>0x21A20</code>) a frame at a
+        time: it steps the motion's clock, turns the joints into a matrix
+        each (<code>0x1F258</code>) and draws a model on each and the
+        shadow under it. A motion is the table at <code>0x28188DC</code>,
+        1 to 170, which the game names none of. Which one plays in a stage
+        is the enemy's script's (<code>0x2820D40</code>, read by
+        <code>0x14118</code>), by the shots and the clock; the body's list
+        leads with the motions its records' scripts ask for. A step can ask
+        for its motion mirrored (<code>+0x8A0</code>), and an enemy whose
+        record's <code>+0x1D</code> is 2 aims (<code>0x15FC0</code>): the
+        hips and legs turn under the upper body by how far the bearing and
+        tilt to the player (<code>+0x61C</code>, <code>+0x618</code>) are
+        past the body's own. The draw keeps the skeleton to itself: the
+        parents are worked out from the frames.
       </div>
       <div class="note" id="anim-note-doa" data-i18n="note.doa" hidden>
         The fighters are drawn by the game's own fight code, run in the

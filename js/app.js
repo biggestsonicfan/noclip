@@ -22,6 +22,7 @@ import {
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
+import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -150,6 +151,9 @@ const state = {
      * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
      * 0x10000 a turn; see poseVonRobot. */
     aim: { twist: 0, turn: 0, tilt: 0 },
+    /* Virtua Cop's enemy's aim: the upper body's yaw and pitch toward the
+     * player past the body's own. */
+    vcopAim: { yaw: 0, pitch: 0 },
     /* What a Dynamite Cop character holds: 'own:k', 'item:k' or 'none'. */
     held: 'none',
     /* Air Walkers: the player's pace (+0x16, 0x1000 = 1), which scales the
@@ -3382,6 +3386,8 @@ const BODY_RIGS = {
     },
     /* Power Sled's figures: every part's matrix baked a frame. */
     powsled: { read: readPowsledBodies, motions: readPowsledMotions, list: powsledMotionList, pose: posePowsledBody },
+    /* Virtua Cop's enemies and hostages: the enemy's draw run a frame. */
+    vcop: { read: readVcopBodies, motions: readVcopMotions, list: vcopMotionList, pose: poseVcopBody },
 };
 
 function bodyRig() {
@@ -3737,10 +3743,10 @@ function bouncedDraws(body, posed, m) {
  * other and each head turns toward the other's. The opponent's matrices are
  * in its own frame, so they go through where it stands. */
 function poseFighterAndRival(body, m) {
-    const mirrored = state.mirrored && ['vf2', 'airwlkrs'].includes(state.rom.game.rig?.kind);
+    const mirrored = state.mirrored && ['vf2', 'airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
     const handsPass = playedOver(m);
     const head = state.rom.game.rig?.kind === 'airwlkrs' ? state.headTurn : null;
-    const aim = state.rom.game.rig?.kind === 'von' ? state.aim : null;
+    const aim = { von: state.aim, vcop: state.vcopAim }[state.rom.game.rig?.kind] ?? null;
     const backward = playsBackward();
     const clock = m.clocks ? m.clock : null;
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim });
@@ -4335,12 +4341,13 @@ function noteHeld(body) {
 
 /*
  * Dead or Alive's shadows (js/doafighters.js poseDoaFighter): the pieces the
- * fight code drew with the frame, one a bone, on the floor.
+ * fight code drew with the frame, one a bone, on the floor. Virtua Cop's
+ * people have one, under the root (js/vcopbodies.js poseVcopBody).
  */
 const DOA_SHADOW_POOL = 16;
 
 function placeDoaShadows(holder, pose) {
-    if (state.rom.game.rig?.kind !== 'doa') return;
+    if (!['doa', 'vcop'].includes(state.rom.game.rig?.kind)) return;
     if (holder.doaShadow?.rom !== state.rom) holder.doaShadow = { rom: state.rom, geoms: new Map() };
     const { geoms } = holder.doaShadow;
     for (const { model } of pose.shadows ?? []) {
@@ -4564,6 +4571,14 @@ function noteAim(body) {
     if ($('#aim-note').textContent !== text) $('#aim-note').textContent = text;
 }
 
+/* Only a record whose +0x1D is 2 has the aim (0x15FC0) turn the hips;
+ * the others turn the whole body, or not at all. */
+function noteVcopAim(body) {
+    if (state.rom.game.rig?.kind !== 'vcop') return;
+    const text = body && !body.aims ? t('None of this body\'s records has +0x1D 2: the game never aims it this way.') : '';
+    if ($('#vcop-aim-note').textContent !== text) $('#vcop-aim-note').textContent = text;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
@@ -4571,6 +4586,7 @@ function poseBodyRig() {
     m.flash = flashMaterial(state.rom, m.decoded, m.frame);
     noteHeadTurn(m.decoded);
     noteAim(body);
+    noteVcopAim(body);
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
@@ -5839,6 +5855,13 @@ function wireOptions() {
         noteHeld(state.character);
         poseRig();
     });
+    for (const k of ['yaw', 'pitch']) {
+        $(`#vcop-aim-${k}`).addEventListener('input', (e) => {
+            state.vcopAim = { ...state.vcopAim, [k]: +e.target.value };
+            $(`#vcop-aim-${k}-val`).textContent = `${(+e.target.value * 360 / 0x10000).toFixed(1)}°`;
+            poseRig();
+        });
+    }
     for (const k of ['twist', 'turn', 'tilt']) {
         $(`#aim-${k}`).addEventListener('input', (e) => {
             state.aim = { ...state.aim, [k]: +e.target.value };
@@ -6249,14 +6272,17 @@ function applyGameFeatures() {
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
     const rival = state.rom.game.rig?.kind === 'vf2';
     $('#char-rival-field').hidden = !rival;
-    /* Air Walkers' players play some motions mirrored too (+0xF4). */
-    $('#char-mirror-field').hidden = !rival && state.rom.game.rig?.kind !== 'airwlkrs';
+    /* Air Walkers' players play some motions mirrored too (+0xF4), and
+     * Virtua Cop's enemies (+0x8A0). */
+    $('#char-mirror-field').hidden = !rival && !['airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
     /* And some backward (+0xEC), mirrored or not. */
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
     $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
+    /* Virtua Cop's enemies turn the upper body toward the player. */
+    $('#vcop-aim-field').hidden = state.rom.game.rig?.kind !== 'vcop';
     /* Dynamite Cop's characters hold guns and things (renderHeld, per body). */
     $('#held-field').hidden = state.rom.game.rig?.kind !== 'dynamcop';
     /* And run the motion's clock at its speed times the player's pace. */
@@ -6268,10 +6294,10 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers' and Power Sled's, name the game's own addresses; the plain bodies note
-     * is The House of the Dead's. */
+     * Air Walkers', Power Sled's and Virtua Cop's, name the game's own addresses; the plain
+     * bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;

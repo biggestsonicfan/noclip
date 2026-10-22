@@ -217,6 +217,8 @@ const JA_PAGE = {
     'aim.twist': 'ひねり：腰の上で相手のほうへ回した上半身（+0x36）',
     'aim.turn': '武器の相手への向き（+0x3A）、±67.5°まで、そのあと高さで±5.6°ずらします',
     'aim.tilt': '武器の上下の傾き（+0x38）、相手のほうへ',
+    'vcopaim.yaw': 'プレイヤーへの方位の、体の向きからのずれ（+0x61C − +0x24）。レコードの+0x1Dが2の敵が狙うときのもので、上半身の下で腰と脚がこれだけ回ります',
+    'vcopaim.pitch': 'プレイヤーへの傾きの、体の傾きからのずれ（+0x618 − +0x20）',
     'f.held': '持ち物',
     'held.title': '手に持つもの：右手のモデル（+0x1CC）と左手のモデル（+0x1D0）。敵の自分の持ち物は、出現レコードが与えるものです',
     'pace': 'ペース',
@@ -292,6 +294,17 @@ const JA_PAGE = {
         + 'ゲームはモーション同士をブレンドしません。新しいモーションは、ここと同じく最初のフレーム（逆再生では最後のフレーム）から始まります。'
         + 'モーションの時計は1描画（1/30秒）に1フレームではなく、レコードの速さ（0x80〜0x4C0、0x100で1フレーム）に'
         + '「ペース」（<code>+0x16</code>）を掛けた分だけ進み、フレームの間はゲームと同じく補間します。',
+    'note.vcop': '敵と人質です。ステージのウェーブのレコードが指すボディ（<code>+0x13</code>、<code>0x281EDF0</code> のテーブル）で、'
+        + 'それぞれスケルトンと関節ごとのモデルを持ちます。エクスプローラーは、ゲームが敵をウェーブに出すときと同じこと'
+        + '（<code>0x13A90</code>）を原点で行い、敵自身の描画（<code>0x21A20</code>）を1フレームずつ実行します。'
+        + 'これがモーションの時計を進め、関節をそれぞれ行列にし（<code>0x1F258</code>）、それぞれにモデルを、その下に影を描きます。'
+        + 'モーションは <code>0x28188DC</code> のテーブルの1〜170で、ゲームはどれにも名前を付けていません。'
+        + 'ステージでどれを再生するかは敵のスクリプト（<code>0x2820D40</code>、<code>0x14118</code> が読みます）が'
+        + '撃たれ方と時計で決めます。ボディのリストは、そのレコードのスクリプトが求めるモーションから始まります。'
+        + 'ステップはモーションを左右反転で求めることがあり（<code>+0x8A0</code>）、レコードの <code>+0x1D</code> が2の敵は狙います'
+        + '（<code>0x15FC0</code>）：プレイヤーへの方位と傾き（<code>+0x61C</code>、<code>+0x618</code>）が体の向きからずれた分だけ、'
+        + '上半身の下で腰と脚が回ります。'
+        + '描画はスケルトンを外に出さないので、親はフレームから割り出しています。',
     'note.powsled': 'フィギュアです。データROMの10個のテーブルで、それぞれフレームのリストとパーツ数を持ち、'
         + 'パーツはそれぞれ別のモデルです。1フレームはパーツごとの64バイトのレコードで、モデルと描画に使う行列が'
         + '焼き込まれています。<code>0xE1D70</code> がプッシュし、<code>+0x34</code> の位置へ移動し、'
@@ -453,6 +466,7 @@ const JA_TEXT = {
     'model {model}, left hand': 'モデル {model}、左手',
     'left {model}': '左 {model}',
     'A pickup: the game draws it from frame 10 of its pickup action (0x38E), moved 0.05, -0.1 in the hand and 1.2 times the size.': '拾ったもの：ゲームは拾う動作（0x38E）のフレーム10から、手の中で 0.05, -0.1 ずらし、1.2倍の大きさで描きます。',
+    "None of this body's records has +0x1D 2: the game never aims it this way.": 'この体のレコードには+0x1Dが2のものがなく、ゲームはこの形で狙いません。',
     'This character draws what it holds twice the size.': 'このキャラクターは持ち物を2倍の大きさで描きます。',
     "This robot's weapon does not turn with the aim: its record's +0x484 is 0.": 'このロボットの武器は照準で回りません（レコードの+0x484が0です）。',
     'Fighter': 'ファイター',
@@ -494,6 +508,8 @@ const JA_TEXT = {
     'This fighter\'s action slots': 'このファイターのアクションスロット',
     'Every motion in the table ({n})': 'テーブルのすべてのモーション（{n}）',
     'Every motion in the table': 'テーブルのすべてのモーション',
+    'Motions its scripts ask for': 'スクリプトが求めるモーション',
+    'Every other motion in the table': 'テーブルのその他のモーション',
     'Motions for {n} joints': '関節 {n} 個用のモーション',
     'Driven by this car in the attract': 'アトラクトでこの車が走る記録',
     'Other recorded runs': 'その他の走行記録',

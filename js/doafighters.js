@@ -191,7 +191,7 @@ const sameMatrix = (a, b) => a.every((v, k) => Math.abs(v - b[k]) < 1e-4);
  * parent's very matrix in every frame is laid on it (`joined`): the face on
  * the head, the bust on the chest.
  */
-function jointsOf(rom, frames) {
+export function jointsOf(rom, frames) {
     const n = Math.max(0, ...frames.map((f) => f.length));
     const parents = new Array(n).fill(-1);
     const joined = new Array(n).fill(false);

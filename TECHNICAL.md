@@ -10147,6 +10147,88 @@ run to 7.6e-6 over all sixteen joint matrices, on the first frame. The later dum
 played tens of frames, so they were not compared. All the drawn models are
 ROM models below 0x4D2; none is built in RAM.
 
+### Virtua Cop's people on the Animation tab
+
+`js/vcopbodies.js`. The bodies are the ones the wave records name (+0x13),
+55 of the 67 in `0x281EDF0`, read from every wave of every stage
+(`stageWaves(rom, s, { all: true })`, which also keeps the waves after the
+first and the records on objects). A body's row has the skeleton first and the
+model list third, a model per joint. The spawn copies that list into the slot
+at +0x42C and swaps in the record's variant: body 49's joint 5 draws 1089, not
+the table's 56, and its root draws 45. So the parts are read back from the
+slot after a spawn, joint by joint, root included.
+
+The motions are `0x28188DC[1..170]`, the length first (motion 0 is none; 169
+have frames). A body lists first the motions its records' scripts name. A
+script (`0x2820D40[script]`, read by 0x14118) is two header words (to +0x740
+and +0x74C), then steps of four words: the action (+0x634), the motion
+(+0x5F8), a mirror flag (+0x8A0) and a turn. A sequence ends at an action of -1
+and one more word, and the next one's header follows. Scripts share tails, so
+the walk runs on into the ones after it.
+
+A frame is the game's own. From the booted RAM the explorer writes the body's
+first record to 0x5E0000 at the origin, unturned and on no object, runs the
+spawn (0x13A90), puts the motion at +0x5F8 and the mirror flag at +0x8A0, and
+then calls the enemy's draw, 0x21A20, once a frame. That calls 0x1EAD0 (the
+motion, clock at +0x4C), 0x1F258 (a matrix per joint at +0x12C, 0x30 each),
+0x21A70 (a model on each joint in the list, -1 skipped) and 0x21C10 (shadow
+0xAC). The draw keeps no parent table, so the skeleton the view draws is worked
+out from the frames (`jointsOf`, `js/doafighters.js`) over the six longest
+motions the body's scripts ask for. A short one bends too few joints to tell.
+
+The draw needed copro commands Dead or Alive never sends: 0x00 to 0x03 (add,
+subtract, multiply, divide), 0x2D (1/sqrt) and 0x43 (the distance between two
+points). They are in `VCOP_COPRO`; the stage enemies come out the same with
+them.
+
+**The aim.** 0x15FC0 is called from the script's actions. It puts the bearing
+from the enemy (+0x478, +0x480) to the camera (0x50F418, 0x50F420) at +0x61C,
+and the tilt to the camera's height (0x50F41C) at +0x618, and then goes by the
+record's +0x1D (kept at +0x744):
+
+- 1 turns the whole body: +0x24 becomes the bearing, and the tilt goes to +0x20
+  and +0x28 by the sine and cosine of +0x628.
+- 2 sets +0x630 to 1.
+- 3 sets +0x630 to 2, and anything else to 0.
+
+With +0x630 at 1, 0x1F258 roots the chain differently. After the root's place
+and turns, it turns Y by +0x61C less +0x24 and X by +0x618 less +0x20. The
+result is that joints 1 to 8 (the hips and legs) turn under joints 9 to 15
+(the upper body), which stay where they were. The **Aim** sliders give those
+two differences. The explorer sets +0x630, +0x61C and +0x618 before each draw,
+as the aim would have.
+
+**Graded against MAME.** The shared build ran the attract mode for 5000 frames
+with a Lua tap (stub `hd44780_a00.bin`, a zero file, on the rompath). When a
+slot's root matrix is written, the tap notes the body, motion, clock, mirror
+flag, +0x630, +0x20, +0x24, +0x618 and +0x61C. When joint 15's last word is
+written, it takes all sixteen matrices.
+
+Taking the matrices at the end of the frame instead gave a mix: the frame
+notifier can fire midway through 0x1F258, so some joints were from the next
+clock.
+
+The explorer ran each body and motion with the same mirror flag and aim and
+was compared at the same clock, every joint against the first part's in both:
+
+| Rows | Count |
+| --- | --- |
+| Graded | 745 |
+| Mirrored | 178 |
+| Aiming (+0x630 = 1) | 153 |
+| More than 10° from the motion's first frame | 683 |
+
+Those rows cover 24 body and motion pairs over bodies 0, 1, 8, 10, 12 and 49
+(a boss).
+
+- Worst angle: 0.053°.
+- Worst place: 1.3e-5.
+
+The aiming twists seen ran from -17.5° to +10° in yaw.
+
+64 rows were bodies 53 and 55, which no wave record names. They were not
+graded.
+
 ### The House of the Dead's music
 
 The finished House of the Dead (`hotd`, `hotdo`) is a Model 2C game on the

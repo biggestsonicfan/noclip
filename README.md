@@ -11,7 +11,7 @@ views below are its. *Fighting Vipers* has stages, models and motions — see
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
-stages, its models and its cells — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
+stages, its models, its cells and its enemies' motions — see [Virtua Cop](#virtua-cop). *Dead or Alive* has its
 twelve stages and its models on both its boards — see
 [Dead or Alive](#dead-or-alive). *Sega Rally Championship* has its four
 courses, its models, its cells and the spectators' animations — see [Sega Rally Championship](#sega-rally-championship).
@@ -473,7 +473,7 @@ upload of 1007.
 
 ## Virtua Cop
 
-`vcop.zip` (Revision B) loads with the Stages, Models and Cells tabs. Virtua Cop is Daytona USA's
+`vcop.zip` (Revision B) loads with the Stages, Models, Animation and Cells tabs. Virtua Cop is Daytona USA's
 library a year on — the texture-bank upload, the colorxlat and luma builds and
 the material upload are Daytona's routines instruction for instruction, with
 their tables moved into the data ROM — so it is a Daytona profile with its own
@@ -512,6 +512,19 @@ pose of the first frame the board draws them: the explorer runs the game's own
 spawn and enemy task for each one, and the joints match MAME's to 1e-5. Each
 comes up with the segment its wave starts on. Enemies standing on a moving
 object are left out. See [Virtua Cop's enemies](TECHNICAL.md#virtua-cops-enemies).
+
+The Animation tab has the people: the 55 bodies the waves name, enemies,
+hostages and bosses, each able to play any of the 169 motions in the game's
+table, the ones its scripts ask for first. The explorer runs the game's own
+spawn and per-frame draw for each frame, so a body wears the models its record
+gives it (a variant gun or hat in place of the table's) and its shadow. Tick
+**mirrored** for the motion played the other way round, as a script step can
+ask. The **Aim** sliders turn the body toward the player the way an enemy
+whose record's +0x1D is 2 aims: the hips and legs turn under the upper body by
+how far the bearing and tilt to the player are past the body's own. Checked
+against MAME over 745 frames of the attract mode, mirrored and aiming ones
+among them, every joint within 0.06°. See [Virtua Cop's people on the
+Animation tab](TECHNICAL.md#virtua-cops-people-on-the-animation-tab).
 
 The game builds no models in RAM. Entries 0x4D2 on (crate shadows, the WHARF
 sign, the stage 3 panels) are ROM meshes in a second table at 0x8693F0, and the
