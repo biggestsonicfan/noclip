@@ -5274,9 +5274,45 @@ root travel on. A third table, `ld 0x26F8600[m*4]` (0x2CE97E0 for the second
 pair), goes to `+0x110` with a halfword a frame, 0x8000 at the start when
 there is none; it is not read.
 
+**Hands.** A motion picks the hands. 0x21A70 draws the hand on joint 7 as
+`+0x13C` plus the byte at `+0x11E`, and the one on joint 4 as `+0x130` plus
+`+0x11F`, with no far-model offset; the motion start (0x1F374) fills the two
+bytes from bytes 4 and 5 of the motion's 12-byte record at
+`0xF2C60 + 12 * m` (the same record as the second-table byte at +8 and the
+flags at +3), the other way round when `+0xF4` is 1, which plays the motion
+mirrored (0x1FD10). The offsets are 0 to 5, models after the record's hand:
+384 of the 646 records keep both at 0, 64 take 4 for both (motion 0's
+stance among them). Team 34's routine adds nothing. The explorer sets the two
+bytes from the motion before it runs the draw, so the hands are whatever the
+game's routine draws (`poseAirwlkrs`, `motions.records` in the rig).
+
+**Mirrored motions.** The motion does not say whether it plays mirrored;
+whoever starts it does, in `+0xF4`. In a game that is 0x66FA0 (and 0x66EE0,
+the same on a word it is given): it takes the player's next step from its
+move sequence, six halfwords each at `0x5A300 + 12 * (+0x348)`, step
+`+0x34C`, and stores the low 12 bits at `+0x33C` as the motion to start.
+Bit 14 sets `+0xF4` and `+0xEC`, bit 13 only `+0xEC`, bit 12 only `+0xF4`;
+0xF000 ends the sequence. Of the 1124 steps in the table 480 are mirrored
+(bit 12: sequence 1 is motion 18 and then 18 mirrored), over 431 motions,
+all but 279, 572 and 589 also played straight elsewhere. The players' motion
+scripts (0x28080) have their own bit for it, 15, and 0x26CF0 copies it back,
+with the rest of a player's state, from the record at 0x5138A0 that 0x26BB0
+fills. Each frame 0x201B0 eases the motion's angles into 0x521520, and 0x1FD10 copies them
+to the pose words at 0x5214C0: as they are when `+0xF4` is 0, and mirrored
+when it is 1. Mirrored, joints 0 and 8 take 0x8000 minus their first and
+third words, joint 1 negates its second and third, the arms trade sides
+(2-4 with 5-7) and so do the legs (9-10 with 12-13), their second and third
+words negated, and joints 11 and 14 trade with 0x8000 minus the second word
+(measured on all 693 mirrored draws below). The draw still puts each arm's
+models on its own joints, so a mirrored player's wristband stays on the same
+arm, doing what the other arm did; only the hands go with the motion, because the motion start swaps the
+two record bytes (0x1F374). 0x22800 negates the root's x step. The explorer's
+**mirrored** box sets `+0xF4`, swaps the two bytes, writes the frame to
+0x521520 and runs 0x1FD10 itself (`eased` and `mirror` in the rig), and
+negates the root's x when the travel is on.
+
 **Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
-`+0x11D`), the blend into a new motion, and the hands the game swaps in during
-a play (MAME's log has hands 41 and 47 where the record has 37 and 43).
+`+0x11D`) and the blend into a new motion.
 
 **Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
 and translates and call 0x1E890, which draws from the model table as it is.
@@ -5302,6 +5338,31 @@ words the explorer's run gives the same distances between those ends to
 y (10.75 at motion 18's first frame), and motion 80 has the 8 frames of its
 second-table entry. The headless page shows 173 bodies and 619 motions with no
 errors; Orlando's #7 (TEDIN, set 9) wears the jersey MAME's screen shows.
+
+The hands, checked the same way: MAME at frames 4980 to 5040 of the attract
+(Orlando at home against Chicago in its away kit, ten players), logging the
+model 0x21A70 passes at its two hand draws (0x21EBC, 0x22144) with the
+object's motion, `+0xF4` and bytes, and at 0x2373C the pose words, the scale
+(`+0x58`, `+0x5C`) and the five read-backs. All 580 hand draws, over 15
+motions, mirrored and not, are the record's hand plus the motion record's
+byte as above. The explorer, on each of the 212 unmirrored draws' player and
+motion, draws the same two hand models as MAME (201 of them not the record's
+own). With MAME's pose words and its scale put on the explorer's read-backs,
+every distance between them agrees to 0.0001, the hands' included, except
+those to the head's on the 258 draws whose head is turned (up to 0.21).
+
+The mirrored motions, checked the same way over ten seconds of the same
+attract (frames 4980 to 5580, 3000 draws, 693 of them mirrored over 31
+motions), logging also the eased angles at 0x521520, and in a second run
+watching every player's `+0xF4` from frame 4000 to 5580: there 0x66FA0 writes it 997 times (211 of them 1),
+0x26CF0 60 times from its record, and the setup's 0x1F454 and 0x2DEF0 clear
+it. The explorer draws MAME's
+two hand models on all 3000, the 693 mirrored ones with the box on (posed
+straight instead, 97 of those get the wrong hands). 0x1FD10 on MAME's eased
+angles gives MAME's pose words on all 3000. With MAME's eased angles through
+the explorer's pose, mirrored as MAME had it, and MAME's scale, every
+distance between the five read-backs agrees to 0.00004 (but to a turned
+head); posed unmirrored, the mirrored draws are off by up to 12.3.
 
 ### Air Walkers' cells (`js/cells.js`)
 
