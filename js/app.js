@@ -14,7 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
-import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld } from './dynamcop.js';
+import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readVonStages, readVonBodies, readVonMotions, vonMotionList, poseVonRobot } from './von.js';
 import {
@@ -3368,8 +3368,11 @@ const BODY_RIGS = {
     /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
     dynamcop: {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
-        /* The hands the motion's frame picks (dynamcopHands). */
-        pose: (rom, body, motion, frame, opts) => ({ ...poseBody(body, motion, frame, opts), hands: dynamcopHands(rom, body, motion, frame) }),
+        /* The hands the motion's frame picks (dynamcopHands); character 79
+         * is posed by its own routine, run on the i960. */
+        pose: (rom, body, motion, frame, opts) => (body.quad
+            ? poseDynamcopQuad(rom, body, motion, frame, opts)
+            : { ...poseBody(body, motion, frame, opts), hands: dynamcopHands(rom, body, motion, frame) }),
     },
     /* Virtual-On's robots: two part lists and pairs of records (js/von.js). */
     von: { read: readVonBodies, motions: readVonMotions, list: vonMotionList, pose: poseVonRobot },
@@ -4310,7 +4313,7 @@ function placeDynamcopHeld(holder, body, matrices, frame) {
 /* The Held list for this character: its own sets first, then every model
  * the program puts in a hand. A new character starts on its own first set. */
 function renderHeld(body) {
-    const shown = state.rom.game.rig?.kind === 'dynamcop' && Boolean(body);
+    const shown = state.rom.game.rig?.kind === 'dynamcop' && Boolean(body) && !body.quad;
     $('#held-field').hidden = !shown;
     if (!shown) return;
     const { items, own } = dynamcopItems(state.rom);

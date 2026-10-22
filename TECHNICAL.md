@@ -4652,7 +4652,8 @@ at `offsets[char]` from its parent, turned by the parent: `pos = pos_p +
 off * R_p` (row vectors). The matrices land at object +0x6A4 + 48 * j.
 `models[char]` points at 15 model numbers, one for each of joints 1-15, drawn
 by 0x18FC0 (joint 0 has no model). The two tables run in parallel, 96
-characters each; 75 and 79 use other skeleton routines and are left out.
+characters each; 75 and 79 use other skeleton routines. 75 (drawn by
+0x187E0) is left out; 79 is below.
 
 | table | dynamcop | dyndeka2 | dynamcopb | dyndeka2b | dynamcopc |
 |---|---|---|---|---|---|
@@ -4843,6 +4844,35 @@ with copro commands 0x30 and 0x31, in another angle order, not 0x32 and 0x33.
 No mirror was found. Only the three heroes are named.
 Character 80 (offsets at 0x1F4F9C, models 199-213) draws nothing in the
 explorer; why was not found.
+
+**Character 79, the bird** (`dynamcopQuadBody`, `poseDynamcopQuad`). The
+object's handler 0x1A9BC sends char 0x4F to a skeleton routine of its own,
+0x16BC0, after 0x169E0 copies the frame. Its motions (2093, 2097-2107) have
+13 joints, 0x5C bytes a frame: 13 angle triples, 2 bytes of padding, and the
+root's three floats in the last 12 bytes (`readFrame` reads them from the
+end). 0x169E0 copies triple t to slots 0, 1, 2, 3, 6, 9, 5, 10-15 in that
+order (h0 to +0x40C, h1 +0x40A, h2 +0x408 of slot 0x408 + 0x2C * slot), and
+0x16880 puts the frame's height in +0x100. 0x16BC0 turns the root -0x4000
+about y, or, for motion 2093 (a flight path in stage coordinates, height 98),
++0x40 about y and +0x3C about z instead, moves by +0x30, +0x34 + +0x100,
++0x38, then steps out joint by joint with copro 0x33 (push, move, turn z, y,
+x) and 0x32, reading each matrix back to +0x6A4 + 48 * j. The 2B builds send
+0x65 and 0x6B in-band after 0x19 for the same two.
+
+The tree was fitted to those matrices against the offsets at 0x1F4EFC
+(parents `-1 0 1 1 9 9 1 9 9 0 9 10 11 9 13 14`): chest 1 on the root, head 2
+and wings 3 and 6 on the chest, hips 9 on the root, tail 5 and legs 10-12
+and 13-15 on the hips. Slots 4, 7 and 8 get the tail's matrix and 0x17950
+does not draw them. The explorer runs 0x169E0 and 0x16BC0 on the i960
+(`rig.quad`, per build) with those copro commands. Without travel, 2093 is
+held at its first frame's place.
+
+Graded with a MAME hijack (break in the handler, set the char, motion and
+frame, run 0x16BC0, save +0x6A4): 60 frames of the twelve motions, frames up
+to 180° from rest, worst 0.039° in relative joint turns and 1.4e-5 in joint
+distances. All five builds give the same matrices. Not done: 0x17950 also
+draws each part flattened through 0x54ECF0 with 0x9AA50, the bird's own
+shadow; the standard shadows, hands and held items are off for it.
 
 ### Fighting Vipers' cells (`js/cells.js`)
 
