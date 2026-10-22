@@ -5311,8 +5311,33 @@ two record bytes (0x1F374). 0x22800 negates the root's x step. The explorer's
 0x521520 and runs 0x1FD10 itself (`eased` and `mirror` in the rig), and
 negates the root's x when the travel is on.
 
-**Not shown.** The head's turn toward the play (`+0xC4..+0xC8`, by bit 5 of
-`+0x11D`) and the blend into a new motion.
+**Head turn.** The motion start copies the motion record's flags (byte 3 of
+`0xF2C60 + 12 * m`) to `+0x11D`; when bit 5 is set (58 of the 646 records,
+motions 0 and 18 among them), 0x21A70 turns the head's joint by `+0xC8`,
+`+0xC6` and `+0xC4` after its pose words (axes 0x1616, 0x1515, 0x1414). Each
+frame of play 0xB1710 (from 0x65C18) fills them. By the player's state
+(`+0x2C8`, the move sequence `+0x348`, ...) it either zeroes all three or
+takes a bearing and tilt from 0x54BC0 toward the point it watches; `+0xC4`
+is 0, `+0xC6` the bearing less the player's facing `+0x338`, held to ±0x3000
+(67.5°), and `+0xC8` the tilt held to ±0x1000 (22.5°), or 0 once the
+bearing is held. Which point it watches isn't followed here. The explorer sets
+`+0x11D` from the record and, from the **Head turn** sliders, `+0xC6` and
+`+0xC8` through the same holds (`airwlkrsHeadTurn`), then runs the draw. A
+motion without bit 5 keeps the head straight whatever the sliders say, as in
+the game, and the panel says so.
+
+Checked against MAME, attract frames 4980 to 5580 (3000 draws, 693 mirrored,
+31 motions), logging `+0xC4..+0xC8` with the rest at 0x2373C and watching
+every player's three words: 0xB1710's stores are the only ones in play
+(2860 each, and 0x26CF0's 60 from its record). `+0x11D` equals the record's
+byte 3 on all 3000 draws, 1925 have bit 5 and 1916 a turn that isn't 0 (1123
+of those held at ±0x3000). `+0xC4` was always 0, and every `+0xC6`/`+0xC8`
+pair is one `airwlkrsHeadTurn` leaves as it is. With MAME's eased angles,
+`+0xF4` and the head's words, the distances between all five read-back joint
+ends, the head's included, agree to 0.00003 on all 3000 draws; with the head
+left straight the turned draws are off by up to 0.35.
+
+**Not shown.** The blend into a new motion.
 
 **Skin.** Nothing is patched at run time: 0x214A0 and 0x21A70 only send turns
 and translates and call 0x1E890, which draws from the model table as it is.
@@ -5334,7 +5359,8 @@ read-backs of five joint ends (0x5215E0..0x521630), on ten players in a game
 on court 9: the pose words are the motion table's frames eased at `+0xE0`
 (but just after a motion changes, while it blends), and with MAME's own pose
 words the explorer's run gives the same distances between those ends to
-0.0001, or within 0.21 where the head is turned. `+0xB0` is the root track's
+0.0001 (0.21 where the head was turned, before the head turn was in; see
+**Head turn**). `+0xB0` is the root track's
 y (10.75 at motion 18's first frame), and motion 80 has the 8 frames of its
 second-table entry. The headless page shows 173 bodies and 619 motions with no
 errors; Orlando's #7 (TEDIN, set 9) wears the jersey MAME's screen shows.

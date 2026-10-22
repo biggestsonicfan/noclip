@@ -140,6 +140,9 @@ const state = {
      * after a move that ends with move flag 21; see mirrorSample. Air Walkers:
      * the motion played mirrored (+0xF4), hands swapped. */
     mirrored: false,
+    /* Air Walkers: the head's turn toward the play, its turn and tilt
+     * (+0xC6, +0xC8) in 0x10000 a turn; see airwlkrsHeadTurn. */
+    headTurn: [0, 0],
     /* Fighting Vipers: which halves of the fighter's armour are broken (see
      * armouredFighter), and whether the win streak's hips are asked for. */
     armour: { upper: false, lower: false, streak: false },
@@ -3717,7 +3720,8 @@ function bouncedDraws(body, posed, m) {
 function poseFighterAndRival(body, m) {
     const mirrored = state.mirrored && ['vf2', 'airwlkrs'].includes(state.rom.game.rig?.kind);
     const handsPass = playedOver(m);
-    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass });
+    const head = state.rom.game.rig?.kind === 'airwlkrs' ? state.headTurn : null;
+    if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head });
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -4408,11 +4412,22 @@ function setLightScale(material, scale) {
     material.uniformsNeedUpdate = true;
 }
 
+/* Air Walkers turns the head only in a motion whose record (0xF2C60) has bit 5
+ * of its flags set. */
+function noteHeadTurn(motion) {
+    if (state.rom.game.rig?.kind !== 'airwlkrs') return;
+    const R = state.rom.game.rig;
+    const turns = motion ? (state.rom.maincpu[R.motions.records + motion.index * 12 + 3] & 0x20) !== 0 : false;
+    const text = turns ? '' : t('This motion keeps the head straight: its record has no bit 5.');
+    if ($('#head-note').textContent !== text) $('#head-note').textContent = text;
+}
+
 function poseBodyRig() {
     const body = state.character;
     const m = state.motion;
     if (!body) return;
     m.flash = flashMaterial(state.rom, m.decoded, m.frame);
+    noteHeadTurn(m.decoded);
     const pose = poseFighterAndRival(body, m);
     const { matrices, origins, extras } = pose;
     m.spring = pose.spring;
@@ -5609,6 +5624,13 @@ function wireOptions() {
         state.mirrored = e.target.checked;
         poseRig();
     });
+    for (const [k, id] of [[0, '#head-turn'], [1, '#head-tilt']]) {
+        $(id).addEventListener('input', (e) => {
+            state.headTurn = state.headTurn.map((v, i) => (i === k ? +e.target.value : v));
+            $(`${id}-val`).textContent = `${(+e.target.value * 360 / 0x10000).toFixed(1)}°`;
+            poseRig();
+        });
+    }
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
         $('#char-behind-field').hidden = !state.opponent;
@@ -6013,6 +6035,8 @@ function applyGameFeatures() {
     $('#char-rival-field').hidden = !rival;
     /* Air Walkers' players play some motions mirrored too (+0xF4). */
     $('#char-mirror-field').hidden = !rival && state.rom.game.rig?.kind !== 'airwlkrs';
+    /* And turn the head toward the ball. */
+    $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     $('#char-behind-field').hidden = !rival || !state.opponent;
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();
