@@ -5287,9 +5287,46 @@ some parts has mesh 0, which is not drawn. Temjin's upper body part 6 has
 62 variants that its win and loss step through, 61 down toward 2, one a
 frame. The triples go into the model table through `addModelTriples`,
 as the field code's do. Slot 0 is the waist, the legs list's last entry.
-Slot 1 is the hand the weapon list's entry 1 is drawn in. Zig-Raht's record
-has no weapons or upper body, and one list of 25 parts with 32-byte
-variants that another routine draws; it is left out.
+Slot 1 is the hand the weapon list's entry 1 is drawn in.
+
+Zig-Raht's record, the last, has no weapons or upper body list. Its own
+draw (0x3A510) places the object (0x12 its place, 0x2A its +0xAC scale,
+0x15 and 0x14 its turns, as the other robots' draw does) and then sends
+the legs list alone, 26 parts at 0x17720, through the same part draw
+0x8DD40: `g0` the record at 0x51ACFC, `g4` the frame at 0x51AD00, `g3` the
+variants at +0xB0, and `g5` 1 so it draws every frame. Its variants are 16
+bytes like the others', two per part, the same. Its +0x70 pairs are other
+robots' 8-part legs records, which it never plays. The records it plays
+are set by its own code, 0x37FC4-0x399A0, all 26 parts: eight as literals
+(0x2B1D9DC at 0x37FC4, 0x2AC7824 at 0x39994, ...) and fifteen loaded from a
+table at 0x382F0 (`ld 0x382F0[g4*4]` at 0x38350, 0x382F4 at 0x384A0,
+0x382F8 at 0x38610, 0x38320 at 0x386CC, 0x38334 at 0x388F4). The frames
+come from counters on the object (+0x17A, +0x194). The explorer lists the
+23 as Zig-Raht's motions (`rig.boss`), each its record's address, and
+poses them on the legs path: one record's last frame is the next one's
+first. vonu's code is the same 0xC30 on (the table at 0x38F20), and the
+records, in the shared data ROM, the same. The effects the draw hangs
+before the parts (table 0x2BE31DC, by the countdown at 0x51ACE4) and off
+slot 0 after them (0x51ACE8) are not drawn.
+
+Zig-Raht is a fight object like the others: the fight's setup reads each
+player's robot from 0x503A98/0x503A9C (`ld 0x19360[g3*4]` at 0x19DC0), and
+the object's init (0x27550) gives index 9 its own handler (0x274A0, which
+runs the actions at 0x3D520 and the draw) and init (0x3D5D0). So writing 9
+to 0x503A9C each frame puts it in the attract's fights as player 2, with
+its own controller. Checked against MAME that way (upstream MAME, vonj,
+20000 frames): a write tap on 0x801008 (the list address the copro writes
+the matrix at, + 0x34) and 0x804000-0x80400F (the object's words, matched
+to Zig-Raht's 25 meshes) logged each part, with 0x51ACFC and 0x51AD00 as it
+was sent; the 12 floats after the 0x0580xxxx word at that address in
+bufferram, read at the end of the frame, are its matrix. On all 10135
+frames it was drawn, each part's matrix relative to part 0 matches the
+explorer's on entry 0x51AD00 (the tab's frame + 1) to 0.064 degrees and
+0.0041 units. Player 1's Temjin legs in the same run show the same floor
+(95% of frames within 0.07 degrees), with or without `-nodrc`, so that is
+the copro's arithmetic. 21 of the 23 records played, every entry of the
+long ones. Two never did: 0x2B2BA44 (0x38224, when the counter +0x194 is
+negative) and 0x2AC7824 (action 6, 0x39980).
 
 `vonu`'s records are 0xF0 lower, their table at 0x19270; the records and
 lists are the same.

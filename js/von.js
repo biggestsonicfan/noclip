@@ -215,8 +215,10 @@ export function readVonStages(rom) {
  * * 12) for what is drawn off it later. Slot 0 is the waist, which the legs
  * list ends on, and slot 1 the hand the weapon list's entry 1 is drawn in.
  *
- * Zig-Raht's record, the last, has no upper body or weapons: its one list of
- * 25 parts, 32-byte variants, is another routine's, not read here.
+ * Zig-Raht's record, the last (`rig.boss`), has no upper body list: its own
+ * draw (0x3A510) sends its legs list alone, 26 parts, to the same part draw,
+ * its variants by the object's +0xB0. Its slot 0 is where the draw hangs its
+ * effects (0x2BE31DC), which are not drawn here.
  */
 const ROBOT_WEAPONS = 0x00, ROBOT_BODY = 0x08, ROBOT_LEGS = 0x10;
 const ROBOT_MOTIONS = 0x70, ROBOT_PAIRS = 103;
@@ -262,11 +264,13 @@ export function readVonBodies(rom) {
         if (struct + ROBOT_NAME + 16 > rom.maincpu.length) continue;
         const legs = readList(rom, struct, ROBOT_LEGS), upper = readList(rom, struct, ROBOT_BODY);
         const weapons = readList(rom, struct, ROBOT_WEAPONS);
-        if (!legs.length || !upper.length) continue;
+        const boss = i === R.boss?.robot;
+        if (!legs.length || (!upper.length && !boss)) continue;
         let name = '';
         for (let p = struct + ROBOT_NAME; rom.maincpu[p] && name.length < 16; p++) name += String.fromCharCode(rom.maincpu[p]);
         const aims = dv.getUint32(struct + ROBOT_AIMS, true) !== 0;
-        robots.push({ i, struct, name, legs, upper, aims, weapon: weapons[1]?.triple ?? null, weaponVariants: weapons[1]?.variants });
+        robots.push({ i, struct, name, legs, upper: boss ? [] : upper, aims,
+            weapon: boss ? null : weapons[1]?.triple ?? null, weaponVariants: weapons[1]?.variants });
     }
     addModelTriples(rom, robots.flatMap((r) => [...r.legs, ...r.upper].map((e) => e.triple)
         .concat([r.weapon]).filter(Boolean)));
@@ -386,8 +390,22 @@ function variantTriple(rom, part, v) {
  */
 export function readVonMotions(rom, bodies) {
     const dv = rom.mainCpuView;
+    const boss = rom.game.rig.boss;
     const out = [];
     for (const body of bodies) {
+        /* Zig-Raht plays the records its own code sets (rig.boss), its legs
+         * list's alone; where each is set stands in for a pair. */
+        if (body.index === boss?.robot) {
+            for (const [routine, at] of boss.records) {
+                const legs = readRecord(rom, at);
+                if (!legs) continue;
+                out.push({
+                    index: out.length, robot: body.index, pair: -1, routine, name: `0x${at.toString(16)}`,
+                    joints: body.joints, frames: legs.frames, address: at, upper: null, legs, view: rom.mainDataView,
+                });
+            }
+            continue;
+        }
         const seen = new Set();
         for (let n = 0; n < ROBOT_PAIRS; n++) {
             const at = body.root + ROBOT_MOTIONS + n * 8;
