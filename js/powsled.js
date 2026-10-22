@@ -28,7 +28,6 @@ import { boardToOps } from './doa.js';
 import { gameLighting } from './stages.js';
 import { readModelEntry } from './romset.js';
 import { decodeModel } from './model.js';
-import { AT_EYE } from './display.js';
 
 /* An object address with bit 23 set is a word index into the polygon ROM. */
 const POLY_BIT = 0x00800000;
@@ -374,6 +373,16 @@ function sceneCameras(rom, pieces) {
  * their floor runs under the course, which the board's z sort puts in front
  * of it but a depth test would not.
  */
+/*
+ * Stand where the camera stands: a translation to the eye, unturned, so what
+ * comes after it is carried along with the camera and never got nearer to.
+ * Power Sled's sky and mountains go round the sled this way (0xD8890). It
+ * lives here, not beside display.js's other camera ops, because display.js
+ * imports romset.js, which imports this module: an import back would leave
+ * it unset when display.js is loaded first.
+ */
+const AT_EYE = ['ce'];
+
 const BACKDROP = [
     { words: [0x7C864, 0x7C954, 0x8AB219], ops: [AT_EYE, ['t', [0, 500, 0]], ['s', [3, 3, 3]]] },
     { words: [0x72A62, 0x72B5A, 0x89DAE0], ops: [AT_EYE, ['t', [0, -2600, 0]]], backdrop: true },
