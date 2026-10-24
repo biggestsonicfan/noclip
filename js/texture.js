@@ -1103,6 +1103,71 @@ function buildCopyTexram(rom) {
 }
 
 /*
+ * Pilot Kids' pages are not packed for the 315-5881 chip: the program deals
+ * them out of the data ROM itself (0x5C2A0 in the Revision A build, run from
+ * its RAM copy). `raw.loads` is the program's table of {source, kind}, ten
+ * loads: load 0 the common one the boot puts in (kind 1), loads 1 to 9 a
+ * scene's (kind 0), which go in over it. A kind is a list of rectangles, each
+ * `blit(base, row, col, h, w)` (0x5C610), the source running on from one to
+ * the next; `base` here is the quarter of texture RAM, 0 and 1 the two halves
+ * of sheet 0 (0x11000000, 0x11080000), 2 and 3 those of sheet 1 (0x11200000,
+ * 0x11280000). A rectangle starts at byte (row >> 1) * 0x400 + (col >> 2) * 4
+ * of its quarter and is h / 2 row pairs of w bytes; each row pair is a run of
+ * halfword headers, n = low byte and m = high byte (0 meaning 256), each
+ * followed by n halfwords written again and again until m are out. Kind 1
+ * ends with a 16 by 32 rectangle of halfword 0x8888 (0x5C6F0). Kind 2 is in
+ * the program but no load names it. m2-hle2's sheets match byte for byte, at
+ * the title (load 8) and in the first stage (load 4).
+ */
+const PLTKIDS_KINDS = [
+    [[0, 0, 0, 1024, 1024], [3, 0x200, 0, 512, 512], [1, 0x300, 0x200, 256, 256],
+        [3, 0x380, 0x300, 128, 128], [1, 0x3c0, 0x380, 64, 64], [3, 0x3e0, 0x3c0, 32, 32]],
+    [[2, 0, 0, 1024, 1024], [3, 0, 0, 512, 1024], [1, 0x200, 0, 512, 512], [1, 0x200, 0x200, 256, 512],
+        [3, 0x300, 0x200, 256, 256], [3, 0x300, 0x300, 128, 256], [1, 0x380, 0x300, 128, 128],
+        [1, 0x380, 0x380, 64, 128], [3, 0x3c0, 0x380, 64, 64], [3, 0x3c0, 0x3c0, 32, 64],
+        [1, 0x3e0, 0x3c0, 32, 32], [1, 0x3e0, 0x3e0, 16, 32]],
+];
+const PLTKIDS_QUARTER = SHEET_BYTES / 2;
+
+function pltkidsLoad(rom, tex, load) {
+    const cv = rom.mainCpuView;
+    const md = rom.mainData;
+    const at = rom.game.texture.raw.loads + load * 8;
+    const kind = cv.getUint32(at + 4, true);
+    let src = cv.getUint32(at, true) - MAIN_DATA_BASE;
+    const rects = PLTKIDS_KINDS[kind];
+    if (!rects) return;
+    for (const [base, row, col, h, w] of rects) {
+        const start = base * PLTKIDS_QUARTER + (row >> 1) * ROW_PAIR + (col >> 2) * 4;
+        for (let rp = 0; rp < h >> 1; rp++) {
+            let d = start + rp * ROW_PAIR;
+            const end = d + w;
+            while (d < end && src + 2 <= md.length) {
+                const head = md[src] | (md[src + 1] << 8);
+                src += 2;
+                const n = (head & 0xff) || 256, m = (head >> 8) || 256;
+                const run = md.subarray(src, src + n * 2);
+                for (let k = 0; k < m && d + run.length <= tex.length; k += n, d += n * 2) tex.set(run, d);
+                src += n * 2;
+            }
+        }
+    }
+    if (kind === 1) {
+        const start = 3 * PLTKIDS_QUARTER + (0x3f0 >> 1) * ROW_PAIR + (0x3e0 >> 2) * 4;
+        for (let rp = 0; rp < 8; rp++) tex.fill(0x88, start + rp * ROW_PAIR, start + rp * ROW_PAIR + 32);
+    }
+}
+
+/* Set s is the common load with scene load s + 1 over it. */
+function buildPltkidsTexram(rom, texSets) {
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    pltkidsLoad(rom, tex, 0);
+    pltkidsLoad(rom, tex, (sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet) + 1);
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
  * Virtual On's banks are LZSS: a big-endian byte count, then flag bytes read
  * low bit first, a set bit a literal, a clear one a 12-bit window offset and
  * a 4-bit length less 3, out of a 4096-byte window whose writes start at
@@ -1581,6 +1646,7 @@ function rallyCourseModels(rom) {
  * - Air Walkers: see airwlkrsModelSets.
  * - Last Bronx: see lastbrnxModelSets.
  * - Power Sled: there is one texture RAM, so a model that samples any is on it.
+ * - Pilot Kids: an untextured model only; nothing yet ties a model to a scene.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1600,6 +1666,11 @@ export function programTextureSets(rom, index, decoded) {
     }
     if (T.raw?.layout === 'airwlkrs') return airwlkrsModelSets(T.raw, index, decoded);
     if (T.raw?.layout === 'lastbrnx') return lastbrnxModelSets(rom, index, decoded);
+    /* Pilot Kids: nothing read yet says which scene a model is drawn in, so
+     * only an untextured one is answered; the rest open on the title's set. */
+    if (T.raw?.layout === 'pltkids') {
+        return decoded && !sampledTiles(decoded).length ? { sets: [], how: 'untextured' } : null;
+    }
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
         return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
@@ -1661,6 +1732,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'airwlkrs') return buildAirwlkrsTexram(rom, texSets);
         if (layout === 'lastbrnx') return buildLastbrnxTexram(rom, texSets, fighters);
         if (layout === 'copy') return buildCopyTexram(rom);
+        if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {

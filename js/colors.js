@@ -326,6 +326,47 @@ function buildPowsledColorxlat(rom) {
     return out;
 }
 
+/*
+ * Pilot Kids. The boot (0x5C890) makes every row of all three channels a
+ * ramp: slot l of 0..63 is r * (8l + 72) / 72 for row r, floored at r (the
+ * byte table at 0x5C870 is 0..31), and slots 64 on keep slot 63's value.
+ * Then 0x5C960 lays the colours of table 0 over the first 64 slots of odd
+ * rows 1 to 9, and a scene its own table over odd rows 11 to 29 (0x54A20, the
+ * table chosen by the scene script's op 144). `tables` is the program's list
+ * of the tables' offsets, `counts` their row counts, a row 64 {r, g, b} byte
+ * triples. `scenes` is the table each texture set's scene picks, as far as
+ * m2-hle2 has shown it; null keeps the ramp on rows 11 to 29. In m2-hle2's
+ * RAM row 31's first 64 slots are row 30's, by code not found; that is
+ * copied. Checked against m2-hle2's colorxlat RAM at the title and in the
+ * first stage: no entry differs.
+ */
+function buildPltkidsColorxlat(rom, colorSet) {
+    const P = rom.game.colors.pltkids;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const ramp = (r, slot) => Math.max(Math.trunc((r * (8 * slot + 72)) / 72), r);
+    for (let row = 0; row < 32; row++) {
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = ramp(row === 31 && luma < 64 ? 30 : row, Math.min(luma, 63));
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    const md = rom.maincpu;
+    const cv = rom.mainCpuView;
+    const table = (k, row0) => {
+        let at = cv.getUint32(P.tables + k * 4, true);
+        for (let i = 0; i < md[P.counts + k]; i++) {
+            for (let luma = 0; luma < 64; luma++) {
+                for (let ch = 0; ch < 3; ch++) put(ch, row0 + i * 2, luma, md[at++]);
+            }
+        }
+    };
+    table(0, 1);
+    const scene = P.scenes[colorSet];
+    if (scene) table(scene, 11);
+    return out;
+}
+
 /**
  * A Dead or Alive fighter's load id, the byte at the rig's `loads` + 13 *
  * costume + char (0x70F40). The game loads everything of a fighter's by it,
@@ -590,6 +631,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.airwlkrs) return buildAirwlkrsColorxlat(rom, colorSet);
     if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
+    if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);

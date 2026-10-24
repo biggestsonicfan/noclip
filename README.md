@@ -24,6 +24,7 @@ its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *
 its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
+Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 
 Three views, and a fourth for the 2D art:
 
@@ -1077,6 +1078,25 @@ Four models are drawn from polygon RAM the program fills itself and are empty
 here. See
 [TECHNICAL.md](TECHNICAL.md#last-bronx-jstexturejs-jscolorsjs-jsromsetjs).
 
+## Pilot Kids
+
+`pltkids.zip` on its own is the Model 2B build, Revision A; `pltkidsa.zip`
+beside it is the Model 2A build, offered as a variant (its zip holds only the
+program and the 2A board's chips, so it wants `pltkids.zip` with it). The
+**Models** tab has all 4185 entries of the model table, every one with a
+mesh, with the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets 0..8 are the nine scenes the game loads, each over
+the common pages every scene has; set 7 is the title's, which a model opens on.
+Nothing found yet says which scene a model belongs to, so a scene's part needs
+its set picked by hand. The textures, palette, luma and colour tables match
+m2-hle2's at the title and in the first stage byte for byte. Sets 0, 1, 2, 3
+and 7 have their scene's colours; sets 4, 5, 6 and 8 were never reached, and
+their scene's colour rows keep the plain ramp.
+
+There is no Stages tab, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1120,6 +1140,9 @@ For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
 `lastbrnx.zip` for Last Bronx; its Japan build wants `lastbrnj.zip` beside it,
 and its USA build `lastbrnxu.zip`.
+
+`pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
+beside it.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

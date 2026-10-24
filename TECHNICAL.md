@@ -6666,6 +6666,83 @@ in costume 0 and 1772 in costume 1, so she stands without it. The fighters
 have not been held against MAME's pictures; the copro is held only to
 m2-hle2's port of MAME's interpreter. The USA set has not been tried.
 
+### Pilot Kids (`js/texture.js`, `js/colors.js`)
+
+Psikyo's 1998 shooter on Model 2B CRX (MAME's `pltkids`, Revision A) and on
+Model 2A (`pltkidsa`) keeps none of the AM2 tables either. Each was found from
+the code that uses it, with m2-hle2's debugger stopping on the routines and
+its texture, colour and palette RAM dumped at the title (frame 300) and in the
+first stage (frames 1100 and 1600) to check the result. The program runs from
+a copy of itself at RAM 0x500000, so a RAM address 0x5xxxxx is the program
+ROM offset less 0x500000. The addresses below are the 2B build's; the 2A
+build keeps every table at the same offset but the colour table list, 0x80
+sooner (0x82280), and much of its code 0x80 or 0x90 sooner. The data,
+polygon and texture chips are the same in both.
+
+**Model table.** The data ROM at 0x28D90, 24 bytes an entry: texture word,
+material word, mesh pointer (`0x800000 | word`, as in the other games),
+polygon count, and two more texture words. It runs 4185 entries to 0x415E8;
+zeros follow, then a font at 0x41708. The program names 0x2028D90 13 times,
+and every one is a draw between 0x5DEE0 and 0x5F0DC: `lda (g0)[g0*2]`,
+`lda 0x2028d90[g0*8]`, `st 0x101, 0x800010`, `ldq` and `stq` to 0x804000.
+Most send words 0 to 3 as they are; 0x5DF40 and 0x5DF80 send word 4 or 5 in
+place of word 1, the same model under another texture header. All 4185
+entries have a mesh, and all decode (697,781 faces, 567,386 of them
+textured).
+
+**Textures.** Not packed for the 315-5881 chip: the program copies its pages
+out of the data ROM itself. The table at 0x5BF30 holds ten loads of
+{source, kind}: load 0 (data 0xE8640, kind 1) is the common one the boot puts
+in (0x5C190), loads 1 to 9 (0x1670F0 to 0x40B550, kind 0) a scene's, put in
+by 0x5C2A0 over it, which keeps the load it has in at RAM 0x532D10. A kind is
+a list of calls to 0x5C610, `blit(base, row, col, h, w)`, the source running
+on from one call to the next. A rectangle starts at byte
+(row >> 1) * 0x400 + (col >> 2) * 4 of its base, 0x11000000 or 0x11080000 on
+sheet 0, 0x11200000 or 0x11280000 on sheet 1, and is h / 2 row pairs of w
+bytes. Each row pair is a run of halfword headers, n the low byte and m the
+high (0 meaning 256), each followed by n halfwords that are written again and
+again until m are out. Kind 0 is a 1024 by 1024 page on sheet 0 with its
+mips on sheet 1 and 0; kind 1 a page on sheet 1 and a 512 by 1024 one, with
+theirs, then a 16 by 32 rectangle of 0x8888 (0x5C6F0). A kind 2 is in the
+program, but no load names it. Each load's stream ends a few bytes short of
+the next one's start. Set s in the viewer is load 0 with load s + 1 over it,
+and both sheets match m2-hle2's byte for byte at the title (load 8, set 7)
+and in the first stage (load 4, set 3).
+
+**Which scene a model is in** is not found: the scene's script picks the
+load, and that script is not read. The viewer opens every model on the
+title's set, and the picker moves it.
+
+**Palette.** {count, colours} at program 0x19E30, 674 colours, which 0x51B10
+copies to the face palette. It matches m2-hle2's.
+
+**Luma.** 0x5C9F0 copies 0x8000 bytes from program 0x6650 to luma RAM
+(0x5CAC0 and 0x5CB70 can lay another band, or a dimmed one, over band 0; the
+boot asks for neither). It matches m2-hle2's.
+
+**Colour tables.** 0x5C890 makes all 32 rows of the three channels a ramp:
+slot l of 0..63 is r * (8l + 72) / 72 for row r, floored at the byte table
+at 0x5C870 (which is r), and slots 64 on keep slot 63's. Then 0x5C960 lays
+table 0 over the first 64 slots of odd rows 1 to 9, and a scene its own
+table over odd rows 11 to 29 (0x54A20, from 0x54B60, which keeps the table
+number at RAM 0x509312). A table is rows of 64 {r, g, b} byte triples; the
+list of the nine tables is at 0x82300 (0x2630, 0x29F0 and on), their row
+counts the bytes at 0x65F0 (5, then 10 each). In m2-hle2's RAM row 31's
+first 64 slots hold row 30's values; what writes them is not found, and the
+viewer copies it. With that, the tables match m2-hle2's at the title and in
+the first stage, entry for entry.
+
+The scene's script picks its table with op 144 (0x61F30 in the op table at
+0x6A230), so which table goes with which load was watched, not read: in
+m2-hle2 the title is load 8 with table 8, the attract's three demos loads 1,
+2 and 3 with tables 4, 3 and 1, and the first stage played load 4 with table
+7 (`scenes` in the profile). Loads 5, 6, 7 and 9 were not reached; their sets
+keep the ramp on rows 11 to 29.
+
+**Not done.** Stages, characters and motions, the scene each model belongs
+to, and the colour tables of four scenes. The 2A build's texture and colour
+code was not stepped, only its tables compared with the 2B build's.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
