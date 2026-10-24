@@ -6469,6 +6469,105 @@ riders' hiding, the slide and the woman's loop), 670 frames each, 51,418 to
 MAME drops a frame at t 200, after which the logged clock is a frame ahead
 of the one drawn.
 
+### Last Bronx (`js/texture.js`, `js/colors.js`, `js/romset.js`)
+
+Sega's 1996 fighter on Model 2B CRX (MAME's `lastbrnx` and `lastbrnxj`)
+keeps none of the AM2 tables, so each was found from the code that uses it,
+with MAME's debugger logging the calls and its memory dumped to check the
+result. The program copies its data section to RAM 0x500000 at boot, out of
+the program ROM at 0xC9100 (Export) or 0xC9220 (Japan), so a RAM address the
+routines read is a program ROM offset here (`data` in the profile). The two
+builds keep everything else at the same offsets, except the fighter records
+(0xB53B0 / 0xB54D0) and the colour settings (0x3D4BB / 0x3D5DB), which move
+with the data section.
+
+**Model table.** The program ROM at 0x189B0, 16 bytes an entry: texture
+word, material word, mesh pointer, polygon count. It runs 2544 entries, up to
+a byte table at 0x229B0. The draws at 0x4370C and 0xAD930 send an entry as
+it is: `ld 0x189B0..0x189BC` and `stq g0, 0x804000` after
+`st 0x101, 0x800010`. The table being in the program and not the data ROMs
+is new, so `modelTable.source` names the region (`readModelEntry` in
+`js/romset.js`). Meshes are polygon ROM words, as in the other games
+(`0x800000 | word`). Entries 1691, 1692, 1772 and 1773 name word 0x4000, the
+polygon RAM the program fills itself, and decode to nothing. The Japan table
+is the same but for entry 2548, past the end.
+
+**Stage textures.** A stage's set-up loads one of three banks,
+`ld 0x500010[ld 0x5042B0[stage*4]*4]`, an LZ stream in the data ROMs. 0x81C0
+reads it: a 16-bit flag word, top bit first, then a literal halfword for a
+set bit, or for a clear one a signed halfword t that copies (t & 15) + 2
+halfwords of a 4096-halfword window from position t >> 4. 0x8320 deals it
+onto the sheets by the table at program 0x8320: rows of 0x20 bytes, a repeat
+count and then runs, each run written to the current sheet while the other
+sheet's offset skips the same length, the sheets swapping after each run.
+
+**Fighter pages.** Then three raw rectangles on sheet 1 by 0x8620, each with
+its mips on the other sheet by 0x8920: the common page `ld 0x500030` at row
+256, player 1's page at row 0 and player 2's at row 512 (x past 0x1FF folds
+onto rows 512 on). A fighter's page is `ld 0x500030[n*4]` for the record's
+word 7. The records are 128 bytes; +0x20 and +0x24 are the colour lists of
+costume 0 and 1, and words 1..5, 10 and 11 are model lists, 28 pointers into
+the model table each.
+
+**Whose part a model is.** The model lists name the fighters' bodies. Each
+fighter's models run from the first its word-1 list names (1353, 1440, 1542,
+1669, 1784, 1869, 1985, 2101 and 2184 for fighters 0..8) to the next
+fighter's first, the last ending at 2495, with player 1's and player 2's page
+copies alternating; the models in a run that no list names (spare hands and
+faces) are taken to be the fighter's too. A fighter's part opens on the set of
+that fighter alone. A part that samples only the common and fighter pages
+(the shared parts at 1185..1317 among them) is the same under every stage and
+opens on the default set. The rest sample a stage bank, and are left to the
+default guess, Cross Street.
+
+**Sets.** 0..8 are the stages, each with the fighters asked for or, none
+given, the attract's first fight: Yoko in costume 0 against Zaimoku in
+costume 1. 9..26 are fighter c alone, costume k, as 9 + 2c + k, on Cross
+Street with both sides that fighter (`lastbrnxScene` in `js/colors.js`).
+
+**Palette.** {count, colours} at program 0x1872C, 318 colours, which 0x157F0
+copies to the face palette. 0x17BE0 cycles entries 40, 41, 43, 44, 47 and 48
+at run time; the table holds their first frame.
+
+**Luma.** 0x1A50 works it out: two bands, divisors 120 and 112, entry k of
+band d being ((k + 1) & 0x7E) × 64 / d up to d and 0x40 past it.
+
+**Colours.** Out of the test menu's nine (add, multiply) settings, which an
+empty backup RAM takes from the defaults in the program. 0x90D0 makes a
+256-entry table of each: 0 at 0, then min(255, add + (mul × i >> 6)); pairs
+0..2 are the ramps' red, green and blue, 3..5 the flat band's. 0x6D40 writes
+a ramp to luma 0..63 of every row and 0x6DF0 a flat colour to luma 64..127.
+0x92D0 (slot, table) then lays luma 0..63 of row 1 + 2 × (slot >> 1) from a
+keyframe table (a float count, then position, red, green, blue floats),
+interpolated in single precision as the board's FPU does and passed through
+the ramp tables. 0x9590 sends the stage's five to rows 1..9 (the stage's
+list by 0x504310, its sources `ld 0x502AA0[j*8]`), 0x9620 the two common ones
+(`ld 0x502A08`) to rows 11 and 13, and 0x94E0 a fighter's four from its
+record's list for its costume to rows 15..21 (player 1) or 23..29 (player 2).
+
+**Checks.** Against MAME's texture RAM, colorxlat, luma and palette RAM at
+frames 900, 1300 and 1800 of the attract (Cross Street, Yoko against
+Zaimoku) and 3400 (stage 6, fighter 3 against Zaimoku): both texture sheets
+match byte for byte, as do the luma and every colorxlat row but three of row
+5 at frame 3400, which the previous stage leaves there. The palette matches
+but for the six cycling entries. Through `loadRomSet` and `detectGames`, both
+sets are detected with no warning, and 2540 models decode with 943314 faces
+and no error.
+
+**Not done.**
+- Which stage a stage part belongs to. The placement records at
+  0x73100..0x79400 are 24 bytes, a model pointer, a zero and a box of
+  floats, but which stage reads which has not been traced, so there is no
+  Stages tab, and a stage part opens on Cross Street whatever its stage.
+- No characters, motions or bodies: the fighters' skeletons and moves are
+  not read.
+- The cycling palette entries.
+- The Japan build's colours differ from the Export's in one row (stage 2,
+  row 3), from its own keyframes; that row was not checked against MAME.
+- The USA set (`lastbrnxu`) is not in the container's ROMs and is not
+  detected.
+- The four polygon-RAM models.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

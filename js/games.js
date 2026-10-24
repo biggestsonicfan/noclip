@@ -5618,13 +5618,128 @@ const powsled = {
     },
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
+/* ---- Last Bronx ----------------------------------------------------------- */
+
+/*
+ * Sega's 1996 fighter on Model 2B CRX (MAME's `lastbrnx`, Revision A Export,
+ * and its Japan clone `lastbrnxj`). Its program keeps nothing in the AM2
+ * shapes: the stages' textures are an LZ stream it deals onto the sheets, the
+ * fighters' pages are raw, and its colour tables are worked out from the test
+ * menu's settings and keyframes, so js/texture.js and js/colors.js each have a
+ * section for it. The two builds keep the same tables at the same program
+ * offsets, except the program's data section, which the Japan build has
+ * 0x120 further on, and what follows it.
+ */
+function lastbronxBuild({ id, name, program, data, chars, settings }) {
+    return {
+        id,
+        name,
+        identify: [program[1], program[3], 'mpr-19052.17', 'mpr-19055.27'],
+        regions: {
+            maincpu: { size: 0x200000, parts: [program] },
+            mainData: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-19050.11', 0xe6af2b61, 'mpr-19051.12', 0x14b88961],
+                    [0x800000, 'mpr-19048.9', 0x02180215, 'mpr-19049.10', 0xdb7eecd6],
+                ],
+            },
+            polygons: {
+                size: 0x800000,
+                parts: [[0x000000, 'mpr-19052.17', 0xd7f27216, 'mpr-19053.21', 0x1f328465]],
+            },
+            textures: {
+                size: 0x400000,
+                parts: [[0x000000, 'mpr-19055.27', 0x85a57d49, 'mpr-19054.25', 0x05366277]],
+            },
+        },
+        /*
+         * 2544 entries of 16 bytes in the program ROM at 0x189B0: texture
+         * word, material word, mesh pointer, polygon count, up to the byte
+         * table at 0x229B0. The draws at 0x4370C and 0xAD930 send an entry as
+         * it is (`ld 0x189B0..0x189BC`, `stq g0, 0x804000` after
+         * `st 0x101, 0x800010`). Entries 1691, 1692, 1772 and 1773 name a
+         * mesh at polygon RAM word 0x4000, which the program fills itself,
+         * and are not shown.
+         */
+        modelTable: { source: 'maincpu', offset: 0x189b0, count: 2544, stride: 16 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        /* {count, colours}: 318 colours at 0x1872E, copied to the face palette
+         * (0x1802000) by 0x157F0. Entries 40, 41, 43, 44, 47 and 48 cycle at
+         * run time (0x17BE0); the table holds their first frame. */
+        paletteProgram: 0x1872c,
+        paletteOffset: null,
+        /*
+         * js/texture.js's Last Bronx section. Sets 0..8 are the stages; a
+         * stage picks one of three banks (`stageBanks`). Sets 9..26 are a
+         * fighter alone, 9 + 2 * char + costume (lastbrnxScene in
+         * js/colors.js). `pages` are the fighters' pages, page 0 the common
+         * one; `chars` the fighter records, 128 bytes each, word 7 the page
+         * and words `lists` its model lists, `listLength` model pointers each.
+         * `fighters` are the attract's first fight, Yoko (costume 0) against
+         * Zaimoku (costume 1), on Cross Street (stage 2).
+         */
+        texture: {
+            raw: {
+                layout: 'lastbrnx',
+                data: { ram: 0x500000, rom: data },
+                deal: 0x8320,
+                banks: 0x500010,
+                stageBanks: 0x5042b0,
+                pages: 0x500030,
+                chars,
+                charStride: 128,
+                fighters: [{ char: 0, costume: 0 }, { char: 7, costume: 1 }],
+                stages: 9,
+                lists: [1, 2, 3, 4, 5, 10, 11],
+                listLength: 28,
+            },
+            sets: 27,
+            residentSet: null,
+            defaultSet: 2,
+        },
+        /*
+         * Luma from 0x1A50, two bands of divisors 120 and 112. The rest is
+         * js/colors.js's Last Bronx section: the ramps and the flat band from
+         * the colour settings, then the stage's, the two common and the
+         * fighters' keyframe tables.
+         */
+        colors: {
+            luma: { bands: [120, 112] },
+            lastbrnx: {
+                data: { ram: 0x500000, rom: data },
+                settings,
+                chars,
+                charCount: 9,
+                stages: 0x504310,
+                stageLists: { pairs: 0x502aa0, dst: 0x5534d0, size: 0x20, count: 5 },
+                common: 0x502a08,
+                fighterLists: { pairs: 0x502a10, dst: 0x5533b0, size: 0x10, count: 4 },
+            },
+            solid: true,
+        },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+const lastbrnx = lastbronxBuild({
+    id: 'lastbrnx', name: 'Last Bronx (Export, Revision A)',
+    program: [0x000000, 'epr-19061a.15', 0xc0aebab2, 'epr-19062a.16', 0xcdf597e8],
+    data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb,
+});
+const lastbrnxj = lastbronxBuild({
+    id: 'lastbrnxj', name: 'Last Bronx (Japan, Revision A)',
+    program: [0x000000, 'epr-19046a.15', 0x75be7b7a, 'epr-19047a.16', 0x1f5541e2],
+    data: 0xc9220, chars: 0xb54d0, settings: 0x3d5db,
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
-    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled];
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxj];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

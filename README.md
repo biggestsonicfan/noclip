@@ -22,6 +22,7 @@ of its stages, its cells and its characters posed by their motions on all three 
 Data East's *Air Walkers* has its seventeen courts, its models, its cells and
 its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its course, its models,
 its cells and the attract's animations — see [Power Sled](#power-sled).
+*Last Bronx* has its models — see [Last Bronx](#last-bronx).
 
 Three views, and a fourth for the 2D art:
 
@@ -1040,6 +1041,28 @@ banners, and matches it there; the race times out before the bridges and the
 goal, so those two scenes are the scene routines' draws, checked by eye. See
 [TECHNICAL.md](TECHNICAL.md#power-sled-jspowsledjs-jstexturejs-jscolorsjs).
 
+## Last Bronx
+
+`lastbrnx.zip` on its own is the Export Revision A; `lastbrnj.zip` beside it
+is the Japan Revision A, offered as a variant. The **Models** tab has all 2544
+entries of the model table, with the textures, palette and colour tables the
+game loads for them: the nine fighters' parts, the parts they share, and the
+stages' parts.
+
+A fighter's part opens on that fighter alone, in costume 0, on its own page
+and with its own colours. The texture picker's sets 0..8 are the nine stages,
+with the attract's first fight (Yoko against Zaimoku) on them, and sets 9..26
+are each fighter alone in each costume, 9 + 2 × fighter + costume. A stage
+part opens on Cross Street (set 2): nothing found yet says which stage a
+stage part belongs to, so a part of another stage needs its set picked by
+hand. The textures and colour tables match MAME's dumps of the attract's
+fights byte for byte.
+
+There is no Stages tab, no characters and no motions yet. Six palette
+entries cycle in the game and show their first frame. Four models are drawn
+from polygon RAM the program fills itself and are empty here. See
+[TECHNICAL.md](TECHNICAL.md#last-bronx-jstexturejs-jscolorsjs-jsromsetjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1080,7 +1103,8 @@ Where a set holds both builds, the other is offered as a variant.
 
 For Fighting Vipers it is `fvipers.zip` on its own, which carries everything.
 
-So is `airwlkrs.zip` for Air Walkers, and `powsled.zip` for Power Sled.
+So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
+`lastbrnx.zip` for Last Bronx; its Japan build wants `lastbrnj.zip` beside it.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

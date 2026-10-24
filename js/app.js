@@ -983,6 +983,8 @@ function describeTextureGuess(g) {
     case 'title': return `${sets}: drawn in the intro, on the title's page`;
     case 'home': return `${sets}: on the home side's team page, team 0`;
     case 'away': return `${sets}: on the away side's team page, team 0`;
+    case 'pages': return `${sets}: on the fighters' and the common pages, which every stage has`;
+    case 'lbfighter': return `${sets}: fighter ${g.char}'s part, by its record's model lists, on its own page in costume 0`;
     case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
     case 'resident': return `${sets} ${g.sets.length > 1 ? 'are' : 'is'} a guess: it is on the ${g.slot}s' pages, and nothing says which ${g.slot}'s`;
     case 'coverage': return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;

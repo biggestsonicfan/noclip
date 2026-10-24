@@ -256,7 +256,8 @@ export function readModelEntry(rom, index) {
     const f = t.fields ?? MODEL_FIELDS;
     const base = t.past && index >= t.past.from ? t.past.offset : t.offset;
     const off = base + index * t.stride;
-    const dv = rom.mainDataView;
+    /* Last Bronx keeps its table in the program ROM (`source`). */
+    const dv = t.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
     return {
         uvPtr: dv.getUint32(off + f.uv, true),
         matPtr: dv.getUint32(off + f.mat, true),
