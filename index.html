@@ -754,6 +754,19 @@
         The fighter steps as the motion does; the hair swings from the
         frames before.
       </div>
+      <div class="note" id="anim-note-lastbrnx" data-i18n="note.lastbrnx" hidden>
+        The fighters are drawn by the game's own fight code and its geometry
+        copro's program, both run in the explorer (the copro on a SHARC
+        interpreter): the fighter is set up in player one's place
+        (<code>0xB5E10</code>) facing its other costume, the motion started
+        (<code>0x49540</code>, id = fighter &lt;&lt; 10 | move), then each
+        frame steps it (<code>0x49820</code>) and draws it
+        (<code>0x4A940</code>); the parts are read back from the packets the
+        copro writes. A motion's name, data and length are in the tables at
+        <code>0x52CEA0</code>, <code>0x511BA0</code> and
+        <code>0x52B4D0</code>. The draw keeps the skeleton to itself: the
+        parents are worked out from the frames.
+      </div>
       <div class="note" id="anim-note" data-i18n="note.stf">
         A motion id indexes <code>offset_list_motions</code> at
         <code>0x6400004</code>. Its record holds 60 channels &mdash; 20 objects

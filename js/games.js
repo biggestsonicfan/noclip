@@ -5747,7 +5747,30 @@ function lastbronxBuild(build) {
             },
             flat: true,
         },
-        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
+        /*
+         * js/lastbrnxfighters.js: the fighters, drawn by the fight code with
+         * the copro's own program run beside it. `boot` is the boot's set-up
+         * (0x1380, 0x1520) as far as the fight needs, [routine, args, steps];
+         * 'sync' is the 8 the boot pushes the copro. `upload` (0x98D8) is
+         * answered by loading the program. `names` the fighter names, 9 bytes
+         * each (data section); `motions` the per-character tables. From
+         * `codeFrom` the Japan build's code is `code` further on.
+         */
+        rig: {
+            kind: 'lastbrnx', note: 'lastbrnx', code, codeFrom: 0x2a680,
+            fighters: 8, names: 0x503f90,
+            motions: { names: 0x52cea0, data: 0x511ba0, heads: 0x52b4d0 },
+            sharc: { at: 0x99f8, halfwords: 19698 },
+            upload: 0x98d8,
+            boot: [
+                [0x12c0], [0x9110], [0x13490], [0x97d0], [0x154d0], [0x17870], [0x72e0, [], 100_000],
+                [0x15b0], [0x3e570], [0x366c0], [0x17cb0], [0x3f410], [0xd60], [0x1330], [0x13420],
+                [0x9b130], [0x39070], ['sync'], [0x4bc80], [0x452d0], [0x54a40], [0xb71c0],
+                [0xc7760, [0x1e240]], [0x231f0, [0x1e240]], [0x4f400],
+            ],
+            setup: 0xb5e10, start: 0x49540, step: 0x49820, draw: 0x4a940,
+        },
+        features: { stages: true, characters: false, motions: true, bodies: true, cells: false },
     };
 }
 
@@ -5767,12 +5790,15 @@ const lastbrnx = lastbronxBuild({
  */
 const LASTBRONX_EXPORT = { data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0 };
 const LASTBRONX_FIRST_WORDS = [[0x71ac0, 0x80a03000], [0x72640, 0x80a03000], [0x71db0, 0x59084810], [0x941e0, 0x5ca81e00]];
+/* And the fighters' set-up, motion start, step and draw, for the Fighters tab. */
+const LASTBRONX_FIGHTER_WORDS = [[0xb5e10, 0x5c601618], [0x49540, 0x8cb800b8], [0x49820, 0x8c086080], [0x4a940, 0x8ce800b8]];
 
 function settleLastbronx(build, rom) {
     const cv = rom.mainCpuView;
     const shift = cv.getUint32(0x83c, true) - LASTBRONX_EXPORT.data;
     const at = (o) => o + shift;
-    const fits = LASTBRONX_FIRST_WORDS.every(([o, w]) => at(o) >= 0 && at(o) + 4 <= cv.byteLength && cv.getUint32(at(o), true) === w);
+    const there = ([o, w]) => at(o) >= 0 && at(o) + 4 <= cv.byteLength && cv.getUint32(at(o), true) === w;
+    const fits = LASTBRONX_FIRST_WORDS.every(there);
     const g = lastbronxBuild({
         ...build, located: false, data: at(build.data), chars: at(build.chars),
         settings: at(build.settings), code: build.code + shift,
@@ -5780,6 +5806,10 @@ function settleLastbronx(build, rom) {
     if (!fits) {
         g.features = { ...g.features, stages: false };
         console.warn(`${g.name}: the stage routines are not ${shift} bytes on from the Export build's; no Stages tab`);
+    }
+    if (!LASTBRONX_FIGHTER_WORDS.every(there)) {
+        g.features = { ...g.features, motions: false, bodies: false };
+        console.warn(`${g.name}: the fight routines are not ${shift} bytes on from the Export build's; no fighters`);
     }
     return g;
 }

@@ -77,6 +77,7 @@ import {
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
+import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -3482,6 +3483,8 @@ const BODY_RIGS = {
         clocks: (rom, motion, { body }) => flightClocks(rom, body, motion),
     },
     doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
+    /* Last Bronx's: the fight code and the copro's program, run (js/lastbrnxfighters.js). */
+    lastbrnx: { read: readLastbrnxFighters, motions: readLastbrnxMotions, list: lastbrnxMotionList, pose: poseLastbrnxFighter },
     /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
     dynamcop: {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
@@ -3592,6 +3595,26 @@ function useDoaFighterScene(body) {
     if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
+/* A Last Bronx fighter stands on its own set, the one the game loads for it
+ * alone (9 + 2 * fighter + costume; lastbrnxScene in js/colors.js). */
+function useLastbrnxFighterScene(body) {
+    const u = state.viewer.material.uniforms;
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    const lit = gameLighting(state.rom);
+    if (lit) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    }
+    const set = body.fighterSet;
+    useRomTexram([set]);
+    useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] });
+    const status = $('#tex-status');
+    if (status) status.textContent = t('sheets unpacked from ROM (set {set})', { set });
+}
+
 /* An Air Walkers player stands on its team's page, under its team's colour
  * tables (js/texture.js, js/colors.js), as the court set-up loads them. */
 function useAirwlkrsPlayerScene(body) {
@@ -3630,6 +3653,7 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (state.rom.game.rig?.kind === 'lastbrnx') useLastbrnxFighterScene(body);
     else if (body.playerSet !== undefined) useAirwlkrsPlayerScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
@@ -5234,6 +5258,7 @@ function renderBodyPanel() {
     const body = state.character;
     if (!body) return;
     if (state.rom.game.rig?.kind === 'doa') return renderDoaBodyPanel(body);
+    if (state.rom.game.rig?.kind === 'lastbrnx') return renderLastbrnxBodyPanel(body);
     const drawn = body.parts.filter((p) => p.model).length;
     const fighter = body.texSet !== undefined;
     const sets = fighter ? '<span>texture sets</span><b>' + body.texSet + ', ' + (body.texSet + 1) + '</b>' : '';
@@ -5309,6 +5334,17 @@ function renderDoaBodyPanel(body) {
         <span>model bank</span><b>${body.base}</b>
         <span>joints</span><b>${body.joints}</b>
         <span>motions</span><b>${bodyMotions(body).lead.length} its own and shared</b>
+    `;
+    $('#slot-list').innerHTML = '';
+    renderMotionPanel();
+}
+
+function renderLastbrnxBodyPanel(body) {
+    $('#char-meta').innerHTML = `
+        <span>character</span><b>${body.fighter}</b>
+        <span>costume</span><b>${body.costume}</b>
+        <span>texture set</span><b>${body.fighterSet}</b>
+        <span>motions</span><b>${bodyMotions(body).lead.length} its own</b>
     `;
     $('#slot-list').innerHTML = '';
     renderMotionPanel();
@@ -6430,7 +6466,7 @@ function applyGameFeatures() {
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
-    const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
+    const solved = ['vf2', 'doa', 'lastbrnx'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
@@ -6465,7 +6501,7 @@ function applyGameFeatures() {
     const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none at the foot of
      * the model panel, where it plays the song picked rather than a stage's. */

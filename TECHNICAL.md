@@ -6517,8 +6517,10 @@ copies alternating; the models in a run that no list names (spare hands and
 faces) are taken to be the fighter's too. A fighter's part opens on the set of
 that fighter alone. A part that samples only the common and fighter pages
 (the shared parts at 1185..1317 among them) is the same under every stage and
-opens on the default set. The rest sample a stage bank, and are left to the
-default guess, Cross Street.
+opens on the default set. The rest sample a stage bank and open on the
+stage whose stage code draws them (below): 467 models, in one run per stage.
+The 60 no stage draws (among them 70..95 and 144..148, between two stages'
+runs) are left to the picker's tile-coverage guess.
 
 **Sets.** 0..8 are the stages, each with the fighters asked for or, none
 given, the attract's first fight: Yoko in costume 0 against Zaimoku in
@@ -6526,8 +6528,47 @@ costume 1. 9..26 are fighter c alone, costume k, as 9 + 2c + k, on Cross
 Street with both sides that fighter (`lastbrnxScene` in `js/colors.js`).
 
 **Palette.** {count, colours} at program 0x1872C, 318 colours, which 0x157F0
-copies to the face palette. 0x17BE0 cycles entries 40, 41, 43, 44, 47 and 48
-at run time; the table holds their first frame.
+copies to the face palette. Some entries cycle at run time, and the table
+holds their first frame (below).
+
+**Stages** (`js/lastbrnx.js`). The stage task 0x71070 draws the stage with
+0x71AC0, which reads the stage number (RAM 0x57DEC0) and walks that stage's
+32-byte descriptor at program 0x795E0: an item list, its count and a cull
+kind. An item is 12 bytes {type, value, pointer}: 0 is a model entry, 1 a
+list of 24-byte placement records (0x72110; the model entry pointer at +0x14,
+culled against the camera unless 0x5D2E60 is 2), 3 an animated piece
+(0x71C68, dispatching on the stage's object kind through 0x94190: the crane,
+the train, the airport's planes) and 2 the ring walls, which 0x72640 draws.
+The Stages tab runs these routines on `js/i960.js`, with the camera (0x71DB0)
+left out and the pieces' state set up by 0x941E0 as the round start does; a
+draw is geometrizer command 0x01 with the model entry's four words. The copro
+commands are Dead or Alive's, plus 0x0F (a box cull, answered "in view"),
+0x17 and 0x6A. The stages that move are stepped a pass a frame, so the
+viewer's clock plays them. Stage names come from the round banner's table
+(0x2A190). Checked against MAME's display list at frame 1300: the 28 pieces
+and four walls of Cross Street land where it has them.
+
+**Colour cycles.** The round start 0x17950 takes the list for the stage's
+object kind (0x5042E0; kinds past 8 take 8's) from 0x502B00: 12-byte records
+{entry, frames, colours} up to one with no frames. An entry under 16 is face
+palette entry 8 + entry, stepped by 0x17AA0's first loop; one of 16 or over
+is the same entry, stepped by its second. Both step once a vblank (0x944),
+going back to the first colour after the last. The colour table holds two
+halfwords a frame; the second is used while 0x567140 is set, which nothing
+in a fight does. This covers entries 8-19 and 40-48. The Stages tab plays
+them, and so does the Models tab, using the cycles of the stage whose
+texture set is shown.
+
+**The USA build.** `lastbrnxu` (MAME's Revision A) has MAME's checksums but
+was never in the container, so its offsets are worked out when it loads
+(`settleLastbronx` in `js/games.js`, through the profile's `settle` hook in
+`loadRomSet`). The program keeps its data section's source at 0x83C
+(0xC9100 Export, 0xC9220 Japan). The difference from the Export's moves the
+data, the fighter records, the settings and the stage code; the code is the
+same, shifted by the same amount. Each stage routine is checked by its first
+word, and if one doesn't match, the set loads without a Stages tab and with
+a warning. This was checked on the Export and Japan programs (each settles
+to its own profile), not on the USA set.
 
 **Luma.** 0x1A50 works it out: two bands, divisors 120 and 112, entry k of
 band d being ((k + 1) & 0x7E) × 64 / d up to d and 0x40 past it.
@@ -6554,19 +6595,73 @@ but for the six cycling entries. Through `loadRomSet` and `detectGames`, both
 sets are detected with no warning, and 2540 models decode with 943314 faces
 and no error.
 
-**Not done.**
-- Which stage a stage part belongs to. The placement records at
-  0x73100..0x79400 are 24 bytes, a model pointer, a zero and a box of
-  floats, but which stage reads which has not been traced, so there is no
-  Stages tab, and a stage part opens on Cross Street whatever its stage.
-- No characters, motions or bodies: the fighters' skeletons and moves are
-  not read.
-- The cycling palette entries.
-- The Japan build's colours differ from the Export's in one row (stage 2,
-  row 3), from its own keyframes; that row was not checked against MAME.
-- The USA set (`lastbrnxu`) is not in the container's ROMs and is not
-  detected.
-- The four polygon-RAM models.
+The Japan build was checked the same way, against MAME's `lastbrnxj` every
+100 frames from 1800 to 4500: stage 2 (Yoko against fighter 7 in costume 1)
+matches in every colorxlat row, including stage 2's row 3, which comes from
+the Japan build's own keyframes. Stage 6 (fighter 3 against fighter 7) also
+matches, except for row 5: stage 6's list sends nothing for that row, so on
+the board it keeps stage 2's colours.
+
+**Fighters** (`js/lastbrnxfighters.js`, `js/sharc.js`). As for Dead or
+Alive, there is no table of parts to read: the draw 0x4A940 works each part's
+matrix out on the copro. Last Bronx's copro is a SHARC running a program the
+i960 uploads (19698 halfwords at 0x99F8, through EPB0), and the fight code
+leans on it as no stage piece does: a matrix stack, a pool of matrices it
+hands out handles to (0x4B sets it up, 0x4C..0x4E take one, 0x59 gives one
+back), lists of them per player, and command 0x46, which writes a whole
+geometrizer packet into buffer RAM itself, 18 words at the geometry pointer
+less 0x48: 0x05800B0B, the 12 matrix floats, flags, and the model entry's
+four words. 0x47 closes a draw. So the explorer runs that program as well,
+on `js/sharc.js`, a word-for-word port of m2-hle2's `sharc_cpu.h` (itself
+MAME's interpreter), wired as the board wires it: FIFO in at 0x884000, FIFO
+out, buffer RAM at 0x900000 on the i960's side; FLAG0 is "FIFO in empty". A
+differential harness runs it and `sharc_cpu.h` side by side, on the
+program fed random command streams (with and without one FIFO access in four
+refused) and on random programs of every compute op: the traces, register
+checksums and memory agree line for line.
+
+The machine is the boot's (0x1380) set-up, the routines the copro's lists
+and the fighters' tables need, in the boot's order: 0x12C0, 0x9110, 0x13490,
+0x97D0, 0x154D0, 0x17870, 0x72E0 (cut short once it has uploaded the
+program; the wait on the upload, 0x98D8, is answered by loading it), 0x15B0,
+0x3E570, 0x366C0, 0x17CB0, 0x3F410, 0xD60, 0x1330, 0x13420, 0x9B130,
+0x39070, then 0x4BC80, 0x452D0, 0x54A40, 0xB71C0, 0xC7760 and 0x231F0 (both
+with 0x1E240) and 0x4F400. 0x3D700, 0x9DAC0 and 0x146D0 wait on hardware or
+add nothing, and are left out: the draws match those of the whole boot
+word for word. It takes ~180 ms. 0xB5E10 (player, fighter, costume, x,
+bearing) then sets both players up as the round start (0x2F060) does: the
+fighter in player one's place at the centre, its other costume facing it 3 m
+away. 0x49540 (player, id) starts a motion, id = fighter << 10 | number, and
+each frame is the step 0x49820 and the draw 0x4A940 under an identity
+matrix (push 8, then 0x10; 5 before the draw and 6 after), so the parts come
+back in the fighter's own frame, in metres, y up. A fighter is 16..19 parts
+in the draw's order: hips, the legs three apiece, chest, an arm in three,
+head, the other arm, and the weapon (models 1016 on). The model is the one
+whose entry the four words are; the parents are worked out from the frames
+(`jointsOf`, as for Dead or Alive).
+
+The fighters are 1..8, by the 9-byte names at RAM 0x503F90 (YOKO, JOE,
+NAGI, KUROSAWA, YUSAKU, TOMMY, LISA, ZAIMOKU; the ninth, REDEYE, has no
+motions). Their motions are three tables of pointers per fighter, indexed
+by the motion number: 0x52CEA0 the names (`kon_kamae_new_5_0`), 0x511BA0 the
+data (a bitstream in the data ROM, unpacked by 0x4B090 to 0x585890 +
+player * 0x19CC), 0x52B4D0 a 16-byte head whose halfwords at +8 and +10 are
+the data's length in 1/30 s and the motion's in frames. 0x47D48 plays it at
+57.5 * h8 / h10 a frame, and a motion holds its last pose once it ends. That
+is 215, 277, 211, 195, 180, 152, 161 and 155 motions. A fighter stands on
+the set of that fighter alone (9 + 2 * (fighter - 1) + costume).
+
+The Japan build's code at or above 0x2A680 sits 0x120 higher; the code
+below it, the copro's program, the model table and the RAM tables do not
+move, and its draws are the Export build's word for word. The USA build is
+checked by the first word of each fighter routine when it loads: where they
+do not fit, the fighters are switched off with a warning.
+
+**Not done.** The four models drawn from polygon RAM (1691, 1692, 1772,
+1773), which the program fills itself, are empty; Nagi's first part is 1691
+in costume 0 and 1772 in costume 1, so she stands without it. The fighters
+have not been held against MAME's pictures; the copro is held only to
+m2-hle2's port of MAME's interpreter. The USA set has not been tried.
 
 ### Polygon decoding (`js/model.js`)
 
