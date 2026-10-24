@@ -30,7 +30,7 @@
 
 import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
-import { doaLoadId } from './colors.js';
+import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
@@ -1263,6 +1263,220 @@ export function bankTextureSet(rom, index) {
     return bankSets[Math.min(bank, bankSets.length - 1)];
 }
 
+/* ---- Last Bronx ----------------------------------------------------------- */
+
+/*
+ * Last Bronx keeps its texels in the data ROMs, a stage's in one LZ stream and
+ * a fighter's page raw, and writes both itself. The program's own data section,
+ * the RAM 0x500000 on, is copied out of the program ROM at boot (`data`), so a
+ * RAM address the routines read is a program ROM offset here.
+ *
+ *   0x81C0  the stage's stream: a 16-bit flag word, its top bit first, then a
+ *           literal halfword for a set bit, or for a clear one a signed
+ *           halfword t naming (t & 15) + 2 halfwords of the 4096 last written
+ *           from window position t >> 4 (the write position starts at 1)
+ *   0x8320  where the stream goes: rows of 0x20 bytes, a repeat count then
+ *           runs, each run written to the current sheet at that sheet's own
+ *           offset while the other sheet's offset skips the same length, and
+ *           the sheets swapping after each run; a negative run swaps them
+ *           once more. A row with no repeats ends the table.
+ *   0x8620  a raw rectangle and its mips (0x8920), each level from where the
+ *           last one ended in the source, on the other sheet
+ *
+ * The stage set-up loads the stage's bank, `ld 0x500010[ld 0x5042B0[stage*4]*4]`,
+ * three for nine stages, then three rectangles on sheet 1: the common page
+ * `ld 0x500030` at row 0x100, player 1's page at row 0 and player 2's at
+ * row 512, a page being `ld 0x500030[n*4]` for the fighter record's word 7
+ * (0x1C). Checked against MAME's texture RAM: no byte differs.
+ */
+function lbRam(raw, addr) {
+    return addr - raw.data.ram + raw.data.rom;
+}
+
+/* 0x81C0's stream, a halfword a call. */
+function lbStream(md, at) {
+    const win = new Uint16Array(4096);
+    let wi = 1, flags = 0, bits = 0, run = 0, from = 0;
+    const hw = () => {
+        if (at + 2 > md.length) { at += 2; return 0; }
+        const v = md[at] | (md[at + 1] << 8);
+        at += 2;
+        return v;
+    };
+    return () => {
+        let v;
+        if (run) {
+            v = win[from++ & 0xfff];
+            run--;
+        } else {
+            if (!bits) { flags = hw(); bits = 16; }
+            const lit = flags & 0x8000;
+            flags = (flags << 1) & 0xffff;
+            bits--;
+            if (lit) {
+                v = hw();
+            } else {
+                const t = (hw() << 16) >> 16;
+                from = t >> 4;
+                run = (t & 15) + 1;
+                v = win[from++ & 0xfff];
+            }
+        }
+        win[wi] = v;
+        wi = (wi + 1) & 0xfff;
+        return v;
+    };
+}
+
+/* 0x8320's deal: the stage bank's stream across the two sheets. */
+function lbBank(rom, tex, src) {
+    const raw = rom.game.texture.raw;
+    const cv = rom.mainCpuView;
+    const next = lbStream(rom.mainData, src);
+    const off = [0, 0];
+    let cur = 0;
+    for (let t = raw.deal; t + 4 <= rom.maincpu.length; t += 0x20) {
+        const rows = cv.getInt32(t, true);
+        if (rows <= 0) break;
+        for (let r = 0; r < rows; r++) {
+            let n = 0;
+            for (let q = t + 4; q + 4 <= rom.maincpu.length; q += 4) {
+                n = cv.getInt32(q, true);
+                if (n <= 0) break;
+                off[cur ^ 1] += n * 2;
+                const base = cur ? SHEET1 : SHEET0;
+                for (let i = 0; i < n; i++, off[cur] += 2) {
+                    const v = next();
+                    if (off[cur] + 2 > SHEET_BYTES) continue;
+                    tex[base + off[cur]] = v & 0xff;
+                    tex[base + off[cur] + 1] = v >> 8;
+                }
+                cur ^= 1;
+            }
+            if (n < 0) cur ^= 1;
+        }
+    }
+}
+
+/*
+ * 0x8620 (sheet, y, x, h, w, source): y and x in 16-row and 16-halfword steps,
+ * h and w in texels. x past 0x1FF folds onto rows 512 on. Each mip goes on
+ * the other sheet, towards (0x400, 0x200) and folded the same way.
+ */
+function lbRect(md, tex, sheet, y, x, h, w, src) {
+    y = (y & 31) << 4;
+    x = (x & 63) << 4;
+    let near = sheet ? SHEET1 : SHEET0, far = sheet ? SHEET0 : SHEET1;
+    const copy = (base, d) => {
+        for (let r = 0; r < h; r++, src += w * 2) {
+            const at = d + r * ROW_PAIR;
+            if (src + w * 2 > md.length || at + w * 2 > SHEET_BYTES) return;
+            tex.set(md.subarray(src, src + w * 2), base + at);
+        }
+    };
+    h >>= 1;
+    w >>= 1;
+    copy(near, (x > 0x1ff ? 0x7fc00 + x * 2 : x * 2) + (y << 10));
+    h >>= 1;
+    w >>= 1;
+    while (h || w) {
+        y = 0x200 - ((0x200 - y) >> 1);
+        x = 0x400 - ((0x400 - x) >> 1);
+        [near, far] = [far, near];
+        copy(near, 0x7fc00 + x * 2 + (y << 10));
+        h >>= 1;
+        w >>= 1;
+    }
+}
+
+/* A fighter's page number, its record's word 7. */
+function lbFighterPage(rom, f) {
+    const raw = rom.game.texture.raw;
+    return rom.mainCpuView.getUint32(raw.chars + f.char * raw.charStride + 0x1c, true);
+}
+
+/*
+ * Texture RAM for Last Bronx: a stage's bank, with the common page and the
+ * two fighters' pages over it (what a set stands for: lastbrnxScene).
+ */
+function buildLastbrnxTexram(rom, texSets, wanted) {
+    const raw = rom.game.texture.raw;
+    const cv = rom.mainCpuView;
+    const md = rom.mainData;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const { stage, fighters } = lastbrnxScene(rom, sets.length ? sets[sets.length - 1] : -1, wanted);
+    const word = (addr) => cv.getUint32(lbRam(raw, addr), true);
+    const page = (n) => word(raw.pages + n * 4) - MAIN_DATA_BASE;
+    lbBank(rom, tex, word(raw.banks + word(raw.stageBanks + stage * 4) * 4) - MAIN_DATA_BASE);
+    const [p1, p2] = fighters;
+    lbRect(md, tex, 1, 48, 0, 0x200, 0x400, page(0));
+    if (p1) lbRect(md, tex, 1, 32, 0, 0x200, 0x400, page(lbFighterPage(rom, p1)));
+    if (p2) lbRect(md, tex, 1, 32, 32, 0x200, 0x400, page(lbFighterPage(rom, p2)));
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 4 };
+}
+
+/*
+ * Whose part each Last Bronx model is, by the fighter records' model lists
+ * (words `lists`, pointers into the model table). A fighter's body models run
+ * on from the first its list names to the next fighter's first, the copies
+ * for player 2's page among them, and the ones no list names in that run
+ * (alternate hands and faces) are the fighter's too.
+ */
+function lastbrnxOwners(rom) {
+    if (rom.lastbrnxOwners) return rom.lastbrnxOwners;
+    const raw = rom.game.texture.raw;
+    const t = rom.game.modelTable;
+    const cv = rom.mainCpuView;
+    const len = rom.maincpu.length;
+    const owner = new Map();
+    const chars = (rom.game.texture.sets - raw.stages) >> 1;
+    const first = [];
+    let last = -1;
+    for (let c = 0; c < chars; c++) {
+        let lo = Infinity;
+        for (const w of raw.lists) {
+            const list = lbRam(raw, cv.getUint32(raw.chars + c * raw.charStride + w * 4, true));
+            for (let k = 0; k < raw.listLength && list >= 0 && list + k * 4 + 4 <= len; k++) {
+                const p = cv.getUint32(list + k * 4, true) - t.offset;
+                if (p < 0 || p % t.stride || p / t.stride >= t.count) continue;
+                const m = p / t.stride;
+                if (!owner.has(m)) owner.set(m, c);
+                if (w === raw.lists[0]) lo = Math.min(lo, m);
+                last = Math.max(last, m);
+            }
+        }
+        first.push(lo);
+    }
+    for (let c = 0; c < chars; c++) {
+        const end = c + 1 < chars ? first[c + 1] : last + 1;
+        for (let m = first[c]; m < end; m++) if (!owner.has(m)) owner.set(m, c);
+    }
+    return (rom.lastbrnxOwners = owner);
+}
+
+/*
+ * A lone Last Bronx model. A fighter's part (lastbrnxOwners) takes the set of
+ * that fighter alone, costume 0. Another one that samples only the fighters'
+ * and the common pages (sheet 1, rows 0..511, and player 2's rows 512..767)
+ * is the same under every stage. The rest are on a stage's bank, and nothing
+ * found says which stage's.
+ */
+function lastbrnxModelSets(rom, index, decoded) {
+    if (!decoded) return null;
+    let any = false, bank = false;
+    for (let i = 0; i < decoded.tiles.length; i += 4) {
+        if (!decoded.tiles[i + 2]) continue;
+        any = true;
+        const x = decoded.tiles[i], y = decoded.tiles[i + 1];
+        if (y < SHEET_H || (x >= 1024 && y - SHEET_H >= 512)) bank = true;
+    }
+    if (!any) return { sets: [], how: 'untextured' };
+    const c = lastbrnxOwners(rom).get(index);
+    if (c !== undefined) return { sets: [rom.game.texture.raw.stages + 2 * c], how: 'lbfighter', char: c };
+    return bank ? null : { sets: [rom.game.texture.defaultSet], how: 'pages' };
+}
+
 /* ---- The sets the program loads for a lone model ------------------------- */
 
 /*
@@ -1365,6 +1579,7 @@ function rallyCourseModels(rom) {
  *   sheet 0 takes the bank sel_course picks (0x1438, `ld 0x15A0[course*4]`),
  *   and the course is the one whose object records name it.
  * - Air Walkers: see airwlkrsModelSets.
+ * - Last Bronx: see lastbrnxModelSets.
  * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
@@ -1384,6 +1599,7 @@ export function programTextureSets(rom, index, decoded) {
         return courses?.size === 1 ? { sets: [...courses], how: 'course' } : null;
     }
     if (T.raw?.layout === 'airwlkrs') return airwlkrsModelSets(T.raw, index, decoded);
+    if (T.raw?.layout === 'lastbrnx') return lastbrnxModelSets(rom, index, decoded);
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
         return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
@@ -1443,6 +1659,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'daytona') return buildDaytonaTexram(rom, texSets);
         if (layout === 'doa') return buildDoaTexram(rom, texSets, fighters);
         if (layout === 'airwlkrs') return buildAirwlkrsTexram(rom, texSets);
+        if (layout === 'lastbrnx') return buildLastbrnxTexram(rom, texSets, fighters);
         if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);

@@ -14,6 +14,7 @@ import { readPlacementStages, buildPlacementDisplayList } from './placements.js'
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
+import { readLastbrnxStages, lastbrnxPaletteCycles } from './lastbrnx.js';
 import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readDaytonaCars, readDaytonaRuns, daytonaRunList, poseDaytonaCar } from './daytonacar.js';
@@ -76,6 +77,7 @@ import {
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
 import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
+import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
 import { buildAtlas, microAtlas, MICRO_W, MICRO_H, classifyDump, palette555ToRGB, ATLAS_W, ATLAS_H, LUMA_W, LUMA_H, CXLAT_W, CXLAT_H, SHEET_BYTES } from './atlas.js';
@@ -258,6 +260,9 @@ const state = {
         footage: null,
         /* The camera as the `live` draws last saw it — see liveCamera. */
         liveCam: null,
+        /* The decodes a stage's palette cycles recolour — see
+         * stepStagePalette. */
+        recoloured: [],
     },
     cxlat: null,        /* colorxlat bytes, whether built or dumped */
     /* A dropped texture-RAM dump pins the sheets: it is a capture of one
@@ -443,6 +448,7 @@ function resetRomState() {
     state.anim.geom.clear();
     state.anim.billboards = [];
     state.anim.liveCam = null;
+    state.anim.recoloured = [];
     state.viewer.clear();
     state.viewer.clearSetMaterials();
 }
@@ -983,6 +989,8 @@ function describeTextureGuess(g) {
     case 'title': return `${sets}: drawn in the intro, on the title's page`;
     case 'home': return `${sets}: on the home side's team page, team 0`;
     case 'away': return `${sets}: on the away side's team page, team 0`;
+    case 'pages': return `${sets}: on the fighters' and the common pages, which every stage has`;
+    case 'lbfighter': return `${sets}: fighter ${g.char}'s part, by its record's model lists, on its own page in costume 0`;
     case 'bank': return `${sets}: the set this bank of the model table is drawn under`;
     case 'resident': return `${sets} ${g.sets.length > 1 ? 'are' : 'is'} a guess: it is on the ${g.slot}s' pages, and nothing says which ${g.slot}'s`;
     case 'coverage': return `set ${g.set} is a guess: it covers ${g.covered} of the model's ${g.tiles} tiles, and no set covers more`;
@@ -1712,6 +1720,7 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
     if (!stage) return;
     state.stageIndex = slot;
     resetStageAnimation(keepClock);
+    state.anim.cycles = stage.paletteCycles ?? null;
     playStageMusic();
     v.clear();
 
@@ -1825,6 +1834,7 @@ function loadStage(slot, { keepCamera = false, keepClock = false } = {}) {
      * already built in place, rotation and all. Put it back to phase 0, which
      * is what buildColorxlat would have written. */
     stepStageColors(0);
+    stepStagePalette(0);
     stepStageShade(0);
     if (stage.lightAt) stepStageLight(0);
 
@@ -1880,6 +1890,7 @@ function addStageDraw(entry, d, matrix, { shellFirst, windowed, material }) {
         mesh.geometry.setAttribute('aTexel',
             new THREE.BufferAttribute(Float32Array.from(d.uvs), 2));
     }
+    notePaletteCycles(d, mesh);
     mesh.visible = state.layerOn[entry.layer] !== false;
     /* The decoded UVs stay the offset's origin: the copy above is written
      * from them every frame rather than walked on from where it stands. */
@@ -2047,6 +2058,7 @@ function resetStageAnimation(keepClock = false) {
     a.blocks = [];
     a.phases = [];
     a.liveCam = null;
+    restorePaletteCycles();
     /* A stage rebuilt for a switch goes on where its round was. */
     if (!keepClock) a.start = performance.now();
     a.frame = -1;
@@ -2297,6 +2309,7 @@ function stepStageAnimation(now) {
     stepSkyImage(frame);
     setWorldFrame(frame);
     stepStageColors(frame);
+    stepStagePalette(frame);
     stepStageShade(frame);
     stepStageLight(frame);
     stepStageMaterials(frame);
@@ -2558,6 +2571,71 @@ function stepStageColors(frame) {
 }
 
 /*
+ * Face palette entries a stage steps a colour a frame, from a list of its own
+ * (`paletteCycles`, [{entry, colors}]: Last Bronx's, js/lastbrnx.js; the
+ * Models tab takes the cycles of the stage its scene is). The
+ * decoder bakes the palette into each vertex's colour, and keeps which entry
+ * the colour is (`colorIndexes`), so the vertices that name a cycling entry
+ * are rewritten in the decode's own array, which every mesh of that model
+ * shares, and put back as decoded when the stage is left.
+ */
+function notePaletteCycles(d, mesh) {
+    const cycles = state.anim.cycles;
+    if (!cycles?.length || !d.colorIndexes) return;
+    const attr = mesh.geometry.getAttribute('aColor');
+    const known = state.anim.recoloured.find((r) => r.colors === d.colors);
+    if (known) { known.attrs.add(attr); return; }
+    const wanted = new Set(cycles.map((c) => c.entry));
+    const at = [];
+    for (let v = 0; v < d.colorIndexes.length; v++) if (wanted.has(d.colorIndexes[v])) at.push(v);
+    if (!at.length) return;
+    state.anim.recoloured.push({ colors: d.colors, original: d.colors.slice(), indexes: d.colorIndexes, at, attrs: new Set([attr]) });
+}
+
+/* The Models tab's cycles: those of the stage whose texture set the scene is,
+ * or of the game's default set's for a set that is no stage. */
+function modelPaletteCycles() {
+    const L = state.rom.game.stageTable?.lastbrnx;
+    if (!L?.cycles) return null;
+    const set = state.texSetChoice ?? state.rom.game.texture.defaultSet;
+    return lastbrnxPaletteCycles(state.rom, set < L.count ? set : state.rom.game.texture.defaultSet);
+}
+
+function stepModelPalette(now) {
+    if (!state.animate) return;
+    stepStagePalette(Math.max(0, Math.floor(((now - state.anim.start) / 1000) * GAME_HZ)));
+}
+
+function restorePaletteCycles() {
+    for (const r of state.anim.recoloured) {
+        r.colors.set(r.original);
+        for (const attr of r.attrs) attr.needsUpdate = true;
+    }
+    state.anim.recoloured = [];
+    state.anim.paletteAt = null;
+    state.anim.cycles = null;
+}
+
+function stepStagePalette(frame) {
+    const cycles = state.anim.cycles;
+    const R = state.anim.recoloured;
+    if (!cycles?.length || !R.length) return;
+    const now = new Map(cycles.map((c) => [c.entry, c.colors[frame % c.colors.length]]));
+    const key = [...now.values()].join(',');
+    if (state.anim.paletteAt === key) return;
+    state.anim.paletteAt = key;
+    for (const r of R) {
+        for (const v of r.at) {
+            const c = now.get(r.indexes[v]);
+            r.colors[v * 3] = (c & 0x1f) / 31;
+            r.colors[v * 3 + 1] = ((c >> 5) & 0x1f) / 31;
+            r.colors[v * 3 + 2] = ((c >> 10) & 0x1f) / 31;
+        }
+        for (const attr of r.attrs) attr.needsUpdate = true;
+    }
+}
+
+/*
  * A stage that shades colorxlat as it runs — the Observation Deck dims a
  * channel or two for each lit corner (js/fvstages.js). The table as built is
  * kept beside it, so each change starts from that, and a stage without the
@@ -2721,9 +2799,12 @@ function loadModel(idx, { keepCamera = false } = {}) {
     /* The scene first: where the palette follows the texture set, the set it
      * picks is what the decode's colours come from. */
     useModelScene(idx);
+    state.anim.cycles = modelPaletteCycles();
     const d = getModel(idx);
     if (d) {
         const { mesh } = addModelToScene(d);
+        notePaletteCycles(d, mesh);
+        stepStagePalette(0);
         applyFaceLayers([{ decoded: d, matrix: new THREE.Matrix4().elements, mesh }]);
         applyWireVisibility();
         if (!keepCamera) v.frame(d.bounds.center, d.bounds.radius);
@@ -3402,6 +3483,8 @@ const BODY_RIGS = {
         clocks: (rom, motion, { body }) => flightClocks(rom, body, motion),
     },
     doa: { read: readDoaFighters, motions: readDoaMotions, list: doaMotionList, pose: poseDoaFighter },
+    /* Last Bronx's: the fight code and the copro's program, run (js/lastbrnxfighters.js). */
+    lastbrnx: { read: readLastbrnxFighters, motions: readLastbrnxMotions, list: lastbrnxMotionList, pose: poseLastbrnxFighter },
     /* Dynamite Cop's characters: one skeleton in the code, HOTD's motions. */
     dynamcop: {
         read: readDynamcopBodies, motions: readMotions, list: bodyMotionList,
@@ -3512,6 +3595,26 @@ function useDoaFighterScene(body) {
     if (status) status.textContent = t('sheets unpacked from ROM ({body}\'s, and stage {stage}\'s set)', { body: body.name, stage: A.stage });
 }
 
+/* A Last Bronx fighter stands on its own set, the one the game loads for it
+ * alone (9 + 2 * fighter + costume; lastbrnxScene in js/colors.js). */
+function useLastbrnxFighterScene(body) {
+    const u = state.viewer.material.uniforms;
+    u.uFogDensity.value = 0;
+    state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
+    u.uTint.value.set(1, 1, 1);
+    u.uBright.value = 1;
+    const lit = gameLighting(state.rom);
+    if (lit) {
+        u.uLight.value.set(...lit.light);
+        lit.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+    }
+    const set = body.fighterSet;
+    useRomTexram([set]);
+    useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] });
+    const status = $('#tex-status');
+    if (status) status.textContent = t('sheets unpacked from ROM (set {set})', { set });
+}
+
 /* An Air Walkers player stands on its team's page, under its team's colour
  * tables (js/texture.js, js/colors.js), as the court set-up loads them. */
 function useAirwlkrsPlayerScene(body) {
@@ -3550,6 +3653,7 @@ function rebuildBody({ keepCamera = true } = {}) {
      * fighter's own. */
     const first = bodySceneModel(body);
     if (state.rom.game.rig?.kind === 'doa') useDoaFighterScene(body);
+    else if (state.rom.game.rig?.kind === 'lastbrnx') useLastbrnxFighterScene(body);
     else if (body.playerSet !== undefined) useAirwlkrsPlayerScene(body);
     /* A fighter's colour rows are its record's: player 2's look is its own
      * number, whoever else wears the part. */
@@ -5154,6 +5258,7 @@ function renderBodyPanel() {
     const body = state.character;
     if (!body) return;
     if (state.rom.game.rig?.kind === 'doa') return renderDoaBodyPanel(body);
+    if (state.rom.game.rig?.kind === 'lastbrnx') return renderLastbrnxBodyPanel(body);
     const drawn = body.parts.filter((p) => p.model).length;
     const fighter = body.texSet !== undefined;
     const sets = fighter ? '<span>texture sets</span><b>' + body.texSet + ', ' + (body.texSet + 1) + '</b>' : '';
@@ -5229,6 +5334,18 @@ function renderDoaBodyPanel(body) {
         <span>model bank</span><b>${body.base}</b>
         <span>joints</span><b>${body.joints}</b>
         <span>motions</span><b>${bodyMotions(body).lead.length} its own and shared</b>
+    `;
+    $('#slot-list').innerHTML = '';
+    renderMotionPanel();
+}
+
+function renderLastbrnxBodyPanel(body) {
+    $('#char-meta').innerHTML = `
+        <span>character</span><b>${body.fighter}</b>
+        <span>costume</span><b>${body.costume}</b>
+        <span>motion set</span><b>${body.motionSet}</b>
+        <span>texture set</span><b>${body.fighterSet}</b>
+        <span>motions</span><b>${bodyMotions(body).lead.length} its own</b>
     `;
     $('#slot-list').innerHTML = '';
     renderMotionPanel();
@@ -6350,7 +6467,7 @@ function applyGameFeatures() {
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
-    const solved = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
+    const solved = ['vf2', 'doa', 'lastbrnx'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
@@ -6385,7 +6502,7 @@ function applyGameFeatures() {
     const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
-    for (const n of ['vf2', 'fv', 'doa', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
+    for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
     for (const b of $('#tabs').children) b.hidden = !on[b.dataset.tab];
     /* The music sits with the stages, or for a game with none at the foot of
      * the model panel, where it plays the song picked rather than a stage's. */
@@ -6469,6 +6586,7 @@ function loadGameContent() {
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
+        else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
@@ -6667,6 +6785,7 @@ function start() {
         /* Ahead of the draw, so a swapped frame lands in the same picture as
          * the transform that goes with it. */
         if (state.tab === 'stage' && state.animate) stepStageAnimation(performance.now());
+        else if (state.tab === 'model' && state.anim.recoloured.length) stepModelPalette(performance.now());
         else if (state.tab === 'anim') {
             if (state.animate) { stepMotion(performance.now()); stepBodyDebris(performance.now()); }
             faceCamera();

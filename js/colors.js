@@ -154,6 +154,18 @@ export function buildLumaram(rom) {
         return luma;
     }
     if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
+    /* Last Bronx works its out too (0x1A50): band b of divisor d takes
+     * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
+    const bands = rom.game.colors.luma?.bands;
+    if (bands) {
+        const luma = new Uint8Array(LUMA_BYTES);
+        bands.forEach((d, b) => {
+            for (let k = 0; k < LUMA_BAND; k++) {
+                luma[(b * LUMA_BAND + k) * 2] = k <= d ? Math.trunc((((k + 1) & 0x7e) << 6) / d) : 0x40;
+            }
+        });
+        return luma;
+    }
     /* Daytona USA keeps both the count and the bands in its program ROM, where
      * the other games keep them in the data ROM — `lda 0x22FD38` and
      * `ld 0x22FD34` in the upload at 0x1314, which are that region's own
@@ -576,6 +588,7 @@ function sendFighterColors(dv, put, rgb, C, fighters, palette) {
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
     if (rom.game.colors.airwlkrs) return buildAirwlkrsColorxlat(rom, colorSet);
+    if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
@@ -716,6 +729,124 @@ function buildAirwlkrsColorxlat(rom, colorSet) {
     if (colorSet >= 0 && colorSet < A.teamCount) {
         send(cv.getUint32(A.teams + colorSet * 4, true), colorSet > 16 ? 6 : 5);
     }
+    return out;
+}
+
+/* ---- Last Bronx ----------------------------------------------------------- */
+
+/*
+ * Last Bronx's colorxlat, worked out by its program out of the test menu's
+ * colour settings and keyframed tables in its data section (RAM 0x500000 on,
+ * a copy of the program ROM from `data.rom`).
+ *
+ * The settings are nine (add, multiply) pairs, the defaults at `settings`
+ * that a machine with empty backup RAM copies to 0x56CBEB. Each makes a
+ * 256-entry table (0x90D0): 0 at 0, then min(255, add + (mul * i >> 6)).
+ * Pairs 0..2 are the red, green and blue of the ramps, 3..5 of the flat band.
+ *
+ * - 0x6D40, every row r: luma l of 0..63 takes entry
+ *   (0x1F80 + l * (r * 0xFF00 / 31)) / 0x3F00 of the channel's ramp table.
+ * - 0x6DF0, every row: luma 64..127 takes entry ((r * 0xFF00 / 31) + 0x80) >> 8
+ *   of the channel's flat table.
+ * - 0x92D0 (slot, table) then lays luma 0..63 of row 1 + 2 * (slot >> 1) out
+ *   of a table of keyframes: a float count, then (position, red, green, blue)
+ *   floats. Luma i reads the colour at i / 64 between the two keyframes about
+ *   it, times 255, through the channel's ramp table. Single precision, as
+ *   the board's FPU works it.
+ * - The stage's five go to rows 1, 3, 5, 7 and 9 (0x9590), from the list the
+ *   stage's entry of 0x504310 names: its destination list is the j-th of 0x20
+ *   bytes from 0x5534D0 and its source list `ld 0x502AA0[j*8]`.
+ * - The two common ones, `ld 0x502A08`, go to rows 11 and 13 (0x9620).
+ * - A fighter's four (0x94E0) go to rows 15..21 for player 1 and 23..29 for
+ *   player 2, from the fighter record's list for its costume (+0x20, +0x24):
+ *   the j-th of 0x10 bytes from 0x5533B0, sources `ld 0x502A10[j*8]`.
+ *
+ * A null entry sends nothing and the row keeps its ramp. Checked against
+ * MAME's colorxlat on the attract's fights: no entry differs.
+ */
+
+/*
+ * What a Last Bronx set stands for. Sets 0..8 are the stages, with `fighters`
+ * ({char, costume} records, player 1 first) or, none given, the attract's
+ * first fight. The sets past them are a fighter alone, 2 * char + costume on
+ * from `stages`, on both sides of the default stage: a lone part is drawn
+ * with its own page and colours whichever side's copy it is.
+ */
+export function lastbrnxScene(rom, set, fighters) {
+    const T = rom.game.texture;
+    if (set >= T.raw.stages && set < T.sets) {
+        const f = { char: (set - T.raw.stages) >> 1, costume: (set - T.raw.stages) & 1 };
+        return { stage: T.defaultSet, fighters: [f, f] };
+    }
+    const stage = set >= 0 && set < T.raw.stages ? set : T.defaultSet;
+    return { stage, fighters: fighters?.length ? fighters : T.raw.fighters };
+}
+
+function buildLastbrnxColorxlat(rom, colorSet, wanted) {
+    const B = rom.game.colors.lastbrnx;
+    const { stage: s, fighters: who } = lastbrnxScene(rom, colorSet, wanted);
+    const cv = rom.mainCpuView;
+    const len = rom.maincpu.length;
+    const ram = (a) => a - B.data.ram + B.data.rom;
+    const word = (a) => (a + 4 <= len ? cv.getUint32(a, true) : 0);
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+
+    const lut = [];
+    for (let k = 0; k < 9; k++) {
+        const add = cv.getUint8(B.settings + k * 2), mul = cv.getUint8(B.settings + k * 2 + 1);
+        const t = new Uint16Array(256);
+        for (let i = 1; i < 256; i++) t[i] = Math.min(255, add + ((mul * i) >> 6));
+        lut.push(t);
+    }
+
+    for (let r = 0; r < 32; r++) {
+        const step = Math.trunc((r * 0xff00) / 31);
+        for (let l = 0, g = 0x1f80; l < 64; l++, g += step) {
+            const i = Math.trunc(g / 0x3f00);
+            for (let ch = 0; ch < 3; ch++) put(ch, r, l, lut[ch][i]);
+        }
+        const i = (Math.trunc((r * 255 * 256) / 31) + 0x80) >> 8;
+        for (let l = 64; l < 128; l++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, r, l, lut[3 + ch][i]);
+        }
+    }
+
+    const F = Math.fround;
+    const send = (slot, table) => {
+        if (!table) return;
+        const at = ram(table);
+        if (at < 0 || at + 4 > len) return;
+        const n = Math.trunc(cv.getFloat32(at, true));
+        if (n < 2 || at + 4 + n * 16 > len) return;
+        const key = (k) => [0, 1, 2, 3].map((j) => cv.getFloat32(at + 4 + k * 16 + j * 4, true));
+        const row = 1 + 2 * (slot >> 1);
+        let cur = key(0), next = key(1), k = 2;
+        for (let i = 0; i < 64; i++) {
+            const x = F(i / 64);
+            while (x > next[0] && k < n) { cur = next; next = key(k++); }
+            const t = F(F(x - cur[0]) / F(next[0] - cur[0]));
+            for (let ch = 0; ch < 3; ch++) {
+                const v = Math.trunc(F(F(F(F(next[1 + ch] - cur[1 + ch]) * t) + cur[1 + ch]) * 255));
+                put(ch, row, i, lut[ch][Math.max(0, Math.min(255, v))]);
+            }
+        }
+    };
+    const list = (at, count) => Array.from({ length: count }, (_, k) => word(at + k * 4));
+    const lists = (L, dst) => {
+        const j = (dst - L.dst) / L.size;
+        if (!Number.isInteger(j) || j < 0) return [];
+        return list(ram(word(ram(L.pairs + j * 8))), L.count);
+    };
+
+    lists(B.stageLists, word(ram(B.stages) + s * 4)).forEach((t, k) => send(2 * k + 1, t));
+    list(ram(B.common), 2).forEach((t, k) => send(2 * k + 11, t));
+    who.slice(0, 2).forEach((one, p) => {
+        const f = typeof one === 'number' ? { char: one } : one;
+        if (!f || !(f.char >= 0 && f.char < B.charCount)) return;
+        const dst = word(B.chars + f.char * 128 + 0x20 + 4 * (f.costume ?? 0));
+        lists(B.fighterLists, dst).forEach((t, k) => send(0x17 + 2 * k - (p ? 0 : 8), t));
+    });
     return out;
 }
 

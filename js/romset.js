@@ -184,6 +184,9 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
      * mainCpuView keeps its old spelling because the callers use it. */
     for (const [key] of regions) out[`${key}View`] = out[key] ? new DataView(out[key].buffer) : null;
     out.mainCpuView = out.maincpuView;
+    /* A profile whose offsets are found in its own program (games.js,
+     * settleLastbronx) settles them now. */
+    if (game.settle) out.game = game.settle(out);
     return out;
 }
 
@@ -256,7 +259,8 @@ export function readModelEntry(rom, index) {
     const f = t.fields ?? MODEL_FIELDS;
     const base = t.past && index >= t.past.from ? t.past.offset : t.offset;
     const off = base + index * t.stride;
-    const dv = rom.mainDataView;
+    /* Last Bronx keeps its table in the program ROM (`source`). */
+    const dv = t.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
     return {
         uvPtr: dv.getUint32(off + f.uv, true),
         matPtr: dv.getUint32(off + f.mat, true),
