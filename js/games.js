@@ -5826,13 +5826,111 @@ const lastbrnxj = lastbronxBuild({
     data: 0xc9220, chars: 0xb54d0, settings: 0x3d5db, code: 0x120,
 });
 
+/* ---- Pilot Kids ----------------------------------------------------------- */
+
+/*
+ * Psikyo's 1998 shooter on Model 2B CRX (MAME's `pltkids`, Revision A) and
+ * its Model 2A build (`pltkidsa`, a clone: its zip holds the program and the
+ * 2A board's TGP and sound chips, and the data, polygon and texture chips are
+ * read from pltkids.zip beside it). Nothing of the AM2 library: the program
+ * deals its pages out of the data ROM itself and works its colour tables
+ * out, so js/texture.js and js/colors.js each have a section for it. The two
+ * programs keep their tables at the same offsets, but for the colour table
+ * list (`colorTables`), which the 2A build has 0x80 sooner.
+ */
+function pilotKidsBuild({ id, name, program, extra = [], colorTables }) {
+    return {
+        id,
+        name,
+        identify: [program[1], program[3], ...extra],
+        regions: {
+            maincpu: { size: 0x100000, parts: [program] },
+            mainData: {
+                size: 0x800000,
+                parts: [[0x000000, 'mpr-21262.da0', 0xaa71353e, 'mpr-21263.da1', 0xd55d4509]],
+            },
+            polygons: {
+                size: 0x2000000,
+                parts: [
+                    [0x0000000, 'mpr-21264.tp0', 0x6b35204d, 'mpr-21268.tp1', 0x16ce2147],
+                    [0x0800000, 'mpr-21265.tp2', 0xf061e639, 'mpr-21269.tp3', 0x8c06255e],
+                    [0x1000000, 'mpr-21266.tp4', 0xf9c32021, 'mpr-21270.tp5', 0xb61f81c3],
+                    [0x1800000, 'mpr-21267.tp6', 0xc42cc938, 'mpr-21271.tp7', 0xa5325c75],
+                ],
+            },
+            textures: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-21274.tx1', 0xf045e3d1, 'mpr-21272.tx0', 0xdd605c21],
+                    [0x800000, 'mpr-21275.tx3', 0xc4870b7c, 'mpr-21273.tx2', 0x722ec8a2],
+                ],
+            },
+        },
+        /*
+         * 4185 entries of 24 bytes in the data ROM at 0x28D90, up to the
+         * zeros before the font at 0x41708: texture word, material word, mesh
+         * pointer, polygon count, then two more texture words. Every one of
+         * the program's 13 references to 0x2028D90 is a draw (0x5DEE0 to
+         * 0x5F0DC in the 2B build) that sends four words of an entry
+         * (`lda 0x2028d90[g0*8]`, `st 0x101, 0x800010`, `stq` to 0x804000):
+         * words 0, 1, 2, 3, or with word 4 or 5 for word 1 (0x5DF40, 0x5DF80).
+         */
+        modelTable: { offset: 0x28d90, count: 4185, stride: 24 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        /* {count, colours}: 674 colours at 0x19E32, copied to the face palette
+         * (0x1802000) by 0x51B10. */
+        paletteProgram: 0x19e30,
+        paletteOffset: null,
+        /*
+         * js/texture.js's Pilot Kids section: the ten loads at 0x5BF30, load
+         * 0 common and set s the common one with scene load s + 1 over it.
+         * Set 7 (load 8) is the title's, the one the game opens on.
+         */
+        texture: {
+            raw: { layout: 'pltkids', loads: 0x5bf30 },
+            sets: 9,
+            residentSet: null,
+            defaultSet: 7,
+        },
+        /*
+         * Luma: 0x5C9F0 copies the 0x8000 bytes at 0x6650. Colorxlat:
+         * js/colors.js's Pilot Kids section.
+         * `scenes` by texture set, as m2-hle2 shows the loads paired: loads
+         * 1, 2 and 3 with tables 4, 3 and 1 (the attract's three demos), load
+         * 4 with table 7 (the first stage played), load 8 with table 8 (the
+         * title). Loads 5, 6, 7 and 9 were not reached.
+         */
+        colors: {
+            luma: { source: 'maincpu', data: 0x6650, bytes: 0x8000 },
+            pltkids: { tables: colorTables, counts: 0x65f0, scenes: [4, 3, 1, 7, null, null, null, 8, null] },
+            solid: true,
+        },
+        /* No stage, fighter or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+const pltkids = pilotKidsBuild({
+    id: 'pltkids', name: 'Pilot Kids (Model 2B, Revision A)',
+    program: [0x000000, 'epr-21285a.15', 0xbdde5b41, 'epr-21286a.16', 0xc8092e0e],
+    extra: ['mpr-21262.da0', 'mpr-21264.tp0'],
+    colorTables: 0x82300,
+});
+/* Known by its program alone, so that pltkids.zip missing is said as such. */
+const pltkidsa = pilotKidsBuild({
+    id: 'pltkidsa', name: 'Pilot Kids (Model 2A)',
+    program: [0x000000, 'epr-21281.pr0', 0x293ead5d, 'epr-21282.pr1', 0xed0e7b9e],
+    colorTables: 0x82280,
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
-    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj];
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
+    pltkids, pltkidsa];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
