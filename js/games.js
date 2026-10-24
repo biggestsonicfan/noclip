@@ -5630,10 +5630,12 @@ const powsled = {
  * offsets, except the program's data section, which the Japan build has
  * 0x120 further on, and what follows it.
  */
-function lastbronxBuild({ id, name, program, data, chars, settings }) {
+function lastbronxBuild(build) {
+    const { id, name, program, data, chars, settings, code, located } = build;
     return {
         id,
         name,
+        settle: located ? (rom) => settleLastbronx(build, rom) : undefined,
         identify: [program[1], program[3], 'mpr-19052.17', 'mpr-19055.27'],
         regions: {
             maincpu: { size: 0x200000, parts: [program] },
@@ -5665,8 +5667,8 @@ function lastbronxBuild({ id, name, program, data, chars, settings }) {
         modelTable: { source: 'maincpu', offset: 0x189b0, count: 2544, stride: 16 },
         meshPtr: { subtract: 0x02000010, add: 0x10 },
         /* {count, colours}: 318 colours at 0x1872E, copied to the face palette
-         * (0x1802000) by 0x157F0. Entries 40, 41, 43, 44, 47 and 48 cycle at
-         * run time (0x17BE0); the table holds their first frame. */
+         * (0x1802000) by 0x157F0. Entries 8 to 19 and 40 to 48 cycle on some
+         * stages (js/lastbrnx.js, paletteCycles); the table holds a frame. */
         paletteProgram: 0x1872c,
         paletteOffset: null,
         /*
@@ -5718,19 +5720,79 @@ function lastbronxBuild({ id, name, program, data, chars, settings }) {
             },
             solid: true,
         },
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        /*
+         * The light geometrizer function 0x0A gets at boot (0x801C), with Z
+         * negated as for Daytona USA, and the 32 material pairs at 0x7E00
+         * that 0x7D98 sends with function 6.
+         */
+        lighting: {
+            light: [0.5, -0.7, -0.5],
+            materials: { source: 'maincpu', at: 0x7e00, count: 32, stride: 8 },
+        },
+        /*
+         * js/lastbrnx.js: the stage task's own draw (0x71AC0) and ring walls
+         * (0x72640) run on a stage byte (0x57DEC0), the camera (0x71DB0) left
+         * out and every placement kept (0x5D2E60 = 2), after the moving
+         * pieces' setup (0x941E0), the Export build's addresses; the Japan
+         * build's code is `code` further on there. `names` the stage names'
+         * pointers (RAM, in the data section `dataSize` long the boot copies).
+         * `cycles` the face palette's colour cycles: the round start (0x17950)
+         * takes a list of them by the stage's object kind (`kinds`).
+         */
+        stageTable: {
+            lastbrnx: {
+                count: 9, stageByte: 0x57dec0, cullAll: 0x5d2e60, camera: 0x71db0 + code,
+                init: 0x941e0 + code, draw: 0x71ac0 + code, walls: 0x72640 + code,
+                names: 0x504250, dataSize: 0x2d080, cycles: { lists: 0x502b00, kinds: 0x5042e0 },
+            },
+            flat: true,
+        },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
 const lastbrnx = lastbronxBuild({
     id: 'lastbrnx', name: 'Last Bronx (Export, Revision A)',
     program: [0x000000, 'epr-19061a.15', 0xc0aebab2, 'epr-19062a.16', 0xcdf597e8],
-    data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb,
+    data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0,
+});
+/*
+ * The USA build is not in the container, so its offsets are not measured: the
+ * Export build's stand in until the set is loaded, then `settleLastbronx`
+ * moves them by as much as the program's data section has moved. The boot
+ * copies that section from the address it keeps at 0x83C (0xC9100 Export,
+ * 0xC9220 Japan); in the Japan build the code the stages run and the tables
+ * moved by the same 0x120. Each routine is checked by its first word, and a
+ * build where one is not there gets no Stages tab.
+ */
+const LASTBRONX_EXPORT = { data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0 };
+const LASTBRONX_FIRST_WORDS = [[0x71ac0, 0x80a03000], [0x72640, 0x80a03000], [0x71db0, 0x59084810], [0x941e0, 0x5ca81e00]];
+
+function settleLastbronx(build, rom) {
+    const cv = rom.mainCpuView;
+    const shift = cv.getUint32(0x83c, true) - LASTBRONX_EXPORT.data;
+    const at = (o) => o + shift;
+    const fits = LASTBRONX_FIRST_WORDS.every(([o, w]) => at(o) >= 0 && at(o) + 4 <= cv.byteLength && cv.getUint32(at(o), true) === w);
+    const g = lastbronxBuild({
+        ...build, located: false, data: at(build.data), chars: at(build.chars),
+        settings: at(build.settings), code: build.code + shift,
+    });
+    if (!fits) {
+        g.features = { ...g.features, stages: false };
+        console.warn(`${g.name}: the stage routines are not ${shift} bytes on from the Export build's; no Stages tab`);
+    }
+    return g;
+}
+
+const lastbrnxu = lastbronxBuild({
+    id: 'lastbrnxu', name: 'Last Bronx (USA, Revision A)',
+    program: [0x000000, 'epr-19059a.15', 0x25478257, 'epr-19060a.16', 0xc48906b2],
+    ...LASTBRONX_EXPORT, located: true,
 });
 const lastbrnxj = lastbronxBuild({
     id: 'lastbrnxj', name: 'Last Bronx (Japan, Revision A)',
     program: [0x000000, 'epr-19046a.15', 0x75be7b7a, 'epr-19047a.16', 0x1f5541e2],
-    data: 0xc9220, chars: 0xb54d0, settings: 0x3d5db,
+    data: 0xc9220, chars: 0xb54d0, settings: 0x3d5db, code: 0x120,
 });
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
@@ -5739,7 +5801,7 @@ const lastbrnxj = lastbronxBuild({
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
-    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxj];
+    dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -244,6 +244,9 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     const positions = [];
     const normals = [];
     const colors = [];
+    /* The palette entry each vertex's colour is, or -1: a stage that cycles
+     * entries (Last Bronx's) recolours the vertices that name them. */
+    const colorIndexes = [];
     const uvs = [];
     const tiles = [];
     const lumaBases = [];
@@ -255,6 +258,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     const edges = [];
 
     const rgb = [0.7, 0.7, 0.7];
+    let colorIndex = -1;
     const uvu = new Float32Array(4);
     const uvv = new Float32Array(4);
     /* Stream order k -> decoder vertex slot.
@@ -430,6 +434,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         positions.push(ax, ay, az, bx, by, bz, cx, cy, cz);
         normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
         for (let t = 0; t < 3; t++) colors.push(rgb[0], rgb[1], rgb[2]);
+        for (let t = 0; t < 3; t++) colorIndexes.push(colorIndex);
         uvs.push(uvu[s0], uvv[s0], uvu[s1], uvv[s1], uvu[s2], uvv[s2]);
         for (let t = 0; t < 3; t++) tiles.push(tx, ty, tw, th);
         for (let t = 0; t < 3; t++) lumaBases.push(lumaBase);
@@ -478,6 +483,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         faceFlags = 0;
         let textured = false, untexTrans = false;
         rgb[0] = 0.7; rgb[1] = 0.7; rgb[2] = 0.7;
+        colorIndex = -1;
 
         if (haveMat) {
             const rec = hdr;
@@ -540,7 +546,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
                 th = texh;
                 const matidx = (th3 >> 6) & 0x3ff;   /* colorbase -> global palette */
                 if (matidx > paletteMax) paletteMax = matidx;
-                if (palette[matidx] >= 0) bgr555(palette[matidx], rgb);
+                if (palette[matidx] >= 0) { bgr555(palette[matidx], rgb); colorIndex = matidx; }
             }
         }
 
@@ -659,6 +665,7 @@ export function decodeModel(rom, modelIdx, points = null, mesh = null) {
         positions: new Float32Array(positions),
         normals: new Float32Array(normals),
         colors: new Float32Array(colors),
+        colorIndexes: new Int16Array(colorIndexes),
         uvs: new Float32Array(uvs),
         tiles: new Float32Array(tiles),
         lumaBases: new Float32Array(lumaBases),

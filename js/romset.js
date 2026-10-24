@@ -184,6 +184,9 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
      * mainCpuView keeps its old spelling because the callers use it. */
     for (const [key] of regions) out[`${key}View`] = out[key] ? new DataView(out[key].buffer) : null;
     out.mainCpuView = out.maincpuView;
+    /* A profile whose offsets are found in its own program (games.js,
+     * settleLastbronx) settles them now. */
+    if (game.settle) out.game = game.settle(out);
     return out;
 }
 
