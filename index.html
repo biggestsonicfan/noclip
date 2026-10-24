@@ -759,7 +759,8 @@
         copro's program, both run in the explorer (the copro on a SHARC
         interpreter): the fighter is set up in player one's place
         (<code>0xB5E10</code>) facing its other costume, the motion started
-        (<code>0x49540</code>, id = fighter &lt;&lt; 10 | move), then each
+        (<code>0x49540</code>, id = weapon set &lt;&lt; 10 | move,
+        the set word 12 of the fighter's record), then each
         frame steps it (<code>0x49820</code>) and draws it
         (<code>0x4A940</code>); the parts are read back from the packets the
         copro writes. A motion's name, data and length are in the tables at

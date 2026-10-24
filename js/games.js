@@ -5753,12 +5753,13 @@ function lastbronxBuild(build) {
          * (0x1380, 0x1520) as far as the fight needs, [routine, args, steps];
          * 'sync' is the 8 the boot pushes the copro. `upload` (0x98D8) is
          * answered by loading the program. `names` the fighter names, 9 bytes
-         * each (data section); `motions` the per-character tables. From
-         * `codeFrom` the Japan build's code is `code` further on.
+         * each (data section); `motions` the tables per motion set, the set
+         * word `setWord` of the fighter's record in `chars`. From `codeFrom`
+         * the Japan build's code is `code` further on.
          */
         rig: {
             kind: 'lastbrnx', note: 'lastbrnx', code, codeFrom: 0x2a680,
-            fighters: 8, names: 0x503f90,
+            fighters: 8, names: 0x503f90, chars, setWord: 12,
             motions: { names: 0x52cea0, data: 0x511ba0, heads: 0x52b4d0 },
             sharc: { at: 0x99f8, halfwords: 19698 },
             upload: 0x98d8,

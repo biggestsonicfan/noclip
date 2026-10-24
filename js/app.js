@@ -5343,6 +5343,7 @@ function renderLastbrnxBodyPanel(body) {
     $('#char-meta').innerHTML = `
         <span>character</span><b>${body.fighter}</b>
         <span>costume</span><b>${body.costume}</b>
+        <span>motion set</span><b>${body.motionSet}</b>
         <span>texture set</span><b>${body.fighterSet}</b>
         <span>motions</span><b>${bodyMotions(body).lead.length} its own</b>
     `;

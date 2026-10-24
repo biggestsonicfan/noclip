@@ -237,19 +237,21 @@ function tables(rom) {
 export function readLastbrnxFighters(rom) {
     const R = rom.game.rig;
     const { view } = tables(rom);
+    const cv = rom.mainCpuView;
     const out = [];
-    for (let char = 1; char <= R.fighters; char++) {
-        const [dv, o] = view(R.names + 9 * (char - 1));
+    for (let char = 0; char < R.fighters; char++) {
+        const [dv, o] = view(R.names + 9 * char);
         const name = str(dv, o);
         const nice = name.charAt(0) + name.slice(1).toLowerCase();
         for (const costume of [0, 1]) {
             out.push({
                 index: (char << 1) | costume,
                 fighter: char,
+                motionSet: cv.getUint32(R.chars + 128 * char + 4 * R.setWord, true),
                 costume,
                 name: `${nice}${costume ? ' (2P)' : ''}`,
                 joints: 15,
-                fighterSet: rom.game.texture.raw.stages + 2 * (char - 1) + costume,
+                fighterSet: rom.game.texture.raw.stages + 2 * char + costume,
                 parts: Array.from({ length: PARTS }, (_, k) => ({ index: k, joint: k, parent: -1, model: null })),
             });
         }
@@ -257,15 +259,15 @@ export function readLastbrnxFighters(rom) {
     return out;
 }
 
-/** Every character's motions, by the game's id (character << 10 | number). */
+/** Every motion set's motions, by the game's id (set << 10 | number). */
 export function readLastbrnxMotions(rom) {
     const R = rom.game.rig;
     const { word, view } = tables(rom);
     const list = [];
-    for (let char = 1; char <= R.fighters; char++) {
-        const names = word(R.motions.names + 4 * char);
-        const datas = word(R.motions.data + 4 * char);
-        const heads = word(R.motions.heads + 4 * char);
+    for (let set = 1; set <= R.fighters; set++) {
+        const names = word(R.motions.names + 4 * set);
+        const datas = word(R.motions.data + 4 * set);
+        const heads = word(R.motions.heads + 4 * set);
         for (let i = 1; i < 0x400; i++) {
             const n = word(names + 4 * i);
             if (!n) break;
@@ -273,21 +275,21 @@ export function readLastbrnxMotions(rom) {
             const [hv, ho] = view(head);
             const frames = head && ho + 12 <= hv.byteLength ? hv.getUint16(ho + 10, true) : 0;
             const [nv, no] = view(n);
-            const id = (char << 10) | i;
+            const id = (set << 10) | i;
             list[id] = frames > 0
-                ? { index: id, char, name: str(nv, no), address: word(datas + 4 * i), frames, joints: 15 }
+                ? { index: id, set, name: str(nv, no), address: word(datas + 4 * i), frames, joints: 15 }
                 : null;
         }
     }
     return list;
 }
 
-/** The fighter's own motions first, then every other character's. */
+/** The fighter's own motions (its weapon's set) first, then every other set's. */
 export function lastbrnxMotionList(rom, body, motions) {
     const all = motions.filter(Boolean);
     return {
         fits: all,
-        lead: all.filter((x) => x.char === body.fighter),
+        lead: all.filter((x) => x.set === body.motionSet),
         label: `${body.name.replace(' (2P)', '')}'s moves`,
         every: 'Every motion in the table',
     };

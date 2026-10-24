@@ -6631,7 +6631,7 @@ add nothing, and are left out: the draws match those of the whole boot
 word for word. It takes ~180 ms. 0xB5E10 (player, fighter, costume, x,
 bearing) then sets both players up as the round start (0x2F060) does: the
 fighter in player one's place at the centre, its other costume facing it 3 m
-away. 0x49540 (player, id) starts a motion, id = fighter << 10 | number, and
+away. 0x49540 (player, id) starts a motion, id = set << 10 | number, and
 each frame is the step 0x49820 and the draw 0x4A940 under an identity
 matrix (push 8, then 0x10; 5 before the draw and 6 after), so the parts come
 back in the fighter's own frame, in metres, y up. A fighter is 16..19 parts
@@ -6640,16 +6640,19 @@ head, the other arm, and the weapon (models 1016 on). The model is the one
 whose entry the four words are; the parents are worked out from the frames
 (`jointsOf`, as for Dead or Alive).
 
-The fighters are 1..8, by the 9-byte names at RAM 0x503F90 (YOKO, JOE,
-NAGI, KUROSAWA, YUSAKU, TOMMY, LISA, ZAIMOKU; the ninth, REDEYE, has no
-motions). Their motions are three tables of pointers per fighter, indexed
-by the motion number: 0x52CEA0 the names (`kon_kamae_new_5_0`), 0x511BA0 the
+The fighters are 0..7, by the 9-byte names at RAM 0x503F90 (YOKO, JOE,
+NAGI, KUROSAWA, YUSAKU, TOMMY, LISA, ZAIMOKU; the ninth, REDEYE, is left
+out). The motions go by weapon, not by fighter: sets 1..8 are kon, ton, kan,
+nun, sai, ssk, bok and ham, and a fighter's set is word 12 of its 128-byte
+record (0xB53B0 + 128 * fighter: 2, 4, 5, 7, 6, 1, 3, 8, so Yoko plays the
+tonfa's). Each set has three tables of pointers, indexed by the motion
+number: 0x52CEA0 the names (`kon_kamae_new_5_0`), 0x511BA0 the
 data (a bitstream in the data ROM, unpacked by 0x4B090 to 0x585890 +
 player * 0x19CC), 0x52B4D0 a 16-byte head whose halfwords at +8 and +10 are
 the data's length in 1/30 s and the motion's in frames. 0x47D48 plays it at
 57.5 * h8 / h10 a frame, and a motion holds its last pose once it ends. That
-is 215, 277, 211, 195, 180, 152, 161 and 155 motions. A fighter stands on
-the set of that fighter alone (9 + 2 * (fighter - 1) + costume).
+is 215, 277, 211, 195, 180, 152, 161 and 155 motions by set. A fighter
+stands on the set of that fighter alone (9 + 2 * fighter + costume).
 
 The Japan build's code at or above 0x2A680 sits 0x120 higher; the code
 below it, the copro's program, the model table and the RAM tables do not
