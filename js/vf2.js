@@ -31,6 +31,8 @@
  *
  * The ring is sized by the operator: 0x50A00C, the setting, is doubled and
  * rounded, and 12 and up pick entries 0..4 (capped), anything less entry 5.
+ * The factory setting is 7.5 (0x11540[0], by 0xCF64), so entry 3; the
+ * attract demos cycle 0x11530's 8.0, 7.5 and 7.0.
  * The floor inside it is one model scaled (size/6, 1, size/6).
  *
  * Flag bit 3 is the raft (0x20054): eight logs under the ring scale, from a

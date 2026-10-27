@@ -785,7 +785,10 @@ the light at `+0x6C`/`+0x70`/`+0x72` (copied by `0xCE1C` as `change_scene`
 does), the texture pair at `+0x78`/`+0x7C` and six ground models at `+0x84`
 by ring size (flag bit 2). None is drawn under a matrix except the floors, which
 `0x20264` and `0x20418` scale by (size/6, 1, size/6), size the operator
-setting at `0x50A00C`.
+setting at `0x50A00C`. Stage setup (`0xCF64`) takes it from `0x11540`: 7.5
+at the factory setting, so a floor scale of 1.25 and ground entry 3. The 8.0
+at `0x11530` is the attract demos' table, which they cycle (8.0, 7.5, 7.0 in
+MAME).
 
 Flag bit 3 is the raft. `0x20054` walks eight logs from a list in the stage
 state (`0x100(g13)`), under the ring scale, at x = 5.4, then 1.4 and five steps
@@ -1423,7 +1426,7 @@ struct's +8 (`+0x75C`) as the piece's floor shadow and fight state. It is
 neither. Straight after the piece (`0x193C8`), `0x193CC` tests the stage
 flags (`0x6EEA0` bit 5, the Mirror floor's), then the head's point `+0x20C`
 (slot 2's, read back as `+0x1F4` is slot 0's): y not below 0, and |x| and
-|z| not past the ring (`0x50A00C`, 8) less 1. If it passes, it pushes, sends
+|z| not past the ring (`0x50A00C`, 7.5) less 1. If it passes, it pushes, sends
 `0x23804747` (op `0x47`, `Fn_mul_matrix_rev`: current = M · current) with
 the twelve words at `0x501960`, and draws `+0x75C` through the window
 `0x501834`. `0x1E52C` stores M each frame: push, invert (`0x6000C0C`), save
@@ -1831,7 +1834,7 @@ set, one axis laid flat, then inner[1] (near) or inner[2] (far).
 | tables | `0x61CFC`, by `+0x1B1` mod 13 | u32 `[0x60BC8 + 4·+0x1B0]`, 26 (player 2's look 13 on) |
 | test ball | the middle of the slot's list (`0x2007BEE`) | the first; the boot (`0x1950`) copies them to `0x506000`/`0x506200`; slot 0 has no list and uses slot 9's |
 | light | stage record `0x6EE38` + 256·stage, `+0x70`/`+0x72` | VECTER_X/Y, record `0x6CE1048` + 256·stage, `+0x08`/`+0x0A` (`0x5FA08`) |
-| ring | 8 by default (`0x50A00C`) | 5 (`0xB658`) |
+| ring | 7.5 at the factory setting (`0x50A00C`) | 5 (`0xB658`) |
 | ground | −0.5 | by stage, f32 `0x6CE3564` (`0x248FC`): −0.2, 0.3, 0, −0.01, … |
 | laid flat | bit 0 the x, else the z | bit 1 the z, else bit 0 the x, else neither (`kage_poly`) |
 
