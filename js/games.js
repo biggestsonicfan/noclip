@@ -3681,7 +3681,10 @@ const vf2 = {
         stageLit: true,
         materials: { at: 0x118f0, count: 32, stride: 4 },
     },
-    stageTable: { vf2: { at: 0x6ee38, stride: 256, count: 16, ringSize: 8 }, flat: true },
+    /* ringSize: stage_x (0x50A00C) at the factory setting. Stage setup (0xCF64)
+     * takes it from 0x11540, 7.5 first; 8.0 is 0x11530's, the table the attract
+     * demos cycle through (8.0, 7.5, 7.0 in MAME). */
+    stageTable: { vf2: { at: 0x6ee38, stride: 256, count: 16, ringSize: 7.5 }, flat: true },
     /*
      * The sound board is Sonic The Fighters' — the same Model 2 board, the
      * chips laid out the same way, the same three boot commands (0x8574,
@@ -3736,18 +3739,18 @@ const vf2 = {
         standardRig: 0x296a0,
         /* The floor shadows (js/fightershadow.js): 0x61BA0's tables by
          * +0x1B1 mod 13, 0x176A0's balls, the light from the stage records'
-         * +0x70 and +0x72 (0xCE1C), the ring's default half-width (0x50A00C)
+         * +0x70 and +0x72 (0xCE1C), the ring's half-width at the factory setting (0x50A00C, 7.5)
          * and the ground (0x50A010, 0x99CC). */
         shadow: {
-            tables: 0x61cfc, count: 13, ring: 8, ground: -0.5, leave: { x: 1 },
+            tables: 0x61cfc, count: 13, ring: 7.5, ground: -0.5, leave: { x: 1 },
             balls: { counts: 0x2007c68, lists: 0x2007bee, points: 0x20078a8 },
             stages: { at: 0x6ee38, stride: 256, light: 0x70 },
         },
         /* The fighters in the Mirror stage's floor (js/vf2reflection.js):
          * 0x20488 under stage flag bit 5, 0x19C94 from record +0x34; the
          * head piece's (0x193CC) while the head is at or above the floor
-         * and within the ring (0x50A00C, 8) less 1. */
-        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 }, piece: { ring: 8, less: 1 } },
+         * and within the ring (0x50A00C, 7.5) less 1. */
+        reflection: { list: 0x34, bit: 5, stages: { at: 0x6ee38, stride: 256, flags: 0x68 }, piece: { ring: 7.5, less: 1 } },
         /* The action table is record +0x14 as in Fighting Vipers:
          * action_init (0x13F1C) puts it at player +0x1A0, and the action
          * code reads it to +0xA6, 84 motion ids, the stance first. */
