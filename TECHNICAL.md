@@ -6820,6 +6820,32 @@ m2-hle2 the title is load 8 with table 8, the attract's three demos loads 1,
 7 (`scenes` in the profile). Loads 5, 6, 7 and 9 were not reached; their sets
 keep the ramp on rows 11 to 29.
 
+**Cells.** The tile chip's pictures are [Virtua Cop's
+records](js/cells.js): the width and the height as halfwords, then the
+halfword entries, which 0x5A890 (and 0x5AA50, from the vblank queue that
+0x5A960 fills) store from the layer's corner with bit 15 set. The code takes
+them by pointer, from the table at program 0x82500 or from the zero-ended
+table at data 0xE850C, which a viewer in the check menu beside the model
+check (0x10390) steps through: 74 records, every one the program table names
+among them. They are the explorer's cells, in that order.
+
+The tile chip is filled once, by the boot (0x596E0):
+
+- 0x599D0 draws 128 characters of 1bpp font from data 0x41600 at character
+  0, pen 1 (Power Sled's), and character 1 is then filled with pen 15;
+  0x51B10 stores white in colour 1.
+- 0x5A820 loads the two files named by the words at data 0xE8500, 0x63F20
+  and 0x74150. A file is a first block, a block count, a table of colour
+  pointers, then the blocks' characters, copied straight from character
+  first * 128 (15 blocks from 4, 104 from 20). 0x5A770 gives block k the 16
+  colours its pointer names, as group first + k.
+
+Each entry's group is its character's block, as on Dead or Alive. Every
+character the 74 records name is one the boot loaded. In MAME's attract
+(frame 1500) the tile chip's characters and colours draw all 74 the same as
+the explorer, pixel for pixel, and layer 2 holds record 71 (the moon) whole,
+layer 0 record 10 (INSERT COINS!).
+
 **Not done.** Stages, characters and motions, the scene each model belongs
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.

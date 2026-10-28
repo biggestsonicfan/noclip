@@ -653,7 +653,7 @@ need a table found in that game's ROM first. Where they stand:
 Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids has neither.
+Bronx has both; Pilot Kids has the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
@@ -1107,6 +1107,12 @@ its set picked by hand. The textures, palette, luma and colour tables match
 m2-hle2's at the title and in the first stage byte for byte. Sets 0, 1, 2, 3
 and 7 have their scene's colours; sets 4, 5, 6 and 8 were never reached, and
 their scene's colour rows keep the plain ramp.
+
+The **Cells** tab has the game's 74 tile-chip pictures, in both builds: the
+fonts, the captions (INSERT COINS!, CONTINUE?, GAME OVER), the digits, the
+Psikyo copyright, the four pilots' portraits, the score ranking, the four sky
+backdrops and the monitor test grids. They all come from the tile chip as
+the boot fills it, so there is one CG.
 
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
