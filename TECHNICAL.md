@@ -6551,6 +6551,13 @@ viewer's clock plays them. Stage names come from the round banner's table
 (0x2A190). Checked against MAME's display list at frame 1300: the 28 pieces
 and four walls of Cross Street land where it has them.
 
+A draw is named by the table entry last read before it only when the mesh
+word it sends (the third) is that entry's. Cross Street's circling piece
+(models 68 to 87, one a frame) sends 0, 0x30000000, 0x20000007, 0xFFFFF8
+once every 21 frames, after the street's entry (model 1) was read; that frame
+draws nothing, where the explorer had drawn the street at the piece's matrix
+(issue 214). No other stage sends such a draw.
+
 The stages are drawn by the depth buffer, with faces laid on others ranked
 by `js/layers.js`, and not by the z-sort keys the board sorts by
 (`depth` in the profile). The board's keys only hold from its own camera.
