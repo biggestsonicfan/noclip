@@ -11077,6 +11077,22 @@ sound board"). `board.wasm` is that emulation, built from m2-hle2's
 `src/board/sound.h` with a thin surface over it (`tools/sound/board.c`):
 load the ROMs, send a byte, render samples.
 
+**The driver in C.** m2-hle2 has the sound driver ported to C
+(`src/board/sound_hle.h`, and `sound_hle_crx.h` for CRX_drv), routine by
+routine with the driver's own RAM layout, writing the same SCSP registers and
+sound RAM the 68000 would; since m2-hle2 #1802 it is the board's default
+wherever the program ROM is a build it knows, picked by a hash of the driver's
+code. The page gets it with the rest of the board: Sonic the Fighters,
+Fighting Vipers, Dead or Alive, Virtual-On, Dynamite Cop and The House of the
+Dead (both builds) run the driver in C; Virtua Fighter 2, Sega Rally, Power
+Sled and Last Bronx have builds it does not know and run theirs on the 68000,
+as before. `snd_driver()` says which, and the console logs it when the board
+starts. The i960's side is the same either way (the same UART, clocked the
+same), so nothing in `sound.js` changes with the driver. Graded in Node
+against the 68000 wasm, first stage song, 12 s each: the per-second loudness
+matches to a few thousandths in every game, and the board's work drops from
+21–35 ms to 11–18 ms of a core per second of sound.
+
 **What it sends.** The song is the one `stage_bgm_select` picks:
 `ld 0xDBFDC[r3*4], g0` at `0x3F6A8`, `r3` the `stage_num` byte masked to four
 bits, and the long it loads (`STAGE_MUSIC_IN_ORDER`) goes to the board as it
@@ -11103,8 +11119,8 @@ worklet without an error on either side.
 read with the set (`rom.readChip` fetches a member on demand). Ticking it reads
 8.5 MB out of the zips once — about three seconds to the first note, most of it
 the driver's own boot — and the board then makes a second of sound in about
-30 ms of one core (34× real time under Node; bit-identical to a native build of
-the same source). Unticked, the audio context is suspended, which stops the
+30 ms of one core on the 68000 (34× real time under Node; bit-identical to a
+native build of the same source), and in about half that with the driver in C. Unticked, the audio context is suspended, which stops the
 board.
 
 **Rebuilding.** `tools/sound/build.sh` with Emscripten on the path (or `EMCC`
@@ -11115,7 +11131,8 @@ it, and the commit should name the m2-hle2 commit it was built from. The first
 build is from `c4ed74f`, then `f797c4b`, which has the 68000 fix The House of
 the Dead's driver needs (below); the current one, and `model1.wasm`, are from
 `cd73efd`, with the 68000's bit-op fix (`3d283a3f`) and, for the Model 1 board,
-#1006's. The build stubs out
+#1006's. `board.wasm` is now from `f07cf01`, the driver in C as the default.
+The build stubs out
 `clock_gettime`: the board times its own work for m2-hle2's status display,
 which a page never reads, and libc's clock would have the module import WASI.
 

@@ -7,9 +7,9 @@
 #   M2HLE2=../m2-hle2 MAME=../claude_mame/mame EMCC=emcc tools/sound/build.sh [model2|model1]
 #
 # The wasm is committed: the site has no build step, and the deploy copies js/
-# as it is. Rebuild board.wasm when m2-hle2's src/board/sound.h, scsp.h or
-# m68k*.h change, model1.wasm when m68k*.h or ymfm change, and say which
-# commits it was built from in the commit message.
+# as it is. Rebuild board.wasm when m2-hle2's src/board/sound.h, sound_hle*.h,
+# sound_synth.h, scsp.h or m68k*.h change, model1.wasm when m68k*.h or ymfm
+# change, and say which commits it was built from in the commit message.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -24,7 +24,7 @@ if [ "$which" = all ] || [ "$which" = model2 ]; then
 "$emcc" -O3 -flto -DNDEBUG \
     -I"$src/board" -I"$src/core" -I"$src/profiles" -I"$src" \
     -sSTANDALONE_WASM --no-entry \
-    -sEXPORTED_FUNCTIONS=$exports \
+    -sEXPORTED_FUNCTIONS=$exports,_snd_driver \
     -sINITIAL_MEMORY=20mb -sALLOW_MEMORY_GROWTH=1 \
     -sFILESYSTEM=0 \
     -o "$root/js/sound/board.wasm" "$here/board.c"

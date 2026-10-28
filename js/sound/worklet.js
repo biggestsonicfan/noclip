@@ -3,7 +3,8 @@
  *
  * The wasm is one of the two sound boards sound.js names — the Model 2 board
  * (tools/sound/board.c) or the Model 1 board (tools/sound/model1.c) — running
- * the game's own 68000 driver. This runs it one
+ * the game's own sound driver, on the 68000 or, where m2-hle2 has ported the
+ * driver, in C. This runs it one
  * render quantum at a time, so the board only ever runs as fast as the
  * speakers take its samples and there is no buffer between the two to fill or
  * starve. The page hands over the wasm's bytes with the ROMs — not a compiled
@@ -37,7 +38,7 @@ class Model2Sound extends AudioWorkletProcessor {
     onMessage(m) {
         if (m.type === 'init') {
             this.start(m).then(
-                () => this.port.postMessage({ type: 'ready' }),
+                () => this.port.postMessage({ type: 'ready', driver: this.driver() }),
                 (err) => this.port.postMessage({ type: 'error', message: String(err) }));
         } else if (m.type === 'send' && this.board) {
             for (const b of m.bytes) this.board.snd_send(b);
@@ -65,6 +66,13 @@ class Model2Sound extends AudioWorkletProcessor {
          * through it here, unheard, ahead of the first command. */
         for (let left = Math.round(warmup * rate); left > 0;) left -= e.snd_render(Math.min(left, 1024)) || left;
         this.board = e;
+    }
+
+    /* Who runs the game's sound program: 'C' where m2-hle2 has the driver
+     * ported (board.c snd_driver), '68000' where the board runs it as is,
+     * which is every program the Model 1 board has. */
+    driver() {
+        return this.board.snd_driver?.() ? 'C' : '68000';
     }
 
     /* The next board sample, rendering a block of them when the last is used. */

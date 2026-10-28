@@ -1,10 +1,14 @@
 /*
  * board.c — the Model 2 sound board, for the browser.
  *
- * The board itself is m2-hle2's (src/board/sound.h): the game's own 68000
- * sound driver running on a 68000 core, the SCSP it drives, and the sample
- * ROMs. That board is graded against MAME's, note for note, so nothing here
- * models sound — this file only gives it a surface a page can call:
+ * The board itself is m2-hle2's (src/board/sound.h): the game's sound
+ * driver, the SCSP it drives, and the sample ROMs. Where m2-hle2 knows the
+ * driver build (sound_hle.h: Sonic the Fighters', Fighting Vipers', Dead or
+ * Alive's, CRX_drv for The House of the Dead and Dynamite Cop, ...) the driver
+ * runs ported to C, in about half the 68000's time; any other program runs on
+ * the 68000 as the board does. That board is graded against MAME's, note for
+ * note, so nothing here models sound — this file only gives it a surface a
+ * page can call:
  *
  *   snd_alloc(n)            memory for the ROMs, which the page copies in
  *   snd_init(p, np, s, ns)  the program ROM as the zip holds it, and the
@@ -12,6 +16,7 @@
  *   snd_send(b)             one byte down the i960's sound UART
  *   snd_render(n)           n samples at 44.1 kHz, as float stereo pairs at
  *                           snd_out(); n at most SND_BLOCK
+ *   snd_driver()            1 if the driver runs in C, 0 on the 68000
  *
  * What the page sends is what the i960 sends: three-byte MIDI-framed commands,
  * 0xAE 0x10 0x04 for South Island's music. The UART takes one byte while one
@@ -77,6 +82,8 @@ EXPORT int snd_init(const uint8_t *prog, uint32_t prog_size, const uint8_t *samp
     return g_sound.rom_loaded ? 1 : 0;
 }
 
+EXPORT int snd_driver(void) { return g_shle.on ? 1 : 0; }
+
 EXPORT int snd_send(uint32_t b) {
     if (s_qw - s_qr >= SND_QUEUE) return 0;
     s_queue[s_qw++ % SND_QUEUE] = (uint8_t)b;
@@ -131,6 +138,7 @@ static uint8_t *slurp(const char *p, uint32_t *n) {
 }
 int main(int argc, char **argv) {
     if (argc < 5) return 2;
+    if (getenv("SND_68K")) g_sound_hle_want = 0;   /* the 68000, to compare */
     uint32_t np, ns;
     uint8_t *p = slurp(argv[1], &np), *s = slurp(argv[2], &ns);
     if (!p || !s || !snd_init(p, np, s, ns)) { fprintf(stderr, "load failed\n"); return 1; }
@@ -155,7 +163,7 @@ int main(int argc, char **argv) {
         }
     }
     fclose(w);
-    printf("peak %.3f, 68000 pc %06X\n", peak, g_sound.m68k.cpu.pc);
+    printf("peak %.3f, driver %s\n", peak, g_shle.on ? "in C" : "on the 68000");
     return 0;
 }
 #endif

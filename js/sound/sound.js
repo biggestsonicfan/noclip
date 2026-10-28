@@ -9,8 +9,11 @@
  *
  * - 'model2', the Model 2 board: a 68000 and a Yamaha SCSP. m2-hle2 emulates
  *   it and grades it against MAME's, and board.wasm is that emulation
- *   (tools/sound/board.c). Sonic The Fighters, Virtua Fighter 2, Fighting
- *   Vipers, Dead or Alive and The House of the Dead.
+ *   (tools/sound/board.c). Where m2-hle2 knows the driver build — Sonic The
+ *   Fighters, Fighting Vipers, Dead or Alive, Virtual-On, Dynamite Cop and
+ *   The House of the Dead — the driver runs ported to C, in about half the
+ *   68000's time; Virtua Fighter 2, Sega Rally, Power Sled and Last Bronx
+ *   keep theirs on the 68000. The SCSP is the same chip either way.
  * - 'model1', the board the original Model 2 kept from Model 1: a 68000, two
  *   MultiPCM sample chips and a YM3438. model1.wasm is MAME's own chips on
  *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA and
@@ -214,6 +217,8 @@ export class SoundBoard {
         this.gain = null;
         this.starting = null;
         this.game = null;
+        /* 'C' or '68000': who runs the sound program, once booted. */
+        this.driver = null;
     }
 
     /* Read the ROMs and boot the board, once per ROM set. */
@@ -274,7 +279,11 @@ export class SoundBoard {
         });
         const ready = new Promise((resolve, reject) => {
             node.port.onmessage = (e) => {
-                if (e.data.type === 'ready') resolve();
+                if (e.data.type === 'ready') {
+                    this.driver = e.data.driver;
+                    console.info(`sound board: ${rom.game.id}'s driver runs ${e.data.driver === 'C' ? 'in C' : 'on the 68000'}`);
+                    resolve();
+                }
                 else if (e.data.type === 'error') reject(new Error(e.data.message));
             };
         });
