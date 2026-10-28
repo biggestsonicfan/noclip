@@ -2495,7 +2495,9 @@ some of Honey's, Bahn's and Raxel's.
 The explorer reads `+0x24` with the record (`readArmourPiece`) and draws
 `debrisShadowDraws` (`js/fvdebris.js`) from the pieces it already flies, on
 the stages `debrisShadowStage` passes. For a piece out of the ring it uses
-the same stand-in for `0x50A010` the fall does (−0.5). Before, it drew none.
+the stage's ground `0x50A010`, as the fall does: `debrisGround` reads the
+f32 `0x6CE3564` + 4·stage that `0x248FC` copies there, the same
+`shadow.grounds` the fighters' shadows read. Before, it drew none.
 
 Checked in node and in headless Chrome: the gate passes stages 1 and 5 only.
 Jane, motion 21, upper half broken, `SAMPLE_HIT`: 714 gets its shadow on

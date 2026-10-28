@@ -41,7 +41,8 @@ export const DEBRIS_SLOTS = 8;
 /* The per-frame constants. Gravity is what 0x50A000 holds at normal speed;
  * the rest are 0x2CF24's immediates, the half-width 0x50A00C's, the height
  * past which no wall applies 0x50027C's, and the drop of a piece out of the
- * ring 0x50A010's default (0x6CE3564 sets it per stage). */
+ * ring 0x50A010's default, for a profile without the stage's own (0x248FC
+ * copies it from 0x6CE3564 by stage; debrisGround). */
 const GRAVITY = fromBits(0x3bab1f2d), DRAG = fromBits(0x3f7ae148), SKID = fromBits(0x3f666666);
 const BOUNCE = fromBits(0x3e4ccccd), STILL = fromBits(0x3a83126f), WALL = fromBits(0xbe99999a);
 const HALF = f(5), OUT = f(0.5), WALL_TOP = fromBits(0x40466666), OUT_DROP = f(-0.5);
@@ -179,14 +180,14 @@ export function pieceOnScreen(v, radius, lens) {
  * model and flags cleared, so its slot is free); `onScreen` asks it, and with
  * none every piece stays. The first two floor hits queue the piece's sound
  * (0x2D218) on `cues`. Returns false for a piece removed. */
-function fall(s, cues, onScreen) {
+function fall(s, cues, onScreen, ground) {
     const { p, v } = s;
     if (s.flags & FLAG.rest) return !(s.flags & FLAG.three) || !onScreen || onScreen(s);
     v[1] = f(v[1] - GRAVITY);
     v[0] = f(v[0] * DRAG);
     v[2] = f(v[2] * DRAG);
     for (let k = 0; k < 3; k++) p[k] = f(p[k] + v[k]);
-    const floor = s.flags & FLAG.out ? f(s.floor + OUT_DROP) : s.floor;
+    const floor = s.flags & FLAG.out ? f(s.floor + ground) : s.floor;
     if (p[1] > floor) return true;
     s.bounces++;
     const bits = s.flags >>> 28;
@@ -346,14 +347,15 @@ function pushOut(s, bodies) {
  * `bodies` are the fighters' body balls (bodyBallsAt), player 1's first;
  * the push is skipped once the finishing blow lands (+0x7D6 bit 0), which
  * the explorer's fight never reaches. `onScreen(s)` is 0x316F0's test for a
- * resting piece (pieceOnScreen, on the explorer's own screen). */
-export function stepDebris(sim, bodies = [], onScreen = null) {
+ * resting piece (pieceOnScreen, on the explorer's own screen). `ground` is
+ * the stage's 0x50A010, the drop out of the ring. */
+export function stepDebris(sim, bodies = [], onScreen = null, ground = OUT_DROP) {
     sim.frame++;
     sim.slots.forEach((s, k) => {
         if (!s?.model) return;
         s.frames++;
         pushOut(s, bodies);
-        if (!fall(s, sim.cues, onScreen)) { sim.slots[k] = null; return; }
+        if (!fall(s, sim.cues, onScreen, ground)) { sim.slots[k] = null; return; }
         walls(s, sim.centre);
         turn(s);
     });
@@ -388,16 +390,16 @@ export function debrisShadowsOn(stageFlags) {
 
 /**
  * 0x78384: under each piece (model +0x22 not 0) at most 0.3 above its floor
- * (0, or 0x50A010 once out of the ring, the same stand-in fall() drops it
- * by), the slot's +0x44 laid on that floor: T(x, floor, z) S(1, 0, 1), the
+ * (0, or `ground`, 0x50A010, once out of the ring, as fall() drops it), the
+ * slot's +0x44 laid on that floor: T(x, floor, z) S(1, 0, 1), the
  * piece's own Y, X and Z turns, then S(1.25). { model, r, t } in the board
  * frame; the effects get none.
  */
-export function debrisShadowDraws(sim) {
+export function debrisShadowDraws(sim, ground = OUT_DROP) {
     const out = [];
     for (const s of sim.slots) {
         if (!s?.model || !s.shadow) continue;
-        const floor = s.flags & FLAG.out ? OUT_DROP : 0;
+        const floor = s.flags & FLAG.out ? ground : 0;
         if (f(floor + SHADOW_ABOVE) < s.p[1]) continue;
         const { r } = debrisPlace(s);
         out.push({ model: s.shadow, r: r.map((v, i) => (i % 3 === 1 ? 0 : v * SHADOW_SCALE)), t: [s.p[0], floor, s.p[2]] });

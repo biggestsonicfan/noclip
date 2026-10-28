@@ -62,7 +62,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, debrisGround, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
     trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming, mirrorSample,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
@@ -4193,8 +4193,9 @@ function stepBodyDebris(now) {
     /* 0x316F0 asks the board's screen; here it is the explorer's. */
     const cam = cameraOnCourse();
     const onScreen = (s) => pieceOnScreen(cam.view(...s.p), s.radius, cam.lens);
+    const ground = debrisGround(state.rom, state.sparkStage);
     for (let i = 0; i < n; i++) {
-        stepDebris(d.sim, d.bodies, onScreen);
+        stepDebris(d.sim, d.bodies, onScreen, ground);
         if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
     }
     sendDebrisCues(d.sim);
@@ -4238,7 +4239,8 @@ function placeDebris(m) {
 function placeDebrisShadows(m) {
     const sim = m.debris.sim;
     const lit = pieceSetting(m);
-    const draws = debrisShadowStage(state.rom, state.sparkStage) ? debrisShadowDraws(sim)
+    const draws = debrisShadowStage(state.rom, state.sparkStage)
+        ? debrisShadowDraws(sim, debrisGround(state.rom, state.sparkStage))
         : lit ? pieceShadowDraws(sim.slots, lit, debrisPlace) : [];
     if (!draws.length && !m.debrisShadowPool) return;
     if (m.debrisShadowGeoms?.rom !== state.rom) m.debrisShadowGeoms = { rom: state.rom, geoms: new Map() };
