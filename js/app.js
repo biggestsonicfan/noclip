@@ -6372,6 +6372,7 @@ function wireOptions() {
     $('#opt-fix-errors').addEventListener('change', (e) => {
         useRomFixes(e.target.checked);
         state.modelCache.clear();
+        rerunFixedStages();
         reloadView({ keepCamera: true });
     });
 
@@ -6677,6 +6678,13 @@ function applyGameFeatures() {
     }
     if (countries) country.value = String(state.rom.country ?? 0);
     return on;
+}
+
+/* Dead or Alive's fixes are in the program its stage routines run, so the
+ * stages are run again, as loadGameContent runs them on a fresh load. */
+function rerunFixedStages() {
+    const game = state.rom.game;
+    if (game.doa?.fixes?.length && game.stageTable?.doa && state.stages.length) state.stages = readDoaStages(state.rom);
 }
 
 /* A new set loads as it shipped, so the switch is carried over to it here. */
