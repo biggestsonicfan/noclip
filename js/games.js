@@ -1609,7 +1609,12 @@ const hotdp = {
             },
         },
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The 2D pictures (js/cells.js): hotdo's table a year early, 341 of them
+     * at 0x7EFC0, read by the same routines at other addresses (the draw
+     * 0x13160, the loads 0x12E94, 0x12FE8 and 0x13088). Floats end it, as
+     * they end hotdo's. */
+    cells: { pictures: { table: 0x7efc0, count: 341 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead ----------------------------------------------- */
@@ -4058,11 +4063,12 @@ const doab = {
          * the head of its loop. `headCheck` is what the body routine asks
          * before it draws the head and face (0x45FA8): no while the player's
          * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
-         * that no action script has run on. */
+         * that no action script has run on. `commands` is the table of
+         * each character's commands (js/doafighters.js moveCommand). */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
-            motion: 0x420c0, headCheck: 0x51dc0,
+            motion: 0x420c0, headCheck: 0x51dc0, commands: 0x91c60,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -4225,7 +4231,8 @@ const doa2ARegions = (regions) => Object.fromEntries(Object.entries(regions)
 
 /* The fight code's routines: every one a program address. */
 const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
-    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
+    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights',
+    'commands'];
 
 /*
  * Revision A's fight code, from Revision B's. Revision A is an older program,
@@ -5784,7 +5791,53 @@ function lastbronxBuild(build) {
              * them on the copro, 0x9B5E0 draws them. */
             skin: { build: 0x9b3b0, draw: 0x9b5e0 },
         },
-        features: { stages: true, characters: false, motions: true, bodies: true, cells: false },
+        /*
+         * The Model 2B's sound board with two 4 MB sample chips, and Sega's
+         * CRX_drv 3.1.1 (by HiroF, 6 June 1996, the string at 0x100 of the
+         * program). The i960 talks to it through the 2B's UART at 0x9C0000:
+         * 0x17EA0 queues a three-byte command, and the wrappers 0x18120 and
+         * 0x18150 drop it in a silent attract (mode 4 with 0x56CBDD clear),
+         * which is why MAME's attract sends nothing but the volume.
+         *
+         * The songs are A0 10 00 to A0 10 0F, and the sound test names all
+         * sixteen: records of a command and a name pointer, `bgmcc` to
+         * `bgmrankout` (0x364D8 Export, 0x365F8 Japan). The round start
+         * (0x277E0) sends the stage's song out of nine commands (0x26910
+         * Export, 0x26A20 Japan) by the index it also takes the stage byte
+         * from, through the data section's table 0x504280: so stage 0 plays
+         * bgmnun, 1 bgmbok, 2 bgmkon, 3 bgmtomp, 4 bgmssk, 5 bgmham,
+         * 6 bgmsai, 7 bgmkan and 8 bgmbonus. Boot sends A0 0D 3E, MASTER
+         * VOLUME (0x56CBE6, 0..7, 3 at the factory) as A0 0D 3B + volume;
+         * the songs are quieter than other games' for it, as on the board.
+         */
+        sound: {
+            program: ['mpr-19056.31', 0x22a22918],
+            samples: [['mpr-19057.32', 0x64809438], ['mpr-19058.34', 0xe237c11c]],
+            sampleChip: 0x400000,
+            boot: [0xA0, 0x00, 0x01, 0xA0, 0x0D, 0x3E],
+            stop: [0xA0, 0x00, 0x01],
+            stageSongs: { first: 0xa01000, count: 9, order: data + 0x4280 },
+            music: {
+                list: { first: 0xa01000, count: 16, stride: 8, nameAt: 4, strip: 'bgm' },
+                own: "the stage's own",
+                hint: 'The song the stage plays. The game plays its stage\'s own at the round start; this plays any of the sixteen its sound test lists, by the names the sound test gives them',
+            },
+        },
+        /* The Cells tab (js/cells.js `groups`): the tilemap scripts Power
+         * Sled's draw runs, as Last Bronx's draw (0x14CD0) runs them, and the
+         * CGs its loader (0x149F0) reads. Fourteen records of a CG, a list of
+         * its cells and their count sit beside the sound test's songs (0x36560
+         * Export, 0x36680 Japan): 508 cells, each written wholly by its CG and
+         * the boot's (data 0xA00000, loaded at boot by 0x14740 and never
+         * unloaded). Every script the code draws by `lda` is in one of them. */
+        cells: {
+            groups: { table: 0x36560 + code, count: 14, boot: 0x02a00000 },
+            script: { bias: 0, last: 0x8e, wideMove: true },
+            charBytes: 0x80000,
+            programAt0: true,
+            colorxlat: true,
+        },
+        features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
     };
 }
 
@@ -5804,6 +5857,8 @@ const lastbrnx = lastbronxBuild({
  */
 const LASTBRONX_EXPORT = { data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0 };
 const LASTBRONX_FIRST_WORDS = [[0x71ac0, 0x80a03000], [0x72640, 0x80a03000], [0x71db0, 0x59084810], [0x941e0, 0x5ca81e00]];
+/* The CG table's first list, which the Cells tab needs where it is. */
+const LASTBRONX_CELLS_WORD = [0x36564, 0x02a00024];
 /* And the fighters' set-up, motion start, step, draw and skins, for the Fighters tab. */
 const LASTBRONX_FIGHTER_WORDS = [[0xb5e10, 0x5c601618], [0x49540, 0x8cb800b8], [0x49820, 0x8c086080], [0x4a940, 0x8ce800b8],
     [0x9b3b0, 0x8cb8004f], [0x9b5e0, 0x8ce80707]];
@@ -5821,6 +5876,11 @@ function settleLastbronx(build, rom) {
     if (!fits) {
         g.features = { ...g.features, stages: false };
         console.warn(`${g.name}: the stage routines are not ${shift} bytes on from the Export build's; no Stages tab`);
+    }
+    if (!there(LASTBRONX_CELLS_WORD)) {
+        g.features = { ...g.features, cells: false };
+        g.cells = undefined;
+        console.warn(`${g.name}: the CG table is not ${shift} bytes on from the Export build's; no Cells tab`);
     }
     if (!LASTBRONX_FIGHTER_WORDS.every(there)) {
         g.features = { ...g.features, motions: false, bodies: false };
@@ -5841,6 +5901,38 @@ const lastbrnxj = lastbronxBuild({
 });
 
 /* ---- Pilot Kids ----------------------------------------------------------- */
+
+/*
+ * The Cells tab (js/cells.js): Virtua Cop's records, the width and the
+ * height then the entries, which the draws store with bit 15 set (`base`).
+ * Nothing numbers them but a viewer in the check menu beside the model
+ * check (0x10390), which steps through the zero-ended table at data
+ * 0xE850C, 74 records. The two words before it are the files the boot
+ * (0x596E0) loads through 0x5A820:
+ * a first block, a block count, a table of colour pointers, then the
+ * blocks' characters, copied straight from character first * 128, each
+ * block taking its own pointer's 16 colours as its group (0x5A770). Before
+ * them the boot draws 128 characters of 1bpp font in pen 1 (0x599D0) and
+ * fills character 1 with pen 15; 0x51B10 stores white in colour 1.
+ */
+const PLTKIDS_CELLS = {
+    sized: true,
+    patternTable: 0x020e850c,
+    base: 0x8000,
+    boot: {
+        font: { src: 0x02041600, first: 0, count: 128, pen: 1 },
+        chars: [[0x02063f28, 4 << 7, 15 << 7], [0x02074158, 20 << 7, 104 << 7]],
+        straight: true,
+        fill: [[1, 1, 0xffff]],
+        palette: [
+            { set: [[1, 0xffff]] },
+            { pointers: 0x02072f50, group: 4, groups: 15 },
+            { pointers: 0x020dc740, group: 20, groups: 104 },
+        ],
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
 
 /*
  * Psikyo's 1998 shooter on Model 2B CRX (MAME's `pltkids`, Revision A) and
@@ -5919,8 +6011,9 @@ function pilotKidsBuild({ id, name, program, extra = [], colorTables }) {
             pltkids: { tables: colorTables, counts: 0x65f0, scenes: [4, 3, 1, 7, null, null, null, 8, null] },
             solid: true,
         },
+        cells: PLTKIDS_CELLS,
         /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
 

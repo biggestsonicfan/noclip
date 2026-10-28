@@ -52,6 +52,7 @@ import {
     readExhaust, exhaustPart, chestModel, exhaustDrawn,
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
+import { readStfHands, stfHandsAt, HAND_SLOTS } from './stfhands.js';
 import { decodeMotion, sampleMotion, listMotions, readMotionScript, scriptStateAt, readMotionTiming } from './motion.js';
 import { readMoves, spellMove, spellEntry, spellGuards, followUps, buildChain, chainAt, chainSample,
     retypeChain, chainCode, parseChainCode, easeLength } from './moves.js';
@@ -62,7 +63,7 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming, mirrorSample,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
@@ -76,7 +77,7 @@ import {
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
-import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand } from './doafighters.js';
 import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -2861,7 +2862,7 @@ function setMotion(id, slot, { rebuild = true } = {}) {
  */
 function setChain(entries, { rebuild = true } = {}) {
     const m = state.motion;
-    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries) : null;
+    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries, chainReaders()) : null;
     if (!chain) return;
     chain.code = chainCode(m.moves, chain.links.map((l) => l.entry));
     m.chain = chain;
@@ -2872,22 +2873,33 @@ function setChain(entries, { rebuild = true } = {}) {
     if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
 }
 
+/* A body's motions are its list's (bit 15 of a commit turns the fighter
+ * round), its timing set-up op 2's as Sonic the Fighters' is
+ * (js/vf2fighters.js, motionTiming). */
+function chainReaders() {
+    if (!state.bodies) return {};
+    const list = state.motion.list;
+    return { decode: (rom, id) => list[id & 0x1fff] ?? null, timing: vf2MotionTiming };
+}
+
 /* Put the motion the chain is on at `m.tick` where the rest of the rig reads
  * it: the id, the block and the frame, as if it had been picked by hand. */
 function enterLink(m) {
     const { index, frame } = chainAt(m.chain, m.tick);
     const link = m.chain.links[index];
     m.link = index;
-    m.id = link.motion;
+    m.id = state.bodies ? link.decoded.index : link.motion;
     m.decoded = link.decoded;
     m.frame = frame;
 }
 
 /* The channels at frame `f` of whatever is on screen — eased out of the link
- * before when a chain is playing. */
+ * before when a chain is playing. Mirrored as Sonic the Fighters' pose code
+ * mirrors a sampled frame when player +0 bit 6 is set (mirrorSample). */
 function motionSample(m, f) {
-    return m.chain ? chainSample(state.rom, m.chain, m.link, f, state.easeChain)
+    const sample = m.chain ? chainSample(state.rom, m.chain, m.link, f, state.easeChain)
         : sampleMotion(state.rom, m.decoded, f);
+    return state.mirrored ? mirrorSample(sample) : sample;
 }
 
 /*
@@ -3078,6 +3090,7 @@ function rebuildRig({ keepCamera = true } = {}) {
             if (d) m.chestGeoms.set(id, geomBundle(d));
         }
     }
+    buildHandGeoms(m, c);
     if (m.exhaust) {
         const cycle = buildCycle(m.exhaust.cycle);
         const p = cycle && exhaustPart(restPoseFor(c), m.exhaust, 0);
@@ -3232,6 +3245,38 @@ function placeChest(m, c) {
     if (part.lines && g.edges) part.lines.geometry = g.edges;
 }
 
+/* The hands the script puts in slots 5 and 8 (js/stfhands.js), built up
+ * front as the chests are. Not for the squished form, whose hands the table
+ * does not name. */
+function buildHandGeoms(m, c) {
+    m.stfHands = state.useSquished ? null : readStfHands(state.rom, c.charIndex);
+    m.handGeoms = new Map();
+    for (const id of new Set(HAND_SLOTS.flatMap((s) => m.stfHands?.[s] ?? []))) {
+        const d = id > 0 && getModel(id);
+        if (d) m.handGeoms.set(id, geomBundle(d));
+    }
+}
+
+/*
+ * The hands on this frame: entry 0 of the character's table from the motion's
+ * start, then what the script's op 0x10 put in slots 5 and 8 (js/stfhands.js).
+ * With no motion the part list's hands stay.
+ */
+function placeHands(m) {
+    if (!m.stfHands) return;
+    const want = m.decoded ? stfHandsAt(state.rom, m.stfHands, m.id, m.script, m.frame, state.mirrored) : {};
+    for (const p of m.parts) {
+        if (!HAND_SLOTS.includes(p.slot) || p.eye) continue;
+        p.base ??= { id: p.mesh.userData.modelIndex, mesh: p.mesh.geometry, edges: p.lines?.geometry };
+        const id = want[p.slot] ?? p.base.id;
+        const g = id === p.base.id ? p.base : m.handGeoms.get(id);
+        if (!g || p.mesh.userData.modelIndex === id) continue;
+        p.mesh.geometry = g.mesh;
+        p.mesh.userData.modelIndex = id;
+        if (p.lines && g.edges) p.lines.geometry = g.edges;
+    }
+}
+
 /* How many display frames the trail ring is stepped through to catch up, as the
  * chains are. Past that it is replayed from the motion's first frame. */
 const TRAIL_CATCH_UP = 8;
@@ -3355,6 +3400,7 @@ function poseRig() {
     }
     m.scriptState = scriptStateAt(state.rom, m.script, m.frame);
     placeChest(m, c);
+    placeHands(m);
     /* The sway chains hang off the pose, so they follow it frame by frame. */
     if (m.osage) {
         /* With no motion the pose has its waist at the origin and no ground
@@ -3552,11 +3598,11 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.character = body;
     renderHeld(body);
     const m = state.motion;
-    /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
-     * are in its motion list with their inputs (fighterMotionList); the
-     * string panel is Sonic the Fighters'. */
-    m.moves = null;
-    $('#string-field').hidden = true;
+    /* Fighting Vipers' and Virtua Fighter 2's matchers are Sonic the
+     * Fighters' (js/vf2fighters.js, readProgramMoves), so their strings play
+     * as its do; no other body has one. */
+    m.moves = state.rom.game.rig?.kind === 'vf2' ? body.moves ?? null : null;
+    $('#string-field').hidden = !m.moves;
     /* Start on the motion the game starts the body on, or another its
      * routines play: a body can play any motion of its joint count, but one
      * keyed on another skeleton bends its parts in ways they were not
@@ -3578,7 +3624,9 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
 function useDoaFighterScene(body) {
     const u = state.viewer.material.uniforms;
     const A = state.rom.game.doa.attract;
-    const rival = A.fighters[1];
+    /* Player 2 is the opponent when one is shown, else the attract's. */
+    const picked = state.opponent ? shownBody(state.opponentChar ?? state.charIndex) : null;
+    const rival = picked ? { char: picked.index } : A.fighters[1];
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
     u.uTint.value.set(1, 1, 1);
@@ -3668,7 +3716,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     dropRivalMaterial(m.rival);
-    m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2' ? rivalOf(body) : null;
+    m.rival = state.opponent && ['vf2', 'doa'].includes(state.rom.game.rig?.kind) ? rivalOf(body) : null;
     /* A Fighting Vipers fighter's midriff is built the same way. */
     m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
@@ -3707,7 +3755,9 @@ function rivalOf(main) {
         body: body === main ? { ...main } : body,
         parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
         extras: extraParts(body),
-        material: rivalMaterial(main, body),
+        /* Dead or Alive's sheets hold both players' strips already
+         * (useDoaFighterScene). */
+        material: state.rom.game.rig?.kind === 'doa' ? null : rivalMaterial(main, body),
         /* Its own midriff, which it builds on its own pose. */
         skin: body.midriff ?? null,
         skinMesh: null,
@@ -3898,6 +3948,7 @@ function poseFighterAndRival(body, m) {
     const clock = m.clocks ? m.clock : null;
     const air = m.clocks?.air?.[scrubValue(m) - 1];
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim, air });
+    if (state.rom.game.rig?.kind === 'doa') return poseDoaRival(body, m);
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -3926,6 +3977,36 @@ function poseFighterAndRival(body, m) {
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
+}
+
+/* Dead or Alive's opponent is player 2 of the fighter's own run, in its
+ * stance where the round puts it (js/doa.js runDoaMotion): its draws come
+ * in the stage's frame, as the fighter's do. */
+function poseDoaRival(body, m) {
+    const reacts = state.opponentPlays === DOA_REACTS.key;
+    if (reacts) noteDoaCommand(body, m);
+    const pose = bodyRig().pose(state.rom, body, m.decoded, m.frame, { rival: m.rival.body, reacts });
+    const theirs = pose.rival;
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), theirs.matrices, theirs, m.rival.material);
+    placeDoaShadows(m.rival, theirs);
+    m.rivalPose = null;
+    return pose;
+}
+
+/* Dead or Alive's opponent: it holds its stance, or the move is given as the
+ * fighter's command and the game's fight code picks what it plays
+ * (js/doafighters.js moveCommand). */
+const DOA_REACTS = { key: 'reacts', label: 'the reaction the game picks' };
+const DOA_PLAYS = [{ key: 'same', label: 'its stance' }, DOA_REACTS];
+
+function noteDoaCommand(body, m) {
+    const key = `${body.index}:${m.decoded?.index}:${m.rival.body.index}`;
+    if (m.rival.reactionKey === key) return;
+    m.rival.reactionKey = key;
+    const move = m.decoded && moveCommand(state.rom, body.index, m.decoded.index, m.rival.body.index);
+    $('#char-rival-note').textContent = move
+        ? `Command 0x${move.command.toString(16)} starts the motion (action 0x${move.action.toString(16)}); the fight code plays the rest.`
+        : 'No command of this fighter starts the motion: the opponent holds its stance.';
 }
 
 /* What the opponent plays on the fighter's frame: the fighter's motion, or
@@ -5140,14 +5221,14 @@ function renderRivalSelect() {
  * names its tables. */
 function renderRivalPlays() {
     const sel = $('#char-rival-plays');
+    const doa = Boolean(state.rom.game.doa?.fighters?.commands);
     const reactions = Boolean(state.rom.game.rig?.reactions);
+    const plays = doa ? DOA_PLAYS : REACTIONS.filter((r) => reactions || r.category == null);
     sel.innerHTML = '';
-    for (const r of REACTIONS.filter((r) => reactions || r.category == null)) {
-        sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
-    }
-    if (!reactions) state.opponentPlays = 'same';
+    for (const r of plays) sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
+    if (!plays.some((r) => r.key === state.opponentPlays)) state.opponentPlays = 'same';
     sel.value = state.opponentPlays;
-    sel.hidden = !reactions;
+    sel.hidden = !reactions && !doa;
     $('#char-rival-note').textContent = '';
 }
 
@@ -5411,7 +5492,13 @@ function renderBodyMotionPanel() {
     const others = other ? t(other) : t('Every other motion for {n} joints', { n: body.joints });
     group(lead.length ? `${others} (${fits.length - lead.length})`
         : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
-    if (m.decoded) sel.value = `id:${m.decoded.index}`;
+    if (m.chain) {
+        const o = el('option');
+        o.value = 'chain';
+        o.textContent = t('A string of {n} — built below', { n: m.chain.links.length });
+        sel.insertBefore(o, sel.firstChild);
+        sel.value = 'chain';
+    } else if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
     const d = m.decoded;
     syncClock(m);
@@ -5423,21 +5510,28 @@ function renderBodyMotionPanel() {
         /* A Power Sled ride scene is its task's clock, not frames of data. */
         : d.phase ? '<span>clock</span><b>' + d.phase + '</b>'
         : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
-    $('#motion-meta').innerHTML = d ? `
+    const link = m.chain?.links[m.link];
+    const times = d ? vf2MotionTiming(state.rom, d.id) : null;
+    $('#motion-meta').innerHTML = (link ? `
+        <span>move</span><b>${link.entry.name ?? d.name}</b>
+        <span>input</span><b>${spellEntry(link.entry)}${link.follows ? ' (a string follow-up)' : ''}</b>
+    ` : '') + (d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
         ${size}
+        ${link && times ? `<span>hits from · cancel · free</span><b>${times.hit} · ${times.cancel} · ${times.end}</b>` : ''}
         ${m.clocks && !m.clocks.air ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
-    ` : '<span>motion</span><b>none fits this body</b>';
+    ` : '<span>motion</span><b>none fits this body</b>');
 
     const scrub = $('#motion-frame');
-    scrub.max = String(d ? m.clocks?.length ?? d.frames : 1);
+    scrub.max = String(!d ? 1 : m.chain ? m.chain.total : m.clocks?.length ?? d.frames);
     scrub.value = String(scrubValue(m));
     scrub.disabled = !d;
     $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
     renderSparkPanel();
+    renderStringPanel();
     updateMotionFrameReadout();
 }
 
@@ -5523,7 +5617,8 @@ function renderMotionPanel() {
  * so a list someone has open stays open. */
 function showLink() {
     const m = state.motion;
-    renderMotionMeta();
+    if (state.bodies) renderBodyMotionPanel();
+    else renderMotionMeta();
     [...$('#string-chain').children].forEach((c, i) => c.classList.toggle('active', i === m.link));
     updateHud();
 }
@@ -5574,6 +5669,9 @@ function renderStringPanel() {
     const field = $('#string-field');
     field.hidden = !m.moves;
     if (!m.moves) return;
+    /* A body blends from the last frame drawn by its own rule
+     * (js/vf2fighters.js, blendFor), so there is nothing to switch. */
+    $('#string-ease').closest('label').hidden = Boolean(state.bodies);
     $('#string-ease').checked = state.easeChain;
 
     const list = $('#string-chain');
@@ -5584,11 +5682,12 @@ function renderStringPanel() {
         chip.type = 'button';
         chip.title = `motion ${l.motion}, ${l.decoded.frames} frames, hands over after ${l.length}`
             + ' — click to end the string before this';
-        chip.textContent = `${i && l.follows ? '› ' : i ? '· ' : ''}${l.entry.name ?? `motion ${l.motion}`}`
+        chip.textContent = `${i && l.follows ? '› ' : i ? '· ' : ''}${l.entry.name ?? l.decoded.name ?? `motion ${l.motion}`}`
             + ` (${spellEntry(l.entry)})`;
         chip.addEventListener('click', () => {
             const rest = links.slice(0, i).map((x) => x.entry);
             if (rest.length) setChain(rest);
+            else if (state.bodies) setMotion(bodyMotions(state.character).lead[0]?.index ?? -1, -1);
             else setMotion(state.character.motions[0], 0);
         });
         list.appendChild(chip);
@@ -5633,7 +5732,7 @@ function updateStringReadout() {
     if (!m.chain) { out.textContent = ''; return; }
     const l = m.chain.links[m.link];
     const n = easeLength(l.decoded.frames);
-    const easing = state.easeChain && m.link > 0 && m.frame < n;
+    const easing = state.easeChain && !state.bodies && m.link > 0 && m.frame < n;
     out.textContent = `link ${m.link + 1} of ${m.chain.links.length}: frame ${m.frame} of ${l.decoded.frames}`
         + (m.link + 1 < m.chain.links.length ? `, hands over after ${l.length}` : '')
         + (easing ? ` · easing in, ${n - m.frame} of ${n} left` : '');
@@ -6105,7 +6204,7 @@ function wireOptions() {
     }
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
-        $('#char-behind-field').hidden = !state.opponent;
+        $('#char-behind-field').hidden = !state.opponent || state.rom.game.rig?.kind !== 'vf2';
         $('#char-rival-opts').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
@@ -6126,6 +6225,7 @@ function wireOptions() {
     $('#char-rival-plays').addEventListener('change', (e) => {
         state.opponentPlays = e.target.value;
         if (state.opponentPlays === 'same') $('#char-rival-note').textContent = '';
+        if (state.motion.rival) state.motion.rival.reactionKey = null;
         poseRig();
     });
     $('#char-p2').addEventListener('change', (e) => {
@@ -6503,12 +6603,14 @@ function applyGameFeatures() {
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
-    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
-    const rival = state.rom.game.rig?.kind === 'vf2';
+    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers), and
+     * Dead or Alive's, whose fight run poses player 2 itself. */
+    const rival = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-rival-field').hidden = !rival;
     /* Air Walkers' players play some motions mirrored too (+0xF4), and
-     * Virtua Cop's enemies (+0x8A0). */
-    $('#char-mirror-field').hidden = !rival && !['airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
+     * Virtua Cop's enemies (+0x8A0). Sonic the Fighters' (no bodies) mirror
+     * as Virtua Fighter 2's do, on player +0 bit 6. */
+    $('#char-mirror-field').hidden = bodies && !['vf2', 'doa', 'airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
     /* And some backward (+0xEC), mirrored or not. */
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
@@ -6521,7 +6623,7 @@ function applyGameFeatures() {
     $('#held-field').hidden = state.rom.game.rig?.kind !== 'dynamcop';
     /* And run the motion's clock at its speed times the player's pace. */
     $('#pace-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
-    $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-behind-field').hidden = !rival || !state.opponent || state.rom.game.rig?.kind !== 'vf2';
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
@@ -6740,7 +6842,7 @@ function restoreLinkedView() {
         const known = slot >= 0 || (id !== null
             && (state.bodies ? Boolean(m.list[id]) : m.list.some((e) => e.id === id)));
         if (known) setMotion(id, slot);
-        const entries = !state.bodies && link.chain && m.moves ? parseChainCode(m.moves, link.chain) : null;
+        const entries = link.chain && m.moves ? parseChainCode(m.moves, link.chain) : null;
         if (entries) setChain(entries);
         if (m.decoded && link.tick !== null && link.tick >= 0) {
             m.tick = link.tick;

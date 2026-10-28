@@ -1523,6 +1523,26 @@ Jane's forearms (4 and 7, 0.17 and 0.28 apart) and Sarah's and Honey's feet
 (diag(1, 1, -1)) exactly, so the mirrored fighter is the unmirrored one in a
 mirror; the one thing a side changes is which hand a shape goes to (below).
 
+Sonic the Fighters has the same mirror. Its pose code tests `+0` bit 6 at
+`0x30E00` and from `0x30E04` runs VF2's `0x28AF8` block instruction for
+instruction (`0x1E4` bytes), and its set_motion flips the bit as VF2's does
+(`0x1B024`–`0x1B040`; Sonic Championship `0x30E28` and `0x1B054`). Its
+samples are the same `{angles, targets, targetUsed}`, so the explorer's
+"mirrored" switch runs them through `mirrorSample` too (`motionSample` in
+js/app.js). Checked on `sfight` for fighters 0–10, eight motions at three
+frames each: every mirrored joint lands on its left/right partner reflected
+in z (within 0.0008), and every matrix is the partner's reflected
+(diag(1, 1, -1), within 0.002). Only the fighter is mirrored: Sonic the
+Fighters has no opponent here, so nothing is thrown.
+
+Dead or Alive's mirror is another shape. Revision B's motion step (`0x44840`)
+reads the player's facing halfword (`0x550124`), not `+0` bit 6. At −1 it
+negates the hips' x step (`0x448B8`, `0x44AA0`, `0x44FF4`) and, copying
+the frame's joint angles to `0x56AA40` (`0x44D34`–`0x44E28`), negates the
+second and third angle of each joint and keeps the joints where they are; at
+1 it copies them as they are (`0x44E60`). No objects are swapped, so
+`mirrorSample` does not fit it and Dead or Alive is not mirrored here.
+
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
 second frame. The explorer plays the reaction from the first such frame
@@ -1655,6 +1675,48 @@ rest of what bears on a hand is this.
   write a slot itself, and Jane's armour table (`0x640EDAC`) has slot 5: it
   gets model 0x2DE, the one all her op 18s write there. A break is fight
   state the explorer does not model.
+
+**Sonic the Fighters** (`js/stfhands.js`) sets its hands outright, as
+Fighting Vipers does, but with the play script's op 0x10 `[slot][entry]`
+(the op that swaps Metal Sonic's chest). `load_action_from_list` (`0x330D0`)
+sends slots 5 and 8 to `0x33254`, which reads the character's table at
+`0xC6570[+0x1B0]`: sixteen s16 models for slot 5, then sixteen for slot 8.
+A mirrored fighter (`+0` bit 6) has the slot turned (5 to 8, 8 to 5) before
+it picks the half, so, as in the other games, the mirror moves the shape and
+each slot keeps its own table. A 0 model leaves the slot be. Sonic
+Championship has the same handler at `0x33280` and table at `0xC66A8`.
+
+Unlike Virtua Fighter 2's and Fighting Vipers', the hands do not carry over:
+`set_mot_dat` (`0x1B508`-`0x1B544`) puts entry 0 of both halves back in
+slots 5 and 8 whenever a motion starts, unless its skeleton type (record
+byte 12, `+0x84C`) is 3. Entry 0 is the part list's own hand for every
+character but Tails' second look (slot 5: 731, not 48) and Super Sonic's
+second look (Sonic's second look's 671/670). The 16 type 3 motions keep
+what the motion before left, which the explorer cannot know, so they start
+from the part list's hands. Of the 519 motions' scripts, 641 op 0x10s name
+slot 5 or 8, with entries 0-15. The hammer-squished form keeps its own
+hands, which the table does not name.
+
+Checked in MAME (the shared build, `sfight` attract, 150 s): player 1's
+`+0x54` and `+0x60` (slots 5 and 8, player at `0x510D00`) against the
+explorer's rule for the motion `+0x1A8`, frame `+0x1AA`, character and bit
+6 on screen. 7116 of 7121 changes agree, 522 of them with a hand the script
+set (Sonic, Knuckles and Eggman, mirrored too). The other 5 are one-frame
+seams: the old character's hands on the frame a new one loads, and motion
+487 read on frame 1 before its frame-1 op had run.
+
+Dead or Alive (`doab`) sets its hands the same way, from its action
+script: op 0x2E (`0x438A0`) is `[0x2E, hand, shape]`, hand 2 sets both, and
+a player whose facing halfword (`0x550124[player*2]`) is -1 has the hand
+turned. The shapes go to `0x5882A4`/`0x5882A5` (a byte a hand a player), which
+the body routine `0x457C0` reads to pick the hand models. The explorer
+already shows them when the opponent plays the reaction, since that run starts
+the move as the fighter's command and its script runs (Zack's hands go 124 to
+134 and 118 to 133 in his first moves). The plain Animation run calls the
+motion routine (`0x420C0`) directly, so no script runs and the hands stay at
+their reset. Starting it through the command instead blends in from the
+stance and moves the fighter (joints up to about 2 units off from the plain
+run, on Zack's first six moves), so the plain run is left as it is.
 
 ### The face (`js/fighterhands.js`)
 
@@ -2060,10 +2122,17 @@ its moves, then the rest of what it plays, then every other motion.
   standing 2 from its opponent reaches it by (a round starts them 2 apart),
   strings as their presses, and the rest under their input and the bits they
   need. State bit 18 stays a number: it is STF's hyper. The motion list
-  splits the moves into those two groups (Jane 26 and 52). A string plays
-  only its last motion: the hand-over at the cancel frame (STF's set-up
-  op 2) is not read here yet. The inputs are read from the ROM, not typed
-  in MAME.
+  splits the moves into those two groups (Jane 26 and 52). Strings play
+  as STF's do (`buildChain`): set-up op 2's handler `0x1BA64` is STF's
+  `0x1B628` byte for byte, copying hit, cancel and end into `+0x808`,
+  `+0x80A` and `+0x80C`, and matcher op `0x12` (`0x1E498`) is STF's
+  `0x1E7D4`, waiting until `motion_coma + 1 >= [+0x80A] + wait`. So a
+  follow-up takes over at cancel + wait - 1 (Jane's P , P: motion 670 plays
+  9 frames, cancel 10, then 620), anything else at the end frame
+  (`motionTiming`). The switch blends by the rig's own rule (`blendFor`),
+  not STF's ease. A string drops `flightClocks`, so a move that leaves the
+  ground in it plays its plain frames. The inputs are read from the ROM, not
+  typed in MAME.
 - **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
   `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
   and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
@@ -2078,7 +2147,13 @@ its moves, then the rest of what it plays, then every other motion.
   Pai's P, P, P, down+K. Checked against MAME: 200 s of `vf2` attract with
   the commits
   (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
-  Shun, Jacky and Akira, all 43 in that fighter's list.
+  Shun, Jacky and Akira, all 43 in that fighter's list. Strings play as
+  FV's: matcher op `0x12` (`0x1CAF4`) is STF's, and set-up op 2
+  (`0x1A420`, in `set_mot_dat` `0x1A1E4`'s table at `0x1A350`) writes hit,
+  cancel and end to `+0x808`, `+0x80A` and `+0x80C`. Its patches to them
+  apply only while bit 6 of `0x59C351` is set, which MAME keeps clear; the
+  two end frames it always sets are `rig.flags.ends`. Akira's P , P: motion
+  17 plays 10 frames (cancel 11), then 20.
 - **Hand-overs**: set-up op 1 of a motion's `mot_list` record
   (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
   `0x13`'s two write the motion that plays as this one runs out, `+0x802` and
@@ -3342,6 +3417,31 @@ draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
 and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
 flashes.
 
+**Sonic the Fighters and Dead or Alive draw none** (read from the ROM; not
+checked against MAME). STF has the parts: `set_mot_dat` (`0x1B3C0`) copies
+the head's word +0 to `+0x804` then `+0x1A4` and word +4 to `+0x860` then
+`+0x70C` (FV `+0x720`), and the boot fill `0x11F7C` writes five blocks from
+`0x800000` from headers at `0x12068` (block 0 `4000 0000 1A00 0400`). But its
+one flash test, the same rule on `+0x1A4` bit 26 and `+0x70C` bit 2, is in
+`0x52C8`, which only the sway-chain segment draw calls (`osage_copro`'s
+record 5, `0x68830`). `rob_disp`'s parts go through `0x4E88`, and none of
+the 22 material draws (`0x5120`, FV's `0x5BE4`) is in it. The bits are set
+in motions 329 and 417 (bit 26) and 380 (bit 2), and none of the three is in
+any fighter's action slots or moves. Dead or Alive has no bit-23 material
+and no such test. So the explorer flashes neither game.
+
+**Nor does Virtua Fighter 2** (`vf2`, read from the ROM; not checked
+against MAME). Its fighter draw, `0x7C60`, takes no material: it sends the
+model's own record from `0x20E0004[model*16]` unchanged, and `g1` is only
+the player-2 colour offset. Fighting Vipers' `0x5BE4` puts `g2` in place of
+that word. `rob_disp`'s calls to it (`0x190F0`, `0x1918C`, `0x193C8`,
+`0x194E0`) and its slot 9 chain draw (`0x19624`) all read
+the record the same way. No code loads `0x802000`, and the only `1 << 23`
+put in `g2` (`0x119C8`) is the boot upload of texture headers from data ROM
+`0x20A0000`, ten blocks copied as they are, not Fighting Vipers' five
+repeated headers. `+0x1A4` bit 26 is read, but by fight code (the reaction
+pick at `0x230D4`, the move code at `0x1BFC4`), never next to a draw.
+
 #### Jane's player 2 broken chest takes another material (read from the ROM; not checked against MAME)
 
 Fighting Vipers only. In `rob_disp`'s part loop the model a slot draws is
@@ -4384,6 +4484,85 @@ frame from 0x6B1 to 0x75E: 1740 pieces, all the same models, in place to
 as the fighters move. The fight's very first frame (0x6B0) is the one that
 differs: MAME's pieces lie at the floor's 1.0 and the explorer's at y 0;
 the tab never shows that frame.
+
+**The opponent.** The tab's motion run (`runDoaMotion`) sets up both players
+the way the fight start does and runs each frame for both, so player 2 is
+already drawn, in the stage's frame like player 1: at the round's place
+(6.5, 1, 0.5 against player 1's 5.5) and facing. The opponent is that player
+2, with the character the panel picks loaded on it (its bank from the
+roster, as player 1's). Its draws come back as `rival` and go through the
+same parts, joints and shadows as player 1's. Set up but not opened, player 2
+plays no motion and stands unposed, hips on the floor and legs through it.
+The run opens it the way the attract opens its players: action at `+0x28`
+and `+0x36` 1. The action is char << 9, script 0 of the fighter's own group
+(`ld 0xD8000[action >> 9]`). That starts the fighter's first motion: Zack
+0x165, Tina 0x3A5, Jann Lee 0x21E, Ryu 0x476, Kasumi 0x624, Genfu 0xBB,
+Bayman 0x552, Leifang 0x2D6. Every fighter then stands with its feet at the
+floor (y 1.07 to 1.10). The attract opens its own Tina on 0x800 instead
+(group 4, motion 0x476: her own, see below); that is the attract's script, and the tab
+does not copy it. Nothing else runs, so player 2 holds that stance and plays
+no reaction. Player 1's draws are the same, frame for frame, with and
+without an opponent, whoever it is (checked on `doa`, `doab` and `doaa`).
+The sheets go in player 2's strips and its colours in player 2's rows
+(`useDoaFighterScene`), as the attract's Tina's do. This was checked in the
+explorer (node and headless Chrome), not graded against MAME, whose attract
+fights only Zack and Tina.
+
+**The opponent's reaction.** With "plays the reaction the game picks" the
+run gives the move the way the attract's AI does, as a command, and runs
+the fight. A player's command is the byte at `+0x2C`; it indexes its
+character's command table (`0x91C60[char]` on `doab`; `doa` 0x95750, `doaa`
+0x8A2A0, `doaab` 0x89F30, `doaae` 0x8A0F0, the same entries moved). An entry
+is eight bytes: the action (u16) at +0, at +3 the state the fight code keeps
+at `+0x2D` (2 and 3 strikes, 4 and 6 throws, 0x0A and 0x0B the one thrown)
+and at +4 the attack's number. `0x25730`, called from the task `0x23C80`,
+turns it into the action. The command used is the first whose action's
+script opens by starting the motion (op 0 `[0, motion, n]` or op 0x1E
+`[0x1E, 0, motion, n]`, `moveCommand` in `js/doafighters.js`). Both players
+are opened as the attract opens them, each on entry 0 of its own command
+table, its stance (Tina's is 0x800, what the attract opens her on). One
+frame on, the command is written; the next frame player 1 is on the action
+and the motion's frame 1, and the run keeps from there. Each frame then runs
+the rest of the fight loop as `runDoaFighters` does: the hit and push
+checks, the camera, the fight's tasks (hits `0x1FDD0`, reactions
+`0x24FD0`, ...) and the movers. Setting the action at `+0x28` straight
+instead leaves `+0x2D` unset, and the fight ends the round on the first
+frame (a KO pair, 0xCD/0xCE).
+
+Player 1 then faces player 2 and blends from its stance (the script's n),
+so its first frames differ from the plain run; its heights match frame for
+frame. Zack's 0x18F (command 0x53) puts Tina on 0x87F; Kasumi's 0x626 ends
+in the throw pair 0xBE2/0xBE3. A move that does not reach from the round's
+place shows player 2 in its stance. Checked in node on `doab` (Zack,
+Jann Lee and Kasumi against Tina and Ryu: a reaction in 4 to 6 of 6 or 7
+moves each), on `doa`, `doaa`, `doaab` and `doaae` (Zack's 0x18F and 0x1E3,
+the same actions), and in headless Chrome; not graded against MAME. The
+command tables show the script groups do not follow the character numbers:
+Zack's moves are in group 0, Tina's in 4, Jann Lee's in 1, Ryu's in 2,
+Kasumi's in 5, Genfu's in 6, Bayman's in 8. So the char << 9 stance above is
+the fighter's own only for Zack.
+
+**The motion list.** The Animation tab lists a fighter's own motions first,
+then the shared group's (13), then every other motion: a group's are the
+ones its scripts open by starting (op 0). The fighter's own group is the one
+most of its command table's actions are in, the shared group left out
+(`ownGroup` in `js/doafighters.js`), not its character number, and not its
+stance either: Raidou (11) stands in Ryu's stance, 0x400 in group 2, but 110
+of his commands are in group 11. Taking the character number led Tina's list
+with Jann Lee's motions, Jann Lee's with Ryu's and Ryu's with Tina's. Of the
+motions each fighter's commands start, the list now leads with 128 of
+Tina's 175 (14 before), 105 of Jann Lee's 162 (19) and 101 of Ryu's 148 (2);
+the other six fighters' groups were already their numbers and are unchanged.
+The rest of a fighter's commands start motions in other groups: most
+tables have 26 entries in one other fighter's group (Zack's in Tina's).
+The same on all five builds (node), and the lists show in headless Chrome
+on `doab`; not checked against MAME.
+
+Sonic the Fighters has no such run. Its fighters are posed by the explorer
+from `CHAR_PARTS` records and `calc_rob_angle_int`'s skeleton types (see
+Character rigs). That is not the shape of Virtua Fighter 2's character record
+and face target that the Fighting Vipers and Virtua Fighter 2 opponent poses
+(`poseBout`), so it has no opponent.
 
 ### Sega Rally Championship (`js/games.js`, `readRallyStages` in `js/stages.js`)
 
@@ -5632,6 +5811,18 @@ against MAME's title frame: cells 38 and 39, drawn at (8, 24), match every
 pixel (27994 and 29517 of them); without colorxlat, 31% match. The pictures
 are reached by number, not by pointer, so there is no unused list.
 
+The prototype (`hotdp`) has the same table, smaller: 341 entries at program
+0x7EFC0, ended by floats as `hotdo`'s is. The same routines read it at other
+addresses: the draw at `0x13160` differs from `hotdo`'s `0x17D80` only in its
+registers, and `0x12E94`, `0x12FE8` and `0x13088` are the loads. Every entry's
+tiles, colours and map lie in the ROMs, and every map entry falls inside its
+picture's tiles. Checked against MAME (shared build, `hotdp` attract, frames
+600, 1500 and 3000): 91 pictures sit in character RAM whole, every chunk's
+tiles in its block and all its colours in the block's group, and none differs;
+148 placements of their maps (with the block added) were found on the tile
+layers, among them pictures 13, 101, 105, 107, 108, 111 and 113 on layer 0 and
+145 on layer 2.
+
 Revision A (`hotd`) moved its tables, and its picture table has not been found,
 so it has no Cells tab.
 
@@ -6681,6 +6872,84 @@ move, and its draws are the Export build's word for word. The USA build is
 checked by the first word of each fighter routine when it loads: where they
 do not fit, the fighters are switched off with a warning.
 
+**Music** (`js/sound/sound.js`). The Model 2B sound board, the program
+`mpr-19056.31` (Sega's CRX_drv 3.1.1, by HiroF, June 1996) and two 4 MB sample
+chips. The 2B's UART is at 0x9C0000, not the 2A's 0x1C80000: 0x17EA0 puts a
+three-byte command in a 256-byte queue (0x5671C0) that 0x17D80 sends a byte at
+a time. The wrappers 0x18120 and 0x18150 drop it while the attract runs
+silent (0x532904 = 4 and 0x56CBDD clear), so in MAME's attract the only
+command is A0 0D 3E, MASTER VOLUME (0x56CBE6, 0..7, 3 at the factory) sent as
+A0 0D 3B + the setting by 0x39070; the explorer boots with it, so the songs
+play at the factory level, a little quieter than other games'.
+
+The songs are A0 10 00 to A0 10 0F. The sound test lists them with the
+effects and voices: records of eight bytes, the command and a pointer to its
+name, the songs from 0x364D8 (Export; 0x365F8 Japan), `bgmcc` to
+`bgmrankout`. The list finds that run by its commands, so every build's is
+read wherever it sits. The round start 0x277E0 takes an index (0x27408, from
+the round's opponent through 0x268B0 and 0x268E0) and sends the song at
+0x26910[index] (Export; 0x26A20 Japan); 0x274F0 takes the stage byte from the
+same index through the data section's 0x504280, `0 4 1 5 3 2 6 7 8`. So a
+stage's song is the entry whose index that table maps to it:
+
+| stage | song | | stage | song |
+|---|---|---|---|---|
+| 0 Dark Rooftop | A0 10 03 nun | | 5 Nightmare Island | A0 10 0A ham |
+| 1 Radical Parking Lot | A0 10 0D bok | | 6 Tears Bridge | A0 10 07 sai |
+| 2 Cross Street | A0 10 04 kon | | 7 Moonlight Garden | A0 10 02 kan |
+| 3 Lust Subway | A0 10 01 tomp | | 8 Brilliant Room | A0 10 0C bonus |
+| 4 Naked Airport | A0 10 05 ssk | | | |
+
+(`stageSongs` in the profile: the nine commands, found by their run, and the
+order table, at the data section's place in each build.) The round start
+also has two turns the explorer leaves out, both about the fight rather
+than the stage: index 5 (Cross Street's) whenever 0x56BC80 is set, and the
+boss fight (0x27820), which sends A0 10 0B or A0 10 0C itself. Each song was
+rendered on `board.wasm` in node and holds its level, and the page plays
+each stage's in headless Chrome.
+
+**Cells.** The tile chip's pictures are [Power Sled's
+scripts](#power-sleds-cells-jscellsjs), drawn by 0x14CD0 with g0 the
+tilemap address, g1 the script and g2 the halfword ORed in (85 calls). Its
+jump table at 0x14D48 has fifteen entries, 80 to 8E, and three differ from
+Power Sled's:
+
+- A character is `(lo + (hi << 8)) & 0x3FFF`, with no 0x100 added; 85
+  builds `(hi << 8) & 0x3F00`.
+- 8D moves by `a + (b << 8)` entries, a signed halfword.
+- 8E lo hi writes one character, so the end is a byte above 0x8E (the
+  scripts end with 0x8F).
+
+The characters and colours come a CG at a time. 0x149F0 loads one: a
+directory of (offset from the directory, first character) entries, ending
+with a zero offset. Each entry leads to a chain of blocks, each a size (the
+offset of its colours), a tile count, 16 colours and the tiles, until a zero
+size. The tiles go to character RAM straight from the first character. Every
+128-character group they take gets the block's 16 colours (with 0x5328D4
+set, a pointer to them in 0x5648F0 and a bit in 0x564CF0, copied later), and the next
+block starts on the next group. The boot (0x14740) loads the directory at
+data 0xA00000 and never loads another over it; two slots (0x5648E0 and
+0x5648E8, through 0x14B90 and 0x14C40) take the rest.
+
+Nothing names a cell by number. The calls load their script by `lda`. Beside
+the sound test's songs, at 0x36560 (Export; 0x36680 Japan), sit fourteen
+records of a CG directory (0 for the boot's), a list of offsets from the list
+itself, and its count: 508 scripts, from data 0xB8A770, among them every
+one of the 55 that a call loads. These records are the explorer's CGs and
+cells, in their order. No code was found to read the table by its
+address, so the grouping was checked on the data:
+
+- every character each script writes is loaded by its own record's CG or
+  the boot's;
+- each call that loads a CG and then draws (0x2656C: CG 0xA002E0, script
+  0xB8E1C0) draws one of that CG's cells.
+
+MAME's tile chip, dumped in the attract (frames 700, 1500 and 2400) and
+on the character select after a coin, holds CGs 0, 2, 10 and 3. Every cell
+of those four (229) renders the same as the tile chip draws it, pixel for
+pixel. `settleLastbronx` offers the tab only where the table's first list
+is where the shift puts it.
+
 **Skins** (issue 206). The parts leave gaps: between chest and hips, at
 the shoulders, under a jacket's hem. The game closes them with skins it
 builds every frame on the parts' matrices just drawn, and the explorer runs
@@ -6781,6 +7050,32 @@ m2-hle2 the title is load 8 with table 8, the attract's three demos loads 1,
 2 and 3 with tables 4, 3 and 1, and the first stage played load 4 with table
 7 (`scenes` in the profile). Loads 5, 6, 7 and 9 were not reached; their sets
 keep the ramp on rows 11 to 29.
+
+**Cells.** The tile chip's pictures are [Virtua Cop's
+records](js/cells.js): the width and the height as halfwords, then the
+halfword entries, which 0x5A890 (and 0x5AA50, from the vblank queue that
+0x5A960 fills) store from the layer's corner with bit 15 set. The code takes
+them by pointer, from the table at program 0x82500 or from the zero-ended
+table at data 0xE850C, which a viewer in the check menu beside the model
+check (0x10390) steps through: 74 records, every one the program table names
+among them. They are the explorer's cells, in that order.
+
+The tile chip is filled once, by the boot (0x596E0):
+
+- 0x599D0 draws 128 characters of 1bpp font from data 0x41600 at character
+  0, pen 1 (Power Sled's), and character 1 is then filled with pen 15;
+  0x51B10 stores white in colour 1.
+- 0x5A820 loads the two files named by the words at data 0xE8500, 0x63F20
+  and 0x74150. A file is a first block, a block count, a table of colour
+  pointers, then the blocks' characters, copied straight from character
+  first * 128 (15 blocks from 4, 104 from 20). 0x5A770 gives block k the 16
+  colours its pointer names, as group first + k.
+
+Each entry's group is its character's block, as on Dead or Alive. Every
+character the 74 records name is one the boot loaded. In MAME's attract
+(frame 1500) the tile chip's characters and colours draw all 74 the same as
+the explorer, pixel for pixel, and layer 2 holds record 71 (the moon) whole,
+layer 0 record 10 (INSERT COINS!).
 
 **Not done.** Stages, characters and motions, the scene each model belongs
 to, and the colour tables of four scenes. The 2A build's texture and colour
@@ -9653,6 +9948,21 @@ rest. The TGP's COLI copy is needed because the bufferram copy is not final when
 the command is sent. Pai's sphere centre (word 5) still read 0 there, while the
 TGP read 0.2409. With the bufferram limits the same check is off by up to 0.08.
 
+#### Dead or Alive
+
+Dead or Alive's chains don't go through `js/osage.js`. Each frame the
+Animation tab's run (`runDoaMotion` in `js/doa.js`) calls the game's own
+chain routine `0x4FEB0` for the fighter after its body, as the fight loop
+does (`fightFrame`). That is the routine graded against MAME's attract
+fight in [Dead or Alive's fighters](#dead-or-alives-fighters-rundoafighters-in-jsdoajs).
+Checked in node on all five builds, 40 frames of each fighter's motion 0,
+with the routine pointed at a bare `ret` to tell its draws apart: the body
+draws come out the same either way, and the routine adds 6 draws for Tina,
+9 for Jann Lee, 4 for Ryu and Raidou, 3 for Kasumi, 7 for Genfu and
+Leifang, and 1 for Bayman. Every link but Bayman's turns against every body
+part, by at least 0.58 in a matrix entry; Bayman's one draw stays fixed to
+a part. Zack has none.
+
 ### Tails' tails
 
 Tails' two tails are not on the sixteen-slot skeleton, and they are not a sway
@@ -10002,6 +10312,27 @@ here say; and the script's trail command and propeller agree with work RAM on
 every fighter-frame. That first run is what showed a fight's first copy starts
 at life 0 rather than the boot value of 3.
 
+**None of the other fighting games has it.** The trail is the coprocessor's
+commands 0x80 to 0x87 and the ring behind them, so a game has it only if its
+own coprocessor program does.
+
+- Fighting Vipers uploads its own program (the data ROM pair `.7`/`.8`,
+  offset 0xC; PM 0x20000 on). Most of its code is Sonic the Fighters', but
+  its dispatch table ends at command 0x7E. It has no 0x80 to 0x87, and the
+  ring's code (PM `0x208E1`–`0x20A8E`) is not in it. Its streaks are the
+  sparks of script op 28 instead (see "Move trails").
+- Virtua Fighter 2's coprocessor is the Model 2 TGP, and its program sends
+  none of these commands. Its script ops stop at 23. The one afterimage in
+  its code (`0x18F14`) is the replay's: while `0x500068` bit 25 and the
+  fighter's `+0x700` bit 5 are set, the main CPU keeps a 30-slot buffer at
+  `0x548010` (0x400 bytes a slot). It belongs to the replay, not to a
+  motion's script.
+- Dead or Alive's coprocessor commands are Tecmo's own small set (the ones
+  `js/doa.js` runs). None of its data ROMs holds Sonic the Fighters'
+  program, and its motions are not Sega's scripts, so there is no op 0x26.
+
+So Afterimages stays Sonic the Fighters' alone.
+
 ### Holding it against the machine
 
 `stf-tools/mame-motion.py` drives a real fight under MAME and records every word the
@@ -10131,6 +10462,20 @@ the last move's table offers as buttons, and a list to put any move after it
 once the fighter is free. Changing fighter retypes the string: each press goes
 through the new fighter's tree, so Sonic's P, K and half-circle P become
 Knuckles' own. A view link carries the string as its entries' table addresses.
+
+Dead or Alive has no such program. Its code is Tecmo's own, and neither
+`doab` nor `doa` (Revision C) holds a run of the matcher's 7-byte `0x0E`
+key headers pointing into byte-code; the same scan finds 42 in Sonic the
+Fighters. Its command table (`0x91C60`, eight bytes an entry) holds the
+action, the state and the attack's number, but no input. So its moves are not
+listed by input.
+
+Its strings are not played either. The explorer chains a move to the next
+through the follow-up table the matcher parks with `0x0D`, and DOA has none.
+`0x25730` turns the player's command byte straight into its entry's action;
+on `doab` an entry's other bytes are two small numbers, `0xFF`, a byte from 1
+to 5 written twice, and a zero, none of them a command to follow (Zack's first
+40 checked). How the game takes a second press is not read.
 
 ## Textures
 
@@ -10729,6 +11074,23 @@ throws the game's 16-bit random number every frame, which in the page is
 `Math.random`, so the timing is the game's in kind but not frame for frame.
 The **stage sounds** switch sends the scene and round codes when a stage opens
 and runs its player at 60 Hz.
+
+Sonic the Fighters and Dead or Alive have none (read from the ROMs, not run):
+
+- Sonic the Fighters' `0x3F44C` is Fighting Vipers' `0x420B4` instruction
+  for instruction: the record by stage at `0xDC024[r4*16]` (program ROM),
+  bits 30, 28 and 26 sending its words, and bit 29 jumping through `0xDB04C`
+  by stage. Stages 0-11 have all four words 0, and the jump table sends
+  stages 0-3 to bare branches to the exit (`0x3F4F4`-`0x3F500`) and the rest
+  to the exit itself. Bit 30 also sends `0xA00002` and `0xAE1007` for every
+  stage alike. The one other code picked by stage, `0x3FA00` (table
+  `0x3FA34`, or the fighter's `+0xACC`), is called from fighter code
+  (`0x1C280`, `0x29710`): a fighter's sound against the stage, part of the fight.
+- Dead or Alive (`doab`) queues its sounds through `0x94C0` from 57 places.
+  The only one that reads the stage number `0x5555BE` is the name entry's song
+  (`0x1C708`), and the only table picked by stage is the song's (`0x90C10`).
+  None of the sends is in the stage routines (`0x64640`-`0x71FFF`); the
+  nearest, `0x72048` (`0xA01138`), is fight code.
 
 ### Daytona USA's car on the Animation tab (`js/daytonacar.js`)
 

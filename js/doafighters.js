@@ -92,9 +92,66 @@ function groupMotions(rom, group) {
     return ids;
 }
 
+/* The action script `action` names: group action >> 9, script action & 0x1FF
+ * (0x44160). */
+function scriptOf(rom, action) {
+    const b = busOf(rom);
+    const group = b.read32(rom.game.rig.scripts + 4 * (action >> 9));
+    return group ? b.read32(group + 4 * (action & 0x1ff)) : 0;
+}
+
+/* The motion an action script opens by starting: op 0 [0, motion, n] or op
+ * 0x1E [0x1E, 0, motion, n] (the interpreter at 0x441AC), else -1. */
+function openingMotion(b, s) {
+    const op = s16(b, s);
+    return op === 0 ? s16(b, s + 2) : op === 0x1e ? s16(b, s + 4) : -1;
+}
+
+/**
+ * The command that plays `motion` on character `char`, or null. A player's
+ * command (+0x2C, a byte, what the attract's AI gives) indexes its
+ * character's table (`fighters.commands`, 0x91C60): eight bytes an entry, the
+ * action at +0, at +3 the state the fight code keeps at +0x2D (2 and 3 the
+ * strikes, 4 and 6 the throws, 0x0A and 0x0B the one thrown) and at +4 the
+ * attack's number. 0x25730 turns it into the action the player starts. The
+ * command picked is the first whose action's script opens by starting the
+ * motion; it comes back with that action and `rival`'s stance, the action of
+ * entry 0 of its own table (Tina's is 0x800, the action the attract opens her
+ * on).
+ */
+export function moveCommand(rom, char, motion, rival) {
+    const table = rom.game.doa.fighters.commands;
+    if (!table) return null;
+    const b = busOf(rom);
+    const entries = b.read32(table + 4 * char);
+    for (let c = 0; c < 0x100; c++) {
+        const action = b.read16(entries + 8 * c);
+        const s = scriptOf(rom, action);
+        if (s && openingMotion(b, s) === motion) return { command: c, action, stance: b.read16(b.read32(table + 4 * rival)) };
+    }
+    return null;
+}
+
+/* The fighter's own script group: the one most of its command table's
+ * actions are in, the shared group left out. The groups do not follow the
+ * character numbers (Tina's is 4, Ryu's 2), and the stance does not name it
+ * either: Raidou stands in Ryu's (group 2) but most of his moves are in 11. */
+function ownGroup(rom, char) {
+    const table = rom.game.doa.fighters.commands;
+    if (!table) return char;
+    const b = busOf(rom);
+    const entries = b.read32(table + 4 * char);
+    const count = new Map();
+    for (let c = 0; c < 0x100; c++) {
+        const group = b.read16(entries + 8 * c) >> 9;
+        if (group !== rom.game.rig.common) count.set(group, (count.get(group) ?? 0) + 1);
+    }
+    return [...count].reduce((best, g) => (g[1] > best[1] ? g : best), [char, 0])[0];
+}
+
 /** The fighter's own moves first, then everyone's, then the rest. */
 export function doaMotionList(rom, body, motions) {
-    const own = groupMotions(rom, body.index);
+    const own = groupMotions(rom, ownGroup(rom, body.index));
     const shared = groupMotions(rom, rom.game.rig.common);
     const pick = (ids) => motions.filter((x) => x && ids.has(x.index));
     const lead = [...pick(own), ...pick(shared).filter((x) => !own.has(x.index))];
@@ -118,19 +175,29 @@ function toThree(m) {
 const det3 = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[3] * (m[1] * m[8] - m[2] * m[7])
     + m[6] * (m[1] * m[5] - m[2] * m[4]);
 
+/* A run's frames as parts: the shadow pieces apart, and the joints the
+ * parts hang from. */
+function keptFrames(rom, frames) {
+    const kept = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) > 0.5));
+    kept.joints = jointsOf(rom, kept);
+    kept.shadows = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) <= 0.5));
+    return kept;
+}
+
 const runs = new WeakMap();
-function framesOf(rom, body, motion) {
+function framesOf(rom, body, motion, rival = null, reacts = false) {
     if (!runs.has(rom)) runs.set(rom, new Map());
     const cache = runs.get(rom);
-    const key = `${body.index}:${motion.index}`;
+    const move = rival && reacts ? moveCommand(rom, body.index, motion.index, rival.index) : null;
+    const key = `${body.index}:${motion.index}:${rival?.index ?? ''}:${move?.command ?? ''}`;
     if (!cache.has(key)) {
         /* One run at a time is kept; a motion is a few hundred frames of
          * fifty draws. */
         cache.clear();
-        const frames = runDoaMotion(rom, { char: body.index, base: body.base }, motion.index, motion.frames);
-        const kept = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) > 0.5));
-        kept.joints = jointsOf(rom, kept);
-        kept.shadows = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) <= 0.5));
+        const frames = runDoaMotion(rom, { char: body.index, base: body.base }, motion.index, motion.frames,
+            rival && { char: rival.index, base: rival.base, ...move });
+        const kept = keptFrames(rom, frames);
+        if (rival) kept.rival = keptFrames(rom, frames.rival);
         cache.set(key, kept);
     }
     return cache.get(key);
@@ -217,14 +284,26 @@ const drawKey = (d) => (d.mesh === undefined ? d.model : `${d.model}/${d.mesh.to
 
 /** The draws of a frame of the motion, a place in the draw order a part;
  * `shadows` the frame's shadow pieces, each a model and its board matrix
- * (`r`, `t`). */
-export function poseDoaFighter(rom, body, motion, frame) {
+ * (`r`, `t`). With `rival` (a body of the roster) the run has it as player
+ * 2, and its draws of the same frame come back as `rival`, in the same
+ * frame: the board's own place for it. With `reacts` the move is given as
+ * the fighter's command (moveCommand) and the fight runs, so the opponent
+ * plays the reaction the game picks (with no command for the motion it holds
+ * its stance, as without). */
+export function poseDoaFighter(rom, body, motion, frame, { rival = null, reacts = false } = {}) {
     const at = Math.max(0, Math.min(frame, motion?.frames ?? 0) - 1);
-    const draws = motion ? framesOf(rom, body, motion)[at] : [];
-    const shadows = motion ? framesOf(rom, body, motion).shadows[at] ?? [] : [];
+    const run = motion ? framesOf(rom, body, motion, rival, reacts) : null;
+    const posed = posedFrame(body, run, at);
+    if (rival) posed.rival = posedFrame(rival, run?.rival, at);
+    return posed;
+}
+
+function posedFrame(body, run, at) {
+    const draws = run?.[at] ?? [];
+    const shadows = run?.shadows[at] ?? [];
     const matrices = body.parts.map((p) => toThree(draws[p.index]?.m ?? IDENTITY));
     const origins = matrices.map((e) => [e[12], e[13], e[14]]);
-    const joints = motion ? framesOf(rom, body, motion).joints : { parents: [], joined: [] };
+    const joints = run?.joints ?? { parents: [], joined: [] };
     return {
         matrices,
         origins,

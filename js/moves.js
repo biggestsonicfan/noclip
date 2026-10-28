@@ -500,8 +500,8 @@ export function followUps(moves, e) {
  * free, which is the motion's end frame, `p1_follow2`, where the action
  * routines hand control back. Never past the motion's last frame.
  */
-export function handoverFrame(rom, motionId, frames, next, isFollowUp) {
-    const t = readMotionTiming(rom, motionId);
+export function handoverFrame(rom, motionId, frames, next, isFollowUp, timing = readMotionTiming) {
+    const t = timing(rom, motionId);
     let f = frames;
     if (t) f = isFollowUp ? t.cancel + (next?.wait ?? 0) - 1 : t.end;
     return Math.max(1, Math.min(frames, f));
@@ -541,14 +541,17 @@ const EASE_SHIFT = { 8: 3, 4: 2 };
  * @param {object[]} entries the entries, in order; an entry sitting in the
  *   follow-up table the one before it parked is a string link and takes over
  *   at the cancel frame, anything else once the one before comes free.
+ * @param {object} [readers] `decode(rom, id)` and `timing(rom, id)` for a game
+ *   whose motions are not Sonic the Fighters' (`decodeMotion`,
+ *   `readMotionTiming`).
  * @returns {null | {links:object[], total:number}} each link `{entry, motion,
  *   decoded, follows, start, length}` — the tick it starts on and how many it
  *   plays before the next takes over.
  */
-export function buildChain(rom, moves, entries) {
+export function buildChain(rom, moves, entries, { decode = decodeMotion, timing = readMotionTiming } = {}) {
     const links = [];
     for (const e of entries) {
-        const decoded = decodeMotion(rom, e.motion);
+        const decoded = decode(rom, e.motion);
         if (!decoded) continue;
         const prev = links[links.length - 1]?.entry;
         const follows = Boolean(prev?.follow && moves.tables.get(prev.follow)?.includes(e));
@@ -559,7 +562,7 @@ export function buildChain(rom, moves, entries) {
     links.forEach((l, i) => {
         const next = links[i + 1];
         l.start = t;
-        l.length = next ? handoverFrame(rom, l.motion, l.decoded.frames, next.entry, next.follows)
+        l.length = next ? handoverFrame(rom, l.motion, l.decoded.frames, next.entry, next.follows, timing)
             : l.decoded.frames;
         t += l.length;
     });

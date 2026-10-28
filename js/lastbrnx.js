@@ -247,6 +247,9 @@ export function readLastbrnxStages(rom) {
         const draws = [...scenery, ...run.walls.map(placed('walls'))];
         stages.push({
             slot: stages.length,
+            /* The stage byte, which the song table is ordered by
+             * (games.js, Last Bronx's `sound`). */
+            soundSlot: n,
             placements: true,
             mixedSets: false,
             num: n,

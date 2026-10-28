@@ -22,7 +22,7 @@ of its stages, its cells and its characters posed by their motions on all three 
 Data East's *Air Walkers* has its seventeen courts, its models, its cells and
 its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its course, its models,
 its cells and the attract's animations — see [Power Sled](#power-sled).
-*Last Bronx* has its models, its stages and its fighters posed by their
+*Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 
@@ -160,8 +160,10 @@ fighter's strike or throw. Each fighter's moves are listed under the input
 that does them, read from its input program the way Sonic the Fighters' are
 (*fwd+down . fwd+P*, the strings as their presses, *P , P , K*), and the ones
 a fighter standing in front of its opponent does not reach that way say what
-they need. They play one at a time: a string is listed by the motion its last
-press plays, and the strings themselves are not played yet. Each move and
+they need. A string plays as Sonic the Fighters' do, built in the same panel:
+each press takes over on the frame the game's own matcher lets it, its cancel
+frame plus the entry's wait, and the switch blends by the rig's own rule. A
+string drops the flight in the air the plain motion has. Each move and
 motion carries the name the motion table keeps for it beside its number
 (*motion 21 AK_TA_KAMAE*, *TA_SYORYU_HNY*); the CPU opponent's names for the
 moves are not found. With the **Armour** switch's
@@ -600,7 +602,8 @@ every one of the
 moves, the motions its own input program can start, as Fighting Vipers' does
 ([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)),
 each under its input: Jacky's *P , P , back+P*, Pai's *P , P , P , down+K*,
-the throws on *G+P*. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+the throws on *G+P*. Strings play as Fighting Vipers' do, each press taking
+over on the frame VF2's matcher lets it. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
@@ -637,29 +640,75 @@ need a table found in that game's ROM first. Where they stand:
 
 | | Sonic the Fighters | Fighting Vipers | Virtua Fighter 2 | Dead or Alive |
 |---|---|---|---|---|
-| Opponent, picked from the roster | | yes | yes | |
-| Opponent plays the reaction | | yes | yes | |
-| Mirrored fighter, and the one it throws | | yes | yes | |
-| Hand shapes from the move script | | yes | yes | |
+| Opponent, picked from the roster | | yes | yes | yes |
+| Opponent plays the reaction | | yes | yes | yes |
+| Mirrored fighter, and the one it throws | fighter only | yes | yes | |
+| Hand shapes from the move script | yes | yes | yes | with the reaction |
 | Moves by input | yes | yes | yes | |
-| Strings played | yes | | | |
-| Fighter's own motions grouped | yes | yes | yes | |
-| Sway chains | yes | yes | yes | |
+| Strings played | yes | yes | yes | |
+| Fighter's own motions grouped | yes | yes | yes | yes |
+| Sway chains | yes | yes | yes | yes |
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
 | Stage sounds | | yes | yes | |
 | Cells tab | yes | yes | yes | yes |
 
-Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
+Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
+and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
-have the Cells tab too, and all of them but Air Walkers the music.
+have the Cells tab too, and all of them but Air Walkers the music. Last
+Bronx has both; Pilot Kids has the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
-characters are posed through a rig of their own) and Dead or Alive (whose
-fight code already runs both players), stage sounds for Sonic the Fighters
-and Dead or Alive, and playing Fighting Vipers' and Virtua Fighter 2's
-strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
-draw goes through `0x7C60` with the colour left as it is.
+characters are posed through a rig of their own, not Virtua Fighter 2's
+record and face target, and no fight code is run for them). Dead or Alive's
+opponent plays the reaction the game's own fight code picks: the move is
+given as the fighter's command and the fight runs ("plays the reaction the
+game picks"). Virtua Fighter 2 has no hit flash to show: every fighter
+draw goes through `0x7C60`, which sends the model's own material and takes
+no other, and nothing fills Fighting Vipers' flash blocks. Sonic the Fighters
+has Fighting Vipers' flash test only in its sway-chain draw, not on the body,
+and no fighter's moves or action slots play the three motions that set it;
+Dead or Alive has no such test. So neither shows one.
+
+Only Sonic the Fighters has afterimages. Its trail is kept by commands
+0x80 to 0x87 of its own coprocessor program. Fighting Vipers' program
+stops at 0x7E, Virtua Fighter 2's coprocessor never gets those commands,
+and Dead or Alive's is Tecmo's own. Virtua Fighter 2's one afterimage
+buffer is for the replay. See
+[Afterimages](TECHNICAL.md#afterimages-jszanzoujs).
+
+Sonic the Fighters and Dead or Alive have no stage sounds to play. Sonic the
+Fighters runs Fighting Vipers' stage-sound routine, but its per-stage records
+are all 0 and its players play nothing; Dead or Alive's stages send no sound,
+only the song. See
+[Virtua Fighter 2's stage sounds](TECHNICAL.md#virtua-fighter-2s-stage-sounds-jssoundambiencejs).
+
+Sonic the Fighters' hands come from its move script too: op 0x10 on slot
+5 or 8 puts one of the character's sixteen hand models for that slot in
+place, and every motion starts from the first. Checked against MAME's
+attract run. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
+
+Dead or Alive is not mirrored as the others are. Its motion step mirrors a
+player by its own facing word, negating angles in place, with no
+player +0 bit 6 and no left/right swap, so the explorer's mirror does not
+apply to it. See
+[The opponent's reaction](TECHNICAL.md#the-opponents-reaction-jsreactionsjs).
+
+Dead or Alive's hand shapes come from its action script (op 0x2E), and show
+only when the opponent plays the reaction: the plain Animation run starts the
+motion without its script. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
+
+Dead or Alive's moves are not listed by input: its ROM has no input program
+like the AM2 games' matcher, and its command table holds no inputs. Nor
+are its strings played: the explorer chains moves through the follow-up
+tables that program parks, and its command table names no next move. See
+[Moves and strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
+
+Dead or Alive's chains (Tina's ribbons, Kasumi's sash and ponytail, Jann
+Lee's belt and the others') swing on the Animation tab. The game's own chain
+routine runs for them, as in the fight. See [Sway
+chains](TECHNICAL.md#dead-or-alive).
 
 ## Dead or Alive
 
@@ -696,6 +745,11 @@ for it under every frame of the motion: a flat piece for each of the fifteen
 bones, laid on the floor along the stage's light. Against MAME's attract fight
 all 1740 pieces drawn over 58 of its frames are the same models, in place to
 0.0003, while Zack and Tina move.
+
+The **opponent** switch adds player 2, from the same run of the game's own
+fight code: any fighter of the roster, standing where the round puts it,
+facing the fighter, on the motion its own first action starts, with its own
+textures, colours and shadow. It plays nothing else and no reaction.
 
 Stages 0, 2, 3, 4, 8, 10 and 11 have pieces of their own that move (stage 4 is
 a conveyor). The game's own stage code runs them from its setup to the same
@@ -1074,6 +1128,19 @@ motion each of them has (1546 between them, by the game's own names), played
 by the game's own fight code and its copro's program, both run in the page.
 The Japan build poses them the same way.
 
+**music**, on the Stages tab, plays each stage's own song on the game's sound
+board, the one the round start sends for it, at the factory's master volume.
+The song picker has all sixteen songs by the names the game's sound test
+gives them (`tomp`, `kan`, `boss`, `rankin` and on).
+
+The **Cells** tab has the game's 2D pictures, in both builds: the fonts,
+the fighters' name plates, the character select's pictures, a starry sky and
+the rest. That makes 508 cells on 14 CGs, every one the game's own table of them lists (the
+table its test menu shows). Each is drawn with its own CG over the boot's,
+which stays loaded. The cells are Power Sled's tilemap scripts, run as Last
+Bronx's own draw runs them. The cells of the four CGs MAME's attract and
+character select load (229 of them) match its tile chip pixel for pixel.
+
 Four models are drawn from polygon RAM the program fills itself and are empty
 here. See
 [TECHNICAL.md](TECHNICAL.md#last-bronx-jstexturejs-jscolorsjs-jsromsetjs).
@@ -1093,6 +1160,12 @@ its set picked by hand. The textures, palette, luma and colour tables match
 m2-hle2's at the title and in the first stage byte for byte. Sets 0, 1, 2, 3
 and 7 have their scene's colours; sets 4, 5, 6 and 8 were never reached, and
 their scene's colour rows keep the plain ramp.
+
+The **Cells** tab has the game's 74 tile-chip pictures, in both builds: the
+fonts, the captions (INSERT COINS!, CONTINUE?, GAME OVER), the digits, the
+Psikyo copyright, the four pilots' portraits, the score ranking, the four sky
+backdrops and the monitor test grids. They all come from the tile chip as
+the boot fills it, so there is one CG.
 
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
@@ -1241,8 +1314,10 @@ for its two chapters.
 `hotdo` has a **Cells** tab too: its 630 pictures, the title logo's layers, the
 EPA notice, the house map, the weak-point cards, the colour bars and FREE PLAY
 among them. Each picture brings its own tiles and colours, as Dead or Alive's
-do. Revision A moved the table, and it has not been found yet, so `hotd` has
-no Cells tab. See [The House of the Dead's
+do. The prototype (`hotdp`) has one as well, with its own 341 pictures: the
+same kind of art a year early, with a Coming Soon card, two GAME OVER and
+CONTINUE screens and the 1998, 12, 18 date among them. Revision A moved the
+table, and it has not been found yet, so `hotd` has no Cells tab. See [The House of the Dead's
 cells](TECHNICAL.md#the-house-of-the-deads-cells-jscellsjs).
 
 A merged archive carrying the parent and its clones together works too, and
