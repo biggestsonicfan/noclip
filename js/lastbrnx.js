@@ -45,17 +45,21 @@ const EXTRA = {
 
 /* The model an object command names: the table entry its words were last read
  * from (the routines `ldq` an entry, or `ld` its words one by one, and send it
- * on). */
-function modelTracker(table) {
+ * on), if the mesh it sends is that entry's. One frame in 21 Cross Street's
+ * circling piece sends words that are no entry's (0, 0x30000000, 0x20000007,
+ * 0xFFFFF8) after the street's own entry was read; naming that entry flashed
+ * the street in at the piece's matrix (issue 214). */
+function modelTracker(table, cv) {
     let last = null;
     return {
         noteRead(a) {
             if (a >= table.offset && a < table.offset + table.count * table.stride) last = Math.floor((a - table.offset) / table.stride);
         },
-        lastIndex() {
+        lastIndex(w) {
             const i = last;
             last = null;
-            return i === null ? null : { model: i };
+            if (i === null || cv.getUint32(table.offset + table.stride * i + 8, true) !== w[2]) return null;
+            return { model: i };
         },
     };
 }
@@ -71,7 +75,7 @@ export function lastbrnxMachine(rom, { copro: extra = {} } = {}) {
     ram.set(new Uint8Array(cv.buffer, cv.byteOffset + D.rom, L.dataSize));
     const unknown = new Set();
     const copro = new Copro(unknown, { ...EXTRA, ...extra });
-    const models = modelTracker(rom.game.modelTable);
+    const models = modelTracker(rom.game.modelTable, cv);
     const geo = new Geo(copro, models);
     const other = new Map();
     const inRam = (a) => a >= RAM_BASE && a < RAM_BASE + RAM_SIZE;
