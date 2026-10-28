@@ -6592,6 +6592,24 @@ viewer's clock plays them. Stage names come from the round banner's table
 (0x2A190). Checked against MAME's display list at frame 1300: the 28 pieces
 and four walls of Cross Street land where it has them.
 
+A draw is named by the table entry last read before it only when the mesh
+word it sends (the third) is that entry's. Cross Street's circling piece
+(models 68 to 87, one a frame) sends 0, 0x30000000, 0x20000007, 0xFFFFF8
+once every 21 frames, after the street's entry (model 1) was read; that frame
+draws nothing, where the explorer had drawn the street at the piece's matrix
+(issue 214). No other stage sends such a draw.
+
+The stages are drawn by the depth buffer, with faces laid on others ranked
+by `js/layers.js`, and not by the z-sort keys the board sorts by
+(`depth` in the profile). The board's keys only hold from its own camera.
+In the parking lot (stage 1) the kerb along the wall, model 493, is a face 2
+by 15 m sorted by its nearest corner. From beside the Java Tea machine it was
+painted over the machine's side, and the floor was painted over the kerb
+(issue 205). MAME's attract fight there has the kerbs and the pads under the
+parked cars grey, as the depth buffer draws them. The z-sort had covered
+them with the green floor. The opening views of all nine stages are
+otherwise the same pixel for pixel to within 0.2%.
+
 **Colour cycles.** The round start 0x17950 takes the list for the stage's
 object kind (0x5042E0; kinds past 8 take 8's) from 0x502B00: 12-byte records
 {entry, frames, colours} up to one with no frames. An entry under 16 is face
@@ -6781,6 +6799,28 @@ on the character select after a coin, holds CGs 0, 2, 10 and 3. Every cell
 of those four (229) renders the same as the tile chip draws it, pixel for
 pixel. `settleLastbronx` offers the tab only where the table's first list
 is where the shift puts it.
+
+**Skins** (issue 206). The parts leave gaps: between chest and hips, at
+the shoulders, under a jacket's hem. The game closes them with skins it
+builds every frame on the parts' matrices just drawn, and the explorer runs
+the same two routines after the draw. 0x9B3B0 (player) builds them: it is
+called under the camera (command 0x2A and 12 matrix words, identity here,
+then 6 after), takes half of polygon RAM by turns (0x5C5BE0: words 0 or
+0x2000), and has the copro (commands 0x4F, 0x53, 0x5D, 0x69, 0x6A) write
+geometrizer polygon-data packets into buffer RAM: 0x02800505, the polygon
+RAM word address, a count, and that many words. 0x9B5E0 (player) then sends
+a geometrizer object packet per skin, from the lists at 0x5C5D70 (count),
+0x5C5CF0 (kinds) and 0x5C5BF0 (copro handles), 60 bytes a player:
+0x00800101, the texture-point and texture-header addresses, the polygon RAM
+address and 0. Polygon RAM holds the 40-byte records the polygon ROM does,
+so each skin decodes as a model would (`readSkins`, then model.js's mesh
+option), its points already in the fighter's frame. The normals are 0. The
+callers are 0x25654 and 0x2D73C, before the fight's draw at 0x25A08 and
+0x2D788. A fighter has 11 (Yoko) to 66 (Joe) of them; they are waist and
+sleeve bands, a jacket's hem, a tied shirt, headband tails and Yusaku's hair.
+Object packets whose address has bit 23 set (texture RAM, 0x800004, on
+Yusaku) are not skins and are left out. The USA build is checked by the
+first words of both routines.
 
 **Not done.** The four models drawn from polygon RAM (1691, 1692, 1772,
 1773), which the program fills itself, are empty; Nagi's first part is 1691
