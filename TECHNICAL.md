@@ -5632,6 +5632,18 @@ against MAME's title frame: cells 38 and 39, drawn at (8, 24), match every
 pixel (27994 and 29517 of them); without colorxlat, 31% match. The pictures
 are reached by number, not by pointer, so there is no unused list.
 
+The prototype (`hotdp`) has the same table, smaller: 341 entries at program
+0x7EFC0, ended by floats as `hotdo`'s is. The same routines read it at other
+addresses: the draw at `0x13160` differs from `hotdo`'s `0x17D80` only in its
+registers, and `0x12E94`, `0x12FE8` and `0x13088` are the loads. Every entry's
+tiles, colours and map lie in the ROMs, and every map entry falls inside its
+picture's tiles. Checked against MAME (shared build, `hotdp` attract, frames
+600, 1500 and 3000): 91 pictures sit in character RAM whole, every chunk's
+tiles in its block and all its colours in the block's group, and none differs;
+148 placements of their maps (with the block added) were found on the tile
+layers, among them pictures 13, 101, 105, 107, 108, 111 and 113 on layer 0 and
+145 on layer 2.
+
 Revision A (`hotd`) moved its tables, and its picture table has not been found,
 so it has no Cells tab.
 
