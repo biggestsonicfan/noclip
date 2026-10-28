@@ -5732,6 +5732,13 @@ function lastbronxBuild(build) {
             light: [0.5, -0.7, -0.5],
             materials: { source: 'maincpu', at: 0x7e00, count: 32, stride: 8 },
         },
+        /* The depth buffer, with faces laid on others ranked over them
+         * (js/layers.js), and no z-sort. The stages are rooms of whole
+         * models standing on one another, and the board's keys only hold
+         * from its own camera: from beside the Java Tea machine in the
+         * parking lot, the 15 m kerb it stands on (model 493) sorts by its
+         * near corner and was painted over the machine's side (issue 205). */
+        depth: { recede: 0, nearMin: 0.02, layers: true },
         /*
          * js/lastbrnx.js: the stage task's own draw (0x71AC0) and ring walls
          * (0x72640) run on a stage byte (0x57DEC0), the camera (0x71DB0) left
@@ -5773,6 +5780,9 @@ function lastbronxBuild(build) {
                 [0xc7760, [0x1e240]], [0x231f0, [0x1e240]], [0x4f400],
             ],
             setup: 0xb5e10, start: 0x49540, step: 0x49820, draw: 0x4a940,
+            /* The skins between the parts (waists, sleeves): 0x9B3B0 builds
+             * them on the copro, 0x9B5E0 draws them. */
+            skin: { build: 0x9b3b0, draw: 0x9b5e0 },
         },
         /*
          * The Model 2B's sound board with two 4 MB sample chips, and Sega's
@@ -5826,8 +5836,9 @@ const lastbrnx = lastbronxBuild({
  */
 const LASTBRONX_EXPORT = { data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0 };
 const LASTBRONX_FIRST_WORDS = [[0x71ac0, 0x80a03000], [0x72640, 0x80a03000], [0x71db0, 0x59084810], [0x941e0, 0x5ca81e00]];
-/* And the fighters' set-up, motion start, step and draw, for the Fighters tab. */
-const LASTBRONX_FIGHTER_WORDS = [[0xb5e10, 0x5c601618], [0x49540, 0x8cb800b8], [0x49820, 0x8c086080], [0x4a940, 0x8ce800b8]];
+/* And the fighters' set-up, motion start, step, draw and skins, for the Fighters tab. */
+const LASTBRONX_FIGHTER_WORDS = [[0xb5e10, 0x5c601618], [0x49540, 0x8cb800b8], [0x49820, 0x8c086080], [0x4a940, 0x8ce800b8],
+    [0x9b3b0, 0x8cb8004f], [0x9b5e0, 0x8ce80707]];
 
 function settleLastbronx(build, rom) {
     const cv = rom.mainCpuView;

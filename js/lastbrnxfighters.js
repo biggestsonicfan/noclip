@@ -50,6 +50,44 @@ const SH_FIFO_IN = 0x400000, SH_FIFO_OUT = 0xc00000, SH_BUFFER = 0x1400000, SH_E
 
 const f32 = new DataView(new ArrayBuffer(4));
 const asFloat = (u) => { f32.setUint32(0, u >>> 0); return f32.getFloat32(0); };
+const floatWord = (v) => { f32.setFloat32(0, v); return f32.getUint32(0); };
+
+/* The geometrizer commands the skins' packets hold, by their word, and how
+ * many words follow each (MAME model2_v.cpp geo_process_command). */
+const GEO_POLYGON_DATA = 0x02800505, GEO_OBJECT = 0x00800101;
+const GEO_ARGS = new Map([[0, 0], [0x08001010, 1], [0x03800707, 1], [0x05800b0b, 12]]);
+
+/*
+ * The skins in buffer RAM from `from` to `to`. The copro writes their points
+ * into polygon RAM (command 0x05: address, count, words), then an object
+ * packet for each (0x01: texture points, texture header, address, count)
+ * that names one. Polygon RAM holds the records a model in the polygon ROM
+ * does, so each is a mesh for model.js, in the fighter's frame.
+ */
+function readSkins(buf, from, to) {
+    const ram = new Uint32Array(0x8000);
+    const word = (a) => buf[(a >> 2) & 0x7fff];
+    const out = [];
+    let end = 0;
+    for (let a = from; a < to;) {
+        const op = word(a);
+        if (op === GEO_POLYGON_DATA) {
+            const at = word(a + 4) & 0x7fff, n = word(a + 8);
+            for (let k = 0; k < n && at + k < ram.length; k++) ram[at + k] = word(a + 12 + 4 * k);
+            end = Math.max(end, Math.min(at + n, ram.length));
+            a += 12 + 4 * n;
+        } else if (op === GEO_OBJECT) {
+            const oba = word(a + 12);
+            if ((oba & 0x800000) === 0) out.push({ uvPtr: word(a + 4), matPtr: word(a + 8), at: oba & 0x7fff });
+            a += 20;
+        } else if (GEO_ARGS.has(op)) {
+            a += 4 + 4 * GEO_ARGS.get(op);
+        } else break;
+    }
+    /* Kept per frame, so only as far as the copro wrote. */
+    const bytes = new Uint8Array(ram.buffer.slice(0, end * 4));
+    return out.map(({ uvPtr, matPtr, at }) => ({ bytes: bytes.subarray(at * 4), uvPtr, matPtr }));
+}
 
 /* The program ROM addresses the fight code is at in the Export build; the
  * Japan build's are `code` further on from `codeFrom`. */
@@ -104,10 +142,11 @@ export function lastbrnxFightMachine(rom, fighters) {
     };
 
     let lastModel = null, geoPtr = BUFFER, drawn = null;
-    const recent = [];
+    /* The words still to come of a 0x46 draw's arguments (the packet's
+     * pointer, its flags and the model entry's four words), and whether one
+     * is open: a part of 0x47 polygons sends 0x47 as its last argument. */
+    let args = 0, open = false;
     const push = (v) => {
-        recent.push(v);
-        if (recent.length > 8) recent.shift();
         fin.push(v >>> 0);
         sharc.setFlagInput(0, false);
         runSharc();
@@ -136,8 +175,13 @@ export function lastbrnxFightMachine(rom, fighters) {
         if (a >= COPRO_PORT && a < COPRO_END) {
             /* 0x47 closes a 0x46 draw: the packet is at the pointer the draw
              * moved on from. */
-            if (v === 0x47 && recent.includes(0x46) && drawn) drawn.push({ model: lastModel, at: (geoPtr - PACKET) >>> 0 });
-            if (v === 0x47) lastModel = null;
+            if (args > 0) args--;
+            else if (v === 0x46) { args = 6; open = true; }
+            else if (v === 0x47) {
+                if (open && drawn) drawn.push({ model: lastModel, at: (geoPtr - PACKET) >>> 0 });
+                open = false;
+                lastModel = null;
+            }
             push(v);
             return;
         }
@@ -181,6 +225,16 @@ export function lastbrnxFightMachine(rom, fighters) {
             push(5);
             cpu.call(at(rom, R.draw), [p, 0], { maxSteps: 20_000_000 });
             push(6);
+            const from = geoPtr;
+            /* The skins, built on the parts' matrices just drawn: 0x9B3B0
+             * under the camera (identity here, 0x2A pushing it), then
+             * 0x9B5E0 sends them. */
+            push(0x2a);
+            for (const v of IDENTITY) push(floatWord(v));
+            cpu.call(at(rom, R.skin.build), [p], { maxSteps: 20_000_000 });
+            push(6);
+            cpu.call(at(rom, R.skin.draw), [p], { maxSteps: 20_000_000 });
+            const skins = readSkins(buf, from, geoPtr);
             const out = drawn.map(({ model, at: a }) => {
                 const i = (a >> 2) & 0x7fff;
                 const words = [buf[i + 14], buf[i + 15], buf[i + 16], buf[i + 17]];
@@ -190,6 +244,7 @@ export function lastbrnxFightMachine(rom, fighters) {
                 };
             });
             drawn = null;
+            out.skins = skins;
             return out;
         },
     };
@@ -342,5 +397,7 @@ export function poseLastbrnxFighter(rom, body, motion, frame) {
         draws: body.parts.map((p) => (draws[p.index]?.model != null ? [draws[p.index].model] : [])),
         parents: body.parts.map((p) => joints.parents[p.index] ?? -1),
         joined: body.parts.map((p) => joints.joined[p.index] ?? false),
+        /* The skins, in the fighter's frame as the parts' places are. */
+        skins: draws.skins ?? [],
     };
 }
