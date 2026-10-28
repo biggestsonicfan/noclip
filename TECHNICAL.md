@@ -4425,7 +4425,7 @@ and `+0x36` 1. The action is char << 9, script 0 of the fighter's own group
 0x165, Tina 0x3A5, Jann Lee 0x21E, Ryu 0x476, Kasumi 0x624, Genfu 0xBB,
 Bayman 0x552, Leifang 0x2D6. Every fighter then stands with its feet at the
 floor (y 1.07 to 1.10). The attract opens its own Tina on 0x800 instead
-(Ryu's group, motion 0x476); that is the attract's script, and the tab
+(group 4, motion 0x476: her own, see below); that is the attract's script, and the tab
 does not copy it. Nothing else runs, so player 2 holds that stance and plays
 no reaction. Player 1's draws are the same, frame for frame, with and
 without an opponent, whoever it is (checked on `doa`, `doab` and `doaa`).
@@ -4433,6 +4433,40 @@ The sheets go in player 2's strips and its colours in player 2's rows
 (`useDoaFighterScene`), as the attract's Tina's do. This was checked in the
 explorer (node and headless Chrome), not graded against MAME, whose attract
 fights only Zack and Tina.
+
+**The opponent's reaction.** With "plays the reaction the game picks" the
+run gives the move the way the attract's AI does, as a command, and runs
+the fight. A player's command is the byte at `+0x2C`; it indexes its
+character's command table (`0x91C60[char]` on `doab`; `doa` 0x95750, `doaa`
+0x8A2A0, `doaab` 0x89F30, `doaae` 0x8A0F0, the same entries moved). An entry
+is eight bytes: the action (u16) at +0, at +3 the state the fight code keeps
+at `+0x2D` (2 and 3 strikes, 4 and 6 throws, 0x0A and 0x0B the one thrown)
+and at +4 the attack's number. `0x25730`, called from the task `0x23C80`,
+turns it into the action. The command used is the first whose action's
+script opens by starting the motion (op 0 `[0, motion, n]` or op 0x1E
+`[0x1E, 0, motion, n]`, `moveCommand` in `js/doafighters.js`). Both players
+are opened as the attract opens them, each on entry 0 of its own command
+table, its stance (Tina's is 0x800, what the attract opens her on). One
+frame on, the command is written; the next frame player 1 is on the action
+and the motion's frame 1, and the run keeps from there. Each frame then runs
+the rest of the fight loop as `runDoaFighters` does: the hit and push
+checks, the camera, the fight's tasks (hits `0x1FDD0`, reactions
+`0x24FD0`, ...) and the movers. Setting the action at `+0x28` straight
+instead leaves `+0x2D` unset, and the fight ends the round on the first
+frame (a KO pair, 0xCD/0xCE).
+
+Player 1 then faces player 2 and blends from its stance (the script's n),
+so its first frames differ from the plain run; its heights match frame for
+frame. Zack's 0x18F (command 0x53) puts Tina on 0x87F; Kasumi's 0x626 ends
+in the throw pair 0xBE2/0xBE3. A move that does not reach from the round's
+place shows player 2 in its stance. Checked in node on `doab` (Zack,
+Jann Lee and Kasumi against Tina and Ryu: a reaction in 4 to 6 of 6 or 7
+moves each), on `doa`, `doaa`, `doaab` and `doaae` (Zack's 0x18F and 0x1E3,
+the same actions), and in headless Chrome; not graded against MAME. The
+command tables show the script groups do not follow the character numbers:
+Zack's moves are in group 0, Tina's in 4, Jann Lee's in 1, Ryu's in 2,
+Kasumi's in 5, Genfu's in 6, Bayman's in 8. So the char << 9 stance above is
+the fighter's own only for Zack.
 
 Sonic the Fighters has no such run. Its fighters are posed by the explorer
 from `CHAR_PARTS` records and `calc_rob_angle_int`'s skeleton types (see

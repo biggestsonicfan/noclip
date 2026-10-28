@@ -641,7 +641,7 @@ need a table found in that game's ROM first. Where they stand:
 | | Sonic the Fighters | Fighting Vipers | Virtua Fighter 2 | Dead or Alive |
 |---|---|---|---|---|
 | Opponent, picked from the roster | | yes | yes | yes |
-| Opponent plays the reaction | | yes | yes | |
+| Opponent plays the reaction | | yes | yes | yes |
 | Mirrored fighter, and the one it throws | | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
 | Moves by input | yes | yes | yes | |
@@ -661,8 +661,10 @@ Bronx has both; Pilot Kids has the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
-record and face target, and no fight code is run for them), Dead or Alive's
-opponent playing a reaction. Virtua Fighter 2 has no hit flash to show: every fighter
+record and face target, and no fight code is run for them). Dead or Alive's
+opponent plays the reaction the game's own fight code picks: the move is
+given as the fighter's command and the fight runs ("plays the reaction the
+game picks"). Virtua Fighter 2 has no hit flash to show: every fighter
 draw goes through `0x7C60` with the colour left as it is. Sonic the Fighters
 has Fighting Vipers' flash test only in its sway-chain draw, not on the body,
 and no fighter's moves or action slots play the three motions that set it;

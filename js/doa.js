@@ -503,6 +503,11 @@ function stageRun(rom, entry, { ram: pokes = [], maxSteps, init, frames = 1, clo
  * 0x588EE0), `modelBase` (0x5A6ED0) and `expression` (0x58828C) are one
  * entry a player. */
 const PLAYER_SIZE = 88;
+/* A player's command (+0x2C), what the AI gives it: an entry of its
+ * character's command table (`fighters.commands`). */
+const COMMAND = 0x2c;
+/* A player's action (+0x28): script group << 9 | script (rig.scripts). */
+const ACTION = 0x28;
 /* The motion step (0x44840) plays the motion 0x420C0 started: each call it
  * moves the motion's clock on by the speed at 0x56ADA0 times the record's
  * rate (+0x10), and takes the joint angles (0x56AA40) and the hips' place
@@ -877,6 +882,12 @@ function stageOf(rom, n, entry, run) {
  * own group's script 0 (`ld 0xD8000[action >> 9]`), which starts that
  * fighter's first motion (Zack 0x165, Tina 0x3A5); unopened it plays none
  * and stands unposed, its legs through the floor.
+ * With `rival.command` the motion is the move that command picks
+ * (moveCommand in js/doafighters.js), and player 1 is given it the way the
+ * attract's AI gives one: in +0x2C, before the first frame's fight tasks,
+ * which start its action; the next frame its script starts the motion. Each
+ * frame then runs the whole fight loop (`fightLoop`), so the game's own hit
+ * and reaction tasks pick what player 2 plays when the move lands.
  * Returns the draws of each of the `frames` frames, in the stage's frame,
  * and player 2's as `rival`, frame for frame.
  */
@@ -889,20 +900,45 @@ export function runDoaMotion(rom, { char, base }, motion, frames, rival = null) 
     const fighters = [{ char, base, pos: A.fighters[0].pos, angles: [0, 0, 0] }, second];
     startFight(rom, M, fighters, A);
     endFrame(M, F, A.first);
-    if (rival) openPlayer(M, 1, { state: [0x28, 0, 0x29, rival.char << 1, 0x36, 1] });
+    const fights = rival?.command != null;
+    if (fights) openFight(M, A, rival);
+    else if (rival) openPlayer(M, 1, { state: [0x28, 0, 0x29, rival.char << 1, 0x36, 1] });
     taskFrame(M, F, F.camera, 2);
     const theirs = [];
-    const run = (n) => {
+    let t = 0;
+    const run = () => {
         const byPlayer = [[], []];
         fightFrame(M, F, byPlayer);
-        endFrame(M, F, A.first + 1 + n);
+        endFrame(M, F, A.first + 1 + t++);
+        if (fights) fightLoop(M, F);
         theirs.push(byPlayer[1]);
         return byPlayer[0];
     };
-    run(0);
+    run();
+    if (fights) {
+        M.rv.setUint8(M.R.player + COMMAND - RAM_BASE, rival.command);
+        while (M.rv.getUint16(M.R.player + ACTION - RAM_BASE, true) !== rival.action && t < 8) run();
+    } else M.cpu.call(F.motion, [0, motion], { maxSteps: 5_000_000 });
     theirs.length = 0;
-    M.cpu.call(F.motion, [0, motion], { maxSteps: 5_000_000 });
-    const out = Array.from({ length: frames }, (_, n) => run(n + 1));
+    const out = Array.from({ length: frames }, run);
     out.rival = theirs;
     return out;
+}
+
+/* Both players open as the attract opens them, each on its own stance: the
+ * action of entry 0 of its command table (`rival.stance`). */
+function openFight(M, A, rival) {
+    openPlayer(M, 0, A.fighters[0].open);
+    openPlayer(M, 1, { angles: A.fighters[1].open.angles, state: [0x36, 1] });
+    M.rv.setUint16(M.R.player + PLAYER_SIZE + ACTION - RAM_BASE, rival.stance, true);
+}
+
+/* The rest of a frame of the fight loop, after the frame end: the hit and
+ * push checks, the camera task, the fight's tasks and the movers
+ * (runDoaFighters). */
+function fightLoop(M, F) {
+    const call = (at) => M.cpu.call(at, [], { maxSteps: 5_000_000 });
+    for (const r of F.collision) call(r);
+    taskFrame(M, F, F.camera, 2);
+    for (const r of [...F.fight, ...F.movers]) call(r);
 }

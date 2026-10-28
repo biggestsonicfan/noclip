@@ -76,7 +76,7 @@ import {
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
-import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter } from './doafighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand } from './doafighters.js';
 import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -3945,12 +3945,30 @@ function poseFighterAndRival(body, m) {
  * stance where the round puts it (js/doa.js runDoaMotion): its draws come
  * in the stage's frame, as the fighter's do. */
 function poseDoaRival(body, m) {
-    const pose = bodyRig().pose(state.rom, body, m.decoded, m.frame, { rival: m.rival.body });
+    const reacts = state.opponentPlays === DOA_REACTS.key;
+    if (reacts) noteDoaCommand(body, m);
+    const pose = bodyRig().pose(state.rom, body, m.decoded, m.frame, { rival: m.rival.body, reacts });
     const theirs = pose.rival;
     placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), theirs.matrices, theirs, m.rival.material);
     placeDoaShadows(m.rival, theirs);
     m.rivalPose = null;
     return pose;
+}
+
+/* Dead or Alive's opponent: it holds its stance, or the move is given as the
+ * fighter's command and the game's fight code picks what it plays
+ * (js/doafighters.js moveCommand). */
+const DOA_REACTS = { key: 'reacts', label: 'the reaction the game picks' };
+const DOA_PLAYS = [{ key: 'same', label: 'its stance' }, DOA_REACTS];
+
+function noteDoaCommand(body, m) {
+    const key = `${body.index}:${m.decoded?.index}:${m.rival.body.index}`;
+    if (m.rival.reactionKey === key) return;
+    m.rival.reactionKey = key;
+    const move = m.decoded && moveCommand(state.rom, body.index, m.decoded.index, m.rival.body.index);
+    $('#char-rival-note').textContent = move
+        ? `Command 0x${move.command.toString(16)} starts the motion (action 0x${move.action.toString(16)}); the fight code plays the rest.`
+        : 'No command of this fighter starts the motion: the opponent holds its stance.';
 }
 
 /* What the opponent plays on the fighter's frame: the fighter's motion, or
@@ -5134,14 +5152,14 @@ function renderRivalSelect() {
  * names its tables. */
 function renderRivalPlays() {
     const sel = $('#char-rival-plays');
+    const doa = Boolean(state.rom.game.doa?.fighters?.commands);
     const reactions = Boolean(state.rom.game.rig?.reactions);
+    const plays = doa ? DOA_PLAYS : REACTIONS.filter((r) => reactions || r.category == null);
     sel.innerHTML = '';
-    for (const r of REACTIONS.filter((r) => reactions || r.category == null)) {
-        sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
-    }
-    if (!reactions) state.opponentPlays = 'same';
+    for (const r of plays) sel.appendChild(Object.assign(el('option'), { value: r.key, textContent: `plays ${r.label}` }));
+    if (!plays.some((r) => r.key === state.opponentPlays)) state.opponentPlays = 'same';
     sel.value = state.opponentPlays;
-    sel.hidden = !reactions;
+    sel.hidden = !reactions && !doa;
     $('#char-rival-note').textContent = '';
 }
 
@@ -6138,6 +6156,7 @@ function wireOptions() {
     $('#char-rival-plays').addEventListener('change', (e) => {
         state.opponentPlays = e.target.value;
         if (state.opponentPlays === 'same') $('#char-rival-note').textContent = '';
+        if (state.motion.rival) state.motion.rival.reactionKey = null;
         poseRig();
     });
     $('#char-p2').addEventListener('change', (e) => {

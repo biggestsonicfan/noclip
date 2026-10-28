@@ -4063,11 +4063,12 @@ const doab = {
          * the head of its loop. `headCheck` is what the body routine asks
          * before it draws the head and face (0x45FA8): no while the player's
          * +0x2D is 0 and its +0x2A at most 17 and not 5, as a record stands
-         * that no action script has run on. */
+         * that no action script has run on. `commands` is the table of
+         * each character's commands (js/doafighters.js moveCommand). */
         fighters: {
             heights: 0xc1e80, load: 0x407a0, clearRibbon: 0x4f930, setup: 0x41900,
             player: 0x41a50, ribbon: 0x4feb0,
-            motion: 0x420c0, headCheck: 0x51dc0,
+            motion: 0x420c0, headCheck: 0x51dc0, commands: 0x91c60,
             roundStart: 0x54660, frameStart: 0x4df20, frameEnd: 0x4ddc0,
             tables: { at: 0x25870, count: 13 },
             grid: { cells: 0x5a6f00, bytes: 0x5a7520, from: [0xc7ca0, 0xc88e0], alt: { stages: [2, 5], from: [0xc82c0, 0xc89a4] } },
@@ -4230,7 +4231,8 @@ const doa2ARegions = (regions) => Object.fromEntries(Object.entries(regions)
 
 /* The fight code's routines: every one a program address. */
 const DOA_FIGHT_CODE = ['load', 'clearRibbon', 'setup', 'player', 'ribbon', 'motion', 'headCheck',
-    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights'];
+    'roundStart', 'frameStart', 'frameEnd', 'roundReset', 'camera', 'frameWait', 'moversStart', 'heights',
+    'commands'];
 
 /*
  * Revision A's fight code, from Revision B's. Revision A is an older program,
