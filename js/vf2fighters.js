@@ -1863,7 +1863,9 @@ function swappedModels(rom, body, live, pose, { motion, frame, stepped, fresh, a
  * set_motion (VF2 0x1A1E4, FV 0x1B5A8) flips the bit when the motion before
  * ends with move flag 21 set or the new one's id has bit 15; 0x184F0 (FV
  * 0x18F14) keeps +0 bit 10 as bit 6 xor flag 21 every frame, the way the
- * fighter will stand once its motion ends.
+ * fighter will stand once its motion ends. Sonic the Fighters' pose code
+ * (0x30E04) and set_motion (0x1B024) are the same instructions, so its
+ * frames are mirrored here too (js/app.js motionSample).
  */
 const MIRROR_NEGATE = [13, 14], MIRROR_FROM_HALF = [15, 17, 27, 29];
 const MIRROR_SWAP_NEGATE = [[0, 3], [1, 4], [7, 10], [8, 11], [21, 24], [22, 25], [30, 33], [31, 34]];
@@ -1871,7 +1873,7 @@ const MIRROR_SWAP = [[2, 5], [6, 9], [23, 26], [32, 35]];
 const MIRROR_TARGET_X = [0, 1, 2], MIRROR_TARGET_PAIRS = [[3, 4], [6, 7]];
 const HALF_TURN = 0x8000;
 
-function mirrorSample({ angles, targets, targetUsed }) {
+export function mirrorSample({ angles, targets, targetUsed }) {
     const a = Uint16Array.from(angles), t = Float32Array.from(targets), used = Uint8Array.from(targetUsed);
     for (const i of MIRROR_NEGATE) a[i] = -a[i];
     for (const i of MIRROR_FROM_HALF) a[i] = HALF_TURN - a[i];

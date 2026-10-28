@@ -1523,6 +1523,18 @@ Jane's forearms (4 and 7, 0.17 and 0.28 apart) and Sarah's and Honey's feet
 (diag(1, 1, -1)) exactly, so the mirrored fighter is the unmirrored one in a
 mirror; the one thing a side changes is which hand a shape goes to (below).
 
+Sonic the Fighters has the same mirror. Its pose code tests `+0` bit 6 at
+`0x30E00` and from `0x30E04` runs VF2's `0x28AF8` block instruction for
+instruction (`0x1E4` bytes), and its set_motion flips the bit as VF2's does
+(`0x1B024`–`0x1B040`; Sonic Championship `0x30E28` and `0x1B054`). Its
+samples are the same `{angles, targets, targetUsed}`, so the explorer's
+"mirrored" switch runs them through `mirrorSample` too (`motionSample` in
+js/app.js). Checked on `sfight` for fighters 0–10, eight motions at three
+frames each: every mirrored joint lands on its left/right partner reflected
+in z (within 0.0008), and every matrix is the partner's reflected
+(diag(1, 1, -1), within 0.002). Only the fighter is mirrored: Sonic the
+Fighters has no opponent here, so nothing is thrown.
+
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
 second frame. The explorer plays the reaction from the first such frame

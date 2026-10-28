@@ -62,7 +62,7 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming, mirrorSample,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
@@ -2893,10 +2893,12 @@ function enterLink(m) {
 }
 
 /* The channels at frame `f` of whatever is on screen — eased out of the link
- * before when a chain is playing. */
+ * before when a chain is playing. Mirrored as Sonic the Fighters' pose code
+ * mirrors a sampled frame when player +0 bit 6 is set (mirrorSample). */
 function motionSample(m, f) {
-    return m.chain ? chainSample(state.rom, m.chain, m.link, f, state.easeChain)
+    const sample = m.chain ? chainSample(state.rom, m.chain, m.link, f, state.easeChain)
         : sampleMotion(state.rom, m.decoded, f);
+    return state.mirrored ? mirrorSample(sample) : sample;
 }
 
 /*
@@ -6539,8 +6541,9 @@ function applyGameFeatures() {
     const rival = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-rival-field').hidden = !rival;
     /* Air Walkers' players play some motions mirrored too (+0xF4), and
-     * Virtua Cop's enemies (+0x8A0). */
-    $('#char-mirror-field').hidden = !rival && !['airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
+     * Virtua Cop's enemies (+0x8A0). Sonic the Fighters' (no bodies) mirror
+     * as Virtua Fighter 2's do, on player +0 bit 6. */
+    $('#char-mirror-field').hidden = bodies && !['vf2', 'doa', 'airwlkrs', 'vcop'].includes(state.rom.game.rig?.kind);
     /* And some backward (+0xEC), mirrored or not. */
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */

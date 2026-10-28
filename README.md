@@ -642,7 +642,7 @@ need a table found in that game's ROM first. Where they stand:
 |---|---|---|---|---|
 | Opponent, picked from the roster | | yes | yes | yes |
 | Opponent plays the reaction | | yes | yes | yes |
-| Mirrored fighter, and the one it throws | | yes | yes | |
+| Mirrored fighter, and the one it throws | fighter only | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
 | Moves by input | yes | yes | yes | |
 | Strings played | yes | yes | yes | |
