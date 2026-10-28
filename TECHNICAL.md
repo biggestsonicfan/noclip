@@ -6699,6 +6699,48 @@ boss fight (0x27820), which sends A0 10 0B or A0 10 0C itself. Each song was
 rendered on `board.wasm` in node and holds its level, and the page plays
 each stage's in headless Chrome.
 
+**Cells.** The tile chip's pictures are [Power Sled's
+scripts](#power-sleds-cells-jscellsjs), drawn by 0x14CD0 with g0 the
+tilemap address, g1 the script and g2 the halfword ORed in (85 calls). Its
+jump table at 0x14D48 has fifteen entries, 80 to 8E, and three differ from
+Power Sled's:
+
+- A character is `(lo + (hi << 8)) & 0x3FFF`, with no 0x100 added; 85
+  builds `(hi << 8) & 0x3F00`.
+- 8D moves by `a + (b << 8)` entries, a signed halfword.
+- 8E lo hi writes one character, so the end is a byte above 0x8E (the
+  scripts end with 0x8F).
+
+The characters and colours come a CG at a time. 0x149F0 loads one: a
+directory of (offset from the directory, first character) entries, ending
+with a zero offset. Each entry leads to a chain of blocks, each a size (the
+offset of its colours), a tile count, 16 colours and the tiles, until a zero
+size. The tiles go to character RAM straight from the first character. Every
+128-character group they take gets the block's 16 colours (with 0x5328D4
+set, a pointer to them in 0x5648F0 and a bit in 0x564CF0, copied later), and the next
+block starts on the next group. The boot (0x14740) loads the directory at
+data 0xA00000 and never loads another over it; two slots (0x5648E0 and
+0x5648E8, through 0x14B90 and 0x14C40) take the rest.
+
+Nothing names a cell by number. The calls load their script by `lda`. Beside
+the sound test's songs, at 0x36560 (Export; 0x36680 Japan), sit fourteen
+records of a CG directory (0 for the boot's), a list of offsets from the list
+itself, and its count: 508 scripts, from data 0xB8A770, among them every
+one of the 55 that a call loads. These records are the explorer's CGs and
+cells, in their order. No code was found to read the table by its
+address, so the grouping was checked on the data:
+
+- every character each script writes is loaded by its own record's CG or
+  the boot's;
+- each call that loads a CG and then draws (0x2656C: CG 0xA002E0, script
+  0xB8E1C0) draws one of that CG's cells.
+
+MAME's tile chip, dumped in the attract (frames 700, 1500 and 2400) and
+on the character select after a coin, holds CGs 0, 2, 10 and 3. Every cell
+of those four (229) renders the same as the tile chip draws it, pixel for
+pixel. `settleLastbronx` offers the tab only where the table's first list
+is where the shift puts it.
+
 **Not done.** The four models drawn from polygon RAM (1691, 1692, 1772,
 1773), which the program fills itself, are empty; Nagi's first part is 1691
 in costume 0 and 1772 in costume 1, so she stands without it. The fighters

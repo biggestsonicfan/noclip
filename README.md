@@ -22,7 +22,7 @@ of its stages, its cells and its characters posed by their motions on all three 
 Data East's *Air Walkers* has its seventeen courts, its models, its cells and
 its players posed by their motions — see [Air Walkers](#air-walkers). Sega's *Power Sled* has its course, its models,
 its cells and the attract's animations — see [Power Sled](#power-sled).
-*Last Bronx* has its models, its stages and its fighters posed by their
+*Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 
@@ -653,7 +653,7 @@ need a table found in that game's ROM first. Where they stand:
 Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has the music but no Cells tab yet; Pilot Kids has neither.
+Bronx has both; Pilot Kids has neither.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
@@ -1079,6 +1079,14 @@ The Japan build poses them the same way.
 board, the one the round start sends for it, at the factory's master volume.
 The song picker has all sixteen songs by the names the game's sound test
 gives them (`tomp`, `kan`, `boss`, `rankin` and on).
+
+The **Cells** tab has the game's 2D pictures, in both builds: the fonts,
+the fighters' name plates, the character select's pictures, a starry sky and
+the rest. That makes 508 cells on 14 CGs, every one the game's own table of them lists (the
+table its test menu shows). Each is drawn with its own CG over the boot's,
+which stays loaded. The cells are Power Sled's tilemap scripts, run as Last
+Bronx's own draw runs them. The cells of the four CGs MAME's attract and
+character select load (229 of them) match its tile chip pixel for pixel.
 
 Four models are drawn from polygon RAM the program fills itself and are empty
 here. See
