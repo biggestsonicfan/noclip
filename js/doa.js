@@ -872,24 +872,37 @@ function stageOf(rom, n, entry, run) {
  * its chains. Nothing else runs, so no script and no AI picks another. With
  * no script run, the body routine's head check (`headCheck`) would leave the
  * head out, so it is answered yes.
- * Returns the draws of each of the `frames` frames, in the stage's frame.
+ * Player 2 is the attract's, or `rival` ({char, base}) in its place: the
+ * same run sets it up and draws it, and opens it on action char << 9, its
+ * own group's script 0 (`ld 0xD8000[action >> 9]`), which starts that
+ * fighter's first motion (Zack 0x165, Tina 0x3A5); unopened it plays none
+ * and stands unposed, its legs through the floor.
+ * Returns the draws of each of the `frames` frames, in the stage's frame,
+ * and player 2's as `rival`, frame for frame.
  */
-export function runDoaMotion(rom, { char, base }, motion, frames) {
+export function runDoaMotion(rom, { char, base }, motion, frames, rival = null) {
     const F = rom.game.doa.fighters;
     const A = rom.game.doa.attract;
     const M = doaMachine(rom);
     M.cpu.hooks.set(F.headCheck, (c) => c.setReg(16, 1));
-    const fighters = [{ char, base, pos: A.fighters[0].pos, angles: [0, 0, 0] }, A.fighters[1]];
+    const second = rival ? { ...A.fighters[1], char: rival.char, base: rival.base, expression: 0 } : A.fighters[1];
+    const fighters = [{ char, base, pos: A.fighters[0].pos, angles: [0, 0, 0] }, second];
     startFight(rom, M, fighters, A);
     endFrame(M, F, A.first);
+    if (rival) openPlayer(M, 1, { state: [0x28, 0, 0x29, rival.char << 1, 0x36, 1] });
     taskFrame(M, F, F.camera, 2);
+    const theirs = [];
     const run = (n) => {
         const byPlayer = [[], []];
         fightFrame(M, F, byPlayer);
         endFrame(M, F, A.first + 1 + n);
+        theirs.push(byPlayer[1]);
         return byPlayer[0];
     };
     run(0);
+    theirs.length = 0;
     M.cpu.call(F.motion, [0, motion], { maxSteps: 5_000_000 });
-    return Array.from({ length: frames }, (_, n) => run(n + 1));
+    const out = Array.from({ length: frames }, (_, n) => run(n + 1));
+    out.rival = theirs;
+    return out;
 }

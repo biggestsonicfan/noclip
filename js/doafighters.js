@@ -118,19 +118,28 @@ function toThree(m) {
 const det3 = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[3] * (m[1] * m[8] - m[2] * m[7])
     + m[6] * (m[1] * m[5] - m[2] * m[4]);
 
+/* A run's frames as parts: the shadow pieces apart, and the joints the
+ * parts hang from. */
+function keptFrames(rom, frames) {
+    const kept = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) > 0.5));
+    kept.joints = jointsOf(rom, kept);
+    kept.shadows = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) <= 0.5));
+    return kept;
+}
+
 const runs = new WeakMap();
-function framesOf(rom, body, motion) {
+function framesOf(rom, body, motion, rival = null) {
     if (!runs.has(rom)) runs.set(rom, new Map());
     const cache = runs.get(rom);
-    const key = `${body.index}:${motion.index}`;
+    const key = `${body.index}:${motion.index}:${rival?.index ?? ''}`;
     if (!cache.has(key)) {
         /* One run at a time is kept; a motion is a few hundred frames of
          * fifty draws. */
         cache.clear();
-        const frames = runDoaMotion(rom, { char: body.index, base: body.base }, motion.index, motion.frames);
-        const kept = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) > 0.5));
-        kept.joints = jointsOf(rom, kept);
-        kept.shadows = frames.map((draws) => draws.filter((d) => Math.abs(det3(d.m)) <= 0.5));
+        const frames = runDoaMotion(rom, { char: body.index, base: body.base }, motion.index, motion.frames,
+            rival && { char: rival.index, base: rival.base });
+        const kept = keptFrames(rom, frames);
+        if (rival) kept.rival = keptFrames(rom, frames.rival);
         cache.set(key, kept);
     }
     return cache.get(key);
@@ -217,14 +226,23 @@ const drawKey = (d) => (d.mesh === undefined ? d.model : `${d.model}/${d.mesh.to
 
 /** The draws of a frame of the motion, a place in the draw order a part;
  * `shadows` the frame's shadow pieces, each a model and its board matrix
- * (`r`, `t`). */
-export function poseDoaFighter(rom, body, motion, frame) {
+ * (`r`, `t`). With `rival` (a body of the roster) the run has it as player
+ * 2, and its draws of the same frame come back as `rival`, in the same
+ * frame: the board's own place for it. */
+export function poseDoaFighter(rom, body, motion, frame, { rival = null } = {}) {
     const at = Math.max(0, Math.min(frame, motion?.frames ?? 0) - 1);
-    const draws = motion ? framesOf(rom, body, motion)[at] : [];
-    const shadows = motion ? framesOf(rom, body, motion).shadows[at] ?? [] : [];
+    const run = motion ? framesOf(rom, body, motion, rival) : null;
+    const posed = posedFrame(body, run, at);
+    if (rival) posed.rival = posedFrame(rival, run?.rival, at);
+    return posed;
+}
+
+function posedFrame(body, run, at) {
+    const draws = run?.[at] ?? [];
+    const shadows = run?.shadows[at] ?? [];
     const matrices = body.parts.map((p) => toThree(draws[p.index]?.m ?? IDENTITY));
     const origins = matrices.map((e) => [e[12], e[13], e[14]]);
-    const joints = motion ? framesOf(rom, body, motion).joints : { parents: [], joined: [] };
+    const joints = run?.joints ?? { parents: [], joined: [] };
     return {
         matrices,
         origins,

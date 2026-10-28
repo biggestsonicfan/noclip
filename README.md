@@ -637,7 +637,7 @@ need a table found in that game's ROM first. Where they stand:
 
 | | Sonic the Fighters | Fighting Vipers | Virtua Fighter 2 | Dead or Alive |
 |---|---|---|---|---|
-| Opponent, picked from the roster | | yes | yes | |
+| Opponent, picked from the roster | | yes | yes | yes |
 | Opponent plays the reaction | | yes | yes | |
 | Mirrored fighter, and the one it throws | | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
@@ -657,8 +657,9 @@ have the Cells tab too, and all of them but Air Walkers the music. Last
 Bronx has both; Pilot Kids has the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
-characters are posed through a rig of their own) and Dead or Alive (whose
-fight code already runs both players), stage sounds for Sonic the Fighters
+characters are posed through a rig of their own, not Virtua Fighter 2's
+record and face target, and no fight code is run for them), Dead or Alive's
+opponent playing a reaction, stage sounds for Sonic the Fighters
 and Dead or Alive, and playing Fighting Vipers' and Virtua Fighter 2's
 strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
 draw goes through `0x7C60` with the colour left as it is.
@@ -698,6 +699,11 @@ for it under every frame of the motion: a flat piece for each of the fifteen
 bones, laid on the floor along the stage's light. Against MAME's attract fight
 all 1740 pieces drawn over 58 of its frames are the same models, in place to
 0.0003, while Zack and Tina move.
+
+The **opponent** switch adds player 2, from the same run of the game's own
+fight code: any fighter of the roster, standing where the round puts it,
+facing the fighter, on the motion its own first action starts, with its own
+textures, colours and shadow. It plays nothing else and no reaction.
 
 Stages 0, 2, 3, 4, 8, 10 and 11 have pieces of their own that move (stage 4 is
 a conveyor). The game's own stage code runs them from its setup to the same

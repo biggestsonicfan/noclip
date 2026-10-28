@@ -4385,6 +4385,35 @@ as the fighters move. The fight's very first frame (0x6B0) is the one that
 differs: MAME's pieces lie at the floor's 1.0 and the explorer's at y 0;
 the tab never shows that frame.
 
+**The opponent.** The tab's motion run (`runDoaMotion`) sets up both players
+the way the fight start does and runs each frame for both, so player 2 is
+already drawn, in the stage's frame like player 1: at the round's place
+(6.5, 1, 0.5 against player 1's 5.5) and facing. The opponent is that player
+2, with the character the panel picks loaded on it (its bank from the
+roster, as player 1's). Its draws come back as `rival` and go through the
+same parts, joints and shadows as player 1's. Set up but not opened, player 2
+plays no motion and stands unposed, hips on the floor and legs through it.
+The run opens it the way the attract opens its players: action at `+0x28`
+and `+0x36` 1. The action is char << 9, script 0 of the fighter's own group
+(`ld 0xD8000[action >> 9]`). That starts the fighter's first motion: Zack
+0x165, Tina 0x3A5, Jann Lee 0x21E, Ryu 0x476, Kasumi 0x624, Genfu 0xBB,
+Bayman 0x552, Leifang 0x2D6. Every fighter then stands with its feet at the
+floor (y 1.07 to 1.10). The attract opens its own Tina on 0x800 instead
+(Ryu's group, motion 0x476); that is the attract's script, and the tab
+does not copy it. Nothing else runs, so player 2 holds that stance and plays
+no reaction. Player 1's draws are the same, frame for frame, with and
+without an opponent, whoever it is (checked on `doa`, `doab` and `doaa`).
+The sheets go in player 2's strips and its colours in player 2's rows
+(`useDoaFighterScene`), as the attract's Tina's do. This was checked in the
+explorer (node and headless Chrome), not graded against MAME, whose attract
+fights only Zack and Tina.
+
+Sonic the Fighters has no such run. Its fighters are posed by the explorer
+from `CHAR_PARTS` records and `calc_rob_angle_int`'s skeleton types (see
+Character rigs). That is not the shape of Virtua Fighter 2's character record
+and face target that the Fighting Vipers and Virtua Fighter 2 opponent poses
+(`poseBout`), so it has no opponent.
+
 ### Sega Rally Championship (`js/games.js`, `readRallyStages` in `js/stages.js`)
 
 The method is Daytona's and Virtua Cop's: run the game on a board that can be

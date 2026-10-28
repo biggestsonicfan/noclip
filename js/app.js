@@ -3578,7 +3578,9 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
 function useDoaFighterScene(body) {
     const u = state.viewer.material.uniforms;
     const A = state.rom.game.doa.attract;
-    const rival = A.fighters[1];
+    /* Player 2 is the opponent when one is shown, else the attract's. */
+    const picked = state.opponent ? shownBody(state.opponentChar ?? state.charIndex) : null;
+    const rival = picked ? { char: picked.index } : A.fighters[1];
     u.uFogDensity.value = 0;
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
     u.uTint.value.set(1, 1, 1);
@@ -3668,7 +3670,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* The opponent is a body of its own, as the pose keeps each one's
      * playback (its blends and its head) under it. */
     dropRivalMaterial(m.rival);
-    m.rival = state.opponent && state.rom.game.rig?.kind === 'vf2' ? rivalOf(body) : null;
+    m.rival = state.opponent && ['vf2', 'doa'].includes(state.rom.game.rig?.kind) ? rivalOf(body) : null;
     /* A Fighting Vipers fighter's midriff is built the same way. */
     m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
@@ -3706,7 +3708,9 @@ function rivalOf(main) {
         body: body === main ? { ...main } : body,
         parts: body.parts.map((p) => ({ part: p.index, slots: [] })),
         extras: extraParts(body),
-        material: rivalMaterial(main, body),
+        /* Dead or Alive's sheets hold both players' strips already
+         * (useDoaFighterScene). */
+        material: state.rom.game.rig?.kind === 'doa' ? null : rivalMaterial(main, body),
         /* Its own midriff, which it builds on its own pose. */
         skin: body.midriff ?? null,
         skinMesh: null,
@@ -3897,6 +3901,7 @@ function poseFighterAndRival(body, m) {
     const clock = m.clocks ? m.clock : null;
     const air = m.clocks?.air?.[scrubValue(m) - 1];
     if (!m.rival) return bodyRig().pose(state.rom, body, m.decoded, m.frame, { travel: state.travel, mirrored, handsPass, head, backward, clock, aim, air });
+    if (state.rom.game.rig?.kind === 'doa') return poseDoaRival(body, m);
     const own = rivalPlays(m);
     const at = opponentMatrix({ behind: state.opponentBehind, thrown: own.thrown });
     /* The one thrown takes the thrower's +0 bit 10 as its bit 6 (VF2 0x1461C
@@ -3925,6 +3930,18 @@ function poseFighterAndRival(body, m) {
     const base = stageFighterLight(state.rom, state.sparkStage, m.rival.body.index);
     strobeFighter(m.rival, strobeAt(state.rom, own.decoded, own.frame, undefined, base).scale);
     return mine;
+}
+
+/* Dead or Alive's opponent is player 2 of the fighter's own run, in its
+ * stance where the round puts it (js/doa.js runDoaMotion): its draws come
+ * in the stage's frame, as the fighter's do. */
+function poseDoaRival(body, m) {
+    const pose = bodyRig().pose(state.rom, body, m.decoded, m.frame, { rival: m.rival.body });
+    const theirs = pose.rival;
+    placeBodyParts(m.rival.parts, bouncedDraws(m.rival.body, theirs, m), theirs.matrices, theirs, m.rival.material);
+    placeDoaShadows(m.rival, theirs);
+    m.rivalPose = null;
+    return pose;
 }
 
 /* What the opponent plays on the fighter's frame: the fighter's motion, or
@@ -6073,7 +6090,7 @@ function wireOptions() {
     }
     $('#char-rival').addEventListener('change', (e) => {
         state.opponent = e.target.checked;
-        $('#char-behind-field').hidden = !state.opponent;
+        $('#char-behind-field').hidden = !state.opponent || state.rom.game.rig?.kind !== 'vf2';
         $('#char-rival-opts').hidden = !state.opponent;
         /* Frame the pair, or the one left: the opponent stands 2 away. */
         rebuildBody({ keepCamera: false });
@@ -6471,8 +6488,9 @@ function applyGameFeatures() {
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
     $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
-    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers). */
-    const rival = state.rom.game.rig?.kind === 'vf2';
+    /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers), and
+     * Dead or Alive's, whose fight run poses player 2 itself. */
+    const rival = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
     $('#char-rival-field').hidden = !rival;
     /* Air Walkers' players play some motions mirrored too (+0xF4), and
      * Virtua Cop's enemies (+0x8A0). */
@@ -6489,7 +6507,7 @@ function applyGameFeatures() {
     $('#held-field').hidden = state.rom.game.rig?.kind !== 'dynamcop';
     /* And run the motion's clock at its speed times the player's pace. */
     $('#pace-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
-    $('#char-behind-field').hidden = !rival || !state.opponent;
+    $('#char-behind-field').hidden = !rival || !state.opponent || state.rom.game.rig?.kind !== 'vf2';
     $('#char-rival-opts').hidden = !rival || !state.opponent;
     renderRivalPlays();
     $('#char-rival-p2-field').hidden = !rival || !state.opponent;
