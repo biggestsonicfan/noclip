@@ -1,6 +1,16 @@
-# Bubblegum fixes: an audit (Pinboard #248, refreshed #712)
+# Bubblegum fixes: an audit (Pinboard #248, refreshed #712 and #1836)
 
-This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. The first audit was of master at `7f17395` (2026-09-30); §1-§6 keep its findings and what each fix did, with line numbers as of that commit. The refresh (Pinboard #712) is of master at `213fb82` (2026-10-12), after Virtua Cop, Virtua Fighter 2, the Cells tab and the Virtua Cop z-fight issues landed; its new findings are §7 and §8, with line numbers as of that commit. Nothing in `js/` was changed by either audit. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+This file lists the places where the explorer patches a symptom (a list of model numbers, a fitted threshold, a per-game switch) and the board has a simpler rule underneath. The first audit was of master at `7f17395` (2026-09-30); §1-§6 keep its findings and what each fix did, with line numbers as of that commit. The refresh (Pinboard #712) is of master at `213fb82` (2026-10-12), after Virtua Cop, Virtua Fighter 2, the Cells tab and the Virtua Cop z-fight issues landed; its new findings are §7 and §8, with line numbers as of that commit. The second refresh (Pinboard #1836) is of master at `b327a28` (2026-10-28), after Dead or Alive, Fighting Vipers' stages, Virtual-On, Sega Rally, Dynamite Cop, Air Walkers, Power Sled, Last Bronx, Pilot Kids and the .glb export landed; its findings are §9, and §10 is a lizard complexity check of the same commit, both with line numbers as of `b327a28`. Nothing in `js/` was changed by any of the audits. m2-hle2 has the same audit for its renderer (its `BUBBLEGUM.md`, Pinboard #245/#247); the two share the z-sort, and §1 says where the explorer's case differs.
+
+## Where things stand (2026-10-28)
+
+Since #712, 445 commits have added about 26,000 lines and 21 game sets (15 then, 36 now). The new games went in mostly as their own files, and those cite a routine on nearly every rule. The CPU cores (`sharc.js`, `i960.js`) treat an op they don't know as fatal, so nothing is skipped quietly. No catch block hides a wrong table: every one is a load, export, clipboard or sound-start error path, and each logs it or shows it. §9 lists what isn't read from a routine. In brief:
+
+- **§7's seven layer rules are still all there, unchanged**, and they now run in five games #758 never measured: Fighting Vipers, every Dead or Alive build, Sega Rally, Power Sled and Last Bronx have turned `layers` on. Two new patches lean on the rules' thresholds rather than on the board's order: `JOINED_SCALE` and Sega Rally's sky `layered: false` (§9a).
+- **One heuristic now builds three games' skeletons.** `jointsOf` infers a fighter's bone tree from how still its parts hold through a motion, and Dead or Alive, Last Bronx and Virtua Cop's bodies all use it. Dynamite Cop's tree was fitted to MAME's matrices instead, and graded. This is the largest new item (§9b).
+- **Fighting Vipers' debris uses the default ring-out values for every stage**, although the per-stage table is already in the profile and the fighter shadows read it (§9c). This one is the cheapest to fix.
+- **Dead or Alive's conveyor fix changes what the board does.** It is on and has no switch, unlike `DAYTONA_PATCHES` (§9d).
+- **The shared code has gained a branch per game** in `loadGameContent`, `applyGameFeatures`, `rebuildRig` and `programTextureSets`, and lists of `rig.kind` that disagree with each other. That is where §10's lizard warnings grew, from 35 to 68.
 
 ## Where things stand (2026-10-12)
 
@@ -363,6 +373,106 @@ No rule was changed.
 
 **The Cells tab** (`cells.js`) picks a cell's CG by the game's own lists where it names one. Where it doesn't, it falls back to tile coverage and then `seamScore`, a picture heuristic (`cells.js:309-364`). That is labelled in the code and only orders a picker.
 
+## 9. Since #712: the new games (#1836)
+
+The diff `213fb82..b327a28` was read file by file, with `git log -S` for where each item came in. Line numbers are as of `b327a28`. Ranked most suspect first within each part.
+
+### 9a. Leaning on the layer rules
+
+| What | Where | Note |
+|---|---|---|
+| `JOINED_SCALE = 100` / `rankJoinedParts` | `app.js:3880-3897` | Joined parts (a face on a head) are ranked at 100 times their size, because layers.js's pairing thresholds were measured on stages: faces under 1e-4 square units are dropped, and pairs must overlap by 1e-3. A fighter's eye triangle is about 1e-4 m², so at its own size nothing paired (`bf3121f`). It applies to every rig that sets `joined`: DOA, Last Bronx, Virtua Cop and Air Walkers. The comment gives the board's rule itself: the face goes over the skin *by the order the two are sent in*. Within a joined group, draw order alone is that rule, with no geometric pairing to scale for |
+| Sega Rally's sky `layered: false` | `stages.js:662` | The course sky dome is kept out of the layers because the cell grid would be "too fine for its size" (`13b42f5`). Its root is the same as §7's: a cell size fixed for stages, not sized to the draw |
+
+### 9b. Inferred, not read
+
+| What | Where | Note |
+|---|---|---|
+| `jointsOf` (+ `hold`, `gapTo`) | `doafighters.js:250-280`; used by `lastbrnxfighters.js:412` and `vcopbodies.js:365-376` | Infers the bone tree from the motion. A part's parent is the earlier part in whose frame its place holds still (`spread < 1e-3`). Ties go to the nearest model, plus `1e-3 * hypot(mean)`. A part is `joined` if its matrix matches its parent's to 1e-4 in every frame. Virtua Cop works the tree out from a body's 6 longest motions (`SKELETON_MOTIONS`). The comment says "the body routine keeps it to itself", but Dynamite Cop's tree was read from push/pop order and graded on MAME matrices (`DYNAMCOP_PARENTS`, sub_15210). The routines are named: DOA 0x47810, Virtua Cop 0x1F258 (its body row's first word is "the skeleton, a place per joint"). Reading the tree from them would take the tolerances out for three games at once |
+| `rootsSane` / `saneFloat` | `bodies.js:160-175`, used at 237 | Works out a motion's joint count from byte sizes. The last motion's count comes from sniffing root floats (`abs < 1e4`, and 0 or `abs > 1e-6`) (`3bdcaad`, `3fbac31`). The body or character record the motion plays on probably holds the count |
+| `ownGroup` | `doafighters.js:142-153` | Picks a fighter's script group by majority vote over its command table's actions (fitted on Tina 4, Ryu 2, Raidou 11; `5f44433`). A per-character byte, in the load table or `rig.loads`, likely names it |
+| `det3 > 0.5` shadow split | `doafighters.js:181-183` | A draw counts as shadow when its matrix's determinant is 0.5 or less (the shadow is squashed by 0.01; `89bf7ab`). The comment already says the shadow is "the first fifteen draws" from 0x45B24, so split by count or caller |
+| Virtual-On's model-table scan | `romset.js:271-335` | Finds pointer triples by scanning the ROM (`(c & 0xff800000) === 0x800000`, first match wins): 5860 of 7097 meshes. The rest are chained from their neighbours ("holds for 92%"). Graded: the 2166 meshes MAME draws agree. The draw routines that send the triples would replace the 8% chain |
+| `findListed` / `orderedSong` | `sound/sound.js` | Scans the ROM for a run of counting commands "wherever the build keeps them", for Dynamite Cop's five builds and Last Bronx (`8bc4d2c`, `d8db065`). Each build's sound-test routine points at the table |
+| unused-cell test | `cells.js:375-396` | "No aligned word of program or data ROM holds it" (Daytona, Sega Rally). It only orders a picker, as `seamScore` (§8) does |
+| `modelsByWords` | `lastbrnxfighters.js:276-290` | A fallback that names a draw's model by matching its four words against the model table. Low risk |
+
+### 9c. A default where a table is known
+
+| What | Where | Note |
+|---|---|---|
+| `OUT_DROP = -0.5`, `HALF = 5`, `RING_OUT = 5.0` | `fvdebris.js:43-46`, `fvobjects.js:352` | Fighting Vipers' debris and objects take the ring-out drop and half-width from 0x50A010's and 0x50A00C's defaults for every stage. The comment says "0x6CE3564 sets it per stage", the profile already holds that table (`shadow.grounds: 0x06ce3564`, `games.js:932`), and `fightershadow.js:119` reads it per stage. `fvwallshadow.js:91` also reads a per-stage ring. The cheapest item here: read the table |
+| `keepBank0: [13]` | `games.js:4690`, `texture.js:1251` | Virtual-On's field 13 loads no texture bank. MAME holds bank 1 after field 3, but the explorer gives it bank 0 (`bd9a57c`). The board's rule is probably "keep whatever the last field loaded" |
+| `rivalSheets` uses `modelTextureGuess` | `app.js:3794-3806` | Player 2's texture sets are guessed from its first model. The comment hard-codes "Honey and Picky ... 81 and 87, not 5 and 11" (`46dba60`). The record already has the set (`texSet: 0x20`, `games.js:807`) |
+| `rally.segments: 60` | `games.js:4963`; `stages.js:654`, `texture.js:1621` | A fixed count, the only thing that stops the desert and lakeside lists running on into their low-detail copies (`13b42f5`). 0x3B200 walks the path record, and the count or end probably comes from there |
+| `maxVertexPairs: 8192` | `games.js:5352`, `model.js:157` | Raises the explorer's mesh cap for Air Walkers' model 555 (5440 polygons). The board has no cap; it stops at the end marker |
+| `texture.mips: false` | `games.js:3971`, `app.js:6698` | Dead or Alive pins every face to LOD 0, from MAME's texture RAM (rows 768-1023 empty while the far walls still draw). The per-face max-LOD may be in the face header or the LOD register |
+| Pilot Kids row 31 = row 30; `scenes` | `colors.js:350`; `games.js:6014` | "By code not found", and the scene list is "as far as m2-hle2 has shown it" (`0b5b68a`) |
+| `SETTLE = 64` | `lastbrnxfighters.js:378` | The first pose is drawn for 64 frames before recording, so the chains are at rest ("Lisa's hair takes about 56"; `d1c74d2`). A reset of 0x9B3B0's state at round start probably starts them there |
+| `DROP = -0.08` | `fvwallshadow.js:47` | The only wall-shadow constant with no address. It is probably an immediate in 0x76A98 |
+| `CROUCH = {6: 0.97, 8: 0.92, 10: 0.97}` | `vf2fighters.js:1036` | Typed in by hand, citing 0x29414, with no table read. It is older than #712, and §8 missed it |
+
+### 9d. Changes what the board does
+
+| What | Where | Note |
+|---|---|---|
+| `doaConveyorFix` | `games.js:3894-3903`; `doa.js:238-254` | Patches DOA's stage 4 belt routine (0x6A0B0, five words, shifted per revision) so a row no longer hangs 80 below the rest for a quarter of the cycle: the game's own copy-paste slip (`1c12790`). It is on in every build and has no switch, so the explorer no longer shows the board's picture. `DAYTONA_PATCHES` (§6) is an opt-in switch, off by default; this one should be too, or the README should say it is on |
+| `LAB_GROUND = 78`, `underlay` | `display.js:312-328, 2438`; `viewer.js:1657-1670` | Tails' lab draws the ground and the room together, although "the board never draws the ground with the room: they are the two cuts". So model 78 is kept out of the nearest surface to let the room draw over it (issue 116, `54086df`). The board's rule is the cut. Draw the window set of the cut the camera is in, as §1's windows do, not both sets with one model excepted |
+
+### 9e. Stand-ins for fight state (labelled)
+
+These are said in the code, as VF2's are (§8):
+
+- Fighting Vipers: `FV_ROUND = 3600` (`display.js:1972`) "stands in for" the round clock that restarts the trucks, planes, the turn and the sound cues. The bear's hop fires when the camera comes within `KUMA_NEAR = 4` (`fvobjects.js:477-506`), standing in for the fighter. It would read better as a "stand-in" switch than as a distance. The neon `flicker` hash (`fvobjects.js:142-157`) stands in for rand. The helicopter's searchlight aims at the arena's centre (`fvobjects.js:645`).
+- Dynamite Cop's light, `vecter: [0xe000, 0xc000]` and `planeNormals` (`games.js:5221-5228`), is "carried over from HOTD, not read from this program". The boot's own light upload, next to the 0x6EE74 materials call, would replace it.
+- Power Sled: `dropReplaced` (`powsled.js:327-340`) drops a course piece whose life ends before another's begins when their boxes overlap by over 90%, and `START_CRANES` (`powsled.js:400-405`) places four cranes, both from m2-hle2's race (`3a09a85`). The pieces' own progress windows would replace the overlap test.
+- The copro's cull commands always answer "in view": DOA `0x0c` (`doa.js:117`), and Last Bronx `0x0f`, `0x17` (answers 0, with no reason given) and `0x6a` (`lastbrnx.js:41-45`). This is harmless while the explorer has no game camera there.
+
+### 9f. Per-game switches in shared code
+
+There are no `game.id ===` branches. Shared code picks a path by `rig.kind`, and the lists of kinds don't agree with each other: the mirror switch is shown for `['vf2', 'doa', 'airwlkrs', 'vcop']` (`app.js:6615`), but the pose mirrors only `['vf2', 'airwlkrs', 'vcop']` (`app.js:3943`). The sparks, the carried item and the wall shadows mirror only for `'vf2'` (`app.js:4885-4892`). Whether DOA's mirror switch does anything is worth checking. A flag on the rig (`rig.mirror`) would keep one list. `noteHeld` (`app.js:4563-4566`) copies Dynamite Cop's `PICKUPS` and `BIG_HANDS` from `dynamcop.js:879/883`, where it could import them. The game picks the stage reader in `loadGameContent` through a 12-way `else if`; see §10.
+
+### 9g. Checked and clean
+
+Each of these cites a routine or a MAME or m2-hle2 measurement. **Fighting Vipers:** `fvdebris.js`' physics constants, `fvobjects.js`' trucks, UFO, plane and gear (0x6B7BC), elevator, hall, glass (sub_6EC0C) and the bear's pendulum, `fvstages.js`' headlights (sub_21884), `DIAGONAL_PLANES` (0x22B64) and `TPD_SCALE`, all of `fvtrails`, `fvhitspark`, `fvstrobe`, `fvburst` and `fvitem`, the cage panels (0x224A0), the turn (0x1EFA8) and the ambience cue frames. **DOA:** the sky's offsets (0x6FE00, 0x70090) and `skyless` (0x6F558 clears or plain-fills those stages), `boardAngle`, `pokes`, `stageSetup.moving` (graded), the colour ramp (0x5D710) and the slabs. **Others:** `fightershadow.js` and `fighterhands.js` throughout. `stfhands.js`' `KEEPS_HANDS`. Dynamite Cop's `PICKUPS`, `BIG_HANDS`, `DYNAMCOP_PARENTS` and `QUAD_*` (fitted to MAME, 0.04°). Power Sled's backdrop, piece layouts and colours. Sega Rally's shadow, car scales and animals. Air Walkers' parts, rect tables and `titleModels`. Virtual-On's `RAISED_WEAPON`, gamma and LZSS. Last Bronx's colorxlat, LZ and `modelTracker`. Virtua Cop's `PART_SCALES` and `GLASS`. Daytona's window frames, now ported (0x21E60, 156/156 frames). `osage.js`' gravity and head clearance. **Labelled gaps, not fitted:** Virtual-On's songs, the placement records' own place and turns, and VF2's skirt spring reset ("the explorer's choice").
+
+**§8, then and now:** `BOARD_FOCAL` is read (#94). VF2's stand-in switches (`vf2fx.js:309-314`) are unchanged, and so is `CLOUDLESS_STAGE`/`FROM` (`vcop.js:336-337`), still uncited. `IN_WORLD`'s 0x24 (`vcop.js:224-229`) is still "a pair no list places", with no cite.
+
+## 10. Lizard: the complexity check (Pinboard #1836)
+
+`/opt/fly/bin/lizard -w -C 15 -L 80` (lizard 1.24.3) over `js/` and `tools/`, at `b327a28`, against the same run at `213fb82`. Nothing was changed; this is the list to split from, not a split.
+
+**How it was run.** Lizard mis-parses this code in two ways, and the raw run can't be trusted as it is:
+
+- It **crashes** on `js/daytonacar.js`, `js/srally.js` and `js/von.js` (`IndexError` in `javascript_bindings.py`), and a crash ends a run over a folder, so every file after the first of them goes unmeasured. No single top-level block fails on its own: the parser's state goes wrong across blocks (in `daytonacar.js` it takes `readDaytonaCars`, `spinAt` and `steerAt` together).
+- Where it doesn't crash it can **lose a function's end** and charge what follows to it: `switchBuild` (13 lines) came out at 786, `useModelScene` (75) at 1152, a 3-line arrow in `vf2fighters.js:1573` at CCN 123 and 473 lines, `cells.js:191/197` (22-28 lines) at 289-491 lines.
+
+So each file was measured one top-level block at a time (each block cut out alone, line numbers added back), which neither crashes nor spills. That gives **68 warnings**, against **35** at `213fb82`; 48 are in functions that are new since, 14 grew, and one (`renderStagePanel`) is gone.
+
+**The worst, by branches (CCN) and length.** NLOC is lines of code; "was" is `213fb82`.
+
+| CCN | Lines | Function | Where | Since #712 | What would split it |
+|---|---|---|---|---|---|
+| 84 | 501 | `decodeModel` | `model.js:117` | grew (was 73 / 471) | the oldest: one function per polygon-header field group and per vertex form |
+| 83 | 49 | `partDraws`' per-part arrow | `bodies.js:475` | new form | a table of `[body, role/joint, motion, frame window, model]` rows (it is sub_764C0's switch, cited; the branches are the board's, the shape is not) |
+| 50 | 114 | `spawnProps` | `placements.js:320` | new | the per-type cases into a map of spawners |
+| 49 | 92 | `loadGameContent` | `app.js:6694` | grew (41 / 75) | the twelve-way `stageTable` chain into a `{ courses: readCourseStages, ... }` table; the link restore into its own function |
+| 42 | 75 | `readTable` | `moves.js:106` | grew (38 / 68) | per-opcode readers |
+| 37 | 164 | `rebuildRig` | `app.js:2969` | new | the character and the body cases are already two paths; split by game kind |
+| 36 | 58 | `programTextureSets` | `texture.js:1653` | grew (18 / 31) | one function per game's rule (FV, Daytona, Last Bronx...) behind a lookup on the game |
+| 33 | 216 | `buildStageDisplayList` | `display.js:2079` | unchanged | per-stage special draws out to their own builders |
+| 32 | 67 | `restoreLinkedView` | `app.js:6822` | unchanged | |
+| 31 | 198 | `readPlacementStages` | `placements.js:1138` | grew (29 / 180) | |
+| 30 | 84 | `applyGameFeatures` | `app.js:6595` | new | 18 `rom.game` tests in a row: a feature table |
+| 29 | 84 | `run` (the stage-script VM) | `placements.js:769` | grew (29 / 64) | an opcode table |
+| 28 | 62 | `cgListsAll` | `cells.js:416` | new | per-game list readers |
+| 27 | 49 | `runScript` | `cells.js:574` | new | an opcode table |
+| 26 | 127 | `loadStage` | `app.js:1718` | grew (21 / 120) | |
+
+The rest (CCN 15-26, or long but simple) are listed by `lizard -w -C 15 -L 80` file by file; 23 of the 68 are in `app.js`. The long-but-flat ones are data or wiring, not logic, and can stay: `games.js`' `lastbronxBuild` (202 lines, CCN 2) and `dynamcopBuild` (103, CCN 1), `export.js`' `buildGlb`, `viewer.js`' constructor, `app.js`' `wireOptions` (185, CCN 8).
+
+**What it says.** The new games went in mostly as their own files, which keeps their functions small: of the 15 new game files, only `dynamcop.js` (`bootBank`, `dynamcopItems`), `von.js` (`runVonAction`, `readVonMotions`), `fvwallshadow.js`, `lastbrnxfighters.js`, `osage.js`, `powsled.js` and `vf2fighters.js` (`flightClocks`, `poseFighter`) have a warning, each just over the line. What grew is the shared code each game had to pass through: a branch per game in `loadGameContent`, `applyGameFeatures`, `programTextureSets`, `rebuildRig` and `useModelScene`. That is the same shape as §9's per-game switches: the explorer asks "which game?" where it could ask the game's own record for its reader. A table of readers keyed by the record's kind (`stageTable`, `rig.kind`, `texture`) would take most of `app.js`' growth out, and it is the one split that touches many games at once, so it wants the headless check of every game's first stage and model before and after.
+
 ## Checked and clean
 
 These look like magic numbers but cite the routine or a MAME measurement, and should stay: `SOUTH_ISLAND_CAGE_CORNERS`, `EGGMAN_DOORS`, `MUSHROOM_RINGS`, `FRAME_TABLES`, `CANYON_SLOPE_DIV` (display.js); the `colors.js` constants from sub_74C; `AREA_REACH`, `SLOT_REELS`, `BIRD_RADIUS` (daytona.js); `TAILS_LAB_VECTER_Y`; `partDraws` (a port of sub_764C0); `RAW_MIP_RECTS`; `osage.js`'s gravity and damping; `exhaust.js`'s chest slots; `zanzou.js`'s spacing (checked against 901 MAME captures). The placement opcode sets in `placements.js:50-61` are the stage-script VM's operand lengths.
@@ -386,3 +496,13 @@ Next (#712), in this order:
 Still open from the first audit, none of them blocking: the finished HOTD's prop lifetimes (§3, the prototype's are read), the finished HOTD's own enemy routines (§5), and the lone models no routine names (§6: Fighting Vipers' extra fighter and stage parts, 64 Daytona frames).
 
 Merging master (Pinboard #440): master's issue 58 fix for Tails' lab's posters (`keepFar`'s layer -1 floor and `leaveApart`'s reordering, `dadf307`, `2f800f0`) was written for the static vote that §2 removed, so it went with it. With the live ranking the issue 58 view renders clean on the RTX 3070 and under SwiftShader. It was not clean, though: two palm trees stood on the world-map poster that master does not show (Pinboard #441). They are model 3798, drawn by `adv_movie_snc_disp` outside the lab, 150 units behind the room's back wall. The board never draws them inside: `adv_movie_snc_disp2` draws the room without them, and MAME's attract run shows the poster bare from the board's own camera. The cause was the key pass itself. `drawScene` left the key texture bound after pass 3, so from the second frame on pass 1 drew into the texture its own program samples, and WebGL dropped every one of those draws as a feedback loop. The key texture held only its clear, no face was held to `uKeyReach`, and window 4 (the palms, the hangar) was drawn over window 3 (the room) wherever it lay behind it. Separately, the clear was zeros rather than "no surface" (view z -1e9), because three.js premultiplies the clear colour by its alpha of 0; that only matters to the mirrored-draw test, and changes 13 pixels on an Aurora view of the ice. Both are fixed: the placeholder goes back after pass 3, and the clear's alpha is 1. The picture is now what a single `drawScene` on a fresh page gave all along (identical on issue 46, within run-to-run noise on the stage views), which is what a grader rendering one frame per page saw. Pixels changed against the branch, with a second render of the branch as the noise floor: issue 58 1.1k (the palms), issue 46 238k (noise 0: the outside's hangar door, roof edge and dish no longer cover the room), issue 44 91k (noise 11k, the dish and the roof edge gone). On the 16 stages' default orbit views, cameras the board never uses: Final Eggman Boss 11k (noise 2k), Aurora 9k (noise 0.2k), Stage 8 3k (0.7k), under 2k each elsewhere. The RTX 3070 and SwiftShader agree.
+
+Next (#1836), in this order:
+
+11. **Read Fighting Vipers' ring-out table** (§9c): `OUT_DROP`, `HALF` and `RING_OUT` from 0x6CE3564 per stage, as `fightershadow.js` already does. Small, and it can be graded on the stages whose value isn't the default.
+12. **Put `doaConveyorFix` behind a switch** (§9d), off by default like `DAYTONA_PATCHES`, or say in the README that it is on.
+13. **Rank joined parts by draw order** (§9a) instead of `JOINED_SCALE`. Grade it on DOA's faces in Chrome and Firefox (memory: layers scale + Firefox), then on Last Bronx, Virtua Cop and Air Walkers.
+14. **Read the bone trees** (§9b) from DOA's 0x47810 and Virtua Cop's 0x1F258, as Dynamite Cop's was, and retire `jointsOf` and its tolerances. Grade against MAME matrix taps.
+15. **Re-measure §7's rules on the five new layered games** (Fighting Vipers, DOA, Sega Rally, Power Sled, Last Bronx), with #758's per-rule on/off harness from each game's own camera.
+16. **One rig flag per capability** (§9f) in place of the `rig.kind` lists, and the stage-reader table in `loadGameContent` (§10). These are refactors with no change to the picture, so check every game's first stage and model before and after.
+17. Then the rest of §9b-§9c, each against its routine: `keepBank0`, `rivalSheets`, `rally.segments`, `ownGroup`, the shadow split, `rootsSane`.
