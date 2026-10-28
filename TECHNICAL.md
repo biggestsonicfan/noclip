@@ -4530,6 +4530,22 @@ Zack's moves are in group 0, Tina's in 4, Jann Lee's in 1, Ryu's in 2,
 Kasumi's in 5, Genfu's in 6, Bayman's in 8. So the char << 9 stance above is
 the fighter's own only for Zack.
 
+**The motion list.** The Animation tab lists a fighter's own motions first,
+then the shared group's (13), then every other motion: a group's are the
+ones its scripts open by starting (op 0). The fighter's own group is the one
+most of its command table's actions are in, the shared group left out
+(`ownGroup` in `js/doafighters.js`), not its character number, and not its
+stance either: Raidou (11) stands in Ryu's stance, 0x400 in group 2, but 110
+of his commands are in group 11. Taking the character number led Tina's list
+with Jann Lee's motions, Jann Lee's with Ryu's and Ryu's with Tina's. Of the
+motions each fighter's commands start, the list now leads with 128 of
+Tina's 175 (14 before), 105 of Jann Lee's 162 (19) and 101 of Ryu's 148 (2);
+the other six fighters' groups were already their numbers and are unchanged.
+The rest of a fighter's commands start motions in other groups: most
+tables have 26 entries in one other fighter's group (Zack's in Tina's).
+The same on all five builds (node), and the lists show in headless Chrome
+on `doab`; not checked against MAME.
+
 Sonic the Fighters has no such run. Its fighters are posed by the explorer
 from `CHAR_PARTS` records and `calc_rob_angle_int`'s skeleton types (see
 Character rigs). That is not the shape of Virtua Fighter 2's character record

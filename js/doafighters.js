@@ -132,9 +132,26 @@ export function moveCommand(rom, char, motion, rival) {
     return null;
 }
 
+/* The fighter's own script group: the one most of its command table's
+ * actions are in, the shared group left out. The groups do not follow the
+ * character numbers (Tina's is 4, Ryu's 2), and the stance does not name it
+ * either: Raidou stands in Ryu's (group 2) but most of his moves are in 11. */
+function ownGroup(rom, char) {
+    const table = rom.game.doa.fighters.commands;
+    if (!table) return char;
+    const b = busOf(rom);
+    const entries = b.read32(table + 4 * char);
+    const count = new Map();
+    for (let c = 0; c < 0x100; c++) {
+        const group = b.read16(entries + 8 * c) >> 9;
+        if (group !== rom.game.rig.common) count.set(group, (count.get(group) ?? 0) + 1);
+    }
+    return [...count].reduce((best, g) => (g[1] > best[1] ? g : best), [char, 0])[0];
+}
+
 /** The fighter's own moves first, then everyone's, then the rest. */
 export function doaMotionList(rom, body, motions) {
-    const own = groupMotions(rom, body.index);
+    const own = groupMotions(rom, ownGroup(rom, body.index));
     const shared = groupMotions(rom, rom.game.rig.common);
     const pick = (ids) => motions.filter((x) => x && ids.has(x.index));
     const lead = [...pick(own), ...pick(shared).filter((x) => !own.has(x.index))];

@@ -646,7 +646,7 @@ need a table found in that game's ROM first. Where they stand:
 | Hand shapes from the move script | yes | yes | yes | with the reaction |
 | Moves by input | yes | yes | yes | |
 | Strings played | yes | yes | yes | |
-| Fighter's own motions grouped | yes | yes | yes | |
+| Fighter's own motions grouped | yes | yes | yes | yes |
 | Sway chains | yes | yes | yes | |
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
