@@ -3355,6 +3355,19 @@ draw every part from block 0 on frames 1-4 and as normal from 5; Honey's 706
 and Picky's 949 draw from block 2 on frames 1 and 3 only; Grace's 21 never
 flashes.
 
+**Sonic the Fighters and Dead or Alive draw none** (read from the ROM; not
+checked against MAME). STF has the parts: `set_mot_dat` (`0x1B3C0`) copies
+the head's word +0 to `+0x804` then `+0x1A4` and word +4 to `+0x860` then
+`+0x70C` (FV `+0x720`), and the boot fill `0x11F7C` writes five blocks from
+`0x800000` from headers at `0x12068` (block 0 `4000 0000 1A00 0400`). But its
+one flash test, the same rule on `+0x1A4` bit 26 and `+0x70C` bit 2, is in
+`0x52C8`, which only the sway-chain segment draw calls (`osage_copro`'s
+record 5, `0x68830`). `rob_disp`'s parts go through `0x4E88`, and none of
+the 22 material draws (`0x5120`, FV's `0x5BE4`) is in it. The bits are set
+in motions 329 and 417 (bit 26) and 380 (bit 2), and none of the three is in
+any fighter's action slots or moves. Dead or Alive has no bit-23 material
+and no such test. So the explorer flashes neither game.
+
 #### Jane's player 2 broken chest takes another material (read from the ROM; not checked against MAME)
 
 Fighting Vipers only. In `rob_disp`'s part loop the model a slot draws is

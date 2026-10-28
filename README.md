@@ -663,7 +663,10 @@ The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
 record and face target, and no fight code is run for them), Dead or Alive's
 opponent playing a reaction. Virtua Fighter 2 has no hit flash to show: every fighter
-draw goes through `0x7C60` with the colour left as it is.
+draw goes through `0x7C60` with the colour left as it is. Sonic the Fighters
+has Fighting Vipers' flash test only in its sway-chain draw, not on the body,
+and no fighter's moves or action slots play the three motions that set it;
+Dead or Alive has no such test. So neither shows one.
 
 Sonic the Fighters and Dead or Alive have no stage sounds to play. Sonic the
 Fighters runs Fighting Vipers' stage-sound routine, but its per-stage records
