@@ -1535,6 +1535,14 @@ in z (within 0.0008), and every matrix is the partner's reflected
 (diag(1, 1, -1), within 0.002). Only the fighter is mirrored: Sonic the
 Fighters has no opponent here, so nothing is thrown.
 
+Dead or Alive's mirror is another shape. Revision B's motion step (`0x44840`)
+reads the player's facing halfword (`0x550124`), not `+0` bit 6. At −1 it
+negates the hips' x step (`0x448B8`, `0x44AA0`, `0x44FF4`) and, copying
+the frame's joint angles to `0x56AA40` (`0x44D34`–`0x44E28`), negates the
+second and third angle of each joint and keeps the joints where they are; at
+1 it copies them as they are (`0x44E60`). No objects are swapped, so
+`mirrorSample` does not fit it and Dead or Alive is not mirrored here.
+
 coli_attack_chk (FV `0x25AA4`) lets a strike land from frame `+0x808` on,
 and only while move flag 8 (`+0x1A4`) is set, which 0x1C180 clears at the
 second frame. The explorer plays the reaction from the first such frame
