@@ -683,8 +683,8 @@ are all 0 and its players play nothing; Dead or Alive's stages send no sound,
 only the song. See
 [Virtua Fighter 2's stage sounds](TECHNICAL.md#virtua-fighter-2s-stage-sounds-jssoundambiencejs).
 
-Dead or Alive is not mirrored as the others are. Its motion step turns a
-player round by its own facing word, negating angles in place, with no
+Dead or Alive is not mirrored as the others are. Its motion step mirrors a
+player by its own facing word, negating angles in place, with no
 player +0 bit 6 and no left/right swap, so the explorer's mirror does not
 apply to it. See
 [The opponent's reaction](TECHNICAL.md#the-opponents-reaction-jsreactionsjs).
