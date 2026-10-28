@@ -643,7 +643,7 @@ need a table found in that game's ROM first. Where they stand:
 | Opponent, picked from the roster | | yes | yes | yes |
 | Opponent plays the reaction | | yes | yes | yes |
 | Mirrored fighter, and the one it throws | fighter only | yes | yes | |
-| Hand shapes from the move script | yes | yes | yes | |
+| Hand shapes from the move script | yes | yes | yes | with the reaction |
 | Moves by input | yes | yes | yes | |
 | Strings played | yes | yes | yes | |
 | Fighter's own motions grouped | yes | yes | yes | |
@@ -693,6 +693,10 @@ player by its own facing word, negating angles in place, with no
 player +0 bit 6 and no left/right swap, so the explorer's mirror does not
 apply to it. See
 [The opponent's reaction](TECHNICAL.md#the-opponents-reaction-jsreactionsjs).
+
+Dead or Alive's hand shapes come from its action script (op 0x2E), and show
+only when the opponent plays the reaction: the plain Animation run starts the
+motion without its script. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
 
 ## Dead or Alive
 

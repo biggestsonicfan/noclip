@@ -1705,6 +1705,19 @@ set (Sonic, Knuckles and Eggman, mirrored too). The other 5 are one-frame
 seams: the old character's hands on the frame a new one loads, and motion
 487 read on frame 1 before its frame-1 op had run.
 
+Dead or Alive (`doab`) sets its hands the same way, from its action
+script: op 0x2E (`0x438A0`) is `[0x2E, hand, shape]`, hand 2 sets both, and
+a player whose facing halfword (`0x550124[player*2]`) is -1 has the hand
+turned. The shapes go to `0x5882A4`/`0x5882A5` (a byte a hand a player), which
+the body routine `0x457C0` reads to pick the hand models. The explorer
+already shows them when the opponent plays the reaction, since that run starts
+the move as the fighter's command and its script runs (Zack's hands go 124 to
+134 and 118 to 133 in his first moves). The plain Animation run calls the
+motion routine (`0x420C0`) directly, so no script runs and the hands stay at
+their reset. Starting it through the command instead blends in from the
+stance and moves the fighter (joints up to about 2 units off from the plain
+run, on Zack's first six moves), so the plain run is left as it is.
+
 ### The face (`js/fighterhands.js`)
 
 The head (slot 2, `+0x48`) changes with the move script too: op 16 swaps
