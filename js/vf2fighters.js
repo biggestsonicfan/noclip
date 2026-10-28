@@ -1505,7 +1505,8 @@ function scriptOp(w, { op, arg }, bit) {
 /* The setup and its script for motion `id`: the word, op 2's frames (with
  * the third set_mot_dat gives some motions outright), +0x850 and the ops. */
 function moveSetup(rom, id) {
-    const { reactions: R, script, flags } = rom.game.rig;
+    const { reactions: R, script, flags } = rom.game.rig ?? {};
+    if (!R) return null;
     const ptr = dataAt(rom, R.setups + id * 4);
     const r = ptr && dataAt(rom, ptr.view.getUint32(ptr.off, true));
     const setup = r && r.off + R.head < r.data.length ? readMoveSetup(rom, R, r.view, r.off + R.head) : null;
