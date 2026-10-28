@@ -643,7 +643,7 @@ need a table found in that game's ROM first. Where they stand:
 | Opponent, picked from the roster | | yes | yes | yes |
 | Opponent plays the reaction | | yes | yes | yes |
 | Mirrored fighter, and the one it throws | fighter only | yes | yes | |
-| Hand shapes from the move script | | yes | yes | |
+| Hand shapes from the move script | yes | yes | yes | |
 | Moves by input | yes | yes | yes | |
 | Strings played | yes | yes | yes | |
 | Fighter's own motions grouped | yes | yes | yes | |
@@ -682,6 +682,11 @@ Fighters runs Fighting Vipers' stage-sound routine, but its per-stage records
 are all 0 and its players play nothing; Dead or Alive's stages send no sound,
 only the song. See
 [Virtua Fighter 2's stage sounds](TECHNICAL.md#virtua-fighter-2s-stage-sounds-jssoundambiencejs).
+
+Sonic the Fighters' hands come from its move script too: op 0x10 on slot
+5 or 8 puts one of the character's sixteen hand models for that slot in
+place, and every motion starts from the first. Checked against MAME's
+attract run. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
 
 Dead or Alive is not mirrored as the others are. Its motion step mirrors a
 player by its own facing word, negating angles in place, with no

@@ -1676,6 +1676,35 @@ rest of what bears on a hand is this.
   gets model 0x2DE, the one all her op 18s write there. A break is fight
   state the explorer does not model.
 
+**Sonic the Fighters** (`js/stfhands.js`) sets its hands outright, as
+Fighting Vipers does, but with the play script's op 0x10 `[slot][entry]`
+(the op that swaps Metal Sonic's chest). `load_action_from_list` (`0x330D0`)
+sends slots 5 and 8 to `0x33254`, which reads the character's table at
+`0xC6570[+0x1B0]`: sixteen s16 models for slot 5, then sixteen for slot 8.
+A mirrored fighter (`+0` bit 6) has the slot turned (5 to 8, 8 to 5) before
+it picks the half, so, as in the other games, the mirror moves the shape and
+each slot keeps its own table. A 0 model leaves the slot be. Sonic
+Championship has the same handler at `0x33280` and table at `0xC66A8`.
+
+Unlike Virtua Fighter 2's and Fighting Vipers', the hands do not carry over:
+`set_mot_dat` (`0x1B508`-`0x1B544`) puts entry 0 of both halves back in
+slots 5 and 8 whenever a motion starts, unless its skeleton type (record
+byte 12, `+0x84C`) is 3. Entry 0 is the part list's own hand for every
+character but Tails' second look (slot 5: 731, not 48) and Super Sonic's
+second look (Sonic's second look's 671/670). The 16 type 3 motions keep
+what the motion before left, which the explorer cannot know, so they start
+from the part list's hands. Of the 519 motions' scripts, 641 op 0x10s name
+slot 5 or 8, with entries 0-15. The hammer-squished form keeps its own
+hands, which the table does not name.
+
+Checked in MAME (the shared build, `sfight` attract, 150 s): player 1's
+`+0x54` and `+0x60` (slots 5 and 8, player at `0x510D00`) against the
+explorer's rule for the motion `+0x1A8`, frame `+0x1AA`, character and bit
+6 on screen. 7116 of 7121 changes agree, 522 of them with a hand the script
+set (Sonic, Knuckles and Eggman, mirrored too). The other 5 are one-frame
+seams: the old character's hands on the frame a new one loads, and motion
+487 read on frame 1 before its frame-1 op had run.
+
 ### The face (`js/fighterhands.js`)
 
 The head (slot 2, `+0x48`) changes with the move script too: op 16 swaps

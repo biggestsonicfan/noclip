@@ -52,6 +52,7 @@ import {
     readExhaust, exhaustPart, chestModel, exhaustDrawn,
     CHEST_SLOT as EXHAUST_CHEST_SLOT, CYCLE_LENGTH as EXHAUST_CYCLE_LENGTH,
 } from './exhaust.js';
+import { readStfHands, stfHandsAt, HAND_SLOTS } from './stfhands.js';
 import { decodeMotion, sampleMotion, listMotions, readMotionScript, scriptStateAt, readMotionTiming } from './motion.js';
 import { readMoves, spellMove, spellEntry, spellGuards, followUps, buildChain, chainAt, chainSample,
     retypeChain, chainCode, parseChainCode, easeLength } from './moves.js';
@@ -3089,6 +3090,7 @@ function rebuildRig({ keepCamera = true } = {}) {
             if (d) m.chestGeoms.set(id, geomBundle(d));
         }
     }
+    buildHandGeoms(m, c);
     if (m.exhaust) {
         const cycle = buildCycle(m.exhaust.cycle);
         const p = cycle && exhaustPart(restPoseFor(c), m.exhaust, 0);
@@ -3243,6 +3245,38 @@ function placeChest(m, c) {
     if (part.lines && g.edges) part.lines.geometry = g.edges;
 }
 
+/* The hands the script puts in slots 5 and 8 (js/stfhands.js), built up
+ * front as the chests are. Not for the squished form, whose hands the table
+ * does not name. */
+function buildHandGeoms(m, c) {
+    m.stfHands = state.useSquished ? null : readStfHands(state.rom, c.charIndex);
+    m.handGeoms = new Map();
+    for (const id of new Set(HAND_SLOTS.flatMap((s) => m.stfHands?.[s] ?? []))) {
+        const d = id > 0 && getModel(id);
+        if (d) m.handGeoms.set(id, geomBundle(d));
+    }
+}
+
+/*
+ * The hands on this frame: entry 0 of the character's table from the motion's
+ * start, then what the script's op 0x10 put in slots 5 and 8 (js/stfhands.js).
+ * With no motion the part list's hands stay.
+ */
+function placeHands(m) {
+    if (!m.stfHands) return;
+    const want = m.decoded ? stfHandsAt(state.rom, m.stfHands, m.id, m.script, m.frame, state.mirrored) : {};
+    for (const p of m.parts) {
+        if (!HAND_SLOTS.includes(p.slot) || p.eye) continue;
+        p.base ??= { id: p.mesh.userData.modelIndex, mesh: p.mesh.geometry, edges: p.lines?.geometry };
+        const id = want[p.slot] ?? p.base.id;
+        const g = id === p.base.id ? p.base : m.handGeoms.get(id);
+        if (!g || p.mesh.userData.modelIndex === id) continue;
+        p.mesh.geometry = g.mesh;
+        p.mesh.userData.modelIndex = id;
+        if (p.lines && g.edges) p.lines.geometry = g.edges;
+    }
+}
+
 /* How many display frames the trail ring is stepped through to catch up, as the
  * chains are. Past that it is replayed from the motion's first frame. */
 const TRAIL_CATCH_UP = 8;
@@ -3366,6 +3400,7 @@ function poseRig() {
     }
     m.scriptState = scriptStateAt(state.rom, m.script, m.frame);
     placeChest(m, c);
+    placeHands(m);
     /* The sway chains hang off the pose, so they follow it frame by frame. */
     if (m.osage) {
         /* With no motion the pose has its waist at the origin and no ground
