@@ -5885,6 +5885,38 @@ const lastbrnxj = lastbronxBuild({
 /* ---- Pilot Kids ----------------------------------------------------------- */
 
 /*
+ * The Cells tab (js/cells.js): Virtua Cop's records, the width and the
+ * height then the entries, which the draws store with bit 15 set (`base`).
+ * Nothing numbers them but a viewer in the check menu beside the model
+ * check (0x10390), which steps through the zero-ended table at data
+ * 0xE850C, 74 records. The two words before it are the files the boot
+ * (0x596E0) loads through 0x5A820:
+ * a first block, a block count, a table of colour pointers, then the
+ * blocks' characters, copied straight from character first * 128, each
+ * block taking its own pointer's 16 colours as its group (0x5A770). Before
+ * them the boot draws 128 characters of 1bpp font in pen 1 (0x599D0) and
+ * fills character 1 with pen 15; 0x51B10 stores white in colour 1.
+ */
+const PLTKIDS_CELLS = {
+    sized: true,
+    patternTable: 0x020e850c,
+    base: 0x8000,
+    boot: {
+        font: { src: 0x02041600, first: 0, count: 128, pen: 1 },
+        chars: [[0x02063f28, 4 << 7, 15 << 7], [0x02074158, 20 << 7, 104 << 7]],
+        straight: true,
+        fill: [[1, 1, 0xffff]],
+        palette: [
+            { set: [[1, 0xffff]] },
+            { pointers: 0x02072f50, group: 4, groups: 15 },
+            { pointers: 0x020dc740, group: 20, groups: 104 },
+        ],
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
+/*
  * Psikyo's 1998 shooter on Model 2B CRX (MAME's `pltkids`, Revision A) and
  * its Model 2A build (`pltkidsa`, a clone: its zip holds the program and the
  * 2A board's TGP and sound chips, and the data, polygon and texture chips are
@@ -5961,8 +5993,9 @@ function pilotKidsBuild({ id, name, program, extra = [], colorTables }) {
             pltkids: { tables: colorTables, counts: 0x65f0, scenes: [4, 3, 1, 7, null, null, null, 8, null] },
             solid: true,
         },
+        cells: PLTKIDS_CELLS,
         /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
 

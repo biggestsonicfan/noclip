@@ -117,6 +117,15 @@
  * from the list and their count; CG 0 is the boot's (`groups.boot`), which
  * stays loaded, so a cell is drawn with it under its own. See js/games.js
  * lastbronxBuild.
+ *
+ * Pilot Kids draws Virtua Cop's records (`sized`): the width and the height
+ * as halfwords, then halfword entries, which its draws (0x5A890, and 0x5AA50
+ * from the vblank queue) store with bit 15 set. A viewer in its check menu
+ * steps through a zero-ended table of them (`patternTable`), and every one
+ * names characters the boot loaded (`boot`): Power Sled's font, then two
+ * files of whole
+ * 128-character blocks, each block taking its own group's colours from a
+ * table of pointers. See js/games.js PLTKIDS_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
@@ -764,7 +773,9 @@ const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) <<
  * count times, until `until` groups are written or for `lists` such entries;
  * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
  * colours copied as they are; `copy`, groups copied to others; `shuffled`,
- * Virtual On's lists of [colours, groups], one group after another.
+ * Virtual On's lists of [colours, groups], one group after another;
+ * `pointers`, a table of `groups` pointers, each to one group's colours
+ * (Pilot Kids'); `set`, [palette entry, colour] pairs the code stores itself.
  *
  * `font` is a 1bpp font drawn first, 8 bytes a character, the top bit the
  * left pixel, a set bit pen `pen` (Virtual On's, Power Sled's). Virtual On's
@@ -833,6 +844,13 @@ function loadBoot(rom, L, charBytes) {
             const [from, to, groups] = op.copy;
             pal.copyWithin(to * 16, from * 16, (from + groups) * 16);
             palRuns.push([to * 16, groups * 16]);
+        } else if (op.pointers) {
+            for (let k = 0; k < op.groups; k++) put(op.group + k, word(rom, op.pointers + k * 4), 1);
+        } else if (op.set) {
+            for (const [i, v] of op.set) {
+                pal[i] = v;
+                palRuns.push([i, 1]);
+            }
         }
     }
     if (L.stage !== undefined) put(B.stages.group, word(rom, B.stages.table + L.stage * 4), 1);
