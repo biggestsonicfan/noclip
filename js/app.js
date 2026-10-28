@@ -3683,6 +3683,7 @@ function rebuildBody({ keepCamera = true } = {}) {
     /* A Fighting Vipers fighter's midriff is built the same way. */
     m.skin = readSkin(state.rom, body) ?? body.midriff ?? null;
     m.skinMesh = null;
+    m.skinMeshes = [];
     /* And its sway chains, the opponent's in its own material. */
     buildBodyOsage(m, body);
     if (m.rival) buildBodyOsage(m.rival, m.rival.body, m.rival.material);
@@ -4698,6 +4699,35 @@ function placeSkin(holder, matrices, flash = null) {
     placePartAt(holder.skinMesh, matrices[holder.skin.hips]);
 }
 
+/* Skins the pose hands over already built (Last Bronx's: the copro builds
+ * them in polygon RAM every frame), in the fighter's frame. `holder` keeps a
+ * mesh for each, and hides those the frame has no skin for. */
+function placeFrameSkins(holder, skins, flash = null) {
+    const pool = holder.skinMeshes ??= [];
+    skins.forEach((skin, i) => {
+        const d = decodeModel(state.rom, null, null, flash == null ? skin : { ...skin, matPtr: flash });
+        if (d) d.index = null;
+        if (d && !pool[i]) pool[i] = addRigPart(d, undefined, holder.material);
+        else if (d) swapRigGeometry(pool[i], d);
+        if (pool[i]) showRigPart(pool[i], Boolean(d));
+    });
+    for (const p of pool.slice(skins.length)) showRigPart(p, false);
+}
+
+function swapRigGeometry(part, d) {
+    part.mesh.geometry.dispose();
+    part.mesh.geometry = buildGeometry(d);
+    if (part.lines) {
+        part.lines.geometry.dispose();
+        part.lines.geometry = buildEdgeGeometry(d);
+    }
+}
+
+function showRigPart(part, shown) {
+    part.mesh.visible = shown;
+    if (part.lines) part.lines.visible = shown && state.wireframe;
+}
+
 /*
  * Fighting Vipers' light strobe (js/fvstrobe.js): each fighter drawn by the
  * light times a scale of its own: its stage's (stageFighterLight), but on the
@@ -4709,6 +4739,7 @@ function placeSkin(holder, matrices, flash = null) {
 function strobeFighter(holder, scale) {
     const meshes = [...holder.parts ?? [], ...holder.extras ?? []].flatMap((p) => p.slots.map((x) => x.mesh));
     if (holder.skinMesh) meshes.push(holder.skinMesh.mesh);
+    for (const p of holder.skinMeshes ?? []) meshes.push(p.mesh);
     for (const p of holder.osageParts ?? []) if (p) meshes.push(p.mesh);
     for (const mesh of meshes) {
         if (mesh.userData.lightScale === undefined) {
@@ -4788,6 +4819,7 @@ function poseBodyRig() {
     followRoot(m, pose.follow);
 
     placeSkin(m, matrices, m.flash);
+    placeFrameSkins(m, pose.skins ?? [], m.flash);
     placeBodyOsage(m, pose.pose, osageBoard(m, body), m.tick, null, m.flash);
     launchPendingDebris(m, pose.pose);
     noteDebrisBodies(m, pose.pose);

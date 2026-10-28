@@ -83,23 +83,39 @@ EXPORT int snd_send(uint32_t b) {
     return 1;
 }
 
+/* Run the board `run` samples into s_out from `at`; what it does not make
+ * (no program loaded) is silence. */
+static void snd_run_into(uint32_t at, uint32_t run) {
+    uint32_t r = g_sound.out_w;
+    sound_run(run);
+    uint32_t made = (g_sound.out_w - r) & (SOUND_OUT_FRAMES - 1);
+    for (uint32_t i = 0; i < run; i++, r = (r + 1) & (SOUND_OUT_FRAMES - 1)) {
+        float *o = &s_out[(at + i) * 2];
+        o[0] = i < made ? g_sound.out[r * 2]     * (1.0f / 32768.0f) : 0.0f;
+        o[1] = i < made ? g_sound.out[r * 2 + 1] * (1.0f / 32768.0f) : 0.0f;
+    }
+    g_sound.out_r = g_sound.out_w;
+}
+
+/* While a byte waits for the UART the board runs a sample at a time, offered
+ * the byte before each, as the i960 polls TxRDY; with none waiting, the rest
+ * of the block in one run. The SCSP makes its samples late, a voice at a time
+ * over the whole run (m2-hle2 scsp.h, "The chip's own time"), and the samples
+ * do not depend on where the runs are cut, so one long run is the same sound
+ * for less work. */
 EXPORT uint32_t snd_render(uint32_t n) {
     if (n > SND_BLOCK) n = SND_BLOCK;
-    for (uint32_t i = 0; i < n; i++) {
+    uint32_t i = 0;
+    while (i < n) {
+        uint32_t run = n - i;
         if (s_qr != s_qw) {
+            run = 1;
             sound_uart_service(&g_sound, g_sound.m68k.cpu.cycles);
             if (sound_uart_txrdy(&g_sound))
                 sound_uart_write(&g_sound, s_queue[s_qr++ % SND_QUEUE], g_sound.m68k.cpu.cycles);
         }
-        uint32_t w0 = g_sound.out_w;
-        sound_run(1);
-        if (g_sound.out_w != w0) {
-            s_out[i * 2]     = g_sound.out[(w0 & (SOUND_OUT_FRAMES - 1)) * 2]     * (1.0f / 32768.0f);
-            s_out[i * 2 + 1] = g_sound.out[(w0 & (SOUND_OUT_FRAMES - 1)) * 2 + 1] * (1.0f / 32768.0f);
-        } else {
-            s_out[i * 2] = s_out[i * 2 + 1] = 0.0f;
-        }
-        g_sound.out_r = g_sound.out_w;
+        snd_run_into(i, run);
+        i += run;
     }
     return n;
 }
