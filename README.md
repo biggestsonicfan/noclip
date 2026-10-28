@@ -160,8 +160,10 @@ fighter's strike or throw. Each fighter's moves are listed under the input
 that does them, read from its input program the way Sonic the Fighters' are
 (*fwd+down . fwd+P*, the strings as their presses, *P , P , K*), and the ones
 a fighter standing in front of its opponent does not reach that way say what
-they need. They play one at a time: a string is listed by the motion its last
-press plays, and the strings themselves are not played yet. Each move and
+they need. A string plays as Sonic the Fighters' do, built in the same panel:
+each press takes over on the frame the game's own matcher lets it, its cancel
+frame plus the entry's wait, and the switch blends by the rig's own rule. A
+string drops the flight in the air the plain motion has. Each move and
 motion carries the name the motion table keeps for it beside its number
 (*motion 21 AK_TA_KAMAE*, *TA_SYORYU_HNY*); the CPU opponent's names for the
 moves are not found. With the **Armour** switch's
@@ -600,7 +602,8 @@ every one of the
 moves, the motions its own input program can start, as Fighting Vipers' does
 ([Virtua Fighter 2's moves](TECHNICAL.md#the-motion-list-the-fighters-own-motions-first)),
 each under its input: Jacky's *P , P , back+P*, Pai's *P , P , P , down+K*,
-the throws on *G+P*. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
+the throws on *G+P*. Strings play as Fighting Vipers' do, each press taking
+over on the frame VF2's matcher lets it. The motions are Sonic the Fighters' keyframe format a year early, and the pose is solved as
 the game solves it: on one standard rig for everyone, then placed on the
 fighter's own skeleton. Played on, a fighter blends from one motion into the
 next, turns its head toward the motion's face target a step at a time and
@@ -642,7 +645,7 @@ need a table found in that game's ROM first. Where they stand:
 | Mirrored fighter, and the one it throws | | yes | yes | |
 | Hand shapes from the move script | | yes | yes | |
 | Moves by input | yes | yes | yes | |
-| Strings played | yes | | | |
+| Strings played | yes | yes | yes | |
 | Fighter's own motions grouped | yes | yes | yes | |
 | Sway chains | yes | yes | yes | |
 | Hit flash | | yes | | |
@@ -659,8 +662,7 @@ Bronx has both; Pilot Kids has the Cells tab but not the music.
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
 record and face target, and no fight code is run for them), Dead or Alive's
-opponent playing a reaction, and playing Fighting Vipers' and Virtua Fighter 2's
-strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
+opponent playing a reaction. Virtua Fighter 2 has no hit flash to show: every fighter
 draw goes through `0x7C60` with the colour left as it is.
 
 Sonic the Fighters and Dead or Alive have no stage sounds to play. Sonic the

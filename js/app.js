@@ -62,7 +62,7 @@ import {
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
     armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
-    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks,
+    trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
 import { readBurst, burstModels, burstDraws } from './fvburst.js';
@@ -2861,7 +2861,7 @@ function setMotion(id, slot, { rebuild = true } = {}) {
  */
 function setChain(entries, { rebuild = true } = {}) {
     const m = state.motion;
-    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries) : null;
+    const chain = m.moves && entries.length ? buildChain(state.rom, m.moves, entries, chainReaders()) : null;
     if (!chain) return;
     chain.code = chainCode(m.moves, chain.links.map((l) => l.entry));
     m.chain = chain;
@@ -2872,13 +2872,22 @@ function setChain(entries, { rebuild = true } = {}) {
     if (rebuild) { poseRig(); renderMotionPanel(); updateHud(); }
 }
 
+/* A body's motions are its list's (bit 15 of a commit turns the fighter
+ * round), its timing set-up op 2's as Sonic the Fighters' is
+ * (js/vf2fighters.js, motionTiming). */
+function chainReaders() {
+    if (!state.bodies) return {};
+    const list = state.motion.list;
+    return { decode: (rom, id) => list[id & 0x1fff] ?? null, timing: vf2MotionTiming };
+}
+
 /* Put the motion the chain is on at `m.tick` where the rest of the rig reads
  * it: the id, the block and the frame, as if it had been picked by hand. */
 function enterLink(m) {
     const { index, frame } = chainAt(m.chain, m.tick);
     const link = m.chain.links[index];
     m.link = index;
-    m.id = link.motion;
+    m.id = state.bodies ? link.decoded.index : link.motion;
     m.decoded = link.decoded;
     m.frame = frame;
 }
@@ -3552,11 +3561,11 @@ function loadBody(index, { keepCamera = false, keepMotion = false } = {}) {
     state.character = body;
     renderHeld(body);
     const m = state.motion;
-    /* A body plays no strings. Fighting Vipers' and Virtua Fighter 2's moves
-     * are in its motion list with their inputs (fighterMotionList); the
-     * string panel is Sonic the Fighters'. */
-    m.moves = null;
-    $('#string-field').hidden = true;
+    /* Fighting Vipers' and Virtua Fighter 2's matchers are Sonic the
+     * Fighters' (js/vf2fighters.js, readProgramMoves), so their strings play
+     * as its do; no other body has one. */
+    m.moves = state.rom.game.rig?.kind === 'vf2' ? body.moves ?? null : null;
+    $('#string-field').hidden = !m.moves;
     /* Start on the motion the game starts the body on, or another its
      * routines play: a body can play any motion of its joint count, but one
      * keyed on another skeleton bends its parts in ways they were not
@@ -5396,7 +5405,13 @@ function renderBodyMotionPanel() {
     const others = other ? t(other) : t('Every other motion for {n} joints', { n: body.joints });
     group(lead.length ? `${others} (${fits.length - lead.length})`
         : `${rest} (${fits.length})`, fits.filter((x) => !lead.includes(x)));
-    if (m.decoded) sel.value = `id:${m.decoded.index}`;
+    if (m.chain) {
+        const o = el('option');
+        o.value = 'chain';
+        o.textContent = t('A string of {n} — built below', { n: m.chain.links.length });
+        sel.insertBefore(o, sel.firstChild);
+        sel.value = 'chain';
+    } else if (m.decoded) sel.value = `id:${m.decoded.index}`;
 
     const d = m.decoded;
     syncClock(m);
@@ -5408,21 +5423,28 @@ function renderBodyMotionPanel() {
         /* A Power Sled ride scene is its task's clock, not frames of data. */
         : d.phase ? '<span>clock</span><b>' + d.phase + '</b>'
         : '<span>frame size</span><b>' + (d.frameSize ?? frameBytes(d.joints)) + ' bytes</b>';
-    $('#motion-meta').innerHTML = d ? `
+    const link = m.chain?.links[m.link];
+    const times = d ? vf2MotionTiming(state.rom, d.id) : null;
+    $('#motion-meta').innerHTML = (link ? `
+        <span>move</span><b>${link.entry.name ?? d.name}</b>
+        <span>input</span><b>${spellEntry(link.entry)}${link.follows ? ' (a string follow-up)' : ''}</b>
+    ` : '') + (d ? `
         <span>motion</span><b>${d.index}</b>
         <span>data</span><b>0x${d.address.toString(16)}</b>
         <span>frames</span><b>${d.frames}</b>
         ${size}
+        ${link && times ? `<span>hits from · cancel · free</span><b>${times.hit} · ${times.cancel} · ${times.end}</b>` : ''}
         ${m.clocks && !m.clocks.air ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
-    ` : '<span>motion</span><b>none fits this body</b>';
+    ` : '<span>motion</span><b>none fits this body</b>');
 
     const scrub = $('#motion-frame');
-    scrub.max = String(d ? m.clocks?.length ?? d.frames : 1);
+    scrub.max = String(!d ? 1 : m.chain ? m.chain.total : m.clocks?.length ?? d.frames);
     scrub.value = String(scrubValue(m));
     scrub.disabled = !d;
     $('#motion-play').textContent = t(m.playing ? 'Pause' : 'Play');
     $('#motion-play').disabled = !d;
     renderSparkPanel();
+    renderStringPanel();
     updateMotionFrameReadout();
 }
 
@@ -5508,7 +5530,8 @@ function renderMotionPanel() {
  * so a list someone has open stays open. */
 function showLink() {
     const m = state.motion;
-    renderMotionMeta();
+    if (state.bodies) renderBodyMotionPanel();
+    else renderMotionMeta();
     [...$('#string-chain').children].forEach((c, i) => c.classList.toggle('active', i === m.link));
     updateHud();
 }
@@ -5559,6 +5582,9 @@ function renderStringPanel() {
     const field = $('#string-field');
     field.hidden = !m.moves;
     if (!m.moves) return;
+    /* A body blends from the last frame drawn by its own rule
+     * (js/vf2fighters.js, blendFor), so there is nothing to switch. */
+    $('#string-ease').closest('label').hidden = Boolean(state.bodies);
     $('#string-ease').checked = state.easeChain;
 
     const list = $('#string-chain');
@@ -5569,11 +5595,12 @@ function renderStringPanel() {
         chip.type = 'button';
         chip.title = `motion ${l.motion}, ${l.decoded.frames} frames, hands over after ${l.length}`
             + ' — click to end the string before this';
-        chip.textContent = `${i && l.follows ? '› ' : i ? '· ' : ''}${l.entry.name ?? `motion ${l.motion}`}`
+        chip.textContent = `${i && l.follows ? '› ' : i ? '· ' : ''}${l.entry.name ?? l.decoded.name ?? `motion ${l.motion}`}`
             + ` (${spellEntry(l.entry)})`;
         chip.addEventListener('click', () => {
             const rest = links.slice(0, i).map((x) => x.entry);
             if (rest.length) setChain(rest);
+            else if (state.bodies) setMotion(bodyMotions(state.character).lead[0]?.index ?? -1, -1);
             else setMotion(state.character.motions[0], 0);
         });
         list.appendChild(chip);
@@ -5618,7 +5645,7 @@ function updateStringReadout() {
     if (!m.chain) { out.textContent = ''; return; }
     const l = m.chain.links[m.link];
     const n = easeLength(l.decoded.frames);
-    const easing = state.easeChain && m.link > 0 && m.frame < n;
+    const easing = state.easeChain && !state.bodies && m.link > 0 && m.frame < n;
     out.textContent = `link ${m.link + 1} of ${m.chain.links.length}: frame ${m.frame} of ${l.decoded.frames}`
         + (m.link + 1 < m.chain.links.length ? `, hands over after ${l.length}` : '')
         + (easing ? ` · easing in, ${n - m.frame} of ${n} left` : '');
@@ -6726,7 +6753,7 @@ function restoreLinkedView() {
         const known = slot >= 0 || (id !== null
             && (state.bodies ? Boolean(m.list[id]) : m.list.some((e) => e.id === id)));
         if (known) setMotion(id, slot);
-        const entries = !state.bodies && link.chain && m.moves ? parseChainCode(m.moves, link.chain) : null;
+        const entries = link.chain && m.moves ? parseChainCode(m.moves, link.chain) : null;
         if (entries) setChain(entries);
         if (m.decoded && link.tick !== null && link.tick >= 0) {
             m.tick = link.tick;

@@ -2060,10 +2060,17 @@ its moves, then the rest of what it plays, then every other motion.
   standing 2 from its opponent reaches it by (a round starts them 2 apart),
   strings as their presses, and the rest under their input and the bits they
   need. State bit 18 stays a number: it is STF's hyper. The motion list
-  splits the moves into those two groups (Jane 26 and 52). A string plays
-  only its last motion: the hand-over at the cancel frame (STF's set-up
-  op 2) is not read here yet. The inputs are read from the ROM, not typed
-  in MAME.
+  splits the moves into those two groups (Jane 26 and 52). Strings play
+  as STF's do (`buildChain`): set-up op 2's handler `0x1BA64` is STF's
+  `0x1B628` byte for byte, copying hit, cancel and end into `+0x808`,
+  `+0x80A` and `+0x80C`, and matcher op `0x12` (`0x1E498`) is STF's
+  `0x1E7D4`, waiting until `motion_coma + 1 >= [+0x80A] + wait`. So a
+  follow-up takes over at cancel + wait - 1 (Jane's P , P: motion 670 plays
+  9 frames, cancel 10, then 620), anything else at the end frame
+  (`motionTiming`). The switch blends by the rig's own rule (`blendFor`),
+  not STF's ease. A string drops `flightClocks`, so a move that leaves the
+  ground in it plays its plain frames. The inputs are read from the ROM, not
+  typed in MAME.
 - **Virtua Fighter 2's moves** are the same: `0x1BBD4` runs
   `ld 0x1D1FC[+0x1B1*4]`, handlers at `0x1D250`. Its opcodes stop at `0x33`
   and agree with these up to `0x31`. `0x32` and `0x33` are VF2's own: each
@@ -2078,7 +2085,13 @@ its moves, then the rest of what it plays, then every other motion.
   Pai's P, P, P, down+K. Checked against MAME: 200 s of `vf2` attract with
   the commits
   (`0x1C8E8`, `0x1C950`) logged, 94 commits, 43 distinct motions on Lion,
-  Shun, Jacky and Akira, all 43 in that fighter's list.
+  Shun, Jacky and Akira, all 43 in that fighter's list. Strings play as
+  FV's: matcher op `0x12` (`0x1CAF4`) is STF's, and set-up op 2
+  (`0x1A420`, in `set_mot_dat` `0x1A1E4`'s table at `0x1A350`) writes hit,
+  cancel and end to `+0x808`, `+0x80A` and `+0x80C`. Its patches to them
+  apply only while bit 6 of `0x59C351` is set, which MAME keeps clear; the
+  two end frames it always sets are `rig.flags.ends`. Akira's P , P: motion
+  17 plays 10 frames (cancel 11), then 20.
 - **Hand-overs**: set-up op 1 of a motion's `mot_list` record
   (`0x6411E94[id]`, twelve bytes of head, handlers at `0x1B9A4`) and op
   `0x13`'s two write the motion that plays as this one runs out, `+0x802` and

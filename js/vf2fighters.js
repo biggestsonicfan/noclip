@@ -168,6 +168,7 @@ function readFighter(rom, F, record, char) {
     const list = u32(root + PARTS);
     const offsets = readOffsets(rom, u32(root + SKELETON));
     const actions = F.actions ? readActions(rom, F.actions, u32(root + F.actions.at)) : [];
+    const moves = F.commands ? readProgramMoves(rom, F.commands, char) : null;
     return {
         index: record,
         char,
@@ -180,7 +181,8 @@ function readFighter(rom, F, record, char) {
         start: actions[0] ?? -1,
         actions,
         commands: F.commands ? readCommands(rom, F.commands, char) : [],
-        inputs: F.commands ? readInputs(rom, F.commands, char) : null,
+        moves,
+        inputs: readInputs(moves),
         poses: F.poses ? readPoses(rom, F.poses, char) : [],
         root,
         texSet: u32(root + (F.texSet ?? TEXTURE_SET)),
@@ -875,6 +877,14 @@ function readCommands(rom, C, char) {
     return commandMotions(rom, rom.mainCpuView.getUint32(at, true), C.isa).map((id) => id & MOTION_ID);
 }
 
+/* The fighter's matcher tree (js/moves.js, programMoves): its tables by
+ * address, what each entry parks for the string's next press. */
+function readProgramMoves(rom, C, char) {
+    const at = C.table + char * 4;
+    if (at + 4 > rom.maincpu.length) return null;
+    return programMoves(rom, rom.mainCpuView.getUint32(at, true), C.isa);
+}
+
 /*
  * The input each move is typed with, by motion: the same tree read as Sonic
  * the Fighters' moves are (js/moves.js, programMoves), each ground move under
@@ -883,10 +893,7 @@ function readCommands(rom, C, char) {
  * input and the bits it needs. Moves of another context (the high byte of a
  * table's key) have none.
  */
-function readInputs(rom, C, char) {
-    const at = C.table + char * 4;
-    if (at + 4 > rom.maincpu.length) return null;
-    const moves = programMoves(rom, rom.mainCpuView.getUint32(at, true), C.isa);
+function readInputs(moves) {
     if (!moves) return null;
     const out = new Map();
     for (const mv of moves.moves) {
@@ -1522,6 +1529,21 @@ function playMoveFlags(m, frames, bit) {
         w = out[f];
     }
     return out;
+}
+
+/*
+ * A motion's hit, cancel and end frames, as js/motion.js readMotionTiming
+ * reads Sonic the Fighters': setup op 2 is the same seven bytes, and its
+ * handler (FV 0x1BA64, VF2 0x1A420) copies them into +0x808, +0x80A and
+ * +0x80C, which the matcher's op 0x12 (FV 0x1E498, VF2 0x1CAF4) waits on as
+ * STF's 0x1E7D4 does. Virtua Fighter 2's handler changes a few of them while
+ * bit 6 of 0x59C351 is set, which MAME's `vf2` leaves clear; two end frames
+ * are its own either way (`rig.flags.ends`). Null for a motion without op 2,
+ * whose three are its length.
+ */
+export function motionTiming(rom, id) {
+    const t = moveSetup(rom, id & MOTION_ID)?.times;
+    return t ? { hit: t[0], cancel: t[1], end: t[2] } : null;
 }
 
 /*
