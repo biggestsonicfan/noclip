@@ -236,12 +236,14 @@ export class Geo {
 /* The bus: program ROM at 0, the data ROMs at 0x2000000, work RAM, and the
  * two ports. Anything else reads back what was last written to it. */
 /* The program the routines run, with the game's own slips fixed (the
- * game's `fixes`: [address, word the ROM holds, word put there]). A fix is
- * left out if the ROM doesn't hold what it expects. */
+ * game's `fixes`: [address, word the ROM holds, word put there]) while the
+ * explorer's "fix errors" switch is on (setRomPatches names them in
+ * `rom.patched`); off, the program as shipped. A fix is left out if the ROM
+ * doesn't hold what it expects. */
 const fixedPrograms = new WeakMap();
 function fixedProgram(rom) {
     const fixes = rom.game.doa?.fixes ?? [];
-    if (!fixes.length) return rom.mainCpuView;
+    if (!fixes.length || !rom.patched?.includes('doa fixes')) return rom.mainCpuView;
     let cv = fixedPrograms.get(rom);
     if (cv) return cv;
     const src = rom.mainCpuView;

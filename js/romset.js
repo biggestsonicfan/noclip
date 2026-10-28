@@ -216,6 +216,12 @@ export function setRomPatches(rom, on) {
         for (const e of p.edits) put(e[0], e[to]);
         rom.patched = on ? [...rom.patched, p.name] : rom.patched.filter((n) => n !== p.name);
     }
+    /* Dead or Alive's slips are mended in doa.js's copy of the program, not
+     * here (fixedProgram); the switch only names them in. */
+    if (rom.game.doa?.fixes?.length) {
+        rom.patched = rom.patched.filter((n) => n !== 'doa fixes');
+        if (on) rom.patched.push('doa fixes');
+    }
     return failed;
 }
 

@@ -6694,7 +6694,7 @@ function useRomFixes(on) {
  * runs once and this runs again on every swap.
  */
 function loadGameContent() {
-    $('#fix-field').hidden = !state.rom.game.patches?.length;
+    $('#fix-field').hidden = !state.rom.game.patches?.length && !state.rom.game.doa?.fixes?.length;
     useRomFixes($('#opt-fix-errors').checked);
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.setMipLevels(state.rom.game.texture.mips !== false);
