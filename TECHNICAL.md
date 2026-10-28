@@ -6695,13 +6695,30 @@ a geometrizer object packet per skin, from the lists at 0x5C5D70 (count),
 0x00800101, the texture-point and texture-header addresses, the polygon RAM
 address and 0. Polygon RAM holds the 40-byte records the polygon ROM does,
 so each skin decodes as a model would (`readSkins`, then model.js's mesh
-option), its points already in the fighter's frame. The normals are 0. The
-callers are 0x25654 and 0x2D73C, before the fight's draw at 0x25A08 and
-0x2D788. A fighter has 11 (Yoko) to 66 (Joe) of them; they are waist and
-sleeve bands, a jacket's hem, a tied shirt, headband tails and Yusaku's hair.
-Object packets whose address has bit 23 set (texture RAM, 0x800004, on
-Yusaku) are not skins and are left out. The USA build is checked by the
-first words of both routines.
+option). The normals are 0. The callers are 0x25654 and 0x2D73C, before the
+fight's draw at 0x25A08 and 0x2D788. A fighter has 11 (Yoko) to 66 (Joe) of
+them; they are waist and sleeve bands, a jacket's hem, a tied shirt,
+headband tails and Yusaku's hair. The USA build is checked by the first
+words of both routines.
+
+A skin is drawn under whatever matrix the geometrizer holds, so `readSkins`
+follows the matrix packets (0x05800B0B, 12 floats) in the stream. Kinds 0
+and 1 get one from copro 0x11 before their object; the bands of a player's
+second list (0x5C5F88 non-zero) go out by copro 0x52 (a buffer place) and
+0x81, which on the board writes the matrix copro 0x2B loaded, the camera's,
+and here writes a 0 word: a 0 at a place 0x52 named puts the next skins
+back in the fighter's frame (identity). Before this every skin was drawn
+in the fighter's frame, so those under a part's matrix were out of place
+(Kurosawa's waist band floated, leaving a hole), and the chains were left
+out. Object addresses with bit 23 set are polygon ROM, not texture
+RAM: the chests (Yoko, Nagi, Lisa), ties and coat tails that hang in a
+chain, one matrix a link. MAME's buffer RAM at attract frame 630 has the
+same packets (Yoko's chest: 0x9000AE, 0x90012D three times, 0x9001AC).
+
+The chains swing on a state 0x9B3B0 keeps, which starts out pointing up and
+falls over about 30 frames (Lisa's hair 56). `runLastbrnxMotion` draws the
+motion's first pose 64 times before it records, so every motion starts with
+them at rest and a looping one ends about where it began.
 
 **Not done.** The four models drawn from polygon RAM (1691, 1692, 1772,
 1773), which the program fills itself, are empty; Nagi's first part is 1691

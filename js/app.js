@@ -4674,8 +4674,9 @@ function placeSkin(holder, matrices, flash = null) {
 }
 
 /* Skins the pose hands over already built (Last Bronx's: the copro builds
- * them in polygon RAM every frame), in the fighter's frame. `holder` keeps a
- * mesh for each, and hides those the frame has no skin for. */
+ * them in polygon RAM every frame), each placed by its `matrix` in the
+ * fighter's frame. `holder` keeps a mesh for each, and hides those the frame
+ * has no skin for. */
 function placeFrameSkins(holder, skins, flash = null) {
     const pool = holder.skinMeshes ??= [];
     skins.forEach((skin, i) => {
@@ -4684,6 +4685,7 @@ function placeFrameSkins(holder, skins, flash = null) {
         if (d && !pool[i]) pool[i] = addRigPart(d, undefined, holder.material);
         else if (d) swapRigGeometry(pool[i], d);
         if (pool[i]) showRigPart(pool[i], Boolean(d));
+        if (pool[i] && skin.matrix) placePartAt(pool[i], skin.matrix);
     });
     for (const p of pool.slice(skins.length)) showRigPart(p, false);
 }
