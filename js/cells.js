@@ -1143,3 +1143,127 @@ export function renderCell(rom, cell, cgs, cxlat = null) {
     }
     return { width, height, rgba };
 }
+
+/*
+ * Last Bronx's stage sky (games.js `stageTable.lastbrnx.sky`): tilemap B, its
+ * two layers joined top to bottom, behind the 3D. The stage's set-up (0x44CD0)
+ * loads CG directory `cgs[stage]` and has 0x44910 build a panorama in RAM
+ * (0x56DDC0), 256 columns of 128 entries; each frame 0x44EC0 scrolls it and
+ * 0x44DE0 streams the columns that came into view into the tile RAM. One turn
+ * of the camera is the panorama's 2048 pixels.
+ *
+ * The builder takes `lists[stage]`, 128 bytes: two halves (rows 0-63 and
+ * 64-127), each four blocks of 64 columns, each block four cell scripts
+ * (0x14CD0, `runScript`) at its corners: +0 the top left of a 64 by 64
+ * scratch tilemap, +4 32 rows down, +8 32 columns on, +0xC both; a 0 is none.
+ * A half whose first block is all 0 ends the build, or for the second half
+ * repeats each column's first entry down it. Cross Street (`stretch`) then
+ * copies each column's row 96 over its rows 32 to 95.
+ */
+const SKY_COLS = 256, SKY_ROWS = 128;
+
+function skyBlock(rom, scripts) {
+    const scratch = new Uint16Array(64 * 64);
+    [0, 32 * 64, 32, 32 * 64 + 32].forEach((base, k) => {
+        const r = scripts[k] ? runScript(rom, scripts[k]) : null;
+        for (const [at, e] of r?.out ?? []) {
+            const i = base + at;
+            if (i >= 0 && i < scratch.length) scratch[i] = e;
+        }
+    });
+    return scratch;
+}
+
+/* The panorama's entries, column by column, as 0x44910 leaves them. */
+function lastbrnxSkyMap(rom, S, ram, stage) {
+    const map = new Uint16Array(SKY_COLS * SKY_ROWS);
+    const list = S.lists + stage * 128;
+    for (let half = 0; half < 2; half++) {
+        const words = Array.from({ length: 16 }, (_, k) => ram(list + half * 64 + k * 4));
+        if (words.slice(0, 4).every((w) => !w)) {
+            for (let c = 0; half && c < SKY_COLS; c++) map.fill(map[c * SKY_ROWS], c * SKY_ROWS + 64, (c + 1) * SKY_ROWS);
+            break;
+        }
+        for (let block = 0; block < 4; block++) {
+            const scratch = skyBlock(rom, words.slice(block * 4, block * 4 + 4));
+            for (let c = 0; c < 64; c++) {
+                for (let r = 0; r < 64; r++) map[(block * 64 + c) * SKY_ROWS + half * 64 + r] = scratch[r * 64 + c];
+            }
+        }
+    }
+    if (stage === S.stretch) {
+        for (let c = 0; c < SKY_COLS; c++) map.fill(map[c * SKY_ROWS + 96], c * SKY_ROWS + 32, c * SKY_ROWS + 96);
+    }
+    return map;
+}
+
+/* Draws the panorama's entries with the stage's CG. */
+function drawSkyMap(map, cg, cxlat) {
+    const width = SKY_COLS * 8, height = SKY_ROWS * 8;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    const rgb = new Int32Array(0x8000).fill(-1);
+    for (let i = 0; i < map.length; i++) {
+        const entry = map[i], base = (entry & CHAR_MASK) * TILE_BYTES, group = (entry >> 7) & 0xff;
+        if (base + TILE_BYTES > cg.chars.length) continue;
+        const x0 = Math.floor(i / SKY_ROWS) * 8, y0 = (i % SKY_ROWS) * 8;
+        for (let p = 0; p < 64; p++) {
+            const py = p >> 3, px = p & 7;
+            const byte = cg.chars[base + py * 4 + ((px >> 1) ^ 1)];
+            const nib = (px & 1) ? (byte & 15) : (byte >> 4);
+            if (!nib) continue;
+            const v = cg.pal[group * 16 + nib] & 0x7fff;
+            if (rgb[v] < 0) {
+                const [r, g, b] = palette555ToBytes(cxlat, v);
+                rgb[v] = (r << 16) | (g << 8) | b;
+            }
+            const o = ((y0 + py) * width + x0 + px) * 4;
+            rgba[o] = rgb[v] >> 16;
+            rgba[o + 1] = (rgb[v] >> 8) & 255;
+            rgba[o + 2] = rgb[v] & 255;
+            rgba[o + 3] = 255;
+        }
+    }
+    return { width, height, rgba };
+}
+
+/* The mean colour of the panorama's top row, which the sky shows above it. */
+function topRowColor({ width, rgba }) {
+    const sum = [0, 0, 0];
+    let n = 0;
+    for (let x = 0; x < width; x++) {
+        if (!rgba[x * 4 + 3]) continue;
+        for (let k = 0; k < 3; k++) sum[k] += rgba[x * 4 + k];
+        n++;
+    }
+    return n ? sum.map((s) => Math.round(s / n)) : [0, 0, 0];
+}
+
+/**
+ * Last Bronx stage `stage`'s sky as a panorama (app.js addSkyPanorama), or
+ * null for a stage with none. Level, 0x44EC0's vertical scroll is the stage's
+ * `scroll` word (+0xC of its 16 bytes), so the eye line, screen line 192,
+ * shows row scroll + 192; tilting moves it by `focal` pixels a unit of
+ * tangent. Its horizontal scroll is 0x800 - heading / 32 with a turn 0x10000,
+ * so at heading 0 the screen's middle, column 248, shows column 248.
+ */
+export function lastbrnxSky(rom, stage, cxlat = null) {
+    const S = rom.game.stageTable.lastbrnx?.sky;
+    const D = rom.game.texture?.raw?.data;
+    if (!S || !D || !rom.game.cells?.groups) return null;
+    const ram = (a) => rom.mainCpuView.getUint32(D.rom + a - D.ram, true);
+    const dir = ram(S.cgs + stage * 4);
+    if (!dir) return null;
+    const cg = loadDirs(rom, [rom.game.cells.groups.boot, dir], rom.game.cells.charBytes);
+    const pano = drawSkyMap(lastbrnxSkyMap(rom, S, ram, stage), cg, cxlat);
+    /* The layer wraps top to bottom, and the scroll is held within 512 lines
+     * of the stage's either way: so the strip is the 1024 rows from 512
+     * above the eye line's, and what shows over the top is its top row. */
+    const half = pano.height / 2;
+    const first = (ram(S.scroll + stage * 16 + 12) + 192 - half) & (pano.height - 1);
+    const row = pano.width * 4;
+    const rgba = new Uint8ClampedArray(pano.rgba.length);
+    rgba.set(pano.rgba.subarray(first * row));
+    rgba.set(pano.rgba.subarray(0, first * row), (pano.height - first) * row);
+    const out = { ...pano, rgba };
+    return { ...out, horizon: half, focal: S.focal, centre: 248, topColor: topRowColor(out) };
+}

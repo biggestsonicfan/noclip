@@ -6995,6 +6995,46 @@ in costume 0 and 1772 in costume 1, so she stands without it. The fighters
 have not been held against MAME's pictures; the copro is held only to
 m2-hle2's port of MAME's interpreter. The USA set has not been tried.
 
+#### The skies
+
+A stage's sky is tilemap B, layers 1s and 1w joined top to bottom (control
+0x2000, window mode 1), behind the 3D: 64 by 128 tiles, which the game fills
+from a panorama of 256 columns by 128 rows in RAM (0x56DDC0, a column 0x100
+bytes). Zeroing tile RAM 0x4000-0x7FFF in MAME takes Cross Street's clouds
+away. `lastbrnxSky` in `js/cells.js` builds that panorama
+as the stage set-up (0x44CD0) does, and app.js puts it on the sky cylinder.
+
+- 0x44CD0 loads CG directory `[0x504340 + 4 * stage]` (0x14BD0, then the
+  0x149F0 loader the Cells tab reads) and calls 0x44910 with the 128-byte
+  list at 0x5043A0 + 128 * stage.
+- 0x44910: two halves (rows 0-63, 64-127), four blocks of 64 columns each.
+  A block clears a 64 by 64 scratch tilemap (0x564D40) and runs up to four
+  cell scripts (0x14CD0) into it: +0 at its top left, +4 32 rows down, +8 32
+  columns on, +0xC both. A half whose first block is all 0 stops the build;
+  as the second half, it first repeats each column's row 0 down rows 64-127.
+  Cross Street (stage 2) then copies each column's row 96 over rows 32-95.
+- 0x44EC0, each frame: horizontal scroll 0x800 - heading / 32 (a turn is
+  0x10000, so 2048 pixels); 0x44E58 marks the columns coming into view and
+  0x44DE0 copies them into the tile RAM's 64. The vertical scroll is the
+  stage's word at 0x50482C + 16 * stage, plus 506.25 (0x5C1284) times the
+  tangent at which the world point in the three floats before it is seen,
+  clamped to -512..511. So, level, the eye line shows row word + 192.
+- Stages 3 and 8 (Lust Subway, Brilliant Room) have no CG and no sky. Radical
+  Parking Lot's (stage 1) is a skyline with Tokyo Tower, mostly see-through,
+  for its open sides.
+
+The tile chip draws a scroll x as the map at x - scroll, and a scroll y as
+y + scroll: with Cross Street at attract frame 630 (scrolls 1 and 0x16) the
+explorer's panorama, cropped there, is MAME's sky. At frame 1200 (0x665) the
+camera has turned to the 13-CARAT side, the explorer's +X, and the strip's
+columns run that way too. Every one of the 8192 entries matches MAME's tile RAM at frame 630, less
+bit 15. Pen 0 is see-through, and the chip's backdrop is palette entry 0,
+black: Cross Street's sky has black holes left of the 109 building, which
+the buildings hide in the fight.
+
+The strip in the explorer is the 1024 rows from 512 above the eye line's,
+since the layer wraps and the scroll stays within 512 of the stage's.
+
 ### Pilot Kids (`js/texture.js`, `js/colors.js`)
 
 Psikyo's 1998 shooter on Model 2B CRX (MAME's `pltkids`, Revision A) and on
