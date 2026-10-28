@@ -659,10 +659,15 @@ Bronx has both; Pilot Kids has the Cells tab but not the music.
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
 record and face target, and no fight code is run for them), Dead or Alive's
-opponent playing a reaction, stage sounds for Sonic the Fighters
-and Dead or Alive, and playing Fighting Vipers' and Virtua Fighter 2's
+opponent playing a reaction, and playing Fighting Vipers' and Virtua Fighter 2's
 strings, whose tables are read but whose hand-over frames are not yet. Virtua Fighter 2 has no hit flash to show: every fighter
 draw goes through `0x7C60` with the colour left as it is.
+
+Sonic the Fighters and Dead or Alive have no stage sounds to play. Sonic the
+Fighters runs Fighting Vipers' stage-sound routine, but its per-stage records
+are all 0 and its players play nothing; Dead or Alive's stages send no sound,
+only the song. See
+[Virtua Fighter 2's stage sounds](TECHNICAL.md#virtua-fighter-2s-stage-sounds-jssoundambiencejs).
 
 ## Dead or Alive
 

@@ -10835,6 +10835,23 @@ throws the game's 16-bit random number every frame, which in the page is
 The **stage sounds** switch sends the scene and round codes when a stage opens
 and runs its player at 60 Hz.
 
+Sonic the Fighters and Dead or Alive have none (read from the ROMs, not run):
+
+- Sonic the Fighters' `0x3F44C` is Fighting Vipers' `0x420B4` instruction
+  for instruction: the record by stage at `0xDC024[r4*16]` (program ROM),
+  bits 30, 28 and 26 sending its words, and bit 29 jumping through `0xDB04C`
+  by stage. Stages 0-11 have all four words 0, and the jump table sends
+  stages 0-3 to bare branches to the exit (`0x3F4F4`-`0x3F500`) and the rest
+  to the exit itself. Bit 30 also sends `0xA00002` and `0xAE1007` for every
+  stage alike. The one other code picked by stage, `0x3FA00` (table
+  `0x3FA34`, or the fighter's `+0xACC`), is called from fighter code
+  (`0x1C280`, `0x29710`): a fighter's sound against the stage, part of the fight.
+- Dead or Alive (`doab`) queues its sounds through `0x94C0` from 57 places.
+  The only one that reads the stage number `0x5555BE` is the name entry's song
+  (`0x1C708`), and the only table picked by stage is the song's (`0x90C10`).
+  None of the sends is in the stage routines (`0x64640`-`0x71FFF`); the
+  nearest, `0x72048` (`0xA01138`), is fight code.
+
 ### Daytona USA's car on the Animation tab (`js/daytonacar.js`)
 
 The Animation tab's bodies are the player's car: a body, four wheels and a
