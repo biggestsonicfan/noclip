@@ -5774,6 +5774,38 @@ function lastbronxBuild(build) {
             ],
             setup: 0xb5e10, start: 0x49540, step: 0x49820, draw: 0x4a940,
         },
+        /*
+         * The Model 2B's sound board with two 4 MB sample chips, and Sega's
+         * CRX_drv 3.1.1 (by HiroF, 6 June 1996, the string at 0x100 of the
+         * program). The i960 talks to it through the 2B's UART at 0x9C0000:
+         * 0x17EA0 queues a three-byte command, and the wrappers 0x18120 and
+         * 0x18150 drop it in a silent attract (mode 4 with 0x56CBDD clear),
+         * which is why MAME's attract sends nothing but the volume.
+         *
+         * The songs are A0 10 00 to A0 10 0F, and the sound test names all
+         * sixteen: records of a command and a name pointer, `bgmcc` to
+         * `bgmrankout` (0x364D8 Export, 0x365F8 Japan). The round start
+         * (0x277E0) sends the stage's song out of nine commands (0x26910
+         * Export, 0x26A20 Japan) by the index it also takes the stage byte
+         * from, through the data section's table 0x504280: so stage 0 plays
+         * bgmnun, 1 bgmbok, 2 bgmkon, 3 bgmtomp, 4 bgmssk, 5 bgmham,
+         * 6 bgmsai, 7 bgmkan and 8 bgmbonus. Boot sends A0 0D 3E, MASTER
+         * VOLUME (0x56CBE6, 0..7, 3 at the factory) as A0 0D 3B + volume;
+         * the songs are quieter than other games' for it, as on the board.
+         */
+        sound: {
+            program: ['mpr-19056.31', 0x22a22918],
+            samples: [['mpr-19057.32', 0x64809438], ['mpr-19058.34', 0xe237c11c]],
+            sampleChip: 0x400000,
+            boot: [0xA0, 0x00, 0x01, 0xA0, 0x0D, 0x3E],
+            stop: [0xA0, 0x00, 0x01],
+            stageSongs: { first: 0xa01000, count: 9, order: data + 0x4280 },
+            music: {
+                list: { first: 0xa01000, count: 16, stride: 8, nameAt: 4, strip: 'bgm' },
+                own: "the stage's own",
+                hint: 'The song the stage plays. The game plays its stage\'s own at the round start; this plays any of the sixteen its sound test lists, by the names the sound test gives them',
+            },
+        },
         features: { stages: true, characters: false, motions: true, bodies: true, cells: false },
     };
 }

@@ -6663,6 +6663,42 @@ move, and its draws are the Export build's word for word. The USA build is
 checked by the first word of each fighter routine when it loads: where they
 do not fit, the fighters are switched off with a warning.
 
+**Music** (`js/sound/sound.js`). The Model 2B sound board, the program
+`mpr-19056.31` (Sega's CRX_drv 3.1.1, by HiroF, June 1996) and two 4 MB sample
+chips. The 2B's UART is at 0x9C0000, not the 2A's 0x1C80000: 0x17EA0 puts a
+three-byte command in a 256-byte queue (0x5671C0) that 0x17D80 sends a byte at
+a time. The wrappers 0x18120 and 0x18150 drop it while the attract runs
+silent (0x532904 = 4 and 0x56CBDD clear), so in MAME's attract the only
+command is A0 0D 3E, MASTER VOLUME (0x56CBE6, 0..7, 3 at the factory) sent as
+A0 0D 3B + the setting by 0x39070; the explorer boots with it, so the songs
+play at the factory level, a little quieter than other games'.
+
+The songs are A0 10 00 to A0 10 0F. The sound test lists them with the
+effects and voices: records of eight bytes, the command and a pointer to its
+name, the songs from 0x364D8 (Export; 0x365F8 Japan), `bgmcc` to
+`bgmrankout`. The list finds that run by its commands, so every build's is
+read wherever it sits. The round start 0x277E0 takes an index (0x27408, from
+the round's opponent through 0x268B0 and 0x268E0) and sends the song at
+0x26910[index] (Export; 0x26A20 Japan); 0x274F0 takes the stage byte from the
+same index through the data section's 0x504280, `0 4 1 5 3 2 6 7 8`. So a
+stage's song is the entry whose index that table maps to it:
+
+| stage | song | | stage | song |
+|---|---|---|---|---|
+| 0 Dark Rooftop | A0 10 03 nun | | 5 Nightmare Island | A0 10 0A ham |
+| 1 Radical Parking Lot | A0 10 0D bok | | 6 Tears Bridge | A0 10 07 sai |
+| 2 Cross Street | A0 10 04 kon | | 7 Moonlight Garden | A0 10 02 kan |
+| 3 Lust Subway | A0 10 01 tomp | | 8 Brilliant Room | A0 10 0C bonus |
+| 4 Naked Airport | A0 10 05 ssk | | | |
+
+(`stageSongs` in the profile: the nine commands, found by their run, and the
+order table, at the data section's place in each build.) The round start
+also has two turns the explorer leaves out, both about the fight rather
+than the stage: index 5 (Cross Street's) whenever 0x56BC80 is set, and the
+boss fight (0x27820), which sends A0 10 0B or A0 10 0C itself. Each song was
+rendered on `board.wasm` in node and holds its level, and the page plays
+each stage's in headless Chrome.
+
 **Not done.** The four models drawn from polygon RAM (1691, 1692, 1772,
 1773), which the program fills itself, are empty; Nagi's first part is 1691
 in costume 0 and 1772 in costume 1, so she stands without it. The fighters

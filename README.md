@@ -652,7 +652,8 @@ need a table found in that game's ROM first. Where they stand:
 
 Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
-have the Cells tab too, and all of them but Air Walkers the music.
+have the Cells tab too, and all of them but Air Walkers the music. Last
+Bronx has the music but no Cells tab yet; Pilot Kids has neither.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own) and Dead or Alive (whose
@@ -1073,6 +1074,11 @@ The **Animation** tab has the eight fighters in both costumes, with every
 motion each of them has (1546 between them, by the game's own names), played
 by the game's own fight code and its copro's program, both run in the page.
 The Japan build poses them the same way.
+
+**music**, on the Stages tab, plays each stage's own song on the game's sound
+board, the one the round start sends for it, at the factory's master volume.
+The song picker has all sixteen songs by the names the game's sound test
+gives them (`tomp`, `kan`, `boss`, `rankin` and on).
 
 Four models are drawn from polygon RAM the program fills itself and are empty
 here. See

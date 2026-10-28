@@ -70,7 +70,8 @@ export function musicChoices(rom) {
  * - `codes`: whole commands `stride` bytes apart from `at`, each followed
  *   (`then`, a byte offset into the record) by the command the game sends
  *   right after it, and the names in a table of pointers (`names`), one a
- *   song (Dynamite Cop's).
+ *   song (Dynamite Cop's), or a pointer in the record itself, `nameAt`
+ *   bytes in (Last Bronx's).
  * - `ids`: the game's sound IDs, `first` on, each a 3-byte command at
  *   `at` + 3 * ID and a name through the pointer at `names` + 4 * ID, the
  *   pointers into the program's copy in RAM, `ramBase` above the ROM (Sega
@@ -130,7 +131,8 @@ function readListedSongs(rom, L) {
         } else {
             const code = view.getUint32(at, true);
             const then = L.then === undefined ? undefined : commandBytes(view.getUint32(at + L.then, true));
-            out.push({ label: text(view.getUint32(L.names + i * 4, true)), index: i, code, then });
+            const name = L.nameAt === undefined ? L.names + i * 4 : at + L.nameAt;
+            out.push({ label: text(view.getUint32(name, true)), index: i, code, then });
         }
     }
     return out;
@@ -165,6 +167,7 @@ export function stageMusic(rom, slot, pick = -1) {
      * table holds for a stage with no song, if not 0. */
     const own = spec?.songs?.[slot];
     if (own !== undefined) return { code: own, index: slot & 0xF };
+    if (spec?.stageSongs) return orderedSong(rom, spec.stageSongs, slot);
     const at = spec?.stageMusic;
     if (at === undefined) return { code: 0, index: -1 };
     /* A table of sound IDs rather than commands (Sega Rally's). */
@@ -174,6 +177,30 @@ export function stageMusic(rom, slot, pick = -1) {
     const view = rom[`${spec.stageMusicRegion ?? 'mainCpu'}View`];
     const code = view.getUint32(at + (slot & 0xF) * 4, true);
     return { code: code === spec.none ? 0 : code, index: slot & 0xF };
+}
+
+/* A song table in the game's own order of stages rather than by stage number
+ * (Last Bronx's): `count` commands in a row, each one of the sixteen from
+ * `first`, found wherever the build keeps them; `order` the program's table
+ * of the stage number each entry is for, one word an entry. */
+const ordered = new WeakMap();
+function orderedSong(rom, S, slot) {
+    const view = rom.mainCpuView;
+    if (!ordered.has(rom)) {
+        const song = (at) => (view.getUint32(at, true) & ~0xF) === S.first;
+        let at = 0;
+        const fits = (a) => {
+            for (let i = 0; i < S.count; i++) if (!song(a + i * 4)) return false;
+            return true;
+        };
+        while (at + S.count * 4 <= view.byteLength && !fits(at)) at += 4;
+        ordered.set(rom, at + S.count * 4 <= view.byteLength ? at : -1);
+    }
+    const at = ordered.get(rom);
+    for (let i = 0; at >= 0 && i < S.count; i++) {
+        if (view.getUint32(S.order + i * 4, true) === slot) return { code: view.getUint32(at + i * 4, true), index: i };
+    }
+    return { code: 0, index: -1 };
 }
 
 export function soundSupported(game) {
