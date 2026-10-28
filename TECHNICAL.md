@@ -3430,6 +3430,18 @@ in motions 329 and 417 (bit 26) and 380 (bit 2), and none of the three is in
 any fighter's action slots or moves. Dead or Alive has no bit-23 material
 and no such test. So the explorer flashes neither game.
 
+**Nor does Virtua Fighter 2** (`vf2`, read from the ROM; not checked
+against MAME). Its fighter draw, `0x7C60`, takes no material: it sends the
+model's own record from `0x20E0004[model*16]` unchanged, and `g1` is only
+the player-2 colour offset. Fighting Vipers' `0x5BE4` puts `g2` in place of
+that word. `rob_disp`'s calls to it (`0x190F0`, `0x1918C`, `0x193C8`,
+`0x194E0`) and its slot 9 chain draw (`0x19624`) all read
+the record the same way. No code loads `0x802000`, and the only `1 << 23`
+put in `g2` (`0x119C8`) is the boot upload of texture headers from data ROM
+`0x20A0000`, ten blocks copied as they are, not Fighting Vipers' five
+repeated headers. `+0x1A4` bit 26 is read, but by fight code (the reaction
+pick at `0x230D4`, the move code at `0x1BFC4`), never next to a draw.
+
 #### Jane's player 2 broken chest takes another material (read from the ROM; not checked against MAME)
 
 Fighting Vipers only. In `rob_disp`'s part loop the model a slot draws is

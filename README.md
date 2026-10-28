@@ -665,7 +665,8 @@ record and face target, and no fight code is run for them). Dead or Alive's
 opponent plays the reaction the game's own fight code picks: the move is
 given as the fighter's command and the fight runs ("plays the reaction the
 game picks"). Virtua Fighter 2 has no hit flash to show: every fighter
-draw goes through `0x7C60` with the colour left as it is. Sonic the Fighters
+draw goes through `0x7C60`, which sends the model's own material and takes
+no other, and nothing fills Fighting Vipers' flash blocks. Sonic the Fighters
 has Fighting Vipers' flash test only in its sway-chain draw, not on the body,
 and no fighter's moves or action slots play the three motions that set it;
 Dead or Alive has no such test. So neither shows one.
