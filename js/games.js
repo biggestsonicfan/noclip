@@ -5761,6 +5761,9 @@ function lastbronxBuild(build) {
                 count: 9, stageByte: 0x57dec0, cullAll: 0x5d2e60, camera: 0x71db0 + code,
                 init: 0x941e0 + code, draw: 0x71ac0 + code, walls: 0x72640 + code,
                 names: 0x504250, dataSize: 0x2d080, cycles: { lists: 0x502b00, kinds: 0x5042e0 },
+                /* The stage skies (js/cells.js lastbrnxSky): CG directories, block
+                 * lists, scroll records; Cross Street stretches its own. */
+                sky: { cgs: 0x504340, lists: 0x5043a0, scroll: 0x504820, focal: 506.25, stretch: 2 },
             },
             flat: true,
         },

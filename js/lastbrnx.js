@@ -30,6 +30,7 @@
 import { I960 } from './i960.js';
 import { Copro, Geo, boardToOps } from './doa.js';
 import { gameLighting } from './stages.js';
+import { lastbrnxSky } from './cells.js';
 
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
 const RAM_BASE = 0x500000, RAM_SIZE = 0x100000;
@@ -258,6 +259,8 @@ export function readLastbrnxStages(rom) {
             draws,
             objects: [],
             sky: null,
+            /* The tile layer's sky (js/cells.js lastbrnxSky); none on stages 3 and 8. */
+            panorama: (cxlat) => lastbrnxSky(rom, n, cxlat),
             zones: [],
             views: [['all', 'Everything']],
             view: 'all',
