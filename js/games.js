@@ -1609,7 +1609,12 @@ const hotdp = {
             },
         },
     },
-    features: { stages: true, characters: false, motions: true, bodies: true },
+    /* The 2D pictures (js/cells.js): hotdo's table a year early, 341 of them
+     * at 0x7EFC0, read by the same routines at other addresses (the draw
+     * 0x13160, the loads 0x12E94, 0x12FE8 and 0x13088). Floats end it, as
+     * they end hotdo's. */
+    cells: { pictures: { table: 0x7efc0, count: 341 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* ---- The House of the Dead ----------------------------------------------- */

@@ -650,7 +650,8 @@ need a table found in that game's ROM first. Where they stand:
 | Stage sounds | | yes | yes | |
 | Cells tab | yes | yes | yes | yes |
 
-Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`),
+Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
+and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
 Bronx has both; Pilot Kids has the Cells tab but not the music.
@@ -1261,8 +1262,10 @@ for its two chapters.
 `hotdo` has a **Cells** tab too: its 630 pictures, the title logo's layers, the
 EPA notice, the house map, the weak-point cards, the colour bars and FREE PLAY
 among them. Each picture brings its own tiles and colours, as Dead or Alive's
-do. Revision A moved the table, and it has not been found yet, so `hotd` has
-no Cells tab. See [The House of the Dead's
+do. The prototype (`hotdp`) has one as well, with its own 341 pictures: the
+same kind of art a year early, with a Coming Soon card, two GAME OVER and
+CONTINUE screens and the 1998, 12, 18 date among them. Revision A moved the
+table, and it has not been found yet, so `hotd` has no Cells tab. See [The House of the Dead's
 cells](TECHNICAL.md#the-house-of-the-deads-cells-jscellsjs).
 
 A merged archive carrying the parent and its clones together works too, and
