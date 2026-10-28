@@ -10133,6 +10133,27 @@ here say; and the script's trail command and propeller agree with work RAM on
 every fighter-frame. That first run is what showed a fight's first copy starts
 at life 0 rather than the boot value of 3.
 
+**None of the other fighting games has it.** The trail is the coprocessor's
+commands 0x80 to 0x87 and the ring behind them, so a game has it only if its
+own coprocessor program does.
+
+- Fighting Vipers uploads its own program (the data ROM pair `.7`/`.8`,
+  offset 0xC; PM 0x20000 on). Most of its code is Sonic the Fighters', but
+  its dispatch table ends at command 0x7E. It has no 0x80 to 0x87, and the
+  ring's code (PM `0x208E1`–`0x20A8E`) is not in it. Its streaks are the
+  sparks of script op 28 instead (see "Move trails").
+- Virtua Fighter 2's coprocessor is the Model 2 TGP, and its program sends
+  none of these commands. Its script ops stop at 23. The one afterimage in
+  its code (`0x18F14`) is the replay's: while `0x500068` bit 25 and the
+  fighter's `+0x700` bit 5 are set, the main CPU keeps a 30-slot buffer at
+  `0x548010` (0x400 bytes a slot). It belongs to the replay, not to a
+  motion's script.
+- Dead or Alive's coprocessor commands are Tecmo's own small set (the ones
+  `js/doa.js` runs). None of its data ROMs holds Sonic the Fighters'
+  program, and its motions are not Sega's scripts, so there is no op 0x26.
+
+So Afterimages stays Sonic the Fighters' alone.
+
 ### Holding it against the machine
 
 `stf-tools/mame-motion.py` drives a real fight under MAME and records every word the

@@ -668,6 +668,13 @@ has Fighting Vipers' flash test only in its sway-chain draw, not on the body,
 and no fighter's moves or action slots play the three motions that set it;
 Dead or Alive has no such test. So neither shows one.
 
+Only Sonic the Fighters has afterimages. Its trail is kept by commands
+0x80 to 0x87 of its own coprocessor program. Fighting Vipers' program
+stops at 0x7E, Virtua Fighter 2's coprocessor never gets those commands,
+and Dead or Alive's is Tecmo's own. Virtua Fighter 2's one afterimage
+buffer is for the replay. See
+[Afterimages](TECHNICAL.md#afterimages-jszanzoujs).
+
 Sonic the Fighters and Dead or Alive have no stage sounds to play. Sonic the
 Fighters runs Fighting Vipers' stage-sound routine, but its per-stage records
 are all 0 and its players play nothing; Dead or Alive's stages send no sound,
