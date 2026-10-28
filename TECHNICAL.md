@@ -9896,6 +9896,21 @@ rest. The TGP's COLI copy is needed because the bufferram copy is not final when
 the command is sent. Pai's sphere centre (word 5) still read 0 there, while the
 TGP read 0.2409. With the bufferram limits the same check is off by up to 0.08.
 
+#### Dead or Alive
+
+Dead or Alive's chains don't go through `js/osage.js`. Each frame the
+Animation tab's run (`runDoaMotion` in `js/doa.js`) calls the game's own
+chain routine `0x4FEB0` for the fighter after its body, as the fight loop
+does (`fightFrame`). That is the routine graded against MAME's attract
+fight in [Dead or Alive's fighters](#dead-or-alives-fighters-rundoafighters-in-jsdoajs).
+Checked in node on all five builds, 40 frames of each fighter's motion 0,
+with the routine pointed at a bare `ret` to tell its draws apart: the body
+draws come out the same either way, and the routine adds 6 draws for Tina,
+9 for Jann Lee, 4 for Ryu and Raidou, 3 for Kasumi, 7 for Genfu and
+Leifang, and 1 for Bayman. Every link but Bayman's turns against every body
+part, by at least 0.58 in a matrix entry; Bayman's one draw stays fixed to
+a part. Zack has none.
+
 ### Tails' tails
 
 Tails' two tails are not on the sixteen-slot skeleton, and they are not a sway

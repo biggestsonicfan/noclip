@@ -647,7 +647,7 @@ need a table found in that game's ROM first. Where they stand:
 | Moves by input | yes | yes | yes | |
 | Strings played | yes | yes | yes | |
 | Fighter's own motions grouped | yes | yes | yes | yes |
-| Sway chains | yes | yes | yes | |
+| Sway chains | yes | yes | yes | yes |
 | Hit flash | | yes | | |
 | Afterimages | yes | | | |
 | Stage sounds | | yes | yes | |
@@ -703,6 +703,11 @@ like the AM2 games' matcher, and its command table holds no inputs. Nor
 are its strings played: the explorer chains moves through the follow-up
 tables that program parks, and its command table names no next move. See
 [Moves and strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
+
+Dead or Alive's chains (Tina's ribbons, Kasumi's sash and ponytail, Jann
+Lee's belt and the others') swing on the Animation tab. The game's own chain
+routine runs for them, as in the fight. See [Sway
+chains](TECHNICAL.md#dead-or-alive).
 
 ## Dead or Alive
 
