@@ -105,6 +105,18 @@
  * tile chip is filled once, at boot, as Virtua Cop's is, but with a 1bpp font
  * expanded first (`boot.font`) and the characters copied straight. See
  * js/games.js POWSLED_CELLS.
+ *
+ * Last Bronx draws Power Sled's scripts with a year-later draw (`script`, see
+ * runScript), but loads its tile chip a CG at a time (`groups`). A CG is a
+ * directory: entries of an offset from the directory and a first character,
+ * ending with a zero offset. Each leads to a chain of blocks, a size (the
+ * colours' offset), a tile count, 16 colours and the tiles, until a zero size;
+ * the loader (0x149F0) copies the tiles straight from the first character and
+ * gives every 128-character group the block takes its 16 colours. The game's
+ * table of CGs (`groups.table`) holds a CG, a list of its cells' offsets
+ * from the list and their count; CG 0 is the boot's (`groups.boot`), which
+ * stays loaded, so a cell is drawn with it under its own. See js/games.js
+ * lastbronxBuild.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
@@ -132,6 +144,8 @@ function cellRecords(rom) {
         out = listedCells(rom).map((c) => c.at);
     } else if (C.pictures) {
         for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
+    } else if (C.groups) {
+        out = groupCells(rom).map((c) => c.at);
     } else if (C.scripts) {
         const [first, end] = C.scripts;
         for (let a = first; a < end && out.length < MAX_CELLS;) {
@@ -191,6 +205,28 @@ function listedCells(rom) {
         for (const [at, cols, rows, or, name] of C.maps) add(at, cols, rows, or, name);
     }
     listedCache.set(rom, out);
+    return out;
+}
+
+/* Last Bronx's cells, each {at, group}: the table's lists in order, each
+ * offset added to its list's own address. A record whose list is not in the
+ * data ROM ends the table. */
+const groupCache = new WeakMap();
+function groupCells(rom) {
+    let out = groupCache.get(rom);
+    if (out) return out;
+    const G = rom.game.cells.groups;
+    out = [];
+    for (let group = 0; group < G.count; group++) {
+        const list = word(rom, G.table + group * 12 + 4);
+        const count = word(rom, G.table + group * 12 + 8);
+        if (list < MAIN_DATA_BASE || !scrollPtrOk(rom, list) || count > MAX_CELLS) break;
+        for (let k = 0; k < count && out.length < MAX_CELLS; k++) {
+            const at = list + word(rom, list + k * 4);
+            if (scrollPtrOk(rom, at)) out.push({ at, group });
+        }
+    }
+    groupCache.set(rom, out);
     return out;
 }
 
@@ -381,6 +417,16 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.groups) {
+        const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
+        for (let group = 0; group < C.groups.count; group++) {
+            const dir = word(rom, C.groups.table + group * 12) || C.groups.boot;
+            const dirs = group ? [C.groups.boot, dir] : [dir];
+            all.push({ dirs, name: group ? `data ${hex(dir)} over the boot's` : `the boot's, data ${hex(dir)}` });
+        }
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.pictures) {
         const skies = skyNames(rom);
         for (let n = 0; n < C.pictures.count; n++) {
@@ -464,7 +510,7 @@ export function cgLabel(rom, cg) {
 export function readCell(rom, cell) {
     if (rom.game.cells.cgm || rom.game.cells.maps) return readListed(rom, cell);
     const p = cellRecords(rom)[cell];
-    if (p !== undefined && rom.game.cells.scripts) return scriptCell(rom, p);
+    if (p !== undefined && (rom.game.cells.scripts || rom.game.cells.groups)) return scriptCell(rom, p);
     const h = p === undefined ? null : recordHeader(rom, p);
     if (!h) return null;
     const { R, base, wide, rows, cols, head } = h;
@@ -508,24 +554,33 @@ function readListed(rom, cell) {
  *   89/8A n lo hi n copies downwards; 8B/8C upwards
  *   8D a b        move (a + b) * 256 entries, the sum a signed byte
  *
+ * Last Bronx's draw (0x14CD0) is the same routine a year on (`script`): no
+ * 0x100 on the character (`bias` 0), 8D moves by a + b * 256 entries, a
+ * signed halfword (`wideMove`), and 8E lo hi writes one character, so a byte
+ * above 0x8E (`last`) ends the script.
+ *
  * Entries are numbered as the layer's are, 64 to a row. Returns them by
  * entry number, and the address past the end; null where the script runs off
  * the ROM. */
 function runScript(rom, start) {
+    const V = rom.game.cells.script ?? {};
+    const bias = V.bias ?? 0x100, last = V.last ?? 0x8d;
     const S = scrollAt(rom, start);
     const b = S.u8;
     let o = S.off, at = 0, dict = [];
     const out = new Map();
     const s8 = (v) => (v << 24) >> 24;
-    const ch = (lo, hi) => ((0x100 + lo + (hi << 8)) & CHAR_MASK) | 0x8000;
+    const s16 = (v) => (v << 16) >> 16;
+    const ch = (lo, hi) => ((bias + lo + (hi << 8)) & CHAR_MASK) | 0x8000;
     for (;;) {
         if (o + 4 > b.length) return null;
         const op = b[o++];
         if (op < 0x80) { out.set(at++, dict[op] ?? 0); continue; }
-        if (op > 0x8d) break;
+        if (op > last) break;
         switch (op) {
         case 0x80: at = b[o] + (b[o + 1] << 8); o += 2; break;
         case 0x81: at += s8(b[o++]); break;
+        case 0x8e: out.set(at++, ch(b[o], b[o + 1])); o += 2; break;
         case 0x85: {
             const n = b[o], base = ch(0, b[o + 1]); o += 2;
             for (let i = 0; i < n; i++) out.set(at++, base | b[o++]);
@@ -541,7 +596,7 @@ function runScript(rom, start) {
             break;
         }
         case 0x88: o++; break;
-        case 0x8d: at += s8(b[o] + b[o + 1]) * 256; o += 2; break;
+        case 0x8d: at += V.wideMove ? s16(b[o] + (b[o + 1] << 8)) : s8(b[o] + b[o + 1]) * 256; o += 2; break;
         default: {
             const n = b[o];
             let e = ch(b[o + 1], b[o + 2]);
@@ -603,6 +658,7 @@ function loadTiles(rom, L) {
     if (L.picture) return loadPicture(rom, L, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
+    if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
     const out = parts[parts.length - 1];
@@ -640,6 +696,37 @@ function loadPicture(rom, L, charBytes) {
         p += 32;
     }
     return { chars, pal, written: block * 16, charRuns, palRuns };
+}
+
+/* Last Bronx's CG directories, one after another, as 0x149F0 loads each:
+ * see the top of the file. */
+function loadDirs(rom, dirs, charBytes) {
+    const chars = new Uint8Array(charBytes);
+    const pal = new Uint16Array(0x8000);
+    const charRuns = [], palRuns = [];
+    const maxChars = charBytes / TILE_BYTES;
+    for (const dir of dirs) {
+        for (let e = 0; ; e++) {
+            const off = word(rom, dir + e * 8);
+            if (!off) break;
+            let first = word(rom, dir + e * 8 + 4), b = dir + off;
+            for (let size; scrollPtrOk(rom, b) && (size = word(rom, b)); ) {
+                const count = word(rom, b + 4);
+                const groups = (count + DOA_BLOCK - 1) >> 7;
+                const P = scrollAt(rom, b + size), T = scrollAt(rom, b + size + 0x20);
+                if (first + count > maxChars || T.off + count * TILE_BYTES > T.u8.length) break;
+                for (let g = first >> 7; g < (first >> 7) + groups; g++) {
+                    for (let c = 0; c < 16; c++) pal[g * 16 + c] = P.view.getUint16(P.off + c * 2, true);
+                }
+                palRuns.push([(first >> 7) * 16, groups * 16]);
+                chars.set(T.u8.subarray(T.off, T.off + count * TILE_BYTES), first * TILE_BYTES);
+                charRuns.push([first, count]);
+                b += size + 0x20 + count * TILE_BYTES;
+                first += groups * DOA_BLOCK;
+            }
+        }
+    }
+    return { chars, pal, written: 0, charRuns, palRuns };
 }
 
 /* A Sega Rally file as its loader (0x5C8EB0) leaves it, from group 9: block
@@ -900,6 +987,8 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.cgm) return [{ cg: listedCells(rom)[cell].file, cover: 1 }];
     /* Power Sled's one CG, the boot's, holds every character and colour. */
     if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
+    /* A Last Bronx cell is drawn with the CG its list goes with. */
+    if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
     return rankSharedCGs(rom, cell, c);
 }
 

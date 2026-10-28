@@ -5806,7 +5806,21 @@ function lastbronxBuild(build) {
                 hint: 'The song the stage plays. The game plays its stage\'s own at the round start; this plays any of the sixteen its sound test lists, by the names the sound test gives them',
             },
         },
-        features: { stages: true, characters: false, motions: true, bodies: true, cells: false },
+        /* The Cells tab (js/cells.js `groups`): the tilemap scripts Power
+         * Sled's draw runs, as Last Bronx's draw (0x14CD0) runs them, and the
+         * CGs its loader (0x149F0) reads. Fourteen records of a CG, a list of
+         * its cells and their count sit beside the sound test's songs (0x36560
+         * Export, 0x36680 Japan): 508 cells, each written wholly by its CG and
+         * the boot's (data 0xA00000, loaded at boot by 0x14740 and never
+         * unloaded). Every script the code draws by `lda` is in one of them. */
+        cells: {
+            groups: { table: 0x36560 + code, count: 14, boot: 0x02a00000 },
+            script: { bias: 0, last: 0x8e, wideMove: true },
+            charBytes: 0x80000,
+            programAt0: true,
+            colorxlat: true,
+        },
+        features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
     };
 }
 
@@ -5826,6 +5840,8 @@ const lastbrnx = lastbronxBuild({
  */
 const LASTBRONX_EXPORT = { data: 0xc9100, chars: 0xb53b0, settings: 0x3d4bb, code: 0 };
 const LASTBRONX_FIRST_WORDS = [[0x71ac0, 0x80a03000], [0x72640, 0x80a03000], [0x71db0, 0x59084810], [0x941e0, 0x5ca81e00]];
+/* The CG table's first list, which the Cells tab needs where it is. */
+const LASTBRONX_CELLS_WORD = [0x36564, 0x02a00024];
 /* And the fighters' set-up, motion start, step and draw, for the Fighters tab. */
 const LASTBRONX_FIGHTER_WORDS = [[0xb5e10, 0x5c601618], [0x49540, 0x8cb800b8], [0x49820, 0x8c086080], [0x4a940, 0x8ce800b8]];
 
@@ -5842,6 +5858,11 @@ function settleLastbronx(build, rom) {
     if (!fits) {
         g.features = { ...g.features, stages: false };
         console.warn(`${g.name}: the stage routines are not ${shift} bytes on from the Export build's; no Stages tab`);
+    }
+    if (!there(LASTBRONX_CELLS_WORD)) {
+        g.features = { ...g.features, cells: false };
+        g.cells = undefined;
+        console.warn(`${g.name}: the CG table is not ${shift} bytes on from the Export build's; no Cells tab`);
     }
     if (!LASTBRONX_FIGHTER_WORDS.every(there)) {
         g.features = { ...g.features, motions: false, bodies: false };
