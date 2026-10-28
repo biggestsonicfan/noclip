@@ -77,7 +77,7 @@ import {
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
-import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand } from './doafighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand, dropDoaBus } from './doafighters.js';
 import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -6681,9 +6681,11 @@ function applyGameFeatures() {
 }
 
 /* Dead or Alive's fixes are in the program its stage routines run, so the
- * stages are run again, as loadGameContent runs them on a fresh load. */
+ * stages are run again, as loadGameContent runs them on a fresh load, and
+ * the fighters' table bus, made on the old program, is dropped. */
 function rerunFixedStages() {
     const game = state.rom.game;
+    if (game.doa?.fixes?.length) dropDoaBus(state.rom);
     if (game.doa?.fixes?.length && game.stageTable?.doa && state.stages.length) state.stages = readDoaStages(state.rom);
 }
 
