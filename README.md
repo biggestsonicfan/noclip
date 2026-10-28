@@ -699,7 +699,9 @@ only when the opponent plays the reaction: the plain Animation run starts the
 motion without its script. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
 
 Dead or Alive's moves are not listed by input: its ROM has no input program
-like the AM2 games' matcher, and its command table holds no inputs. See
+like the AM2 games' matcher, and its command table holds no inputs. Nor
+are its strings played: the explorer chains moves through the follow-up
+tables that program parks, and its command table names no next move. See
 [Moves and strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
 
 ## Dead or Alive

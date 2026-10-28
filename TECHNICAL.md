@@ -10387,6 +10387,13 @@ Fighters. Its command table (`0x91C60`, eight bytes an entry) holds the
 action, the state and the attack's number, but no input. So its moves are not
 listed by input.
 
+Its strings are not played either. The explorer chains a move to the next
+through the follow-up table the matcher parks with `0x0D`, and DOA has none.
+`0x25730` turns the player's command byte straight into its entry's action;
+on `doab` an entry's other bytes are two small numbers, `0xFF`, a byte from 1
+to 5 written twice, and a zero, none of them a command to follow (Zack's first
+40 checked). How the game takes a second press is not read.
+
 ## Textures
 
 The sheets are not in ROM in a readable form: the game unpacks them into
