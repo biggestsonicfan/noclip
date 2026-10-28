@@ -10380,6 +10380,13 @@ once the fighter is free. Changing fighter retypes the string: each press goes
 through the new fighter's tree, so Sonic's P, K and half-circle P become
 Knuckles' own. A view link carries the string as its entries' table addresses.
 
+Dead or Alive has no such program. Its code is Tecmo's own, and neither
+`doab` nor `doa` (Revision C) holds a run of the matcher's 7-byte `0x0E`
+key headers pointing into byte-code; the same scan finds 42 in Sonic the
+Fighters. Its command table (`0x91C60`, eight bytes an entry) holds the
+action, the state and the attack's number, but no input. So its moves are not
+listed by input.
+
 ## Textures
 
 The sheets are not in ROM in a readable form: the game unpacks them into

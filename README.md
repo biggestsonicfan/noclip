@@ -698,6 +698,10 @@ Dead or Alive's hand shapes come from its action script (op 0x2E), and show
 only when the opponent plays the reaction: the plain Animation run starts the
 motion without its script. See [The hands](TECHNICAL.md#the-hands-jsfighterhandsjs).
 
+Dead or Alive's moves are not listed by input: its ROM has no input program
+like the AM2 games' matcher, and its command table holds no inputs. See
+[Moves and strings](TECHNICAL.md#moves-and-strings-jsmovesjs).
+
 ## Dead or Alive
 
 Every build MAME has loads: `doa.zip` (Revision C, Model 2B), `doab.zip`
