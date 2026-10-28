@@ -29,7 +29,7 @@
 const JA_PAGE = {
     'doc.title': 'セガ Model 2 — 3D エクスプローラー',
     'splash.title': 'セガ Model 2 <span>3D エクスプローラー</span>',
-    'splash.sub': 'Model&nbsp;2 アーケードゲーム5本のアリーナ、コース、ファイター、モンスターの中を飛び回れます。'
+    'splash.sub': 'Model&nbsp;2 アーケードゲーム14本のアリーナ、コース、ファイター、モンスターの中を飛び回れます。'
         + 'すべてこのタブの中で、あなた自身の ROM セットから組み立てます。',
     'splash.showcase': 'エクスプローラーが描くもの',
     'reel.empty': 'このゲームのクリップはまだありません &mdash; <code id="reel-empty-zip"></code> をドロップして自分の目で確かめてください。',
@@ -57,49 +57,61 @@ const JA_PAGE = {
     'daytona.clip.speedway': 'スリーセブン・スピードウェイ、スタートラインに並ぶグリッド',
     'daytona.clip.canyon': '岩の上から見たダイナソー・キャニオン',
     'daytona.clip.seaside': '水の上から見たシーサイド・ストリート・ギャラクシー',
-    'vcop.name': 'バーチャコップ <i>実験的</i>',
-    'vcop.meta': '3つのステージとすべてのモデル &middot; <code>vcop</code>',
+    'vcop.name': 'バーチャコップ',
+    'vcop.meta': '3つのステージ、リグに乗った敵、すべてのモデル &middot; <code>vcop</code>',
     'vcop.clip.warehouse': 'ステージ&nbsp;1 のレールに乗ってコンテナの間へ',
     'vcop.clip.site': 'ステージ&nbsp;2 のレール、赤い空の下の工事現場を横切って',
     'vcop.clip.tower': 'ステージ&nbsp;3 のレール、タワーのふもとを回って',
-    'fvipers.name': 'ファイティングバイパーズ <i>実験的</i>',
-    'fvipers.meta': '16のアリーナ、まだ解読中 &middot; <code>fvipers</code>',
+    'fvipers.name': 'ファイティングバイパーズ',
+    'fvipers.meta': '16のアリーナ、ファイターとその技 &middot; <code>fvipers</code>',
     'fvipers.clip.arena': '最初のアリーナの壁に囲まれた中庭',
     'fvipers.clip.sunset': '同じ中庭の夕暮れ、別のアリーナのレコードが描いたもの',
     'fvipers.clip.ring': '街のスカイラインの下のロープつきリング',
-    'vf2.name': 'バーチャファイター2 <i>実験的</i>',
-    'vf2.meta': '12ステージ、その音楽とステージの音つき &middot; <code>vf2</code>',
+    'vf2.name': 'バーチャファイター2',
+    'vf2.meta': '音楽つきの12ステージと、リグに乗ったファイター &middot; <code>vf2</code>',
     'vf2.clip.islands': '海に突き出た緑の岬にあるアイランドのリング',
     'vf2.clip.wall': '万里、万里の長城の上のリング',
     'vf2.clip.snow': '山に切り込まれた雪山のリング',
     'vf2.clip.fighter': '専用リグのアキラ',
-    'doa.name': 'デッド オア アライブ <i>実験的</i>',
-    'doa.meta': '12ステージとすべてのモデル、Model 2B と 2A で &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code>',
-    'von.name': '電脳戦機バーチャロン <i>実験的</i>',
-    'von.meta': '10ステージ（一部組み立て済み）とすべてのモデル &middot; <code>vonj</code> / <code>vonu</code>',
+    'doa.name': 'デッド オア アライブ',
+    'doa.meta': '12ステージとファイター、Model 2B と 2A で &middot; <code>doa</code> / <code>doab</code> / <code>doaa</code> / <code>doaab</code> / <code>doaae</code>',
+    'von.name': '電脳戦機バーチャロン',
+    'von.meta': '10ステージ（一部組み立て済み）と、リグに乗ったロボット &middot; <code>vonj</code> / <code>vonu</code>',
     'von.clip.airport': 'エアポートのフィールド、その壁の内側',
     'von.clip.deathtrap': '鉄骨の塔の中にあるデストラップのアリーナ',
     'von.clip.secretbase': 'シークレットベースの段々の輪',
-    'srallyc.name': 'セガラリーチャンピオンシップ <i>実験的</i>',
-    'srallyc.meta': '4つのコースとすべてのモデル &middot; <code>srallyc</code>',
+    'srallyc.name': 'セガラリーチャンピオンシップ',
+    'srallyc.meta': '4つのコース、車、観客 &middot; <code>srallyc</code>',
     'srallyc.clip.forest': '木々の間を縫うフォレストコース',
     'srallyc.clip.desert': '青空の下の砂漠のコース',
     'srallyc.clip.mountain': '雪の峰を背にしたマウンテンコース',
-    'dynamcop.name': 'ダイナマイトコップ <i>実験的</i>',
-    'dynamcop.meta': '279のエリアとすべてのモデル、Model 2A、2B、2C で &middot; <code>dynamcop</code> / <code>dyndeka2</code>',
+    'dynamcop.name': 'ダイナマイトコップ',
+    'dynamcop.meta': '279のエリアとキャラクター、Model 2A、2B、2C で &middot; <code>dynamcop</code> / <code>dyndeka2</code>',
     'dynamcop.clip.ballroom': 'コース&nbsp;2-1 の舞踏室とそのテーブル',
     'dynamcop.clip.harbour': 'コース&nbsp;4-1 の洞窟の港に浮かぶガレオン船',
     'dynamcop.clip.deck': 'コース&nbsp;4-2、夜の甲板の上',
-    'airwlkrs.name': 'エアウォーカーズ <i>実験的</i>',
-    'airwlkrs.meta': '17のコートとすべてのモデル、各チームのテクスチャつき &middot; <code>airwlkrs</code>',
-    'airwlkrs.clip.city': 'イントロで飛び越える街',
-    'airwlkrs.clip.mascot': 'あるチームのカバのマスコット',
-    'airwlkrs.clip.trophy': 'トロフィー',
-    'powsled.name': 'パワースレッド <i>実験的</i>',
-    'powsled.meta': 'ゲームが描くすべてのモデル &middot; <code>powsled</code>',
-    'powsled.clip.sled': '黄色いソリ',
-    'powsled.clip.penguin': 'ペンギン',
-    'powsled.clip.ice': 'コース脇の氷の岩山',
+    'airwlkrs.name': 'エアウォーカーズ',
+    'airwlkrs.meta': '17のコートと、リグに乗った選手 &middot; <code>airwlkrs</code>',
+    'airwlkrs.clip.court': 'シアトル・ベロシティのホームコート、床すれすれに',
+    'airwlkrs.clip.stands': 'スタンドの上から見たニューヨーク・スターズのコート',
+    'airwlkrs.clip.player': '専用リグのシアトル・ベロシティの選手',
+    'powsled.name': 'パワースレッド',
+    'powsled.meta': 'コース、モデル、アトラクトのライドシーン &middot; <code>powsled</code>',
+    'powsled.clip.start': 'スタートから岩の間を縫って下る滑走',
+    'powsled.clip.tunnel': 'トンネルのシーン：氷の谷を下るコース',
+    'powsled.clip.bridges': '橋のシーン、雪原の上へ',
+    'powsled.clip.ride': 'アトラクトのライド：黄色いソリに乗る2人',
+    'lastbrnx.name': 'ラストブロンクス',
+    'lastbrnx.meta': '9つのステージ、その動く仕掛けと曲、リグに乗ったファイター &middot; <code>lastbrnx</code> / <code>lastbrnj</code>',
+    'lastbrnx.clip.parking': '投光器に照らされたラディカル・パーキング・ロット',
+    'lastbrnx.clip.garden': '高層ビルに囲まれたムーンライト・ガーデンのリング',
+    'lastbrnx.clip.street': 'クロス・ストリートの屋上の上を',
+    'lastbrnx.clip.fighter': '専用リグで勝利ポーズを決めるヨーコ',
+    'pltkids.name': 'パイロットキッズ',
+    'pltkids.meta': 'すべてのモデル、9つのシーンのテクスチャつき &middot; <code>pltkids</code> / <code>pltkidsa</code>',
+    'pltkids.clip.pilot': '子どものパイロットの1人',
+    'pltkids.clip.viking': '角の生えたボス',
+    'pltkids.clip.dog': '犬',
     'doa.clip.palace': 'ステージ&nbsp;3 の壁に囲まれた宮殿の中庭',
     'doa.clip.sunset': 'ステージ&nbsp;11 の溶岩に囲まれた岩のリング',
     'doa.clip.city': 'ステージ&nbsp;10、夜の街の上',
@@ -145,12 +157,39 @@ const JA_PAGE = {
         + 'カモメ、近くを飛ぶと駆け出す馬 &mdash; そして選択肢でコースをレース、タイムアタック、'
         + 'エンディングとして描けます。<b>キャビネット</b>の切り替えで、テストメニューの設定と同じ'
         + 'カラーテーブルを選べます。車にはリグがなく動かないので、アニメーションタブはありません。',
-    'romnote.fvipers': '<b>ファイティングバイパーズ</b>（<code>fvipers.zip</code>）&mdash; <b>実験的</b>。'
-        + '16のアリーナと5413のテーブル項目が出てきます。このゲームとソニック・ザ・ファイターズは同じセガの'
-        + 'ライブラリで作られていて、ステージのレコード、モデルテーブル、テクスチャとカラーのパイプラインが'
-        + 'すべてそのまま使えたからです。このゲーム独自の部分はまだ見つかっていません。アリーナのレコードが'
-        + '指すオブジェクトリストが未解読なのでアリーナは止まったまま、アリーナには名前がないのでそれぞれ'
-        + 'レコードの番号で表示し、キャラクターのリグやモーションもないのでアニメーションタブはありません。',
+    'romnote.fvipers': '<b>ファイティングバイパーズ</b>（<code>fvipers.zip</code>）&mdash; '
+        + '16のアリーナと5413のテーブル項目が出てきます。'
+        + 'このゲームとソニック・ザ・ファイターズが同じセガのライブラリで作られているので読めるのです。'
+        + 'アリーナはそのレコードが指すオブジェクトを動かし、ファイターはバーチャファイター2のリグで1054のモーションを演じます。'
+        + '技はそれを出す入力の下に並び、相手はゲームどおりのリアクションを返します。',
+    'romnote.vcop': '<b>バーチャコップ</b>（<code>vcop.zip</code>、Revision B）&mdash; '
+        + 'デイトナUSAと同じライブラリで、その1年後に作られたゲームです。基板が描くテーブルから読んだ3つのステージをレールカメラで進めます。'
+        + 'モデル1234個、セル、敵のモーションも出てきます。',
+    'romnote.vf2': '<b>バーチャファイター2</b>（<code>vf2.zip</code>、Version 2.1）&mdash; '
+        + 'ゲームのデバッグメニューの名前がついた12ステージとその音楽とステージの音、'
+        + 'モデルとセル、そしてリグに乗って技や連携を出すファイターが出てきます。',
+    'romnote.doa': '<b>デッド オア アライブ</b>（<code>doa.zip</code>、ほかに <code>doab</code>、<code>doaa</code>、<code>doaab</code>、<code>doaae</code>）&mdash; '
+        + '各ステージ自身のルーチンを i960 インタープリターで動かして組み立てた12ステージと、'
+        + 'ゲーム自身の格闘コードがポーズをつけるファイターが、Model 2B 版でも 2A 版でも出てきます。',
+    'romnote.von': '<b>電脳戦機バーチャロン</b>（<code>vonj.zip</code> と <code>von.zip</code>、または USA 版の <code>von.zip</code> 単体）&mdash; '
+        + 'ROM をスキャンして見つけた7097のモデル、10ステージ（一部は部分的）、セル、'
+        + '音楽、そしてモーションでポーズをとる9体のロボットが出てきます。',
+    'romnote.srallyc': '<b>セガラリーチャンピオンシップ</b>（<code>srallyc.zip</code>、Revision C）&mdash; '
+        + '4つのコース、すべてのカラーリングのセリカとデルタ、セル、そしてコース脇で声援を送る観客が出てきます。',
+    'romnote.dynamcop': '<b>ダイナマイトコップ</b>（<code>dynamcop.zip</code>、4つのクローンと一緒に）&mdash; '
+        + 'ゲーム自身のオブジェクトリストから組み立てた1部屋ずつの279のエリア、19432のモデルすべて、セル、'
+        + 'そしてモーションでポーズをとるキャラクターが、2A、2B、2C の基板で出てきます。',
+    'romnote.airwlkrs': '<b>エアウォーカーズ</b>（<code>airwlkrs.zip</code>）&mdash; データイーストのゲームです。'
+        + 'チームごとに1つ、観客とスコアボードつきの17のコート、'
+        + '各チームのユニフォームつきの2026のモデル、セル、そしてモーションでポーズをとる選手が出てきます。',
+    'romnote.powsled': '<b>パワースレッド</b>（<code>powsled.zip</code>）&mdash; '
+        + 'レースの6つのシーンルーチンを滑走全体にわたって動かして組み立てたただ1つのコース、'
+        + 'プログラムが名指す494のモデル、セル、そしてアトラクトのライドシーンが出てきます。',
+    'romnote.lastbrnx': '<b>ラストブロンクス</b>（<code>lastbrnx.zip</code>、日本版には <code>lastbrnj.zip</code> を一緒に）&mdash; '
+        + 'モデル2544個、ステージ自身のコードで動く9つのステージ（動く仕掛けと曲つき）、508のセル、'
+        + 'そしてゲーム自身の格闘コードがポーズをつける、両方のコスチュームの8人のファイターが出てきます。',
+    'romnote.pltkids': '<b>パイロットキッズ</b>（<code>pltkids.zip</code>、2A 版には <code>pltkidsa.zip</code> を一緒に）&mdash; '
+        + '彩京のゲームです。読み込む9つのシーンのテクスチャつきの4185のモデルすべてと、74のセルが出てきます。',
 
     'tab.stage': 'ステージ',
     'tab.model': 'モデル',

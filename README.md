@@ -1383,16 +1383,19 @@ node record-previews.mjs --game stf --list sfight.zip   # what the shots index
 node record-previews.mjs --game stf sfight.zip          # record them all
 node record-previews.mjs --game stf --only carpet sfight.zip
 node record-previews.mjs --game hotdp --build hotdp hotd.zip   # a merged set
+node record-previews.mjs --gpu --game powsled powsled.zip       # on the GPU under WSL (see the script)
 ```
 
 It wants Chrome or Edge (`$CHROME` names one) and ffmpeg with libx264. The ROM
 set goes to the page through its file input and nowhere else; the script's own
 server refuses a `.zip` like `serve.mjs` does. The clips are pictures of what
 the explorer draws, not the ROM's bytes: nothing in them loads back into it.
-Every game has clips, the experimental ones too. Virtua Cop's ride its rail
+Every game has clips. Virtua Cop's ride its rail
 (the script's `rail(n)`, off the stage's `railPath`), since that is where the
-game puts its camera. Re-record them all when the explorer draws something
-differently, so the reel shows what a set turns into today.
+game puts its camera; Power Sled's fly round the views its Zone list frames
+(`viewFrame`), since its course has no centre to orbit.
+Re-record them all when the explorer draws something differently, so the
+reel shows what a set turns into today.
 
 ## Reporting something wrong
 
