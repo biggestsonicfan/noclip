@@ -7878,6 +7878,27 @@ two rows left from the pointer table 0xA1ED0, three to each value of work
 RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
 2500: sheets, colorxlat, luma and palette the same.
 
+Water Ski's **Stages** are read the same way, from its own addresses. A
+course draws its grid through 0x9BA10, which hands 0x56580 two records by
+course: data 0x62E8B70 (near) and 0x62E8B90 (far). 0x56580 takes a cell's
+model from the far grid, and from the near one inside a box round the
+camera; the far grids are the near ones with some cells left out, so the
+explorer lays the near grid. The attract's 0x9BA70 uses 0x62E8BB0/0x62E8BD0
+instead, the same but with the fourth course's grid first. The objects:
+0xBB0(course) picks two lists into 0x5110F0/0x5110F8 (0xB320/0xB910,
+0xBA80/0xC130, 0xC150/0xC970, 0xCCA0/0xCCC0, the fourth empty), or, in the
+attract's demo modes 5 and 6 of work RAM 0x570098, the first two courses'
+other lists (0xCCE0/0xD1F0, 0xDC90/0xDE70, 0xD210/0xD4D0; not read). The
+walker 0x1080 makes and fills tasks as Wave Runner's does (0x1040 copies
+the record). Makers call 0x91FB0 straight, there is no code copy, and the
+culled draw is 0x18F0. Handlers often scale (copro 0x13 from +0x6C/+0x70).
+The sea is model 358 (0x62933C0), 1360 wide, drawn by 0x2D5A0 under the
+camera; 0x5114D0 = 1 picks model 356 instead. No backdrop maker was found.
+Checked: from MAME's camera at attract frame 2000, the fourth course's grid
+puts the grandstand and its boards where MAME draws them, and three buoys
+drawn there by 0x2C40 stand at the first course's list positions (their
+model steps by a clock, so the first frame's model differs).
+
 ### Top Skater (`js/topskatr.js`)
 
 Sega's 1997 skateboard game on Model 2C (MAME's `topskatr`, Revision A,

@@ -7422,6 +7422,16 @@ const segawski = {
             count: 4, palettes: 0x90970, banks: 0x90990,
             colorTable: 0x4f990, colorIndex: [0, 1, 2, 3], patches: 0x622c390,
         },
+        /* The Stages tab (readWaverunrStages): the near grids by course
+         * (0x9BA10 hands 0x56580 these and a far copy, 0x62E8B90, that drops
+         * some cells), the race's object lists from 0xBB0, the task maker and
+         * the culled draw, the course in work RAM, the sea (0x2D5A0). No
+         * code copy and no backdrop maker. */
+        stages: {
+            count: 4, grids: 0x62e8b70, course: 0x56e094, backdrop: 0,
+            objects: [[0xb320, 0xb910], [0xba80, 0xc130], [0xc150, 0xc970], [0xcca0, 0xccc0]],
+            code: null, makers: [0x91fb0], draw: 0x18f0, sea: 358, seaSize: 1360,
+        },
     },
     texture: { raw: { layout: 'waverunr' }, sets: 4, residentSet: null, defaultSet: 0 },
     colors: {
@@ -7431,7 +7441,9 @@ const segawski = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The courses, read as Wave Runner's (js/waverunr.js). */
+    stageTable: { waverunr: true, flat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /*

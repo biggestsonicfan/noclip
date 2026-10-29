@@ -37,7 +37,7 @@ Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
-*Wave Runner* has its models and courses and *Sega Water Ski* its models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Wave Runner* and *Sega Water Ski* have their models and courses — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
@@ -1471,14 +1471,27 @@ Runner's program carried on. The **Models** tab has all 13331 entries of the
 data ROM's model table (one is empty), with the textures, palette and colour
 tables the game loads for them.
 
-The texture picker's sets are the four courses; a model opens on set 0, the
-first course, which the attract shows. Nothing found yet says which course a
-model belongs to. Set 0's texture sheets, colour tables, luma and palette
+The texture picker's sets are the four courses. A model drawn only from the
+boot's sheet, or by no course's stage, opens on set 0, the first course,
+which the attract shows; one that a course's stage draws opens on that
+course. Set 0's texture sheets, colour tables, luma and palette
 match MAME's RAM in the attract byte for byte. Three colour rows of every
 course come from a table picked by a value in work RAM (0 in the attract,
 which is the one used here; it may be the player's choice of skier).
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Stages** tab has the four courses, *course 1* to *course 4*, read as
+Wave Runner's are: the course's grid (the near one; the game also has a far
+copy that leaves some cells out), the sea, and the objects of the race's
+lists, each drawn by its own routine run once on the program's code: the
+hotels, piers, boats, ramps, buoys, the parasail and the dolphin, the big
+wheel of the third course. The fourth course is a small one with no objects;
+the attract runs its grid under the first course's textures. Seen from
+MAME's camera at attract frame 2000, the grandstand, its SEGA and Water Ski
+boards and the shore stand where MAME draws them. Not there: the sky and
+clouds, the skiers and boats that move, the attract's own object lists. The
+light is not read; faces are at full ambient.
+
+There are no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Top Skater
