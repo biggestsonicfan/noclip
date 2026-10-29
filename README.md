@@ -673,7 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids has the Cells tab but not the music.
+Bronx has both; Pilot Kids and Super GT 24h have the Cells tab but not the
+music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1307,6 +1308,14 @@ match MAME's at the title and in the attract race byte for byte. The colour
 tables are those of the hour the title and the attract use: the race has
 640 versions of two rows, one per stretch of its 24 hours, and the viewer
 shows one.
+
+The **Cells** tab has the game's 521 tile-chip pictures from its seven CG
+files: the fonts, the digits, the captions (INSERT COIN, GAME OVER, FINAL
+LAP, ROLLING START), the course, car and gear select screens with their
+buttons, the rev counters and the results. A CG is a file loaded over the
+boot's, as the game loads them, and each cell opens on its own file's.
+The pictures checked against MAME's screen (Course select, the lap and
+course buttons) are the same pixel for pixel.
 
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).

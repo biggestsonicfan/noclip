@@ -131,6 +131,7 @@
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
+import { jalecoCells, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -151,6 +152,8 @@ function cellRecords(rom) {
     out = [];
     if (C.cgm || C.maps) {
         out = listedCells(rom).map((c) => c.at);
+    } else if (C.files) {
+        out = jalecoCells(rom).map((c) => c.at);
     } else if (C.pictures) {
         for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
     } else if (C.groups) {
@@ -426,6 +429,11 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.files) {
+        all = jalecoCGs(rom);
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -518,6 +526,7 @@ export function cgLabel(rom, cg) {
  */
 export function readCell(rom, cell) {
     if (rom.game.cells.cgm || rom.game.cells.maps) return readListed(rom, cell);
+    if (rom.game.cells.files) return readJalecoCell(rom, cell);
     const p = cellRecords(rom)[cell];
     if (p !== undefined && (rom.game.cells.scripts || rom.game.cells.groups)) return scriptCell(rom, p);
     const h = p === undefined ? null : recordHeader(rom, p);
@@ -666,6 +675,7 @@ function loadTiles(rom, L) {
     const charBytes = rom.game.cells.charBytes;
     if (L.picture) return loadPicture(rom, L, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
+    if (L.jaleco) return loadJalecoCG(rom, L, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
@@ -1007,6 +1017,8 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
     /* A Last Bronx cell is drawn with the CG its list goes with. */
     if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
+    /* A Jaleco cell is drawn with its own file (js/jalecocells.js). */
+    if (rom.game.cells.files) return [{ cg: jalecoCellCG(rom, cell), cover: 1 }];
     return rankSharedCGs(rom, cell, c);
 }
 

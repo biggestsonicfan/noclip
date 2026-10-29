@@ -6686,7 +6686,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, cells }) {
     return {
         id,
         name,
@@ -6698,8 +6698,10 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         paletteOffset: null,
         texture,
         colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* The tile chip's CG files (js/jalecocells.js). */
+        cells,
         /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: !!cells },
     };
 }
 
@@ -6765,6 +6767,8 @@ const sgt24h = jalecoBuild({
         defaultSet: 0,
     },
     colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+    /* The tile chip's CG files: the directory at data 0xE00000 (0x3CF8C). */
+    cells: { files: { dir: 0x02e00000 }, charBytes: 0x80000, colorxlat: true },
 });
 
 /*

@@ -7410,6 +7410,51 @@ keeps the boot's. Texture RAM matches at the title and in the attract race
 (Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
 sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
 
+**Cells** ([js/jalecocells.js](js/jalecocells.js), `files` in the game's
+cells). The tile chip is filled from CG files, which the data ROM lists in a
+zero-ended directory of pointers: sgt24h data 0xE00000, 7 files. The boot
+loads the first (0x3CF8C, `ld 0x2E00000`), and a scene loads another by its
+address through the same loader, 0x3C7B0. A file is:
+
+- +0x00, the tile list: a halfword the loader skips, a halfword block count,
+  then the blocks, each a character RAM address, a tile count and the tiles
+  (32 bytes each), copied as they are;
+- +0x04, the palette list: a count of 16-colour groups, a palette RAM address
+  and the colours;
+- +0x08, the pattern count; +0x10, the patterns' pointers;
+- +0x0C, 0 or a palette variant record, which the loader hands to 0x3C0B0
+  with variant 0: a group count, a pointer to the groups' numbers
+  (halfwords), the variant count and the colours, 16 per group, variant v's
+  `count * 32` bytes on from the first.
+
+A pattern is the width and the height (halfwords), a word, and the entries
+row by row. 0x3D370 draws one: the column and row in g0/g1, the pattern in
+g2, the tilemap (0x1000000 or 0x1004000) in g3, and in g4 a halfword ORed
+into every entry; rows go 64 entries apart, clipped to the 64 by 64 map. Of
+its 272 callers 189 pass 0x8000 (the category bit), 31 pass 0, 13 pass 0x4000
+and 4 pass 0xC000. Bit 14 moves the entry's group up by 128: the select
+screens draw the choice not taken so (LONG COURSE and 3 LAPS on MAME's
+course select), and file 1's variant record holds exactly those groups, darker.
+The explorer draws every pattern with 0x8000.
+
+The boot's file (data 0xE2C3E8) fills characters 0 to 0x19FF and groups 0 to
+51 (176 patterns: fonts, digits, HUD captions); files 1 to 5 start at
+character 0x2000 and group 64 and load over it, leaving the boot's in place;
+file 6 (data 0xEFE5F4) fills characters from 0 again. Each block is one
+128-character group, whose entries name that group, so every cell's
+characters and colours come from its own file (plus the boot's for files 1
+to 5). The cells are the files' patterns in directory order, 521 in all; CG
+n is file n over the boot's.
+
+Checked against MAME: in the attract (frames 300 to 5000) the boot's file and
+file 2 (the race HUD) are in character and palette RAM byte for byte; coined
+up (frames 700 to 5200, the course select) the boot's and file 1, but for
+colour 15 of group 64, which code stores (the blinking frame round the
+current choice). 30 of file 1's patterns sit whole in MAME's tilemaps, and
+Course select, SHORT COURSE and the lap buttons render the same as MAME's
+screen pixel for pixel. Files 3 to 6 were not reached in MAME; the loader
+reads them the same way.
+
 **Not done, and leads.** No course is put together: the course's model
 lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
 read the model table besides the draw routines, and the pointer list at
@@ -7418,8 +7463,7 @@ make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
 read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
 copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
-found in. The tile chip's pictures and the sound programs were not looked
-at.
+found in. The sound programs were not looked at.
 
 ### Dynamite Baseball 97 (`js/dynabb.js`)
 
