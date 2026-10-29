@@ -32,7 +32,7 @@ import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
-import { buildJalecoTexram } from './jaleco.js';
+import { buildJalecoTexram, jalecoCourseSets } from './jaleco.js';
 import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
 import { buildSkisuprgTexram } from './skisuprg.js';
 import { buildWaverunrTexram } from './waverunr.js';
@@ -1936,7 +1936,8 @@ export function programTextureSets(rom, index, decoded) {
     }
     /* Super GT 24h and Over Rev: sheet 0's full-size pages are the boot's and
      * no course replaces them; a model on them alone is drawn the same on
-     * every course. The rest are left to the picker. */
+     * every course. A model a course's grids or trackside name takes that
+     * course's set (js/jaleco.js); the rest are left to the picker. */
     if (T.raw?.layout === 'jaleco') {
         if (!decoded) return null;
         const want = sampledTiles(decoded);
@@ -1945,7 +1946,9 @@ export function programTextureSets(rom, index, decoded) {
         for (let i = 0; i < decoded.tiles.length; i += 4) {
             if (decoded.tiles[i + 2] && decoded.tiles[i + 1] >= SHEET_H) sheet1 = true;
         }
-        return sheet1 ? null : { sets: [], how: 'boot' };
+        if (!sheet1) return { sets: [], how: 'boot' };
+        const course = jalecoCourseSets(rom).get(index);
+        return course != null ? { sets: [course], how: 'course' } : null;
     }
     if (T.raw?.layout === 'dynabb') {
         return dynabbModelSets(rom, index, decoded, decoded && sampledTiles(decoded).length > 0);

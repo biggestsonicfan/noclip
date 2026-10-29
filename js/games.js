@@ -6686,7 +6686,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, courses }) {
     return {
         id,
         name,
@@ -6698,8 +6698,11 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         paletteOffset: null,
         texture,
         colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
-        /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        /* The courses (readJalecoStages in js/jaleco.js); flat, so the Models
+         * tab still asks the model for its set. */
+        ...(courses ? { stageTable: { jaleco: courses, flat: true } } : {}),
+        /* No fighter or motion data is read yet. */
+        features: { stages: !!courses, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
@@ -6765,6 +6768,23 @@ const sgt24h = jalecoBuild({
         defaultSet: 0,
     },
     colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+    /*
+     * The four courses, in 0x5305F8's order, named as the test menu's
+     * histogram pages name them (0xBF670: bit 0 the long course, 2 and 3
+     * reversed). 0x2FC0's lists and counts; 0x3F4C0 loads sheet 1 from
+     * 0xED8B0[course]. Trackside: 0xEFE60's {model, course} pairs and
+     * 0xF0120's model a course.
+     */
+    courses: {
+        courses: [
+            { name: 'Short course', list: 0xec66c, count: 0xec630 },
+            { name: 'Long course', list: 0xec678, count: 0xec640 },
+            { name: 'Short course, reverse', list: 0xec684, count: 0xec650 },
+            { name: 'Long course, reverse', list: 0xec690, count: 0xec660 },
+        ],
+        textures: 0xed8b0,
+        trackside: [{ at: 0xefe60, count: 16, stride: 8 }, { at: 0xf0120, count: 4, stride: 4 }],
+    },
 });
 
 /*

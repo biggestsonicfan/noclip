@@ -7410,15 +7410,44 @@ keeps the boot's. Texture RAM matches at the title and in the attract race
 (Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
 sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
 
-**Not done, and leads.** No course is put together: the course's model
-lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
-read the model table besides the draw routines, and the pointer list at
-data 0x818060 is the place to start. The car is single models; which parts
+**Courses (Stages tab).** Both games draw a course the same way. A course
+is a few grid records, {cell width, cell depth (floats: 50 in Super GT 24h,
+75 in Over Rev), columns, rows, first and last column, first and last row,
+grid pointer at +0x20}, and the grid is a word a cell: the model there, or
+0. The camera's cell picks a list of 6-byte records {column, row, kind},
+ended by 0xFF, and each draws the model in that cell of each grid record of
+that kind under the camera matrix alone. The models are in world space, as
+Daytona USA's blocks are, so `readJalecoStages` draws every non-empty cell
+of the near (kind 0) records at the origin.
+
+Super GT 24h: 0x46B4 calls one of the fourteen band routines at 0xEC6A0
+(0x2450 in the attract), and they draw through 0x72C90 out of
+`(0x517B20[course])[kind]`, `0x517AF0[course][kind]` records; 0x2FC0 points
+those at the lists at 0xEC66C (12 bytes a course) and counts at 0xEC630
+(16). The course is 0x5305F8; the test menu's histogram pages (0xBF670) name
+them: bit 0 the long course, 2 and 3 reversed. Each course has one 128 by
+128 grid (0x282A360, 0x284A3C0, 0x286A420, 0x288A480), and 0x3F4C0 loads
+sheet 1 from 0xED8B0[course], sets 0..3. Trackside: 0x4AC10 draws the 16
+{model, course} pairs at 0xEFE60 (gated by cell bits at 0xEDF60/0xEDDC8)
+and 0x4CDE0 the model `0xF0120[course]` every frame; both are in.
+
+Checked in headless Chrome from MAME's attract-race camera (Super GT 24h
+frame 1200, the eye from the course pieces' matrix):
+the pieces stand where MAME draws them, on the right textures.
+
+**Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
+(0x47700, 0x4A450, 0x4A760, 0x4B5B0, 0x4B2E0, 0x4BAD0, 0x4B870, 0x4CDB0)
+place the animated trackside: tables at 0x476D0/0x476F0 by 0x510F60 and
+course >> 1 (0x5307E0), rows of 0x4DA from 0x49BA0, the moving 0x4CC..0x4CE
+from 0x4599C, and the Check Point gantry (0x4DB/0x4E3, likely 0x47A5C). The
+sky is 0x2AF0 (models 0x3F7..0x40C, tables 0x29B0, 0x2AB0, 0x2AC0). Over Rev
+draws objects 0x1B1, 0x283, 0x28A, 0x290, 0x125 and 0x159 from 0x55B778,
+0x56176C, 0x5618AC, 0x561B70, 0x556BC0 and 0x557194. The material table is
+not read: stages draw at full ambient. 0x2DEC, 0x4B324 and 0xCFE2C read the
+model table besides the draw routines. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
-read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
-copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
-found in. The tile chip's pictures and the sound programs were not looked
+read at 0x6000C and 0x7EBAC. The tile chip's pictures and the sound programs were not looked
 at.
 
 ### Dynamite Baseball 97 (`js/dynabb.js`)
