@@ -15,6 +15,7 @@ import { t } from './lang.js';
 import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
 import { skisuprgPalette } from './skisuprg.js';
+import { waverunrPalette } from './waverunr.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -418,8 +419,9 @@ export function facePalette(rom) {
     rom.facePalettes ??= new Map();
     if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
 
-    if (p?.layout === 'dynamcop' || p?.layout === 'skisuprg') {
-        const out = (p.layout === 'dynamcop' ? dynamcopPalette : skisuprgPalette)(rom, set);
+    const own = { dynamcop: dynamcopPalette, skisuprg: skisuprgPalette, waverunr: waverunrPalette }[p?.layout];
+    if (own) {
+        const out = own(rom, set);
         rom.facePalettes.set(set, out);
         return out;
     }

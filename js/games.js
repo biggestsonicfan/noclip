@@ -6119,6 +6119,86 @@ const skisuprg = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Sega's 1996 jet-ski game on Model 2C (MAME `waverunr`, Revision A). The
+ * program is Ski Super G's generation and Sega Water Ski's, which runs the
+ * same code; js/waverunr.js has the scenes, the sheets, the face palette and
+ * colorxlat for both. README's Wave Runner section and TECHNICAL.md say how
+ * each was found.
+ */
+const waverunr = {
+    id: 'waverunr',
+    name: 'Wave Runner',
+    identify: ['epr-19282a.15', 'epr-19283a.16', 'mpr-19291.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19282a.15', 0x5df58604, 'epr-19283a.16', 0xbca188e1]],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19291.11', 0x54431d67, 'mpr-19292.12', 0x9152d979],
+                [0x0800000, 'mpr-19293.9', 0xb168bea9, 'mpr-19294.10', 0xc731e659],
+                ...Array.from({ length: 16 }, (_, i) =>
+                    [0x1000000 + i * 0x100000, 'epr-19278.7', 0x29ed421d, 'epr-19279.8', 0x6ae9f899]),
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19287.17', 0x203b9e45, 'mpr-19288.21', 0x4a488e4d],
+                [0x0800000, 'mpr-19289.18', 0x35361cb3, 'mpr-19290.22', 0x67300826],
+                ...Array.from({ length: 15 }, (_, i) =>
+                    [0x1000000 + i * 0x100000, 'epr-19304.19', 0x1a7d9521, 'epr-19305.23', 0x00412412]),
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19286.27', 0x3ccc33cb, 'mpr-19285.25', 0xa070fbd0],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x800000 + i * 0x100000, 'epr-19303.28', 0xfcffc8a0, 'epr-19302.26', 0xbd00933a]),
+            ],
+        },
+    },
+    /*
+     * 3457 entries of 16 bytes in the program ROM at 0x6A7C0: tpa, tha,
+     * 0x800000 | polygon word, polygon count, as Ski Super G's. The draws (53
+     * sites) send an entry whole, `lda 0x6a7c0[gX*16]`, `ldq` and `stq` to
+     * 0x804000 after `st 0x101, 0x800010`.
+     */
+    modelTable: { offset: 0x6a7c0, count: 3457, stride: 16, source: 'maincpu' },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    palette: { layout: 'waverunr' },
+    paletteOffset: null,
+    /* A set is a scene (waverunrScenes): the four courses by their tables,
+     * then the two scenes that name theirs in the code. */
+    waverunr: {
+        bootBank: 0x02000000,
+        fill: 0xbbbb,
+        ramps: 0x34ec0,
+        palette: { top: 0x10080, blocks: [[0x2858b60, 0], [0x84350, 300]], first: 500 },
+        courses: {
+            count: 4, palettes: 0x973e0, banks: 0x973f0,
+            colorTable: 0x35040, colorIndex: [0, 1, 2, 3], patches: 0x2848b60,
+        },
+        scenes: [
+            { name: 'scene 0x4AF60', bank: 0x02200000, palette: 0x2858fda, colors: 0xa2bd7 },
+            { name: 'scene 0x2CBE0', bank: 0x02500000, palette: 0x2859556, colors: 0xa2bd7 },
+        ],
+    },
+    texture: { raw: { layout: 'waverunr' }, sets: 6, residentSet: null, defaultSet: 0 },
+    colors: {
+        /* 0x35220: luma RAM cleared, then 0x4000 bytes of the data ROM at
+         * 0x85C408 to the entries from 0x3200. */
+        luma: { data: 0x85c408, bytes: 0x4000, at: 0x3200 },
+        waverunr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6126,7 +6206,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, skisuprg];
+    pltkids, pltkidsa, skisuprg, waverunr];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

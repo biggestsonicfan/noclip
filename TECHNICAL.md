@@ -7186,6 +7186,50 @@ start of luma RAM; the rest stays 0.
 set, is not found. A course's record (+0x24 and on) and the course loader
 0x3DEA4 are where a Stages tab would start. Lighting is not done.
 
+### Wave Runner and Sega Water Ski (`js/waverunr.js`)
+
+Sega's 1996 jet-ski game on Model 2C (MAME's `waverunr`, Revision A). Its
+program is Ski Super G's generation: the same 16-byte model table, the same
+raw banks. Each table was found from the code that uses it, and checked
+against MAME's texture, colour, luma and palette RAM in the attract (frames
+1300 and 3000). Addresses are the program ROM's.
+
+**Model table.** 0x6A7C0, 16 bytes an entry, 3457 entries, named by 53 draws
+(`lda 0x6a7c0[gX*16]`, then `ldq` and `stq` to 0x804000). All 3457 decode
+(174,094 faces, 153,651 textured).
+
+**Textures.** 0x34BF0(bank, sheet) is Ski Super G's 0x43830, the same calls
+to the rectangle copy 0x345C0 (`uploadRawBank`). The boot (0x34DC8) puts
+0x2000000 on sheet 0 and 0x2100000 on sheet 1. After a scene's bank,
+0x3F570(0xBBBB) fills the 16 x 8 halfwords at (0x1F0, 0x1F8) of both mip
+halves. A course then has 0x4AAC0 paste eight 64 x 64 blocks, 0x2000 bytes
+each from data 0x848B60, onto sheet 1 through 0x3EC50 (g1 = 0 is sheet 1),
+at The House of the Dead's eight places.
+
+**Scenes.** A course (work RAM 0x511F60) takes its palette block from
+0x973E0, its bank from 0x973F0 (0x2100000, 0x2200000, 0x2300000, 0x2400000)
+and its colour table from 0x35040 (0x97410, 0x97470, 0x97460). 0x4AF60 with
+0x4AFF4 and 0x2CBE0 with 0x2CD2C name theirs in the code (banks 0x2200000
+and 0x2500000, colour table 4 of 0x35040).
+
+**Palette.** 0x351C0 writes the {count, colours} block at 0x10080 down from
+entry 1023 (the boot's only). Every scene writes 0x2858B60 from entry 0,
+0x84350 from 300 and its own from 500 through 0x36360.
+
+**Colour tables.** 0x34EC0 works the ramps out in floating point, every
+entry of every row; it runs with `js/i960.js`. 0x35060 (or 0x97500, a row a
+frame) lays a table over them: a count byte, then 64 {r, g, b} bytes a row
+onto rows 1, 3, 5 and so on. A switch at 0x513334 averages each entry to grey.
+It is off in the attract and is not followed here.
+
+**Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
+0x85C408 to the entries from 0x3200.
+
+**Leads.** Which models a course draws, so that a model could open on its
+own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
+calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
+identified.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

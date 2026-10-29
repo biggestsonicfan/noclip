@@ -95,17 +95,17 @@ export function skisuprgPalette(rom, set) {
  * 0x80 bytes at 0x5121B0 + c * 0x1000 + r * 0x80. Matches MAME's colorxlat
  * RAM in the attract byte for byte.
  */
-const COLOR_RAM = 0x01800000;
-const CXLAT_AT = 0x10000;
-const CXLAT_BYTES = 0xc000;
+export const COLOR_RAM = 0x01800000;
+export const CXLAT_AT = 0x10000;
+export const CXLAT_BYTES = 0xc000;
 const SHADOW = 0x5121b0;
 
-export function buildSkisuprgColorxlat(rom, colorSet) {
-    const S = rom.game.colors.skisuprg;
-    const table = scene(rom, colorSet).colors;
-    rom.skisuprgColors ??= new Map();
-    const have = rom.skisuprgColors.get(table);
-    if (have) return have.slice();
+/*
+ * Run program routines over a bus of the program ROM, work RAM 0x500000 and
+ * the palette/colorxlat RAM at 0x1800000; js/waverunr.js runs its colour
+ * routines through this too. Returns the work RAM and the palette RAM.
+ */
+export function runRoutines(rom, calls, what) {
     const prog = rom.maincpu;
     const ram = new Uint8Array(0x100000);
     const pal = new Uint8Array(0x20000);
@@ -113,7 +113,7 @@ export function buildSkisuprgColorxlat(rom, colorSet) {
         if (a < prog.length) return [prog, a];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + pal.length) return [pal, a - COLOR_RAM];
-        throw new Error(`Ski Super G colour routine at 0x${a.toString(16)}`);
+        throw new Error(`${what} colour routine at 0x${a.toString(16)}`);
     };
     const read = (a, n) => {
         const [b, o] = where(a);
@@ -129,11 +129,21 @@ export function buildSkisuprgColorxlat(rom, colorSet) {
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
-    for (const [entry, args] of [[S.ramps, []], [S.table, [table]]]) {
+    for (const [entry, args] of calls) {
         if (!cpu.call(entry, args, { maxSteps: 2_000_000 })) {
             throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
         }
     }
+    return { ram, pal };
+}
+
+export function buildSkisuprgColorxlat(rom, colorSet) {
+    const S = rom.game.colors.skisuprg;
+    const table = scene(rom, colorSet).colors;
+    rom.skisuprgColors ??= new Map();
+    const have = rom.skisuprgColors.get(table);
+    if (have) return have.slice();
+    const { ram, pal } = runRoutines(rom, [[S.ramps, []], [S.table, [table]]], 'Ski Super G');
     const out = pal.slice(CXLAT_AT, CXLAT_AT + CXLAT_BYTES);
     const sh = SHADOW - 0x500000;
     for (let ch = 0; ch < 3; ch++) {

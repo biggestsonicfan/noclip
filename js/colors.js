@@ -33,6 +33,7 @@ import { MAIN_DATA_BASE } from './romset.js';
 import { dynamcopScene } from './dynamcop.js';
 import { I960 } from './i960.js';
 import { buildSkisuprgColorxlat } from './skisuprg.js';
+import { buildWaverunrColorxlat } from './waverunr.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -634,6 +635,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
     if (rom.game.colors.skisuprg) return buildSkisuprgColorxlat(rom, colorSet);
+    if (rom.game.colors.waverunr) return buildWaverunrColorxlat(rom, colorSet);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
