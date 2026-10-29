@@ -7281,6 +7281,7 @@ const waverunr = {
     id: 'waverunr',
     name: 'Wave Runner',
     identify: ['epr-19282a.15', 'epr-19283a.16', 'mpr-19291.11'],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7347,7 +7348,11 @@ const waverunr = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0x8E1B0, 1059 entries; the last 215 through XTRA_DATA (`xtra`). Load
+     * 0x8D650, draw 0x8D720 (adds block << 7). */
+    cells: { pictures: { table: 0x8e1b0, count: 1059 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

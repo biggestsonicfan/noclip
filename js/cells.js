@@ -77,6 +77,7 @@
  * ROM (`programAt0`, table 0xEBFB0): the loaders 0x78A90 (tiles) and 0x789F0
  * (colours) put a picture from a block its "scroll group" names, and the draw
  * (0x78BB0) adds block << 7 to the entries. See js/games.js skytargt.cells.
+ * Wave Runner (waverunr) has the same library (table 0x8E1B0).
  *
  * The House of the Dead (hotdo) has the same pictures a year early, in its
  * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free

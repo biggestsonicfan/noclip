@@ -7840,6 +7840,19 @@ It is off in the attract and is not followed here.
 **Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
 0x85C408 to the entries from 0x3200.
 
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format): the
+table is program 0x8E1B0, 1059 {tiles, colours, map} entries to the zeros at
+0x91354; the last 215 point at data through XTRA_DATA (0x64xxxxx is data
+0x14xxxxx; the data region repeats its chip there). The scroll-group library
+is the same as Sky Target's: 0x8D650 loads (block allocator 0x2176D0, colours
+0x2177C0, tiles 0x217940), 0x8D720 draws, adding block << 7. The 0x21xxxx
+routines run from RAM: the boot copies 128 KB of program from 0xB0000 to
+0x200000 (0xB790), so 0x2176D0 is program 0xC76D0. A MAME write tap put the
+title's tiles from 0x2CD5B30 (count 0x175) through 0x217A08. Graded against
+MAME's tile and palette RAM at frames 1200, 3000, 4200 and 5400: 48 pictures
+found on the layers (the title, the backdrops 111/112/243/244, the course
+map pieces 925-1008, the menus 699/702), all pixel for pixel.
+
 **Leads.** Which models a course draws, so that a model could open on its
 own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
 calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not

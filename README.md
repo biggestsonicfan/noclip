@@ -1454,7 +1454,11 @@ which course a model belongs to: the beach of model 2826, for one, wants set
 1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
 in the attract byte for byte.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 1059 2D pictures (the title, the HUD, the
+course maps, the menus), each with its own colours. The title screen's
+pictures match MAME's tile RAM pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Sega Water Ski
