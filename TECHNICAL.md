@@ -7801,6 +7801,18 @@ start of luma RAM; the rest stays 0.
 set, is not found. A course's record (+0x24 and on) and the course loader
 0x3DEA4 are where a Stages tab would start. Lighting is not done.
 
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format), with
+the same scroll-group library (its SCROLL GROUP ERROR string is at 0x58E30;
+the tile clear 0x58DB0, the loads at 0x58D98 and 0x58E78). The table is
+program 0xB05C0, 946 {tiles, colours, map} entries; 920 to 943 are in the
+second program chip (0x100000 on), 944 and 945 have their map in the first.
+Entry 946 has no tiles: what follows is another table. MAME's `skisuprg`
+stops on DRIVE BOARD TROUBLE (code FF) at every frame, with #1881's NVRAM
+too, so the grading is thin: its CREDIT pieces (cells 670, 673, 675) match
+the tile RAM pixel for pixel at frames 1200 to 6000. The trouble screen
+itself is not one of the pictures. Getting past it (the drive board's reply,
+not found) would let the attract grade the rest.
+
 ### Wave Runner and Sega Water Ski (`js/waverunr.js`)
 
 Sega's 1996 jet-ski game on Model 2C (MAME's `waverunr`, Revision A). Its

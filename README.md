@@ -36,7 +36,7 @@ Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and its cells — see [Sky Target](#sky-target).
-Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
+Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
@@ -1437,7 +1437,12 @@ course select look right under set 0, the snow, trees and banners under set
 in the attract byte for byte; the courses' sets are read from their records
 and were not reached in MAME.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 946 2D pictures (the HUD, the course maps,
+the menus, the name entry), each with its own colours. MAME stops on DRIVE
+BOARD TROUBLE, where only the CREDIT pieces show; those match its tile RAM
+pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
 
 ## Wave Runner

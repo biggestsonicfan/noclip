@@ -7267,7 +7267,10 @@ const skisuprg = {
         skisuprg: { ramps: 0x43df0, table: 0x44260 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0xB05C0, 946 entries (920-945 in the second program chip). */
+    cells: { pictures: { table: 0xb05c0, count: 946 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
