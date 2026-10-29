@@ -151,12 +151,36 @@
  * records) and its palettes in three tables a bank (`banks`), and its draws
  * take a cell and a CG by number. See js/bankcells.js and js/games.js
  * INDY500_CELLS.
+ *
+ * Virtua Cop 2 keeps Virtua Cop's records and boot, moved: its draw (0x7928)
+ * ORs the caller's bits into each entry rather than adding them (`orBase`),
+ * its font is copied straight where the rest is swapped (a fourth element of
+ * a `chars` entry), and a run count of 0 fills to the end (`zeroFills`). The
+ * game refills the middle and the end of the chip for the title and for each
+ * stage, so its CGs are `modes`. See js/games.js VCOP2_CELLS.
+ *
+ * Desert Tank draws Daytona's records (`records`) and loads Daytona's pairs
+ * of lists, but never clears the chip between them: every CG lands on what
+ * the boot left (`stacked`, js/stackcells.js). Its pointer tables lie on
+ * halfword steps (`pointerStep`). See js/games.js DESERT_CELLS.
+ *
+ * Gunblade NY runs Power Sled's scripts as Last Bronx does, from two runs
+ * with zero padding between scripts (`scriptPad`), and loads one Last Bronx
+ * directory at the boot with a font over it; each scene copies colours and
+ * characters over that by hand (`dirs`, js/stackcells.js applyCopies). See
+ * js/games.js, the gunblade entry.
+ *
+ * Zero Gunner is Pilot Kids' records and files a year sooner; the check
+ * menu's viewer loads one file of fourteen over the boot's, so each is a
+ * boot `mode`, and each record opens on the file it lies after (`screens`).
+ * See js/games.js ZEROGUN_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { bankTables, loadBankCG, rankBankCGs } from './bankcells.js';
+import { stackCGs, loadStacked, applyCopies } from './stackcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -167,6 +191,7 @@ const MAX_PICTURE_SIDE = 128;   /* Dead or Alive's tallest picture is 69 rows */
 const DOA_BLOCK = 128;          /* tiles to a block of character RAM */
 
 const word = (rom, addr) => { const t = scrollAt(rom, addr); return t.view.getUint32(t.off, true); };
+const byteAt = (rom, addr) => { const t = scrollAt(rom, addr); return t.u8[t.off]; };
 
 /* Each cell's record address, worked out once per ROM set. */
 const recordCache = new WeakMap();
@@ -222,7 +247,7 @@ function scriptRuns(C) {
     return Array.isArray(C.scripts[0]) ? C.scripts : [C.scripts];
 }
 function pastZeros(rom, a, end) {
-    while (a < end && scrollAt(rom, a).u8[scrollAt(rom, a).off] === 0) a++;
+    while (a < end && byteAt(rom, a) === 0) a++;
     return a;
 }
 
@@ -427,8 +452,10 @@ export function unusedCells(rom) {
         const records = cellRecords(rom);
         const index = new Map(records.map((a, i) => [a, i]));
         const named = new Set();
+        /* Desert Tank keeps pointer tables on halfword steps (`pointerStep`). */
+        const step = rom.game.cells.pointerStep ?? 4;
         for (const v of [rom.mainCpuView, rom.mainDataView]) {
-            for (let o = 0; o + 4 <= v.byteLength; o += 4) {
+            for (let o = 0; o + 4 <= v.byteLength; o += step) {
                 const i = index.get(v.getUint32(o, true));
                 if (i !== undefined) named.add(i);
             }
@@ -475,6 +502,16 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.dirs) {
+        /* Gunblade NY's: the boot's directory (Last Bronx's format), its
+         * fonts and copies, then each scene's copies over that (`dirs`). */
+        const D = C.dirs;
+        const boot = { dirs: [D.boot], fonts: D.fonts ?? [], copies: D.copies ?? [] };
+        all.push({ ...boot, name: D.name });
+        for (const S of D.scenes ?? []) all.push({ ...boot, fonts: S.fonts ?? boot.fonts, copies: [...boot.copies, ...S.copies], name: S.name });
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -514,7 +551,7 @@ function cgListsAll(rom) {
         return all;
     }
     const pairAt = (pair, name, extra) => ({
-        tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
+        tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name, pair,
     });
     if (C.cgTables || C.cgPairs || C.cgLists) {
         for (const [table, count] of C.cgTables ?? []) {
@@ -529,6 +566,7 @@ function cgListsAll(rom) {
         }
         for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
         for (const [tiles, pal, name] of C.cgLists ?? []) all.push({ tiles: [tiles], pal, name });
+        if (C.stacked) stackCGs(rom, all);
     } else {
         for (let cg = 0; cg < (C.cgEntries ?? CG_ENTRIES) / 2; cg++) {
             const tiles = word(rom, C.cgTable + cg * 8);
@@ -581,7 +619,7 @@ export function readCell(rom, cell) {
     const entries = new Uint16Array(rows * cols);
     for (let i = 0; i < entries.length; i++) {
         const v = wide ? R.view.getUint16(R.off + head + i * 2, true) : R.u8[R.off + head + i];
-        entries[i] = (v + base) & 0xffff;
+        entries[i] = (rom.game.cells.orBase ? v | base : v + base) & 0xffff;
     }
     return { cols, rows, entries };
 }
@@ -723,6 +761,13 @@ function loadTiles(rom, L) {
     if (L.banked) return loadBankCG(rom, L.banked, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
+    if (L.stack) return loadStacked(rom, L, charBytes);
+    if (L.dirs && (L.fonts || L.copies)) {
+        const out = loadDirs(rom, L.dirs, charBytes);
+        for (const F of L.fonts) bootFont(rom, F, out.chars, out.charRuns);
+        applyCopies(rom, out, L.copies);
+        return out;
+    }
     if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
@@ -824,9 +869,12 @@ const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) <<
 
 /* What Virtua Cop's boot leaves in the tile chip, and a stage's group over
  * it (js/games.js VCOP_CELLS). The characters are copied a halfword at a
- * time with the bytes swapped, unless `straight`. The palette steps, in the
+ * time with the bytes swapped, unless `straight` (for all of them, or as a
+ * fourth element for one list, Virtua Cop 2's font). The palette steps, in the
  * boot's order: `runs`, a count and sixteen colours, that group repeated
- * count times, until `until` groups are written or for `lists` such entries;
+ * count times, until `until` groups are written or for `lists` such entries
+ * (with `zeroFills`, Virtua Cop 2's, a count of 0 repeats its group to the
+ * end, or once in a single entry);
  * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
  * colours copied as they are; `copy`, groups copied to others; `shuffled`,
  * Virtual On's lists of [colours, groups], one group after another;
@@ -845,10 +893,10 @@ function loadBoot(rom, L, charBytes) {
     const pal = new Uint16Array(0x8000);
     const charRuns = [], palRuns = [];
     if (B.font) bootFont(rom, B.font, chars, charRuns);
-    for (const [src, first, count] of [...(M.chars ?? []), ...B.chars]) {
+    for (const [src, first, count, straight] of [...(M.chars ?? []), ...B.chars]) {
         const S = scrollAt(rom, src);
         const n = Math.min(count * TILE_BYTES, S.u8.length - S.off, charBytes - first * TILE_BYTES) & ~1;
-        const swap = B.straight ? 0 : 1;
+        const swap = B.straight || straight ? 0 : 1;
         for (let i = 0; i < n; i += 2) {
             chars[first * TILE_BYTES + i] = S.u8[S.off + i + swap];
             chars[first * TILE_BYTES + i + 1] = S.u8[S.off + i + 1 - swap];
@@ -884,7 +932,8 @@ function loadBoot(rom, L, charBytes) {
             let src = op.runs, group = op.group;
             for (let k = 0; k < 0x100 && (op.lists ? k < op.lists : group - op.group < op.until); k++) {
                 const S = scrollAt(rom, src);
-                const count = S.view.getUint16(S.off, true);
+                let count = S.view.getUint16(S.off, true);
+                if (!count && B.zeroFills) count = op.lists ? 1 : op.until - (group - op.group);
                 put(group, src + 2, count);
                 group += count;
                 src += 34;
@@ -1065,8 +1114,9 @@ export function rankCGs(rom, cell) {
         const run = scriptRuns(rom.game.cells).findIndex(([a, b]) => p >= a && p < b);
         return [{ cg: run, cover: 1 }];
     }
-    /* Power Sled's one CG, the boot's, holds every character and colour. */
-    if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
+    /* Power Sled's one CG, the boot's, holds every character and colour;
+     * Gunblade NY's scenes are ranked like any shared CGs. */
+    if (rom.game.cells.scripts && !rom.game.cells.dirs) return [{ cg: 0, cover: 1 }];
     /* A Last Bronx cell is drawn with the CG its list goes with. */
     if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
     /* An INDY 500 cell is drawn with a CG of its own bank (js/bankcells.js). */

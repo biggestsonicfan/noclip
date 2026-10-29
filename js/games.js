@@ -3563,6 +3563,96 @@ const vcop = {
  * called in the same order at boot (0x1EDC..0x1F2C). What differs is listed
  * on the fields below.
  */
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot, moved and
+ * grown. The draw is 0x7928 (0x7970 the same but for skipping zero
+ * entries): the record's address in g0, the tilemap's in g9 and in g1 the
+ * bits it ORs into every entry (`orBase`), 0x8000 from most calls, 0xC000
+ * (bit 14, the group moved on by 0x80) from some and 0 from a few. The
+ * record is Virtua Cop's, the width and the height as halfwords then
+ * halfword entries; they lie end to end in data 0x2B80000..0x2B8E67E and in
+ * the two gaps between the three stage skies (0x8228[stage], which 0x7EAC
+ * and 0x80A8 stream into layer 0x1006000 as Virtua Cop does its own).
+ *
+ * The boot (0x7510) fills the tile chip, and the game fills parts of it
+ * again. The characters, each list a halfword at a time with its bytes
+ * swapped (0x7604), but for the font:
+ *   0x7E10  the font, a list at 0x60AA4: 128 characters from 0x60AB4 into 0
+ *   0x7554  0x2400000 into 0x80..0x67F
+ *   0x8260  0x240C000 into 0x680..0x327F, the game's (called again after
+ *           0x82D8's screens); 0x82D8 has 0x2464000 there instead
+ *   0x8314  the stage's, 0x8394[0x502010]: three lists into 0x3280..0x3FFF,
+ *           and stage 2 one more over 0x3B80 on
+ * and the colours, a count and sixteen colours repeated count groups (0x767C
+ * until its end, 0x76C0 one such run): 0x7E50's list at 0x61AB4 (groups 0
+ * and 0x80), four colours at 0x6068C over 0x80, 0x2B95070 into groups 1..0xC
+ * and again into 0x81..0xFF, runs from the program over 0x82..0x88; 0x8260
+ * 0x2B951A2 into 0xD..0x64 and three runs over 0x41, 0xCD and 0xB4 (0x82D8,
+ * 0x2B95626); the stage's into 0x65..0x7F (and 0x2B95A44 into 0x77.. for
+ * stage 2). So a CG is the boot with one of the two middle fills and one of
+ * the stage fills (`modes`).
+ */
+const VCOP2_STAGE_FILLS = [
+    { name: 'stages 0, 2, 4, 5', chars: 0x02bc0000, pal: 0x02b95978 },
+    { name: 'stage 1', chars: 0x024aa000, pal: 0x02b959de },
+    { name: 'stages 3, 6', chars: 0x02ba0000, pal: 0x02b95a88 },
+    { name: 'stage 2', chars: 0x02bc0000, pal: 0x02b95978, more: [0x02bd6000, 0x02b95a44] },
+];
+const VCOP2_MIDDLE = [
+    {
+        name: 'game (0x8260)', chars: 0x0240c000,
+        palette: [
+            { runs: 0x02b951a2, group: 0xd, until: 0x58 },
+            { runs: 0x0006094e, group: 0x41, lists: 1 },
+            { runs: 0x0006092c, group: 0xcd, lists: 1 },
+            { runs: 0x000608e8, group: 0xb4, lists: 1 },
+        ],
+    },
+    { name: 'title (0x82D8)', chars: 0x02464000, palette: [{ runs: 0x02b95626, group: 0xd, until: 0x58 }] },
+];
+const VCOP2_CELLS = {
+    sized: true,
+    orBase: true,
+    records: [[0x02b80000, 0x02b8e67e], [0x02b9047e, 0x02b90e78], [0x02b92d78, 0x02b93266]],
+    base: 0x8000,
+    bases: {
+        [0x02b805f8]: 0xc000, [0x02b80608]: 0xc000, [0x02b80390]: 0xc000,
+        [0x02b89750]: 0, [0x02b8b644]: 0, [0x02b89c70]: 0, [0x02b8b6c0]: 0,
+        [0x02b899e0]: 0, [0x02b8b746]: 0, [0x02b8c24a]: 0,
+    },
+    boot: {
+        chars: [],
+        palette: [],
+        zeroFills: true,
+        modes: VCOP2_MIDDLE.flatMap((M) => VCOP2_STAGE_FILLS.map((S) => ({
+            name: `${M.name}, ${S.name}`,
+            chars: [
+                [0x00060ab4, 0, 0x80, true],
+                [0x02400000, 0x80, 0x600],
+                [M.chars, 0x680, 0x2c00],
+                [S.chars, 0x3280, 0xd80],
+                ...(S.more ? [[S.more[0], 0x3b80, 0x480]] : []),
+            ],
+            palette: [
+                { set: [[0, 0xb60a], [1, 0xffff], ...Array.from({ length: 14 }, (_, i) => [2 + i, 0])] },
+                { set: [[0x800, 0xfed6], [0x801, 0x83e0], [0x802, 0x8000], [0x803, 0x8000],
+                    ...Array.from({ length: 12 }, (_, i) => [0x804 + i, 0])] },
+                { runs: 0x02b95070, group: 1, until: 0xc },
+                { runs: 0x02b95070, group: 0x81, until: 0x7f },
+                { runs: 0x000608a4, group: 0x82, lists: 1 },
+                { runs: 0x000608c6, group: 0x87, lists: 1 },
+                { runs: 0x0006090a, group: 0x83, lists: 1 },
+                ...M.palette,
+                { runs: S.pal, group: 0x65, until: 0x1b },
+                ...(S.more ? [{ runs: S.more[1], group: 0x77, until: 9 }] : []),
+            ],
+        }))),
+    },
+    programAt0: true,
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
 const vcop2 = {
     ...daytonaBuild({
         id: 'vcop2',
@@ -3646,9 +3736,9 @@ const vcop2 = {
     objects: null,
     area: null,
     sky: null,
-    cells: null,
+    cells: VCOP2_CELLS,
     rig: null,
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Virtua Striker ------------------------------------------------------- */
@@ -7101,6 +7191,9 @@ const dynabb97 = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */
+const GUNBLADE_CASE_8 = [[0x02b37ff0, 0x01800d00, 0x10, 21], [0x02b38010, 0x010e8000, 0xa230], [0x02b4c490, 0x01800fa0, 0x10], [0x02b4c4b0, 0x010fd000, 0x310]];
+
 /*
  * Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`). Its library
  * is Virtual-On's: no model table, the object triples sit in the program and
@@ -7184,8 +7277,101 @@ const gunblade = {
         gunblade: { keys: 0xc75c0 },
         solid: true,
     },
+    /* The Cells tab (js/cells.js `scripts`, `dirs`): Power Sled's tilemap
+     * scripts as Last Bronx runs them, drawn by 0xD1A80 (g0 the tilemap
+     * address, g1 the script, g2 0x8000). The scripts lie in two runs, zero
+     * padding between some of them; every one is named, by `lda` or by the
+     * table of {count, script} at 0x17A20. The boot (0xD20E0) loads the
+     * directory at data 0xA00000 with Last Bronx's loader (0xD2470) and the
+     * 1bpp font at 0xD0E20 into characters 0-0xFF (0xD2A70, pen 1), and
+     * never unloads them. Each scene then copies colours and characters
+     * over them by hand: the switch at 0xD2550 (cases 1-6, the stages),
+     * 0xF1C8C, the attract's 0xDC44/0x2264C and 0xF1DA8 on top of it; the
+     * warning screen (0xF44A0) calls 0xD2260, which puts the font at 0xD09C0
+     * and group 0 from 0xD21D0 in. A scene is the boot plus its `copies`,
+     * [source, destination, halfwords, times]. */
+    cells: {
+        scripts: [[0x02a601a0, 0x02a64c52], [0x02b4caf0, 0x02b4fc50]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        dirs: {
+            boot: 0x02a00000,
+            name: "the boot's (0xD2550 case 0)",
+            fonts: [{ src: 0xd0e20, first: 0, count: 0x80, pen: 1 }, { src: 0xd0e20, first: 0x80, count: 0x80, pen: 1 }],
+            copies: [[0x15530, 0x01800000, 0x10], [0x15550, 0x01800020, 0x10]],
+            scenes: [
+            { name: 'the warning screen (0xF44A0, 0xD2260)', fonts: [{ src: 0xd09c0, first: 0, count: 0x80, pen: 1 }, { src: 0xd09c0, first: 0x80, count: 0x80, pen: 1 }], copies: [[0xd21d0, 0x01800000, 0x10]] },
+            { name: 'stage 1 (0xD2550 case 1)', copies: [[0x02a53f40, 0x01800d00, 0x10, 5], [0x02a53f60, 0x010e8000, 0x2710], [0x02a58da0, 0x01800da0, 0x10], [0x02a58dc0, 0x010ed000, 0x720], [0x02a59c20, 0x01800dc0, 0x10, 2], [0x02a59c40, 0x010ee000, 0xbf0]] },
+            { name: 'stage 2 (0xD2550 case 2)', copies: [[0x02b00270, 0x01800d00, 0x10, 8], [0x02b00290, 0x010e8000, 0x4002]] },
+            { name: 'stage 3 (0xD2550 case 3)', copies: [[0x02b073f0, 0x01800d00, 0x10, 13], [0x02b07410, 0x010e8000, 0x6802]] },
+            { name: 'stage 4 (0xD2550 case 4)', copies: [[0x02b14350, 0x01800d00, 0x10, 13], [0x02b14370, 0x010e8000, 0x6802]] },
+            { name: 'stage 5 (0xD2550 case 5)', copies: [[0x02b210d0, 0x01800d00, 0x10, 6], [0x02b210f0, 0x010e8000, 0x3002]] },
+            { name: 'stage 6 (0xD2550 case 6)', copies: [[0x02b26490, 0x01800d00, 0x10, 12], [0x02b264b0, 0x010e8000, 0x6002]] },
+            { name: 'case 7 (0xF1C8C)', copies: [[0x02b31990, 0x01800d00, 0x10, 7], [0x02b319b0, 0x010e8000, 0x3802]] },
+            { name: 'case 8 (0xDC44, 0x2264C), the attract', copies: GUNBLADE_CASE_8 },
+            { name: 'case 9 (0xF1DA8) over case 8', copies: [...GUNBLADE_CASE_8, [0x02a5b460, 0x01800e00, 0x10], [0x02a5b480, 0x010f0000, 0x200], [0x02a5b8a0, 0x01800e20, 0x10], [0x02a5b8c0, 0x010f1000, 0x1d0], [0x02a5bc80, 0x01800e40, 0x10], [0x02a5bca0, 0x010f2000, 0x170], [0x02a5bfa0, 0x01800e60, 0x10], [0x02a5bfc0, 0x010f3000, 0x1c0], [0x02a5c360, 0x01800e80, 0x10], [0x02a5c380, 0x010f4000, 0x1c0], [0x02a5c720, 0x01800ea0, 0x10], [0x02a5c740, 0x010f5000, 0x230], [0x02a5cbc0, 0x01800ec0, 0x10], [0x02a5cbe0, 0x010f6000, 0x480], [0x02a5d500, 0x01800ee0, 0x10], [0x02a5d520, 0x010f7000, 0x3e0], [0x02a5dd00, 0x01800f00, 0x10], [0x02a5dd20, 0x010f8000, 0x380], [0x02a5e440, 0x01800f20, 0x10], [0x02a5e460, 0x010f9000, 0x3d0], [0x02a5ec20, 0x01800f40, 0x10], [0x02a5ec40, 0x010fa000, 0x420], [0x02a5f4a0, 0x01800f60, 0x10], [0x02a5f4c0, 0x010fb000, 0x240], [0x02a5f960, 0x01800f80, 0x10], [0x02a5f980, 0x010fc000, 0xc0], [0x02a5fb20, 0x01800fa0, 0x10], [0x02a5fb40, 0x010fd000, 0xf0]] },
+            ],
+        },
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
     /* No stage or object record is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+};
+
+/*
+ * Zero Gunner's cells, the same in all three builds (the tables are in the
+ * data ROM): Pilot Kids' records and files, a year sooner. The records are
+ * the zero-ended table at data 0x2F49E8 that the check menu's viewer
+ * (0x5C10, program 0x505C10 in RAM) steps through, drawn by 0x55940
+ * (0x55960: width, height, entries; g4 1 sets bit 15). The boot (0x54D50)
+ * draws the 1bpp font at 0xCAFC8 at character 0 with pen 1 (0x54F80), fills
+ * character 1 with pen 15, and loads files 0 and 14 of the viewer's table
+ * at data 0x2F49A8 with 0x558F0: {first block, block count, colour
+ * pointers, characters}, block k's colours (16, from its pointer) going to
+ * group first + k at the next vblank (0x557F0, 0x55840). Every other file
+ * loads from block 41 or 43, over nothing of the boot's, so each is a mode.
+ */
+const ZEROGUN_CELLS = {
+    sized: true,
+    patternTable: 0x022f49e8,
+    base: 0x8000,
+    boot: {
+        font: { src: 0x020cafc8, first: 0, count: 128, pen: 1 },
+        chars: [[0x020ed8f8, 4 << 7, 17 << 7], [0x022d7f58, 21 << 7, 20 << 7]],
+        straight: true,
+        fill: [[1, 1, 0xffff]],
+        palette: [
+            { pointers: 0x020fe9c0, group: 4, groups: 17 },
+            { pointers: 0x022ec1c0, group: 21, groups: 20 },
+        ],
+        modes: [
+        { name: "the boot's" },
+        { name: 'file 1 (0x2100590)', chars: [[0x02100598, 41 << 7, 41 << 7]], palette: [{ pointers: 0x02129640, group: 41, groups: 41 }] },
+        { name: 'file 2 (0x212EB90)', chars: [[0x0212eb98, 43 << 7, 33 << 7]], palette: [{ pointers: 0x0214fbe0, group: 43, groups: 33 }] },
+        { name: 'file 3 (0x21521D0)', chars: [[0x021521d8, 43 << 7, 33 << 7]], palette: [{ pointers: 0x02173220, group: 43, groups: 33 }] },
+        { name: 'file 4 (0x2175A70)', chars: [[0x02175a78, 43 << 7, 36 << 7]], palette: [{ pointers: 0x02199ac0, group: 43, groups: 36 }] },
+        { name: 'file 5 (0x219C320)', chars: [[0x0219c328, 43 << 7, 16 << 7]], palette: [{ pointers: 0x021ac350, group: 43, groups: 16 }] },
+        { name: 'file 6 (0x21ADAF0)', chars: [[0x021adaf8, 41 << 7, 60 << 7]], palette: [{ pointers: 0x021e9b20, group: 41, groups: 60 }] },
+        { name: 'file 7 (0x21F96B0), the attract (scene 0x5786B0)', chars: [[0x021f96b8, 41 << 7, 79 << 7]], palette: [{ pointers: 0x02248700, group: 41, groups: 79 }] },
+        { name: 'file 8 (0x225D040), scene 0x5771FC (the attract at frame 3000)', chars: [[0x0225d048, 41 << 7, 29 << 7]], palette: [{ pointers: 0x0227a090, group: 41, groups: 29 }] },
+        { name: 'file 9 (0x227C210)', chars: [[0x0227c218, 41 << 7, 27 << 7]], palette: [{ pointers: 0x02297260, group: 41, groups: 27 }] },
+        { name: 'file 10 (0x22993D0)', chars: [[0x022993d8, 41 << 7, 30 << 7]], palette: [{ pointers: 0x022b7420, group: 41, groups: 30 }] },
+        { name: 'file 11 (0x22B95A0)', chars: [[0x022b95a8, 41 << 7, 2 << 7]], palette: [{ pointers: 0x022bb5d0, group: 41, groups: 2 }] },
+        { name: 'file 12 (0x22BB7D0)', chars: [[0x022bb7d8, 41 << 7, 14 << 7]], palette: [{ pointers: 0x022c9800, group: 41, groups: 14 }] },
+        { name: 'file 13 (0x22CAF90)', chars: [[0x022caf98, 41 << 7, 11 << 7]], palette: [{ pointers: 0x022d5fe0, group: 41, groups: 11 }] },
+        ],
+    },
+    /* Each file's records lie after its colour pointers, up to the next
+     * file: so a cell opens on the file it was laid out with (the boot's
+     * files 0 and 14 being mode 0). */
+    screens: [
+        [0, 0, 55], [0, 182, 38], [1, 55, 31], [2, 86, 2], [3, 88, 2], [4, 90, 2], [5, 92, 1], [6, 93, 30],
+        [7, 123, 16], [8, 139, 2], [9, 141, 2], [10, 143, 2], [11, 145, 2], [12, 147, 1], [13, 148, 34],
+    ].map(([cg, first, count]) => ({ cg, cells: Array.from({ length: count }, (_, i) => first + i) })),
+    charBytes: 0x80000,
+    colorxlat: true,
 };
 
 /*
@@ -7257,8 +7443,9 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
             zerogun: { table: 0x1050, count: 0x1a10 },
             solid: true,
         },
-        /* No stage, cell or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        cells: ZEROGUN_CELLS,
+        /* No stage or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
 
@@ -7761,6 +7948,75 @@ const bel = {
 };
 
 /*
+ * Desert Tank's 2D pictures, for the Cells tab: the title, the mission
+ * briefings, the HUD, the rankings. The draw (0xD380) is Daytona USA's
+ * record: a halfword added to every entry, a halfword 0 for byte entries, the
+ * row count, the column count, then the entries onto 0x80-byte tilemap rows.
+ * 160 records lie end to end from 0x2800180 to the boot's pair at 0x281590C,
+ * and the rest in short runs among the tile data after it, each a run of its
+ * own here (`records`). Every one is named by an `lda` or a pointer table:
+ * the digits 0x43210 and 0x43238, the mission's 0x2891E10, the HUD's
+ * 0x289CF00 and 0x2893AF4.
+ *
+ * The CGs (the loader 0x3C6F0) are Daytona's pairs of lists through a table
+ * of eight pairs at 0x2100000 (`cgTables`). The boot (0x3C7F0) loads pair 0,
+ * then the pair at 0x28159A0, then copies group 3's colours, groups 8-10's,
+ * 0x88-0x8A's and six characters at 0x549 out of 0x289CD40..0x289CE00 by
+ * hand. It never clears the chip after that, so each later CG is loaded over
+ * what the boot left (`stacked`, js/stackcells.js). Pairs 1-7 all start at
+ * character 0x2F80 and group 0x5F. The game's own table of {record, CG}
+ * at 0x2894400, 172 entries, names each record's CG (`screens`).
+ *
+ * Six more pairs head the skies: 0x520C9C points at {CG list, palette list,
+ * then the sky's 36x32 strips} (two in mission 0's, eight in the others),
+ * which 0x3D4E0 loads and draws. A mission's own is the first word of its
+ * bank (0x2200000, 0x2300000, 0x2380000 by the mission byte 0x52106F,
+ * through 0x43204; set at 0xA52C); the code puts three more there itself
+ * (0x281EC5A at 0xCB3C, 0x282ADBE at 0xCB68, 0x2838B0E at 0x9C04). They are
+ * CGs 8 to 13 (`cgPairs`), and their strips the last runs of `records`. The
+ * tables of strips lie on halfword steps (`pointerStep`).
+ */
+const DESERT_CELLS = {
+    records: [
+        [0x02800180, 0x0281590c], [0x028181d4, 0x028185d0], [0x0281a6d4, 0x0281aeb2],
+        [0x0281c1b6, 0x0281c35a], [0x0281c79e, 0x0281c7f2], [0x0281d63a, 0x0281d9c2],
+        [0x0281eba6, 0x0281ec5a],
+        [0x0282655e, 0x0282adbe], [0x028342ae, 0x02838b0e], [0x0284d13e, 0x0285199e],
+        [0x02220cb8, 0x022215d0], [0x0231e5b0, 0x02322e10], [0x023a4544, 0x023a8da4],
+    ],
+    cgTables: [[0x02100000, 8]],
+    cgNames: ['boot'],
+    cgPairs: [
+        [0x0281ec5a, 'sky 0xCB3C'], [0x0282adbe, 'sky 0xCB68'], [0x02838b0e, 'sky 0x9C04'],
+        [0x02220c84, 'mission 0 sky'], [0x0231e564, 'mission 1 sky'], [0x023a4508, 'mission 2 sky'],
+    ],
+    stacked: {
+        base: 0,
+        after: { 0: [0x028159a0] },
+        copies: [
+            [0x0289cd40, 0x01800060, 16],
+            [0x0289cd60, 0x01800100, 16], [0x0289cd60, 0x01800120, 16], [0x0289cd60, 0x01800140, 16],
+            [0x0289cd80, 0x01801100, 16], [0x0289cd80, 0x01801120, 16], [0x0289cd80, 0x01801140, 16],
+            [0x0289cda0, 0x0108a920, 0x60],
+        ],
+    },
+    screens: [
+        { cg: 1, cells: [2] }, { cg: 5, cells: [3] }, { cg: 6, cells: [1] },
+        { cg: 3, cells: [14, 15, 16, 17] }, { cg: 4, cells: [24, 25, 26] },
+        { cg: 2, cells: Array.from({ length: 33 }, (_, i) => 38 + i) },
+        { cg: 8, cells: Array.from({ length: 8 }, (_, i) => 174 + i) },
+        { cg: 9, cells: Array.from({ length: 8 }, (_, i) => 182 + i) },
+        { cg: 10, cells: Array.from({ length: 8 }, (_, i) => 190 + i) },
+        { cg: 11, cells: [198, 199] },
+        { cg: 12, cells: Array.from({ length: 8 }, (_, i) => 200 + i) },
+        { cg: 13, cells: Array.from({ length: 8 }, (_, i) => 208 + i) },
+    ],
+    pointerStep: 2,
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
+/*
  * Desert Tank (MAME's `desert`), Sega and Martin Marietta's 1994 tank game on
  * the original Model 2. MAME calls it not working, but it boots and runs its
  * attract mode, the textures and colours in. The program is built on
@@ -7841,8 +8097,9 @@ const desert = {
         ramp: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8, top: 0x100 },
         solid: true,
     },
+    cells: DESERT_CELLS,
     /* No mission, tank or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,

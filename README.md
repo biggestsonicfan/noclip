@@ -25,7 +25,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
-*Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Cop 2* has its models and its cells — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models and its cells — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models and its cells — see [INDY 500](#indy-500).
@@ -33,8 +33,8 @@ Sega's *INDY 500* has its models and its cells — see [INDY 500](#indy-500).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
-*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
-Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+*Gunblade NY* has its models and its cells — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models and its cells — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and its cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
@@ -673,7 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids has the Cells tab but not the music.
+Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank, Gunblade NY and Zero
+Gunner have the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1221,8 +1222,15 @@ over the bank the boot puts on sheet 1. With set 0, the sheets, the palette,
 luma and the colour tables match MAME's in the attract byte for byte. Sets 1
 and 2 were not reached in MAME.
 
-There is no Stages tab, no characters, no motions, no cells and no music yet.
-See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+The **Cells** tab has its 314 pictures: the title cards, the stage maps and
+briefings, the HUD, the rankings and the font. The game fills the tile chip
+at boot and again for the title screens and each stage, so there are eight
+CGs, one per fill; the game's fill with stage 0's matches MAME's tile chip in
+the attract.
+
+There is no Stages tab, no characters, no motions and no music yet.
+See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs) and
+[Virtua Cop 2's cells](TECHNICAL.md#virtua-cop-2s-cells-jscellsjs-vcop2_cells-in-jsgamesjs).
 
 ## Virtua Striker
 
@@ -1417,8 +1425,16 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+The **Cells** tab has its 561 pictures (the fonts, the logos, the HUD, the
+results and rankings, the mission briefings in five languages, the staff
+roll) and 11 CGs: the boot's, and each
+scene's colours and characters copied over it. The warning screen, the
+attract and the scene after it match MAME's tile chip. Some briefings open
+on another stage's CG, as no table says which stage draws them.
+
+There is no Stages tab, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs) and
+[Gunblade NY's cells](TECHNICAL.md#gunblade-nys-cells-jscellsjs-jsstackcellsjs).
 
 ## Zero Gunner
 
@@ -1441,8 +1457,16 @@ needs its set picked by hand. The colour tables are the same in every scene.
 The textures, palette, luma and colour tables match MAME's byte for byte in
 the attract, in all three builds.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+The **Cells** tab has its 220 pictures, in all three builds: the title, the
+course select, the mission maps, the briefings, the HUD, the results and
+rankings, and the check menu's test patterns. A CG is the boot's or one of
+the thirteen files the game loads over it, and each picture opens on the
+file it was laid out with. The boot's and the two the attract loads match
+MAME's tile chip.
+
+There is no Stages tab, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs) and
+[Zero Gunner's cells](TECHNICAL.md#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
 
 ## Sky Target
 
@@ -1611,8 +1635,16 @@ sheet 0 may need another set.
 Set 1's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frames 600 and 1200.
 
-There is no Stages tab, no cells and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs).
+The **Cells** tab has its 216 pictures: the title, the mission briefings,
+the HUD, the rankings and the skies' strips. The game loads each
+picture's characters and colours over the boot's, so a CG here is the boot's
+with its own on top, and the cells the game's own table names open on the
+CG it gives them. The boot's, the title's and mission 1's sky match MAME's tile chip in the
+attract.
+
+There is no Stages tab and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs) and [Desert Tank's
+cells](TECHNICAL.md#desert-tanks-cells-jscellsjs-jsstackcellsjs).
 
 ## Running it
 
