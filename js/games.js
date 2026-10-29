@@ -3753,11 +3753,84 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
         objects: null,
         area: null,
         sky: null,
-        cells: null,
+        cells: VSTRIKER_CELLS,
         rig: null,
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot fill, with
+ * Virtual On's modes. Every address is the same in both builds (their data
+ * ROMs differ only from 0x282DE00 on); the routines are Revision A's, the
+ * first release's 0x80 further up (0x3240, 0x29E0, 0x2F90).
+ *
+ * The draws (0x31C0, and 0x3230, which draws the record with its bottom
+ * right corner at g1) are Virtua Cop's 0x55A0: the width and the height as
+ * halfwords, then halfword entries, g2 added to each, 0x8000 from every call
+ * but four (`bases`). The records lie end to end in three runs of the data
+ * ROM, each straight after the palette list of the fill it is drawn with:
+ * every one of the 61 records a call names by `lda`, and the 18 tables of
+ * them the calls index, lands on a record start.
+ *
+ * The fill (0x2960, g0 the mode) is Virtua Cop's boot: 0x2F10 expands the
+ * 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1, at boot (0x28D4);
+ * 0x2960 copies 0x3F80 characters to 0x80 on out of the data ROM a halfword
+ * at a time with the bytes swapped, from 0x2000000, 0x2080000 or 0x2100000 by
+ * the mode, and the mode's palette runs, {count, 16 colours}, from group 1
+ * until 0x7F groups are written. Mode 0 also copies 38 groups from 0x2825830
+ * to group 0xB4. Nothing else writes the characters (MAME write taps over the
+ * attract), so the three modes are the game's three CGs. Mode 2 is the boot's
+ * (0x13D4): the title, the logo, the FBI and 2002 screens, the credits,
+ * SPECIAL MATCH. Mode 0 is the match's and the attract's: the ranking, the
+ * HUD, the flags and team bars, CHALLENGER COMES. Mode 1 is the team select's
+ * (0x106E0, 0x10D74): the select screen, the tournament roster, name entry.
+ * MAME's characters 0x80-0x3FFF and palette match mode 0 at attract frames
+ * 300-1200 and mode 2 at 1500-3000 byte for byte, and every cell of those
+ * CGs drawn from MAME's tile RAM is pixel-exact against renderCell.
+ *
+ * Two pictures load their own characters over 0x180 on. The Japanese
+ * build's joke picture (cell 762, 0x6C370) copies 0x26C from 0x2891000 and
+ * colours groups 3-5 from 0x2825D90: CG 3. Cell 761 (0x6C2E0, through 0x2D00
+ * and 0x2DE4) copies 0x80 from 0x2890000 but takes its colours, group 0x83,
+ * from a fade in RAM (0x514550, from the table at 0x2825DB0): not built, so
+ * it shows black.
+ */
+const VSTRIKER_CELLS = {
+    sized: true,
+    records: [[0x028008e0, 0x0280a360], [0x0280a73a, 0x02812670], [0x028129f0, 0x028252b0]],
+    base: 0x8000,
+    bases: { [0x02801650]: 0, [0x02801e60]: 0, [0x0280af80]: 0, [0x02824e40]: 0xc000 },
+    boot: {
+        font: { src: 0x028252b0, first: 0, count: 0x80, pen: 1 },
+        modes: [
+            {
+                name: 'mode 0 (0x2960)',
+                chars: [[0x02000000, 0x80, 0x3f80]],
+                palette: [{ runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 }],
+            },
+            { name: 'mode 1 (0x2960)', chars: [[0x02080000, 0x80, 0x3f80]], palette: [{ runs: 0x0280a360, group: 1, until: 0x7f }] },
+            { name: 'mode 2 (0x2960)', chars: [[0x02100000, 0x80, 0x3f80]], palette: [{ runs: 0x02812670, group: 1, until: 0x7f }] },
+            {
+                name: 'mode 0, Japan (0x6C370)',
+                chars: [[0x02000000, 0x80, 0x3f80], [0x02891000, 0x180, 0x26c]],
+                palette: [
+                    { runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 },
+                    { colours: 0x02825d90, group: 3, groups: 3 },
+                ],
+            },
+        ],
+        chars: [],
+        palette: [],
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+const vstrikerRun = (first, end) => Array.from({ length: end - first }, (_, i) => first + i);
+VSTRIKER_CELLS.screens = [
+    { cg: 3, cells: [762] },
+    { cg: 0, cells: vstrikerRun(0, 337) }, { cg: 1, cells: vstrikerRun(337, 595) }, { cg: 2, cells: vstrikerRun(595, 763) },
+];
 
 /*
  * Revision A: 0x9210 dims the palette and calls 0x93F0, which builds
@@ -6354,7 +6427,17 @@ const motoraid = {
         solid: true,
     },
     /* No course, rider or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /*
+     * The 2D is Dead or Alive's pictures (js/cells.js `pictures`): 882
+     * entries of {tiles, colours, map} in the program ROM at 0x87860, the
+     * first 835 pointing into the data ROM and the rest into XTRA. The loader
+     * 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) copies each chunk of tiles to
+     * whole 128-tile blocks from the first block 0x21BB10 found free, and
+     * 0x21BC70 gives every block of a chunk the chunk's 16 colours, straight
+     * or queued (0x21BCF0, 0x21BDA0, as 0x5194B4 says).
+     */
+    cells: { pictures: { table: 0x87860, count: 882 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -6473,7 +6556,7 @@ const manxtt = {
  * Twin's data with its program moved about; the addresses it changes are
  * `program`'s.
  */
-function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun }) {
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, cells }) {
     const prog = [program[1], program[3]];
     return {
         id, name,
@@ -6552,9 +6635,55 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun 
             solid: true,
         },
         depth: { recede: 0, nearMin: 0.02, layers: true },
-        features: { stages: false, characters: false, motions: false, cells: false },
+        /* The 1 MB pair at 0x1000000, as the cells' second bank names it. */
+        xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+        cells,
+        features: { stages: false, characters: false, motions: false, cells: !!cells },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js `banks`, js/bankcells.js), the Twin's
+ * addresses. Two banks: the data ROM's, its CGs' tiles at 0x2800000 on, and
+ * XTRA's, at 0x6400000 on. Each has a CG table, {offset, tile count}, a cell
+ * table of pointers to Virtua Cop's records, and after the cells a table of
+ * each CG's palette; CG 0 of each is empty. The loaders (0x53790, 0x53890)
+ * take whole 128-tile blocks from the free list at 0x5EE460/0x5EE660 and note
+ * {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860); 0x55F10 and
+ * 0x55F30 queue the CG's colours, a group a block, to the first block's
+ * group. Every entry has bit 15 set; the draws add the first block << 7.
+ *
+ * `screens` are the calls that name both a cell and a CG by constant: 0x53E60,
+ * 0x548A0, 0x55320 and 0x55750 for the data ROM's bank (cell g0, CG g1),
+ * 0x54950 (three cells, CG g3), and 0x54300 and 0x54550 for XTRA's. Bank 1's
+ * cells and CGs come after bank 0's: cell 441 is its cell 0, CG 61 its CG 0.
+ */
+const INDY500_CELLS = {
+    banks: [
+        { name: 'data', cgs: 0x02c39eb0, cgCount: 61, cells: 0x02c89bf0, cellCount: 441, pals: 0x02c8a2dc, data: 0x02800000 },
+        { name: 'XTRA', cgs: 0x064b00c0, cgCount: 13, cells: 0x064b83d0, cellCount: 60, pals: 0x064b84bc, data: 0x06400000 },
+    ],
+    sized: true,
+    base: 0,
+    screens: [
+        { cg: 4, cells: [36, 37, 39] }, { cg: 9, cells: [80] }, { cg: 10, cells: [88, 89, 90, 91, 92] },
+        { cg: 12, cells: [121] }, { cg: 13, cells: [122] }, { cg: 14, cells: [123] }, { cg: 15, cells: [124, 125] },
+        { cg: 16, cells: [128, 129, 130, 131, 132, 133, 134, 135, 136, 137] }, { cg: 17, cells: [187, 188] },
+        { cg: 18, cells: [189, 190, 191, 192, 193, 194] }, { cg: 19, cells: [202] }, { cg: 21, cells: [205] },
+        { cg: 22, cells: [266, 267] }, { cg: 23, cells: [301] }, { cg: 24, cells: [311] }, { cg: 25, cells: [312] },
+        { cg: 27, cells: [343] }, { cg: 29, cells: [346] }, { cg: 30, cells: [347] }, { cg: 32, cells: [350, 351] },
+        { cg: 33, cells: [352, 353, 354] }, { cg: 37, cells: [367] }, { cg: 38, cells: [369] }, { cg: 41, cells: [394] },
+        { cg: 42, cells: [395] }, { cg: 43, cells: [396] }, { cg: 45, cells: [398] }, { cg: 46, cells: [402] },
+        { cg: 47, cells: [404] }, { cg: 50, cells: [408] }, { cg: 51, cells: [419, 420] }, { cg: 52, cells: [421] },
+        { cg: 53, cells: [423, 424] }, { cg: 54, cells: [425] }, { cg: 55, cells: [427] }, { cg: 57, cells: [433, 434] },
+        { cg: 58, cells: [435] }, { cg: 60, cells: [440] },
+        { cg: 62, cells: [441, 442] }, { cg: 63, cells: [451] }, { cg: 64, cells: [452] }, { cg: 65, cells: [453] },
+        { cg: 68, cells: [475, 476] }, { cg: 69, cells: [486] }, { cg: 70, cells: [495] }, { cg: 71, cells: [496] },
+        { cg: 72, cells: [497, 499] }, { cg: 73, cells: [500] },
+    ],
+    charBytes: 0x80000,
+    colorxlat: true,
+};
 
 const indy500 = indy500Build({
     id: 'indy500', name: 'INDY 500 Twin (Revision A)',
@@ -6564,7 +6693,20 @@ const indy500 = indy500Build({
     lumaOver: { data: 0x10b0850, bytes: 0x180 },
     top: { at: 0x1048de0 },
     colorRun: [0x2dd80, [0x2de70, 'set']],
+    cells: INDY500_CELLS,
 });
+/* The Deluxe's data ROM bank is the Twin's, at the same addresses; its XTRA
+ * bank's tables moved into the program ROM (its XTRA loader 0x9EB40 reads
+ * the CG table at 0x9B7B0, its draws the cells at 0xB34A0), and hold 7 CGs
+ * and 34 cells, with each CG's palette the pointer list's entry 35 + n.
+ * The data bank's `screens` stand; XTRA's cells are left to their seams. */
+const INDY500D_CELLS = {
+    ...INDY500_CELLS,
+    programAt0: true,
+    banks: [INDY500_CELLS.banks[0],
+        { name: 'XTRA', cgs: 0x9b7b0, cgCount: 7, cells: 0xb34a0, cellCount: 34, pals: 0xb34a0 + 35 * 4, data: 0x06400000 }],
+    screens: INDY500_CELLS.screens.filter((s) => s.cg < 61),
+};
 /* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
  * epr-18345/18346. The CRCs find either. */
 const indy500d = indy500Build({
@@ -6575,6 +6717,7 @@ const indy500d = indy500Build({
     lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
     top: { source: 'maincpu', at: 0x1b3a4 },
     colorRun: [0x34230, [0x34320, 'set']],
+    cells: INDY500D_CELLS,
 });
 
 /*

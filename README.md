@@ -26,9 +26,9 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
-*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
+*Virtua Striker* has its models and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models and its cells — see [Manx TT Superbike](#manx-tt-superbike).
-Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
+Sega's *INDY 500* has its models and its cells — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
@@ -1200,6 +1200,12 @@ scene a model belongs to, so a course's part needs its set picked by hand.
 The sheets, luma and colour tables of set 1 match MAME's at attract frame 1800
 byte for byte, and the boot's colours match it at frame 600.
 
+The **Cells** tab has the game's 882 pictures, each with its own tiles and
+colours. They include the attract's tips in Japanese and English, the rider
+plates, the select screens, the skies, the course maps and the HUD. Every
+picture MAME's attract mode loads has the same characters there, byte for
+byte, and the same colours, except where the game was fading them.
+
 There is no Stages tab, no riders and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
 
@@ -1234,8 +1240,24 @@ build different colour tables. With either setting, the sheets, the palette,
 luma and the colour tables match MAME's at boot byte for byte.
 
 The kits, the per-team textures and the stadium are set up in play, from
-the team tables, so the models show the boot's look. There is no Stages
-tab, no motions, no cells and no music yet.
+the team tables, so the models show the boot's look.
+
+The **Cells** tab has the game's 763 tile-chip pictures, in four CGs:
+
+- CG 0 is the match's and the attract's: the ranking, the HUD, the flags
+  and team bars, CHALLENGER COMES;
+- CG 1 is the team select's: the select screen, the tournament roster and
+  name entry;
+- CG 2 is the boot's: the title, the VIRTUA STRIKER logo, the FBI and 2002
+  screens, the credits and SPECIAL MATCH;
+- CG 3 is a picture only the Japanese build shows.
+
+The characters and colours of CGs 0 and 2 match MAME's byte for byte in
+the attract, and every cell of them is pixel-exact against the same cell
+drawn from MAME's tile RAM. One cell (761) takes its colours from a fade the
+game runs in RAM, and shows black.
+
+There is no Stages tab, no motions and no music yet.
 
 ## Manx TT Superbike
 
@@ -1278,7 +1300,17 @@ texture banks and its own colour table; set 3 is the pair the game loads for
 its other screens. The cars are on every course's banks; a course model needs
 its course picked, and the race queen is on set 1's.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Cells** tab has the 2D: 501 cells and 74 CGs in the Twin (475 and 68
+in the Deluxe), out of two banks of tables, one in the data ROM and one in
+XTRA (in the Deluxe, in its program ROM). They include the title logo, the FBI
+screen, the select screens, the HUD, the rankings, the messages and the
+credits. Each CG is loaded as the game loads it, and its characters and
+colours match MAME's tile chip byte for byte in both sets, in the attract mode
+and the screens around it. A cell is drawn with the CG the program's calls
+name for it; any other cell takes the CG beside it in the tables whose tiles
+join up best, and a few small ones still come out wrong.
+
+There is no Stages tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Sega Touring Car Championship

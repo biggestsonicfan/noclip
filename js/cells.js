@@ -128,11 +128,18 @@
  * files of whole
  * 128-character blocks, each block taking its own group's colours from a
  * table of pointers. See js/games.js PLTKIDS_CELLS.
+ *
+ * INDY 500 loads a CG at a time into free 128-character blocks, as The
+ * House of the Dead does, but keeps its CGs, its cells (Virtua Cop's
+ * records) and its palettes in three tables a bank (`banks`), and its draws
+ * take a cell and a CG by number. See js/bankcells.js and js/games.js
+ * INDY500_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
+import { bankTables, loadBankCG, rankBankCGs } from './bankcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -153,6 +160,8 @@ function cellRecords(rom) {
     out = [];
     if (C.cgm || C.maps) {
         out = listedCells(rom).map((c) => c.at);
+    } else if (C.banks) {
+        out = bankTables(rom).cells.map((c) => c.at);
     } else if (C.pictures) {
         for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
     } else if (C.groups) {
@@ -431,6 +440,11 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.banks) {
+        all = bankTables(rom).cgs.map((L) => L && { banked: L, name: L.name });
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -670,6 +684,7 @@ function loadCG(rom, L) {
 function loadTiles(rom, L) {
     const charBytes = rom.game.cells.charBytes;
     if (L.picture) return loadPicture(rom, L, charBytes);
+    if (L.banked) return loadBankCG(rom, L.banked, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
@@ -1012,7 +1027,22 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
     /* A Last Bronx cell is drawn with the CG its list goes with. */
     if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
+    /* An INDY 500 cell is drawn with a CG of its own bank (js/bankcells.js). */
+    if (rom.game.cells.banks) return bySeams(rom, cell, rankBankCGs(rom, cell, c, gameCGs(rom)));
     return rankSharedCGs(rom, cell, c);
+}
+
+/* A bank cell's candidates (js/bankcells.js): those in its window first,
+ * re-ranked among themselves by the picture that holds together best
+ * (seamScore), within NEAR_TIE keeping the table's order. */
+function bySeams(rom, cell, full) {
+    const win = full.filter((r) => r.window);
+    if (win.length < 2) return full;
+    const score = new Map(win.map((r) => [r.cg, seamScore(renderCell(rom, cell, [r.cg]))]));
+    const best = Math.min(...score.values());
+    const near = (r) => (score.get(r.cg) <= best * NEAR_TIE ? 0 : 1);
+    win.sort((a, b) => near(a) - near(b) || (near(a) ? score.get(a.cg) - score.get(b.cg) : 0) || a.cg - b.cg);
+    return win.concat(full.filter((r) => !r.window));
 }
 
 function rankSharedCGs(rom, cell, c) {

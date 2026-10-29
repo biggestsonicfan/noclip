@@ -7179,6 +7179,30 @@ palette, colorxlat and luma windows naming the routines.
   0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
   which 0x16E38 animates). The other scenes' tables are the same routines
   run with another n and were not held against MAME.
+- **Cells** (`pictures`, as Dead or Alive's and The House of the Dead's). The
+  2D is 882 pictures of 12 bytes, {tiles, colours, map}, at program 0x87860.
+  Entries 0..834 point into the data ROM, and 835..881 into XTRA
+  (0x6C00000.., data 0x1C00000). A tile list is chunks of {count, count
+  tiles}, until a zero count. The colours are 16 a chunk, and the map is
+  Virtua Cop's record. Many entries share one tile list with their own map:
+  33..71 are one CG's 39 maps.
+  - The loader 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) is called from
+    0x21BF50/0x21BFC0 with g0 a slot {first block, blocks, chunks, entry}.
+    0x21BB10 first finds enough free 128-tile blocks in 0x57ABC0. The loader
+    then copies each chunk to whole blocks.
+  - 0x21BC70 gives every block of a chunk that chunk's 16 colours, at once
+    (0x21BCF0) or through the queue at 0x57B030 (0x21BDA0), as 0x5194B4
+    says.
+  - The boot's 1bpp font (0x21B2F8 from 0x21AE70, data 0x8B49A0) goes to
+    characters 0..127, so the pictures start at block 1. The panel loads a
+    picture from block 0, and its map numbers the picture's own tiles.
+  - MAME, attract frames 600..2400: every picture found in character RAM
+    (4, 33, 99, 134, 499, 503, 504, 510, 578, 579, 580, 594, 853) has the
+    panel's tiles at its block, byte for byte. The colours match too, except
+    578, 579, 594 and a second copy of 33, which the game was fading when
+    dumped.
+  - Not followed: the draw that adds the first block to a map's entries. No
+    capture says which pictures share a screen.
 
 ### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
 
@@ -7311,12 +7335,60 @@ pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
 table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
 palette; it is not ported. Luma and palette match MAME.
 
+**Cells** (`banks`, js/bankcells.js). There are no CGM pictures; the 2D is in
+two banks of three tables the program indexes by number:
+
+| bank | CGs {offset, tiles} | cell pointers | palettes | tile data |
+|---|---|---|---|---|
+| data | 0x2C39EB0, 61 | 0x2C89BF0, 441 | 0x2C8A2DC + 4n | 0x2800000 + offset |
+| XTRA (Twin) | 0x64B00C0, 13 | 0x64B83D0, 60 | 0x64B84BC + 4n | 0x6400000 + offset |
+| XTRA (Deluxe) | program 0x9B7B0, 7 | program 0xB34A0, 34 | entry 35 + n of the cell list | 0x6400000 + offset |
+
+A cell is Virtua Cop's record: the width and the height as halfwords, then the
+entries. CG 0 of each bank is empty.
+
+- **Loaders.** 0x53790 loads from the data bank and 0x53890 from XTRA's
+  (0x9EA40 and 0x9EB40 in the Deluxe). They take (count >> 7) + 1 128-tile
+  blocks of character RAM from a free list (0x5EE460, 0x5EE660) and copy the
+  tiles there straight (ldq; the writes are 0x53868 and 0x53968). They note
+  {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860; the Deluxe's
+  0x556130 and 0x556720).
+- **Palette.** 0x55F10/0x55F30 queue the CG's palette through 0x9260; the
+  queue (0x9440) writes a group a block, from the first block's group on.
+- **Draws.** 0x53E60, 0x548A0, 0x55320 and 0x55750 draw a data-bank cell (g0)
+  with a CG (g1). 0x54950 draws three cells. 0x54300 and 0x54550 draw an XTRA
+  cell. Each adds first block << 7 to every entry, so a cell numbers its CG's
+  tiles and groups from 0.
+- **The font.** 0x53278 expands a 1bpp font at char 0, from data 0x2C00000
+  (0x53080 at boot). The panel does not load it, and no cell needs it.
+
+The panel loads a CG from block 0. `screens` are the 48 call sites that name
+both a cell and a CG by constant; one more call gives CG 33 the palette
+0x2C39DF0 with g2 = 1, which the panel does not follow. The tables keep a CG's
+cells together and in CG order. So any other cell takes a CG of its own bank,
+between the CGs named for the nearest named cells before and after it, that
+holds every tile and group it names. Of those, the one whose tiles join up
+best wins (seamScore).
+
+**Checked against MAME.**
+- MAME `indy500to`, frames 300..3000, and `indy500d`, frames 1500 and 2100:
+  every loaded CG (data 1, 8, 9, 13..18, 45, 46, 49, 53, 54, 58; XTRA 1 and on)
+  has the panel's tiles at its first block, byte for byte.
+- The colours match too, except CGs 13 and 14, which MAME fills with flat
+  0xFA0C (a flash), and CG 53, which the game darkens from frame 2100 (a fade).
+- The snapshots' TOP 10 RANKING, NAME/TOTAL TIME, places, AT/MT, VIEW BUTTON
+  text and SEGA logo are the panel's cells.
+
+**What is missing.** The Twin's XTRA cell 59 is really CG 0's palette
+pointer. A few small cells (e.g. 34, a strip of HUD words) take a CG that
+garbles them, so they probably draw with two CGs loaded. The Deluxe's XTRA
+cells have no `screens`; they rank by fit and seams alone.
+
 **Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
 lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
 like the course's segments at two distances; +0x0C points at 16-byte records
 of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
-program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
-format, and its tiles were not looked for. The sound board is the 68000 and
+program table (0x69F60) not read yet. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
 
@@ -10629,6 +10701,53 @@ byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
 - A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
 
 There are no model names in ROM.
+
+**Cells.** The tile chip is Virtua Cop's (`sized` + `boot` in
+`js/cells.js`, with Virtual On's `modes`). Every address is the same in
+both builds, whose data ROMs differ only from 0x282DE00 on. The routines
+below are Revision A's; the first release's are 0x80 further up.
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x31C0 | 0x3240 | draws a record at g1: u16 width, u16 height, halfword entries, g2 added (Virtua Cop's 0x55A0, byte for byte) |
+| 0x3230 | 0x32B0 | the same, with the record's bottom right corner at g1 |
+| 0x2960 | 0x29E0 | the fill, g0 the mode: 0x3F80 characters to 0x80.. from 0x2000000, 0x2080000 or 0x2100000, bytes swapped, then the mode's palette runs |
+| 0x2F10 | 0x2F90 | the 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1 (boot, 0x28D4) |
+
+Each mode's palette runs, {count, 16 colours}, fill groups 1 on until 0x7F
+groups are written: mode 0's from 0x2800170, mode 1's from 0x280A360, mode
+2's from 0x2812670. Mode 0 also copies 38 groups from 0x2825830 to group
+0xB4. The records lie end to end in three runs, each straight after its
+mode's palette list: 0x28008E0..0x280A360 (337 records, mode 0),
+0x280A73A..0x2812670 (258, mode 1) and 0x28129F0..0x28252B0 (168, mode 2).
+Every one of the 61 records a draw names by `lda`, and every one of the 18
+tables of records the draws index, lands on a record start. Almost every
+draw adds 0x8000; four records are drawn with 0 (0x2801650, 0x2801E60,
+0x280AF80) or 0xC000 (0x2824E40).
+
+Mode 2 is the boot's (0x13D4), mode 1 the team select's (0x106E0, 0x10D74),
+mode 0 the match's and the attract's. MAME's write taps over the attract
+see only the fill (0x2AA4) and the font (0x2F8C) writing characters.
+
+Two pictures bring their own characters, over 0x180 on:
+- 0x6C370 (the Japanese build only) copies 0x26C characters from 0x2891000
+  and the colours at 0x2825D90 to groups 3-5. Its record, 0x28252B0's
+  last, is cell 762, in its own CG 3.
+- 0x6C2E0 copies 0x80 characters from 0x2890000 (0x2D00, 0x2DE4) for cell
+  761, but its colours, group 0x83, come from a fade in RAM (0x514550,
+  built from the table at 0x2825DB0). noclip does not build it, so the cell
+  is black.
+
+**Checked against MAME.** `vstriker` was dumped at attract frames 300 to
+3000. Characters 0x80-0x3FFF and the palette match mode 0 at frames
+300-1200 and mode 2 at 1500-3000 byte for byte. Each cell of CGs 0 and 2,
+drawn from MAME's tile RAM with the cell's own record, is pixel-exact
+against `renderCell`. Mode 1 is not shown in the attract.
+
+**Leads.** 0x2BDC fades group 0x44 from 0x2825CF0 in RAM, and 0xA708 writes
+the face palette. 0x6A778 and its neighbours write tilemap 0x1004000
+through routines not followed. Draws whose record comes from a register
+(0x6A328, 0x6AD3C) were not mapped; the runs hold every record anyway.
 
 ## Animation
 
