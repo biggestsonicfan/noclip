@@ -35,7 +35,7 @@ Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
-*Sky Target* has its models — see [Sky Target](#sky-target).
+*Sky Target* has its models and stages — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
@@ -1402,16 +1402,32 @@ There is no Stages tab, no cells, no characters and no motions yet. See
 **Models** tab has all 24204 entries of the model table, with the textures,
 palette and colour tables the game loads for them.
 
-The texture picker's sets are the game's twelve stage records, 0 to 11, and
-set 12 is what the boot loads, which the title shows. Records 0, 1 and 9
-share a texture bank and palette, and differ in their colour tables (9 is
-another list). Nothing found yet says which stage a model belongs to, so a
-stage's part needs its set picked by hand.
+The **Stages** tab has the game's stages in the order its four routes fly
+them: the briefing flight (EXPLAIN), Stage 1 UMI, Stage 2 SORA, Stage 3
+HOKKAIDO or TOSHI2, Stage 4 KYUKOKA, Stage 5 GAKE or SKI SKI, Stage 6
+TOSHI, SABAKU, SORA3 or GAKE2, Stage 7 LAST, and the attract's UMI2. The
+names are the game's own, from its stage select; the routes a stage is on
+are given when not all four fly it. Each stage is the scenery the game
+files in its object grid, its ground grid and its sky, with the stage's own
+texture set, palette, colour tables and light. A stage runs for up to 100000
+units and up to 33000 pieces, so the **zone** picker cuts it into stretches
+of 8192 along the flight; *The whole stage* shows it all at once and is slow.
+The sky rides with the camera.
+
+The first stage was put side by side with MAME's attract, from the board's
+own camera: the carrier deck and hangars, the sea, the islands and the
+sand bar sit where MAME draws them. SORA was checked the same way in play.
+
+The texture picker's sets are the game's eighteen stage records, 0 to 17,
+and set 18 is what the boot loads, which the title shows. Records 0, 1 and 9
+share a texture bank and palette, and differ in their colour tables.
 
 The textures, palette, luma and colour tables match MAME's byte for byte at
 the title and in the first stage.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+Not there yet: the planes, ships and tanks the stage's script sends, the
+far ring of ground past 3072, the snowfall and lightning, and cells,
+characters and motions. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
 
 ## Ski Super G

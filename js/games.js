@@ -7118,10 +7118,11 @@ const zeroguna = zeroGunnerBuild({
  * table entry's first three words to 0x804000. Its data ROM's last megabyte
  * (epr-18404/18405) is what the program reads through the XTRA_DATA mirror at
  * 0x6400000 for its colour, luma and palette tables. A stage is a 24-byte
- * record at 0xF6578 (the index in RAM at 0x5290C0; set up by 0xD1C90):
- * +0 texture bank, +4 colour row list, +8 palette table, +0xC row-21 list,
- * +0x10 a data pointer not yet read. The sets here are its twelve records
- * and the boot (12), which is what the title shows.
+ * record at 0xF6570 (the index in RAM at 0x5290C0; set up by 0xD1C90):
+ * +0 object list (js/skytargt.js), +4 base height, +8 texture bank, +0xC
+ * colour row list, +0x10 palette table, +0x14 row-21 list. The tables here
+ * read it from +8, so their `records` is 0xF6578. The sets are its eighteen
+ * records and the boot (18), which is what the title shows.
  */
 const skytargt = {
     id: 'skytargt',
@@ -7157,11 +7158,11 @@ const skytargt = {
     /* js/romset.js's `records` layout: {count, colours} at 0x640FB5C from
      * entry 0 (0x232D0), then the stage record's +8 table from entry 500
      * (0x39060). MAME's matches for every stage it showed. */
-    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 12 },
+    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 18 },
     /* js/texture.js's Sky Target section: the boot bank, then the record's. */
     texture: {
-        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 12 },
-        sets: 13,
+        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 18 },
+        sets: 19,
         residentSet: null,
         defaultSet: 0,
     },
@@ -7170,12 +7171,25 @@ const skytargt = {
     colors: {
         luma: { source: 'mainData', data: 0x1000000, bytes: 0x4000, spill: { data: 0x100000, entries: 8 } },
         skytargt: {
-            records: 0xf6578, stride: 24, stages: 12, bootList: 0x6410580,
+            records: 0xf6578, stride: 24, stages: 18, bootList: 0x6410580,
             gain: Math.fround(1.1), flat: [5, 8], fixed: 0x640f85c,
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    lighting: {
+        /* 0x37DF0 uploads 0x36530 with function 6, start 0, count 31: a
+         * parameter word and a distance coefficient each. */
+        materials: { source: 'maincpu', at: 0x36530, count: 32, stride: 8 },
+        /* 0x31A88 sends the camera's +0x70 through function 0xA every frame,
+         * the vector of two angles a stage reads from 0xE6970 (js/skytargt.js
+         * gives each stage its own). This is records 0 and 1's, (0xA180, 0),
+         * which the attract flies: (0, -0.733, -0.681), z negated for the
+         * explorer. */
+        light: [0, -0.732654, 0.680601],
+    },
+    /* js/skytargt.js: the stage records' object and ground grids. */
+    stageTable: { skytargt: true, flat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /* ---- Ski Super G ---------------------------------------------------------- */

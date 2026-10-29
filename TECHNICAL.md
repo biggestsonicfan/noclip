@@ -7665,9 +7665,67 @@ main RAM do not reach a Lua write tap; watchpoints do.
 - +0xC a list of row-21 tables, taken by an argument (0x374D0);
 - +0x10 a data pointer, not read yet; +0x14 is 0.
 
-There are twelve records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
+There are eighteen records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
 0x2200000, 3 and 11 0x2300000, 4 0x2400000, 5 and 8 0x2500000, 6 0x2600000
 and 7 0x2700000.
+
+**Stage scenery (`js/skytargt.js`).** Counted from 0xF6570, eight bytes
+before the table above, a record's +0 is the object list and +4 a height
+every object stands on (0.0 in all of them). 0x31220 picks the record off
+the route table at 0xE67B0, nine words a route, by the route at 0x5245D4
+and the step at 0x5245C0. The four routes are:
+
+| step | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| route 1 | 0 | 1 | 5 | 3 | 8 | 4 | 2 | 17 |
+| route 2 | 0 | 1 | 5 | 3 | 8 | 4 | 6 | 17 |
+| route 3 | 0 | 1 | 5 | 10 | 8 | 7 | 14 | 17 |
+| route 4 | 0 | 1 | 5 | 10 | 8 | 7 | 12 | 17 |
+
+Step 0 is the briefing flight, 1 to 7 the STAGE 1 to STAGE 7 of the
+strings at 0x82F68. Records 11, 13, 15 and 16 are on no route. The debug
+stage select's 0x79744 names the records out of 0xEDD70, ten bytes each.
+The attract flies record 1 (RAM 0x5290C0 reads 1 through it); record 9 is
+the attract's own (0x17F18).
+
+Every frame draws three things round the camera, whose struct 0x528780
+points at: +0x20..+0x28 its place, +0x2C, +0x30, +0x34 its turns (0x10000
+a turn):
+
+- The object grid. 0xD1D10 walks the record's object list, {A, B, P}
+  blocks of 12 bytes until P is 0. P holds {rows, columns, offsets, limits,
+  +0x20 count}, then count nodes of 20 bytes: int x, y, z, +0xC a model
+  list, +0x10 a hit-list word. 0xD24B0 files a node in the 256-unit cell
+  (x >> 8) + A, (z >> 8) + B (shri, toward zero), and 0xD2790 draws it at
+  the cell's corner, at the node's y plus the record's +4. A model list is
+  {count, then 20 bytes an entry: x, y, z floats off the parent, model,
+  child list or 0}; 0xD29F0 walks it with the offsets added up and sends
+  each as a translation with no turn of its own. 0xD2AC0 swaps a model
+  farther than 1000 for the next table entry, the far one; the explorer
+  draws the near one.
+- The ground. 0xD2B90 draws the grid at the word 0xF6770 + 4s: {columns,
+  rows, x, z, y, then a model a cell}, 1024-unit cells from (x, z); records
+  4 and 12 are raised by 390. Model 0 is an empty cell. 0xD34A0 draws a
+  coarser grid from 0xF67D0 + 4s past 3072, which the explorer leaves out.
+- The sky. 0x31AF0 draws the model at 0xE5E80 + 4s turned by the camera
+  alone, one unit below the eye; records 0 and 1 first draw 0x815 fifty
+  below. Record 14 draws one of seven models from 0xE5F50 a frame
+  (lightning) and record 3 a snowfall from 0xE5ED0; neither is animated
+  here.
+
+The light is two angles a record at 0xE6970 + 8s, which 0x86A68 (and
+0x8B480) copy into the struct the camera's +0xA8 points at; 0x89C40 copies
+them to the camera's +0x68/+0x6C, and 0x31A88 sends the vector they make
+(`stageLight`) through function 0xA. Records 0 and 1 are (0xA180, 0), 5 is
+(0xE800, 0x4800): the vectors MAME's camera +0x70 holds in those stages.
+The materials are 0x36530, 32 {word, float} pairs, which 0x37DF0 uploads
+with function 6.
+
+Checked against MAME by setting the explorer's camera to the board's
+(eye (x, y, -z); look (-sin b cos a, sin a, -cos b cos a), a = +0x2C,
+b = +0x30): attract frames 1500, 1900 and 2300 (sea, islands, sand bar)
+and 1100 (carrier deck, hangars) of record 1, and SORA in play at frames
+1500, 2400 and 3300 with record 5 forced through a write tap on 0x5290C0.
 
 **Model table.** The data ROM at 0xDE3D00 holds 16 bytes an entry: texture
 word, material word, mesh pointer, polygon count. It runs 24204 entries. All
@@ -7714,12 +7772,14 @@ They match MAME's entry for entry, at the boot and in the first stage.
 
 **Leads.**
 
-- Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
-  set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
-  0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
-  or path data and is not read.
+- Stages: the planes, ships and tanks are tasks the stage's script
+  starts; their sources were airship.c, ship.c and tank.c (the strings near
+  0x1BB0). Record +0x10 (counted from 0xF6578) points into the data ROM
+  (0x2CC28F0..0x2CD9740, and 0x6429950 for record 9) and is not read; it is
+  likely their placements or the flight path.
+- Music: sound.c's code is round 0x7D760.
 - Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
-  0x2CF20, and the tile RAM loader 0x78A90.
+  0x2CF20, the tile RAM loader 0x78A90, and the scroll strings at 0x78900.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 
