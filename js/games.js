@@ -3753,11 +3753,84 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
         objects: null,
         area: null,
         sky: null,
-        cells: null,
+        cells: VSTRIKER_CELLS,
         rig: null,
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot fill, with
+ * Virtual On's modes. Every address is the same in both builds (their data
+ * ROMs differ only from 0x282DE00 on); the routines are Revision A's, the
+ * first release's 0x80 further up (0x3240, 0x29E0, 0x2F90).
+ *
+ * The draws (0x31C0, and 0x3230, which draws the record with its bottom
+ * right corner at g1) are Virtua Cop's 0x55A0: the width and the height as
+ * halfwords, then halfword entries, g2 added to each, 0x8000 from every call
+ * but four (`bases`). The records lie end to end in three runs of the data
+ * ROM, each straight after the palette list of the fill it is drawn with:
+ * every one of the 61 records a call names by `lda`, and the 18 tables of
+ * them the calls index, lands on a record start.
+ *
+ * The fill (0x2960, g0 the mode) is Virtua Cop's boot: 0x2F10 expands the
+ * 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1, at boot (0x28D4);
+ * 0x2960 copies 0x3F80 characters to 0x80 on out of the data ROM a halfword
+ * at a time with the bytes swapped, from 0x2000000, 0x2080000 or 0x2100000 by
+ * the mode, and the mode's palette runs, {count, 16 colours}, from group 1
+ * until 0x7F groups are written. Mode 0 also copies 38 groups from 0x2825830
+ * to group 0xB4. Nothing else writes the characters (MAME write taps over the
+ * attract), so the three modes are the game's three CGs. Mode 2 is the boot's
+ * (0x13D4): the title, the logo, the FBI and 2002 screens, the credits,
+ * SPECIAL MATCH. Mode 0 is the match's and the attract's: the ranking, the
+ * HUD, the flags and team bars, CHALLENGER COMES. Mode 1 is the team select's
+ * (0x106E0, 0x10D74): the select screen, the tournament roster, name entry.
+ * MAME's characters 0x80-0x3FFF and palette match mode 0 at attract frames
+ * 300-1200 and mode 2 at 1500-3000 byte for byte, and every cell of those
+ * CGs drawn from MAME's tile RAM is pixel-exact against renderCell.
+ *
+ * Two pictures load their own characters over 0x180 on. The Japanese
+ * build's joke picture (cell 762, 0x6C370) copies 0x26C from 0x2891000 and
+ * colours groups 3-5 from 0x2825D90: CG 3. Cell 761 (0x6C2E0, through 0x2D00
+ * and 0x2DE4) copies 0x80 from 0x2890000 but takes its colours, group 0x83,
+ * from a fade in RAM (0x514550, from the table at 0x2825DB0): not built, so
+ * it shows black.
+ */
+const VSTRIKER_CELLS = {
+    sized: true,
+    records: [[0x028008e0, 0x0280a360], [0x0280a73a, 0x02812670], [0x028129f0, 0x028252b0]],
+    base: 0x8000,
+    bases: { [0x02801650]: 0, [0x02801e60]: 0, [0x0280af80]: 0, [0x02824e40]: 0xc000 },
+    boot: {
+        font: { src: 0x028252b0, first: 0, count: 0x80, pen: 1 },
+        modes: [
+            {
+                name: 'mode 0 (0x2960)',
+                chars: [[0x02000000, 0x80, 0x3f80]],
+                palette: [{ runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 }],
+            },
+            { name: 'mode 1 (0x2960)', chars: [[0x02080000, 0x80, 0x3f80]], palette: [{ runs: 0x0280a360, group: 1, until: 0x7f }] },
+            { name: 'mode 2 (0x2960)', chars: [[0x02100000, 0x80, 0x3f80]], palette: [{ runs: 0x02812670, group: 1, until: 0x7f }] },
+            {
+                name: 'mode 0, Japan (0x6C370)',
+                chars: [[0x02000000, 0x80, 0x3f80], [0x02891000, 0x180, 0x26c]],
+                palette: [
+                    { runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 },
+                    { colours: 0x02825d90, group: 3, groups: 3 },
+                ],
+            },
+        ],
+        chars: [],
+        palette: [],
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+const vstrikerRun = (first, end) => Array.from({ length: end - first }, (_, i) => first + i);
+VSTRIKER_CELLS.screens = [
+    { cg: 3, cells: [762] },
+    { cg: 0, cells: vstrikerRun(0, 337) }, { cg: 1, cells: vstrikerRun(337, 595) }, { cg: 2, cells: vstrikerRun(595, 763) },
+];
 
 /*
  * Revision A: 0x9210 dims the palette and calls 0x93F0, which builds

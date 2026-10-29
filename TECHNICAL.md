@@ -10571,6 +10571,53 @@ byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
 
 There are no model names in ROM.
 
+**Cells.** The tile chip is Virtua Cop's (`sized` + `boot` in
+`js/cells.js`, with Virtual On's `modes`). Every address is the same in
+both builds, whose data ROMs differ only from 0x282DE00 on. The routines
+below are Revision A's; the first release's are 0x80 further up.
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x31C0 | 0x3240 | draws a record at g1: u16 width, u16 height, halfword entries, g2 added (Virtua Cop's 0x55A0, byte for byte) |
+| 0x3230 | 0x32B0 | the same, with the record's bottom right corner at g1 |
+| 0x2960 | 0x29E0 | the fill, g0 the mode: 0x3F80 characters to 0x80.. from 0x2000000, 0x2080000 or 0x2100000, bytes swapped, then the mode's palette runs |
+| 0x2F10 | 0x2F90 | the 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1 (boot, 0x28D4) |
+
+Each mode's palette runs, {count, 16 colours}, fill groups 1 on until 0x7F
+groups are written: mode 0's from 0x2800170, mode 1's from 0x280A360, mode
+2's from 0x2812670. Mode 0 also copies 38 groups from 0x2825830 to group
+0xB4. The records lie end to end in three runs, each straight after its
+mode's palette list: 0x28008E0..0x280A360 (337 records, mode 0),
+0x280A73A..0x2812670 (258, mode 1) and 0x28129F0..0x28252B0 (168, mode 2).
+Every one of the 61 records a draw names by `lda`, and every one of the 18
+tables of records the draws index, lands on a record start. Almost every
+draw adds 0x8000; four records are drawn with 0 (0x2801650, 0x2801E60,
+0x280AF80) or 0xC000 (0x2824E40).
+
+Mode 2 is the boot's (0x13D4), mode 1 the team select's (0x106E0, 0x10D74),
+mode 0 the match's and the attract's. MAME's write taps over the attract
+see only the fill (0x2AA4) and the font (0x2F8C) writing characters.
+
+Two pictures bring their own characters, over 0x180 on:
+- 0x6C370 (the Japanese build only) copies 0x26C characters from 0x2891000
+  and the colours at 0x2825D90 to groups 3-5. Its record, 0x28252B0's
+  last, is cell 762, in its own CG 3.
+- 0x6C2E0 copies 0x80 characters from 0x2890000 (0x2D00, 0x2DE4) for cell
+  761, but its colours, group 0x83, come from a fade in RAM (0x514550,
+  built from the table at 0x2825DB0). noclip does not build it, so the cell
+  is black.
+
+**Checked against MAME.** `vstriker` was dumped at attract frames 300 to
+3000. Characters 0x80-0x3FFF and the palette match mode 0 at frames
+300-1200 and mode 2 at 1500-3000 byte for byte. Each cell of CGs 0 and 2,
+drawn from MAME's tile RAM with the cell's own record, is pixel-exact
+against `renderCell`. Mode 1 is not shown in the attract.
+
+**Leads.** 0x2BDC fades group 0x44 from 0x2825CF0 in RAM, and 0xA708 writes
+the face palette. 0x6A778 and its neighbours write tilemap 0x1004000
+through routines not followed. Draws whose record comes from a register
+(0x6A328, 0x6AD3C) were not mapped; the runs hold every record anyway.
+
 ## Animation
 
 Motion playback is implemented, and checked against the board — see

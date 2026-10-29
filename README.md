@@ -26,7 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
-*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
+*Virtua Striker* has its models and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
@@ -1234,8 +1234,24 @@ build different colour tables. With either setting, the sheets, the palette,
 luma and the colour tables match MAME's at boot byte for byte.
 
 The kits, the per-team textures and the stadium are set up in play, from
-the team tables, so the models show the boot's look. There is no Stages
-tab, no motions, no cells and no music yet.
+the team tables, so the models show the boot's look.
+
+The **Cells** tab has the game's 763 tile-chip pictures, in four CGs:
+
+- CG 0 is the match's and the attract's: the ranking, the HUD, the flags
+  and team bars, CHALLENGER COMES;
+- CG 1 is the team select's: the select screen, the tournament roster and
+  name entry;
+- CG 2 is the boot's: the title, the VIRTUA STRIKER logo, the FBI and 2002
+  screens, the credits and SPECIAL MATCH;
+- CG 3 is a picture only the Japanese build shows.
+
+The characters and colours of CGs 0 and 2 match MAME's byte for byte in
+the attract, and every cell of them is pixel-exact against the same cell
+drawn from MAME's tile RAM. One cell (761) takes its colours from a fade the
+game runs in RAM, and shows black.
+
+There is no Stages tab, no motions and no music yet.
 
 ## Manx TT Superbike
 
