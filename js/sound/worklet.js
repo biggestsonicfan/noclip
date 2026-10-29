@@ -1,20 +1,19 @@
 /*
  * worklet.js — the sound board on the audio thread.
  *
- * The wasm is one of the two sound boards sound.js names — the Model 2 board
- * (tools/sound/board.c) or the Model 1 board (tools/sound/model1.c) — running
- * the game's own 68000 driver. This runs it one
+ * The wasm holds m2-hle2's sound boards (tools/sound/board.c), the Model 2 one
+ * or the Model 1 one as sound.js says, running the game's own sound driver,
+ * on the 68000 or, where m2-hle2 has ported the driver, in C. This runs it one
  * render quantum at a time, so the board only ever runs as fast as the
  * speakers take its samples and there is no buffer between the two to fill or
  * starve. The page hands over the wasm's bytes with the ROMs — not a compiled
  * module, which Chrome drops on the way to a worklet without a word — and
  * after that the only traffic is command bytes, the ones the i960 would send.
  *
- * The Model 2 board makes 44.1 kHz; the page asks for a context at that rate,
- * and every current browser gives it one. The Model 1 board makes MultiPCM's
- * 44642.857 Hz, which it reports as snd_rate(). Where the two differ, this
- * steps the board's output across to the context's rate with a linear blend,
- * which is enough for a preview and keeps the pitch right.
+ * Both boards make 44.1 kHz; the page asks for a context at that rate, and
+ * every current browser gives it one. Where it does not, this steps the
+ * board's output across to the context's rate with a linear blend, which is
+ * enough for a preview and keeps the pitch right.
  */
 
 const BOARD_RATE = 44100;
@@ -37,14 +36,14 @@ class Model2Sound extends AudioWorkletProcessor {
     onMessage(m) {
         if (m.type === 'init') {
             this.start(m).then(
-                () => this.port.postMessage({ type: 'ready' }),
+                () => this.port.postMessage({ type: 'ready', driver: this.driver() }),
                 (err) => this.port.postMessage({ type: 'error', message: String(err) }));
         } else if (m.type === 'send' && this.board) {
             for (const b of m.bytes) this.board.snd_send(b);
         }
     }
 
-    async start({ wasm, program, samples, warmup }) {
+    async start({ wasm, model1, program, samples, warmup }) {
         /* One import, and only if the heap ever has to grow — it does not:
          * the build's initial memory holds the sample ROMs outright. */
         const { instance: inst } = await WebAssembly.instantiate(wasm, {
@@ -58,13 +57,18 @@ class Model2Sound extends AudioWorkletProcessor {
         const sp = e.snd_alloc(smp.length);
         new Uint8Array(e.memory.buffer, pp, prog.length).set(prog);
         new Uint8Array(e.memory.buffer, sp, smp.length).set(smp);
+        e.snd_board(model1 ? 1 : 0);
         if (!e.snd_init(pp, prog.length, sp, smp.length)) throw new Error('the sound program did not load');
-        const rate = e.snd_rate ? e.snd_rate() : BOARD_RATE;
-        this.step = rate / sampleRate;
         /* A driver deaf for a while after reset (sound.js `warmup`) runs
          * through it here, unheard, ahead of the first command. */
-        for (let left = Math.round(warmup * rate); left > 0;) left -= e.snd_render(Math.min(left, 1024)) || left;
+        for (let left = Math.round(warmup * BOARD_RATE); left > 0;) left -= e.snd_render(Math.min(left, 1024)) || left;
         this.board = e;
+    }
+
+    /* Who runs the game's sound program: 'C' where m2-hle2 has the driver
+     * ported (board.c snd_driver), '68000' where the board runs it as is. */
+    driver() {
+        return this.board.snd_driver() ? 'C' : '68000';
     }
 
     /* The next board sample, rendering a block of them when the last is used. */
