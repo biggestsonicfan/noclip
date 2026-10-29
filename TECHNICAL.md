@@ -7227,6 +7227,12 @@ palette, colorxlat and luma windows naming the routines.
     panel's tiles at its block, byte for byte. The colours match too, except
     578, 579, 594 and a second copy of 33, which the game was fading when
     dumped.
+  - Every picture's chunks looked for in character RAM: the attract
+    (frames 600..6000) loads 185 pictures and a play (coin, start, player
+    select, Championship stage 1 to GAME OVER and the ranking) 363, 421 in
+    all, each with the explorer's tiles and its own colours (594 again
+    brightened by a fade at attract frame 1200). 287, 611 and 710..739 only
+    half match: siblings of 275..279, 628 and 690..709.
   - Not followed: the draw that adds the first block to a map's entries. No
     capture says which pictures share a screen.
 - **Missing.** The sky and the background (MAME's frame 3000 has an orange
@@ -8373,6 +8379,15 @@ DRUGS, the EPA's RECYCLE IT, the InVision sound credit); the rest are
 the how-to-play pages in Japanese and English, the wing select, the
 pilots' names and portraits, the story text and the ranking.
 
+Graded the same way as Ski Super G's (chunks in MAME's character RAM, the
+colours at their blocks, the maps on the layers) through a play (two
+coins, start, gun and missiles, 9000 frames: the mission briefing, DANGER,
+the mission chart, continue and GAME OVER): 222 pictures, 237 with the
+attract's 28, all with the explorer's tiles. Their colours are their own
+except 468..472 (one colour the code blinks) and 484..486 (a colour ramp it
+cycles); that code is not read. 514..516 and 549 only half match: siblings
+sharing a first chunk.
+
 **Leads.**
 
 - Stages: the planes, ships and tanks are tasks the stage's script
@@ -8437,12 +8452,36 @@ the same scroll-group library (its SCROLL GROUP ERROR string is at 0x58E30;
 the tile clear 0x58DB0, the loads at 0x58D98 and 0x58E78). The table is
 program 0xB05C0, 946 {tiles, colours, map} entries; 920 to 943 are in the
 second program chip (0x100000 on), 944 and 945 have their map in the first.
-Entry 946 has no tiles: what follows is another table. MAME's `skisuprg`
-stops on DRIVE BOARD TROUBLE (code FF) at every frame, with #1881's NVRAM
-too, so the grading is thin: its CREDIT pieces (cells 670, 673, 675) match
-the tile RAM pixel for pixel at frames 1200 to 6000. The trouble screen
-itself is not one of the pictures. Getting past it (the drive board's reply,
-not found) would let the attract grade the rest.
+Entry 946 has no tiles: what follows is another table.
+
+MAME's `skisuprg` stops on DRIVE BOARD TROUBLE (code FF) because nothing
+answers for the drive board. The check is the state machine 0x88B10: state
+in RAM 0x510CD8, handlers at program 0xC1F90 {0x889E0, 0x88A40, 0x88A70,
+0x88AB0}. State 1 waits for 0xCE and state 2 for 0xFF in 0x58823A (written
+each frame from the I/O at 0x473D0); after 0x1DF frames it stores 2 in
+0x52FCD4 and 0xFF in 0x588239, which 0x1DF14 copies to 0x52FCD8 and 0x1D860
+draws as the trouble screen. Writing 0x88AB0 over the handlers at 0xC1F94
+and 0xC1F98 (Lua: `region(":maincpu"):write_u32`) steps both states on, and
+the game runs its attract and plays (course select, World Series, time
+attack, the results and grade screens).
+
+Graded against MAME's character, tile and palette RAM (each picture's
+chunks found in character RAM, its colours at its blocks, its map on a
+layer): the attract (frames 600..6000) loads 190 pictures, two plays (World
+Series round 1, time attack to the results) 374, 421 in all. Every one has
+the explorer's tiles at its blocks, and its own colours, except:
+
+- 832 and 833, the title's glow: 0x1E9A0 starts the palette fade 0x59240
+  (task 0x590A0) on them from program colours 0xA31E0 to 0xA3220 over 120
+  frames, so on screen they wear 0xA3220/0xA3240, not their own.
+- The warning text 609..646 shares 275 tiles with the CREDIT pieces
+  665..683; MAME draws the warning lines from 665's block with 665's
+  colours (white, pens 9..15), not 609's own gradient.
+
+Pictures that only half match are siblings (the same first chunk, other
+later chunks or colours: 505/508, 647..664 to 609..683, 718/775, 905..907,
+691..706, 917/918), not misread. Not loaded in any run: the other World
+Series rounds, name entry, and about 520 more.
 
 ### Wave Runner and Sega Water Ski (`js/waverunr.js`)
 
@@ -8539,7 +8578,13 @@ routines run from RAM: the boot copies 128 KB of program from 0xB0000 to
 title's tiles from 0x2CD5B30 (count 0x175) through 0x217A08. Graded against
 MAME's tile and palette RAM at frames 1200, 3000, 4200 and 5400: 48 pictures
 found on the layers (the title, the backdrops 111/112/243/244, the course
-map pieces 925-1008, the menus 699/702), all pixel for pixel.
+map pieces 925-1008, the menus 699/702), all pixel for pixel. Graded again
+with every picture's chunks looked for in character RAM: the attract
+(frames 600..6000) loads 183 pictures and a play (three coins, start, 9000
+frames: course select, the race, GAME OVER, the ranking) 422, 426 in all,
+each with the explorer's tiles and its own colours. 989..998, 1025..1027
+and 1054 only half match: they share a first chunk with 999..1008,
+1022..1024 and 1028.
 
 **Leads.** The rider draws at 0x20D124 and 0x20D2B4 (models 207..416) and
 0x2123D8 (models 757..862) are where an Animation tab would start; the
@@ -8592,7 +8637,13 @@ through XTRA_DATA (0x64xxxxx, data 0x14xxxxx; `xtra` window 0x1000000).
 Graded against MAME's tile and palette RAM at frames 1100, 2500 and 4000:
 the backdrops 863 (62 x 48) and 251 (64 x 48) and the INSERT COIN and CREDIT
 pieces 47, 55, 65, 68 and 74 pixel for pixel. Cells 10 to 37 are the same
-tiles under another picture's colours, which is why they half match.
+tiles under another picture's colours, which is why they half match. With
+every picture's chunks looked for in character RAM: the attract (frames
+600..6000) loads 144 pictures and a play (coin, start, the Palm Beach run
+to TIME IS UP) 295, 334 in all, each with the explorer's tiles and its own
+colours (98 is still fading in from white at attract frame 4800). 107, 384
+and 850 only half match: siblings (850's first chunk is the third of
+333..335 and 383).
 
 ### Top Skater (`js/topskatr.js`)
 
