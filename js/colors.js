@@ -286,7 +286,7 @@ function buildRampColorxlat(rom, colorSet) {
     /* Which set is the test menu's CABINET setting (see DAYTONA_CABINETS in
      * js/games.js); the panel's switch puts its choice on the ROM set. */
     const C = rom.game.colors;
-    const { step, span, bias, flat } = C.cabinets?.[rom.cabinet ?? C.cabinet]?.ramp ?? C.ramp;
+    const { step, span, bias, flat, top = 0xff } = C.cabinets?.[rom.cabinet ?? C.cabinet]?.ramp ?? C.ramp;
     const out = new Uint8Array(CXLAT_BYTES);
     const set = cxlatWriter(out);
     const put = (row, luma, v) => {
@@ -298,7 +298,8 @@ function buildRampColorxlat(rom, colorSet) {
             let v = row * i * step;
             if (v) v += bias;
             v >>>= 6;
-            put(row, i, v >= 0x100 ? 0xffff : v);
+            /* Desert Tank's 0x37150 keeps a 0x100 (`cmpible`): its `top`. */
+            put(row, i, v > top ? 0xffff : v);
         }
         const t = step * row;
         const tail = t ? (flat + t) >>> 1 : 0;
