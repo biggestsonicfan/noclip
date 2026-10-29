@@ -7359,12 +7359,34 @@ to 0x1802000 by 0x1C8C0 from the frame hook (0x696C0). 0x1C950, 0x1C9F0 and
 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or 0xFC00 for a moment of the
 attract mode (MAME's frame 6000 is in one of them); not ported.
 
+**Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
+routines (js/cells.js `cgm`, see [Sega Rally's
+cells](#sega-rally-championships-cells-jscellsjs)) at ROM addresses. The
+loader 0x74650 compares a file with the string at 0x74600 (the scan's first
+program match, no file), loads block k into group g + k, and files the
+patterns at work RAM 0x218C10; the draw 0x74450 adds g << 7. g is work RAM
+0x219C10, which the reset 0x742C0 sets to 9; 0x74300 sets it, 0x74A20 keeps
+24 groups aside. The loader's 116 callers name the files directly. Four
+files are in the program past the code (0xC0000 on), 93 in the first data
+pair (0x1FC4BC on) and 10 in the 1 MB pair at 0x800000, which the region
+repeats at 0xC00000. The program names the
+repeat's copies (`lda 0x2C4B210, g2` for the attract's URL line), so the
+scan reads 0..0x7FFFFF and 0xC00000.. and leaves 0x800000.. out
+(`cells.cgm.data`): 107 files, 924 patterns, 16 files and 173 patterns
+unused. Colours go through colorxlat.
+
+Checked against MAME's attract (stcca, with the drive board's epr-18261 a
+stub of zeros): at frames 1500, 3000, 4500 and 6000 every file in character
+RAM (six, seven by frame 6000, from group 9) has its tiles and colours there
+byte for byte, and the rendered stc_url, insert_coins and credit_ patterns are MAME's
+snapshot's pixels exactly where the game draws them, also in the green
+moment of frame 6000 (the tile layer does not take the tint).
+
 **Leads.** A course record's +0x08 points at a program table (0xBB60 for
 record 0) and +0x0C on is a run of consecutive model numbers (0x399.. for
 record 0, 0x48F.. for 2, 0x678.. for 3, 0xA09.. for 7), which look like the
-course's segments. The pictures are "CGM 1.0" files, as Sega Rally's
-(js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
-(epr-19275.2s, mpr-19262..19265); not traced.
+course's segments. Sound is the 68000 and SCSP (epr-19274.31) with a DSB
+MPEG board (epr-19275.2s, mpr-19262..19265); not traced.
 
 ### Super GT 24h and Over Rev (`js/jaleco.js`)
 

@@ -29,7 +29,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models and its cells — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
-*Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
+*Sega Touring Car Championship* has its models and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
@@ -1296,7 +1296,15 @@ set 4 is the title's. The cars are on every set; a course model needs its
 course's set picked.
 
 The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Cells** tab has the game's 2D art, 924 pictures in 107 files: ENTER
+YOUR NAME, the SEGA logo, the course and car select pieces, the round
+titles and course maps, the counters and the attract's messages. They are
+AM3's "CGM 1.0" files, as Sega Rally's, each a CG and each picture a cell
+with its own name (NE_PRE, SEGA_only, insert_coins...). 16 files, 173
+pictures, are named nowhere in the program and are marked unused. The
+attract's messages match MAME's pixel for pixel.
+
+There is no Stages tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
 ## Super GT 24h

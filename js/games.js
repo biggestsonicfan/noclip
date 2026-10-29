@@ -6683,7 +6683,20 @@ const stcc = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /*
+     * The 2D pictures are Sega Rally's "CGM 1.0" files (js/cells.js, `cgm`):
+     * the loader 0x74650 compares the string at 0x74600, the reset 0x742C0
+     * sets the free group (work RAM 0x219C10) to 9, and the draw 0x74450
+     * adds the group << 7 from the pattern table at 0x218C10. Four files are
+     * in the program ROM past the code (0xC0000 on), the rest in the data
+     * ROM's first pair (0x1FC4BC on) and the 1 MB pair at 0x800000, which the
+     * region repeats at 0xC00000. The program names the repeat (`lda
+     * 0x2C4B210`, the attract's URL line), so the scan reads it and skips
+     * 0x800000..0xBFFFFF (`cgm.data`). The files MAME's attract loads sit
+     * from group 9 in its character RAM with their colours, byte for byte.
+     */
+    cells: { cgm: { data: [[0, 0x800000], [0xc00000, 0xd00000]] }, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false },
 };
 
 /* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */

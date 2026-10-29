@@ -89,6 +89,8 @@
  * g, which the reset (0x5C8A60) sets to 9 above the font; the draw (0x5C8C10)
  * adds g << 7 to each entry. So a file is a CG, loaded from group 9, and each
  * of its patterns a cell with its name. See js/games.js srallyc.cells.
+ * Manx TT and Touring Car run the same routines at their own addresses
+ * (js/games.js manxtt.cells, stcc.cells).
  *
  * Virtual On's maps are bare halfword entries: the draw routines (0x1DC10
  * and its siblings) take the map's address, its width and its height from
@@ -240,8 +242,9 @@ function groupCells(rom) {
 }
 
 /* Sega Rally's CGM files, in the program ROM and then the data ROM up to
- * `cgm.dataEnd`: each file's blocks {pal, tiles, count} and patterns {at,
- * name, cols, rows}. The loader (0x5C8EB0) refuses a file whose blocks would
+ * `cgm.dataEnd`, or in the data ROM's runs `cgm.data` ([from, to] offsets;
+ * Touring Car's skip a repeat the program never names): each file's blocks
+ * {pal, tiles, count} and patterns {at, name, cols, rows}. The loader (0x5C8EB0) refuses a file whose blocks would
  * run past group 0x80; so does this. */
 const CGM_MAGIC = [...'CGM 1.0 '].map((ch) => ch.charCodeAt(0));
 const CGM_GROUP = 9;            /* the first free group after the reset, 0x5C8A60 */
@@ -250,8 +253,10 @@ function cgmFiles(rom) {
     let out = cgmCache.get(rom);
     if (out) return out;
     out = [];
-    const end = rom.game.cells.cgm.dataEnd ?? rom.mainData.length;
-    for (const [u8, base] of [[rom.maincpu, 0], [rom.mainData.subarray(0, end), MAIN_DATA_BASE]]) {
+    const G = rom.game.cells.cgm;
+    const runs = (G.data ?? [[0, G.dataEnd ?? rom.mainData.length]])
+        .map(([from, to]) => [rom.mainData.subarray(from, to), MAIN_DATA_BASE + from]);
+    for (const [u8, base] of [[rom.maincpu, 0], ...runs]) {
         for (let o = u8.indexOf(CGM_MAGIC[0]); o >= 0 && o + 10 <= u8.length; o = u8.indexOf(CGM_MAGIC[0], o + 1)) {
             if (!CGM_MAGIC.every((b, i) => u8[o + i] === b)) continue;
             const f = readCgm(u8, o, base);
