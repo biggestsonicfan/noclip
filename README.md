@@ -26,6 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 
 Three views, and a fourth for the 2D art:
 
@@ -1191,6 +1192,30 @@ byte for byte in the city, the stage film and the title.
 There is no Stages tab, no cells, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
 
+## Zero Gunner
+
+`zerogun.zip` on its own is the export build on Model 2B. With
+`zerogunj.zip` beside it the Japanese build is offered as a variant, and
+with `zeroguna.zip` the Model 2A build is. Those two zips hold only their
+programs. The **Models** tab has all 7712 entries of the model table, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game loads:
+
+- sets 0 and 1 are the two the attract opens with;
+- set 2 is a load on its own;
+- sets 3 to 7 are the first stage's five areas;
+- sets 8 to 12 are the second stage's areas;
+- sets 13 to 17 are the third stage's areas.
+
+Nothing found yet says which scene a model belongs to, so a scene's part
+needs its set picked by hand. The colour tables are the same in every scene.
+The textures, palette, luma and colour tables match MAME's byte for byte in
+the attract, in all three builds.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1236,7 +1261,9 @@ So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
 and its USA build `lastbrnxu.zip`.
 
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
-beside it. `gunblade.zip` carries Gunblade NY.
+beside it. `gunblade.zip` carries Gunblade NY. `zerogun.zip` carries Zero
+Gunner; its Japanese build wants `zerogunj.zip` beside it, and its Model 2A
+build `zeroguna.zip`.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

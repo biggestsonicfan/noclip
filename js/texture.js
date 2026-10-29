@@ -1118,6 +1118,13 @@ function buildCopyTexram(rom) {
  * ends with a 16 by 32 rectangle of halfword 0x8888 (0x5C6F0). Kind 2 is in
  * the program but no load names it. m2-hle2's sheets match byte for byte, at
  * the title (load 8) and in the first stage (load 4).
+ *
+ * Zero Gunner has the same loader (0x48440, `raw.loads` 0x48080, 25 loads),
+ * but load 0 is kind 0, and a scene puts in one load of kind 1 and one of
+ * kind 2 over it. Its kind 2 (0x486B0), the third list below, is a page of
+ * 512 rows into sheet 0's second half, with its mips. A scene record has its
+ * two load numbers at +0x24 and +0x26, -1 for none (0x62F6C); `raw.sets`
+ * lists the pairs. MAME's sheets match byte for byte for three of them.
  */
 const PLTKIDS_KINDS = [
     [[0, 0, 0, 1024, 1024], [3, 0x200, 0, 512, 512], [1, 0x300, 0x200, 256, 256],
@@ -1126,6 +1133,8 @@ const PLTKIDS_KINDS = [
         [3, 0x300, 0x200, 256, 256], [3, 0x300, 0x300, 128, 256], [1, 0x380, 0x300, 128, 128],
         [1, 0x380, 0x380, 64, 128], [3, 0x3c0, 0x380, 64, 64], [3, 0x3c0, 0x3c0, 32, 64],
         [1, 0x3e0, 0x3c0, 32, 32], [1, 0x3e0, 0x3e0, 16, 32]],
+    [[1, 0, 0, 512, 1024], [3, 0x200, 0x200, 256, 512], [1, 0x300, 0x300, 128, 256],
+        [3, 0x380, 0x380, 64, 128], [1, 0x3c0, 0x3c0, 32, 64], [3, 0x3e0, 0x3e0, 16, 32]],
 ];
 const PLTKIDS_QUARTER = SHEET_BYTES / 2;
 
@@ -1158,12 +1167,14 @@ function pltkidsLoad(rom, tex, load) {
     }
 }
 
-/* Set s is the common load with scene load s + 1 over it. */
+/* Set s is the common load with scene load s + 1 over it, or with the loads
+ * `raw.sets[s]` names. */
 function buildPltkidsTexram(rom, texSets) {
     const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
     const tex = new Uint8Array(SHEET_BYTES * 2);
+    const set = sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet;
     pltkidsLoad(rom, tex, 0);
-    pltkidsLoad(rom, tex, (sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet) + 1);
+    for (const load of rom.game.texture.raw.sets?.[set] ?? [set + 1]) if (load > 0) pltkidsLoad(rom, tex, load);
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
 }
 

@@ -7215,6 +7215,77 @@ Gunblade NY has no fighters or motions. Its enemies and vehicles move by
 script, and that script is not read. The tile chip (cells) and the music
 are not looked at.
 
+### Zero Gunner (`js/texture.js`, `js/colors.js`)
+
+Psikyo's 1997 shooter runs on Pilot Kids' engine, a year older. The builds
+are the export one on Model 2B CRX (MAME's `zerogun`), the Japanese one
+(`zerogunj`) and the export one on Model 2A (`zeroguna`). The three programs
+keep every table at the same offset, except the texture load list: 0x48080,
+0x480D0 and 0x47FA0. Their code moves by up to 0x180. The addresses below
+are `zerogun`'s. As in Pilot Kids, the program runs from a copy at RAM
+0x500000.
+
+Everything was checked against MAME. The shared build's RAM was dumped at
+attract frames 600, 1500 and 3000 in `zerogun`, and at frame 600 in the two
+clones. Its write taps named the routines below.
+
+**Model table.** The data ROM at 0x7FF80 holds 32 bytes an entry: texture
+word, material word, mesh pointer, polygon count, then two more texture
+words. It runs 7712 entries; {4, -1, 0, 0} follows. The draws (0x4D3A0 to
+0x4DB48) send words 0 to 3 after `st 0x101, 0x800010`, the same as Pilot
+Kids'. In the attract's first 3000 frames the game sent 294 distinct objects:
+
+- 207 are entries as they are;
+- 18 more are entries with word 4 or 5 for word 1;
+- 47 use mesh 0x22, a quad, with texture words worked out at run time
+  (sprites);
+- 18 have no mesh;
+- a few use meshes at 0x14F... that no entry names.
+
+**Textures.** The 315-5881 on the board is used, at 0x6C510, only to
+decrypt short constants for the game's checks. The pages are dealt by Pilot
+Kids' loader (0x48440, the RLE blit at 0x48760). The load list holds 25
+{source, kind}. Load 0 is kind 0, the common load. A scene adds one load of
+kind 1 and one of kind 2. Kind 2 (0x486B0) is a list of rectangles that
+Pilot Kids has in its program but never uses: a page 512 rows high in sheet
+0's second half, with its mips. A scene's record has its two load numbers at
++0x24 and +0x26, with -1 meaning none; they are read at 0x62F6C. The records
+are listed by stage: RAM 0x56EE28 holds one list for each stage, and each
+list points at the records. The pairs are:
+
+- (20, 21), the attract at frame 600;
+- (22, 23), at frame 1500;
+- (19, none);
+- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
+  8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the second stage;
+- (5, 6, 14, 15 or 7, with 18), the third stage.
+
+Both sheets match MAME's byte for byte at all three frames.
+
+**Palette.** The palette is {count, colours} at 0x87F4, 615 colours, which
+0x4DFA8 copies to the face palette. Entry 26 is later animated (0x538B8).
+
+**Luma.** 0x48B60 copies the 0x600 bytes at 0x1A20. 0x48C10 can lay a band
+of 128 from the same table over band 0. The attract's fade does that by
+frame 3000.
+
+**Colour tables.** 0x489E0 writes every row: slot l of 0..63 on row r is
+((6r + r / 6 + 64) * (l + 1)) >> 6, floored at r (the byte table at
+0x489C0), and row 0 is 0. Slots 64 to 255 keep slot 63's value. Then 0x48AD0
+lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
+on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
+tables after the boot (frame 51), and they match MAME's entry for entry.
+
+**Leads.**
+
+- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
+  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
+  0x502512 and 0x502510.
+- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
+  a model to its set.
+- The tile chip and the music are not looked at.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

@@ -367,6 +367,38 @@ function buildPltkidsColorxlat(rom, colorSet) {
     return out;
 }
 
+/* ---- Zero Gunner ---- */
+
+/*
+ * Zero Gunner's colorxlat, the same in every scene: Pilot Kids' scheme with
+ * another ramp (0x489E0). Row r of all three channels is, for slot l of
+ * 0..63, ((6r + r / 6 + 64) * (l + 1)) >> 6, row 0 zero, floored at r (the
+ * byte table at 0x489C0); slots 64 on keep slot 63's. Then 0x48AD0 lays the
+ * program's table over the first 64 slots of odd rows 1, 3, ...: `count`
+ * (0x1A10) rows of 64 {r, g, b} bytes from `table` (0x1050). MAME's matches
+ * it entry for entry, from the boot (frame 51) to the attract's end.
+ */
+function buildZerogunColorxlat(rom) {
+    const Z = rom.game.colors.zerogun;
+    const md = rom.maincpu;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = Math.max((a * (Math.min(luma, 63) + 1)) >> 6, row);
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    let at = Z.table;
+    for (let k = 0; k < md[Z.count] && 2 * k + 1 < 32; k++) {
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 2 * k + 1, luma, md[at++]);
+        }
+    }
+    return out;
+}
+
 /* ---- Gunblade NY ---- */
 
 /*
@@ -708,6 +740,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
     if (rom.game.colors.gunblade) return buildGunbladeColorxlat(rom, colorSet);
+    if (rom.game.colors.zerogun) return buildZerogunColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);

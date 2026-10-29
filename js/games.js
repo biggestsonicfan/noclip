@@ -6121,6 +6121,99 @@ const gunblade = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Psikyo's 1997 shooter: Zero Gunner on Model 2B CRX, the export build
+ * (`zerogun`, MAME's parent) and the Japanese one (`zerogunj`), and the
+ * export build on Model 2A (`zeroguna`). The clones' zips hold only their
+ * programs (and the 2A board's own chips); the data, polygon and texture
+ * chips are read from zerogun.zip beside them. It is Pilot Kids' engine a
+ * year sooner: the same model table, the same texture loader and colour
+ * scheme, so js/texture.js's Pilot Kids section reads it and js/colors.js has
+ * a short section of its own. The three programs keep every table at the
+ * same offset but the texture load list (`loads`).
+ */
+function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
+    return {
+        id,
+        name,
+        identify: [program[1], program[3], ...extra],
+        identifyCrc: [program[2], program[4]],
+        regions: {
+            maincpu: { size: 0x100000, parts: [program] },
+            mainData: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-20296.11', 0x072d8a5e, 'mpr-20297.12', 0xba6a825b],
+                    [0x800000, 'mpr-20294.9', 0xa0bd1474, 'mpr-20295.10', 0xc548cced],
+                ],
+            },
+            polygons: { size: 0x800000, parts: [[0x000000, 'mpr-20298.17', 0x8ab782fc, 'mpr-20299.21', 0x90e20cdb]] },
+            textures: { size: 0x400000, parts: [[0x000000, 'mpr-20301.27', 0x52010fb2, 'mpr-20300.25', 0x6f042792]] },
+        },
+        /*
+         * 7712 entries of 32 bytes in the data ROM at 0x7FF80, up to the
+         * {4, -1, 0, 0} after them: texture word, material word, mesh pointer,
+         * polygon count, two more texture words. The program's draws (0x4D3A0
+         * to 0x4DB48 in `zerogun`) send words 0 to 3 of an entry after
+         * `st 0x101, 0x800010`, as Pilot Kids' do.
+         */
+        modelTable: { offset: 0x7ff80, count: 7712, stride: 32 },
+        meshPtr: { subtract: 0x02000000, add: 0 },
+        /* {count, colours}: 615 colours at 0x87F6, which 0x4DFA8 copies to
+         * the face palette. MAME's matches; entry 26 is animated later. */
+        paletteProgram: 0x87f4,
+        paletteOffset: null,
+        /*
+         * js/texture.js's Pilot Kids section. Load 0 is the common one, and a
+         * scene puts in a load of kind 1 and one of kind 2 over it, by the
+         * two numbers at +0x24 of its record (0x62F6C). The records are listed
+         * at 0x6EE28 by stage. `sets` are the pairs they name: 0 is what
+         * MAME's attract has in at frame 600, 1 at frame 1500, 2 a load on its
+         * own; 3-7 are the first stage's five areas (the attract's frame
+         * 3000 is set 3), 8-12 the second's and 13-17 the third's.
+         */
+        texture: {
+            raw: {
+                layout: 'pltkids', loads,
+                sets: [[20, 21], [22, 23], [19], [8, 16], [3, 16], [10, 16], [4, 16], [1, 16],
+                    [2, 17], [9, 17], [11, 17], [12, 17], [13, 17], [5, 18], [6, 18], [14, 18], [15, 18], [7, 18]],
+            },
+            sets: 18,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        /* Luma: 0x48B60 copies the 0x600 bytes at 0x1A20 (0x48C10 can lay
+         * another band over band 0; the attract's fade does). Colorxlat:
+         * js/colors.js's Zero Gunner section, the same in every scene. */
+        colors: {
+            luma: { source: 'maincpu', data: 0x1a20, bytes: 0x600 },
+            zerogun: { table: 0x1050, count: 0x1a10 },
+            solid: true,
+        },
+        /* No stage, cell or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+const zerogun = zeroGunnerBuild({
+    id: 'zerogun', name: 'Zero Gunner (Export, Model 2B)',
+    program: [0x000000, 'epr-20439.15', 0x10125381, 'epr-20440.16', 0xce872747],
+    extra: ['mpr-20296.11', 'mpr-20298.17'],
+    loads: 0x48080,
+});
+/* The clones are known by their programs alone, so that zerogun.zip missing
+ * is said as such. */
+const zerogunj = zeroGunnerBuild({
+    id: 'zerogunj', name: 'Zero Gunner (Japan, Model 2B)',
+    program: [0x000000, 'epr-20290.15', 0x9ce3ad21, 'epr-20291.16', 0x7267a03d],
+    loads: 0x480d0,
+});
+const zeroguna = zeroGunnerBuild({
+    id: 'zeroguna', name: 'Zero Gunner (Export, Model 2A)',
+    program: [0x000000, 'epr-20437.12', 0xfad30cc0, 'epr-20438.13', 0xca364408],
+    loads: 0x47fa0,
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6128,7 +6221,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, gunblade];
+    pltkids, pltkidsa, gunblade, zerogun, zerogunj, zeroguna];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
