@@ -33,8 +33,8 @@ Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
-*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
-Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+*Gunblade NY* has its models and its cells — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models and its cells — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
@@ -673,8 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank and Gunblade NY have
-the Cells tab but not the music.
+Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank, Gunblade NY and Zero
+Gunner have the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1409,8 +1409,16 @@ needs its set picked by hand. The colour tables are the same in every scene.
 The textures, palette, luma and colour tables match MAME's byte for byte in
 the attract, in all three builds.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+The **Cells** tab has its 220 pictures, in all three builds: the title, the
+course select, the mission maps, the briefings, the HUD, the results and
+rankings, and the check menu's test patterns. A CG is the boot's or one of
+the thirteen files the game loads over it, and each picture opens on the
+file it was laid out with. The boot's and the two the attract loads match
+MAME's tile chip.
+
+There is no Stages tab, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs) and
+[Zero Gunner's cells](TECHNICAL.md#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
 
 ## Sky Target
 

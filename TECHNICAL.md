@@ -7689,7 +7689,48 @@ tables after the boot (frame 51), and they match MAME's entry for entry.
   0x502512 and 0x502510.
 - The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
   a model to its set.
-- The tile chip and the music are not looked at.
+- The music is not looked at. Cells: see [Zero Gunner's
+  cells](#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
+
+### Zero Gunner's cells (`js/cells.js`, `ZEROGUN_CELLS` in `js/games.js`)
+
+The tile chip is Pilot Kids' a year sooner, and its tables are in the data
+ROM, so the three builds share one configuration. Code addresses are
+`zerogun`'s program offsets (it runs from RAM 0x500000).
+
+**Cells.** Virtua Cop's sized records (width, height, then the entries),
+drawn by `0x55940` (`0x55960`: g1 the layer, 0x1000000, 0x1004000,
+0x1002000 or 0x1006000 for 0 to 3; g4 1 sets bit 15, and `0x55950` bit 14
+too). The check menu's viewer (`0x5C10`) steps through two zero-ended
+tables in the data ROM: 15 files at 0x22F49A8 and 220 records at 0x22F49E8,
+every one drawn by the attract's code among them. They are the explorer's
+cells, in that order; none is unnamed.
+
+**CGs.** The boot, `0x54D50`, draws 128 characters of 1bpp font from data
+0x20CAFC8 at character 0, pen 1 (`0x54F80`), fills character 1 with pen 15,
+and loads files 0 and 14 with `0x558F0`. A file is {first block, block
+count, colour pointers, characters}: the characters are copied straight to
+block first (128 characters a block), and the file is queued; at the next
+vblank `0x557F0`/`0x55840` give block k the 16 colours its pointer names,
+as group first + k (and a half-bright copy at 0x1801000). Files 0 and 14
+take blocks 4 to 40; every other file starts at block 41 or 43, over nothing
+of the boot's, so the boot is mode 0 and files 1 to 13 are modes 1 to 13
+(`boot.modes`), 14 CGs. Each file's records lie in the data ROM after its
+colour pointers, up to the next file, so `screens` opens each record on
+that file.
+
+**Checked against MAME.** The shared build's attract, character RAM and
+palette dumped at frames 600, 1500 and 3000 in `zerogun`, and at 600 and
+1500 in `zerogunj` and `zeroguna`. The boot's CG matches both byte for byte
+at every frame in all three. File 7 (the attract's first scene, record
+0x5786B0) matches both at 600 and 1500, file 8 (scene 0x5771FC) at 3000.
+The other files were not loaded in the attract.
+
+**Leads.** The file words also sit in the scene records at 0x574000 to
+0x57D300 (file 7 at +0x34 of 0x5786B0, files 8 to 10 at +0x30 of
+0x5771FC, 0x577668 and 0x577C20, file 12 at 0x57D28C, also loaded by
+`0x54CBC8` and `0x54D258`); the other offsets are not read. `0x54F50`
+animates colour 15 of group 0 (from frame 150); it is not modelled.
 
 ### Sky Target (`js/texture.js`, `js/colors.js`)
 

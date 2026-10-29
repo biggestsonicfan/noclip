@@ -7152,6 +7152,60 @@ const gunblade = {
 };
 
 /*
+ * Zero Gunner's cells, the same in all three builds (the tables are in the
+ * data ROM): Pilot Kids' records and files, a year sooner. The records are
+ * the zero-ended table at data 0x2F49E8 that the check menu's viewer
+ * (0x5C10, program 0x505C10 in RAM) steps through, drawn by 0x55940
+ * (0x55960: width, height, entries; g4 1 sets bit 15). The boot (0x54D50)
+ * draws the 1bpp font at 0xCAFC8 at character 0 with pen 1 (0x54F80), fills
+ * character 1 with pen 15, and loads files 0 and 14 of the viewer's table
+ * at data 0x2F49A8 with 0x558F0: {first block, block count, colour
+ * pointers, characters}, block k's colours (16, from its pointer) going to
+ * group first + k at the next vblank (0x557F0, 0x55840). Every other file
+ * loads from block 41 or 43, over nothing of the boot's, so each is a mode.
+ */
+const ZEROGUN_CELLS = {
+    sized: true,
+    patternTable: 0x022f49e8,
+    base: 0x8000,
+    boot: {
+        font: { src: 0x020cafc8, first: 0, count: 128, pen: 1 },
+        chars: [[0x020ed8f8, 4 << 7, 17 << 7], [0x022d7f58, 21 << 7, 20 << 7]],
+        straight: true,
+        fill: [[1, 1, 0xffff]],
+        palette: [
+            { pointers: 0x020fe9c0, group: 4, groups: 17 },
+            { pointers: 0x022ec1c0, group: 21, groups: 20 },
+        ],
+        modes: [
+        { name: "the boot's" },
+        { name: 'file 1 (0x2100590)', chars: [[0x02100598, 41 << 7, 41 << 7]], palette: [{ pointers: 0x02129640, group: 41, groups: 41 }] },
+        { name: 'file 2 (0x212EB90)', chars: [[0x0212eb98, 43 << 7, 33 << 7]], palette: [{ pointers: 0x0214fbe0, group: 43, groups: 33 }] },
+        { name: 'file 3 (0x21521D0)', chars: [[0x021521d8, 43 << 7, 33 << 7]], palette: [{ pointers: 0x02173220, group: 43, groups: 33 }] },
+        { name: 'file 4 (0x2175A70)', chars: [[0x02175a78, 43 << 7, 36 << 7]], palette: [{ pointers: 0x02199ac0, group: 43, groups: 36 }] },
+        { name: 'file 5 (0x219C320)', chars: [[0x0219c328, 43 << 7, 16 << 7]], palette: [{ pointers: 0x021ac350, group: 43, groups: 16 }] },
+        { name: 'file 6 (0x21ADAF0)', chars: [[0x021adaf8, 41 << 7, 60 << 7]], palette: [{ pointers: 0x021e9b20, group: 41, groups: 60 }] },
+        { name: 'file 7 (0x21F96B0), the attract (scene 0x5786B0)', chars: [[0x021f96b8, 41 << 7, 79 << 7]], palette: [{ pointers: 0x02248700, group: 41, groups: 79 }] },
+        { name: 'file 8 (0x225D040), scene 0x5771FC (the attract at frame 3000)', chars: [[0x0225d048, 41 << 7, 29 << 7]], palette: [{ pointers: 0x0227a090, group: 41, groups: 29 }] },
+        { name: 'file 9 (0x227C210)', chars: [[0x0227c218, 41 << 7, 27 << 7]], palette: [{ pointers: 0x02297260, group: 41, groups: 27 }] },
+        { name: 'file 10 (0x22993D0)', chars: [[0x022993d8, 41 << 7, 30 << 7]], palette: [{ pointers: 0x022b7420, group: 41, groups: 30 }] },
+        { name: 'file 11 (0x22B95A0)', chars: [[0x022b95a8, 41 << 7, 2 << 7]], palette: [{ pointers: 0x022bb5d0, group: 41, groups: 2 }] },
+        { name: 'file 12 (0x22BB7D0)', chars: [[0x022bb7d8, 41 << 7, 14 << 7]], palette: [{ pointers: 0x022c9800, group: 41, groups: 14 }] },
+        { name: 'file 13 (0x22CAF90)', chars: [[0x022caf98, 41 << 7, 11 << 7]], palette: [{ pointers: 0x022d5fe0, group: 41, groups: 11 }] },
+        ],
+    },
+    /* Each file's records lie after its colour pointers, up to the next
+     * file: so a cell opens on the file it was laid out with (the boot's
+     * files 0 and 14 being mode 0). */
+    screens: [
+        [0, 0, 55], [0, 182, 38], [1, 55, 31], [2, 86, 2], [3, 88, 2], [4, 90, 2], [5, 92, 1], [6, 93, 30],
+        [7, 123, 16], [8, 139, 2], [9, 141, 2], [10, 143, 2], [11, 145, 2], [12, 147, 1], [13, 148, 34],
+    ].map(([cg, first, count]) => ({ cg, cells: Array.from({ length: count }, (_, i) => first + i) })),
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
+/*
  * Psikyo's 1997 shooter: Zero Gunner on Model 2B CRX, the export build
  * (`zerogun`, MAME's parent) and the Japanese one (`zerogunj`), and the
  * export build on Model 2A (`zeroguna`). The clones' zips hold only their
@@ -7220,8 +7274,9 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
             zerogun: { table: 0x1050, count: 0x1a10 },
             solid: true,
         },
-        /* No stage, cell or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        cells: ZEROGUN_CELLS,
+        /* No stage or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
     };
 }
 

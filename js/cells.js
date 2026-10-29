@@ -144,6 +144,11 @@
  * directory at the boot with a font over it; each scene copies colours and
  * characters over that by hand (`dirs`, js/stackcells.js applyCopies). See
  * js/games.js, the gunblade entry.
+ *
+ * Zero Gunner is Pilot Kids' records and files a year sooner; the check
+ * menu's viewer loads one file of fourteen over the boot's, so each is a
+ * boot `mode`, and each record opens on the file it lies after (`screens`).
+ * See js/games.js ZEROGUN_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
