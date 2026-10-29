@@ -7611,10 +7611,10 @@ list points at the records. The pairs are:
 - (20, 21), the attract at frame 600;
 - (22, 23), at frame 1500;
 - (19, none);
-- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
-  8 with 16;
-- (2, 9, 11, 12 or 13, with 17), the second stage;
-- (5, 6, 14, 15 or 7, with 18), the third stage.
+- (8, 3, 10, 4 or 1, with 16), the Asia course; the attract's frame 3000
+  is 8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the America course;
+- (5, 6, 14, 15 or 7, with 18), the Europe course.
 
 Both sheets match MAME's byte for byte at all three frames.
 
@@ -7632,13 +7632,47 @@ lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
 on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
 tables after the boot (frame 51), and they match MAME's entry for entry.
 
+**Stage scenery (`js/zerogun.js`).** The course table is at 0x6EE28
+(`zerogunj` 0x6EFA8, `zeroguna` 0x6E1E8; the pointers in it are RAM, 0x500000
+past the ROM offset). Its five words point at lists of scene records: the
+Asia, America and Europe courses of five (the strings near 0x26DD0,
+全5ステージ), the expert course of ten, which reuses the first three's records,
+and a list of scenes with no terrain (the demo and the ending). A record is
+0x28 bytes and then its script; 0x62EB0, 0x63010 and 0x63130 set it up:
+
+- +4/+8/+0xC, floats: the camera's start, to RAM 0x502520;
+- +0x10 and +0x12: two camera turns, to 0x502564 and 0x502504;
+- +0x20 and +0x22: the terrain blocks, to 0x502512 and 0x502510;
+- +0x24 and +0x26: the texture loads, the pair games.js's sets list by.
+
+0x4367C calls 0x42FC0 every frame both blocks are 0 or more (0x7390 and
+0x4B300 set them to -1). 0x42FC0 walks the list the word at
+0x20C70D0 + 8 * block points at: model numbers up to a negative word, for
++0x20's block and then +0x22's. Each model is culled by the sphere at +0x30
+of the record the word at 0x2078700 + 4 * model points at (copro function
+0x27), and drawn by 0x4D3A0 with only the camera's matrix. So the numbers
+are model table indices and a stage is those models at the origin. The
+first block (its entry's second word is 1) is the ground and water, the
+second the huts, trees and piers.
+
+Materials: 0x49210 uploads, with function 6 and count 31, a copy at RAM
+0x502260 of the 32 entries of 8 bytes at 0x47FB0 (`zerogunj` 0x48000,
+`zeroguna` 0x47ED0); 0x48298 makes the copy. Light: 0x4362C sends function
+0xA a vector the copro makes (function 0x2B, then the 0x1A turn) from the
+turns at 0x502566 and 0x502568, 0x2000 and 0x8000 in MAME's attract. The
+viewer takes the vector those make with `stageLight` and reverses it; that
+lights the Asia course's first stage as MAME does at frame 3000 (MAME sends
+(-0.471, 0.526, 0.708) in camera space there), and is an estimate.
+
+Checked against MAME: the attract at frame 3000 plays the Asia course's
+first stage (blocks 0x25C and 0x25B, loads 8 and 16), with the camera at
+(-23.9, 7.6, -233.9). Seen from above that point, the explorer has the same
+river bend, sandy shore, huts and jungle as MAME's picture.
+
 **Leads.**
 
-- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
-  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
-  0x502512 and 0x502510.
-- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
-  a model to its set.
+- Stages: the scene's script after +0x28 places the boats, tanks and
+  aircraft and moves the camera; it is not read.
 - The tile chip and the music are not looked at.
 
 ### Sky Target (`js/texture.js`, `js/colors.js`)

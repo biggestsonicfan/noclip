@@ -34,7 +34,7 @@ Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
-Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+Psikyo's *Zero Gunner* has its models and stages — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and stages — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
@@ -1384,16 +1384,26 @@ The texture picker's sets are the scenes the game loads:
 
 - sets 0 and 1 are the two the attract opens with;
 - set 2 is a load on its own;
-- sets 3 to 7 are the first stage's five areas;
-- sets 8 to 12 are the second stage's areas;
-- sets 13 to 17 are the third stage's areas.
+- sets 3 to 7 are the Asia course's five stages;
+- sets 8 to 12 are the America course's stages;
+- sets 13 to 17 are the Europe course's stages.
 
-Nothing found yet says which scene a model belongs to, so a scene's part
-needs its set picked by hand. The colour tables are the same in every scene.
-The textures, palette, luma and colour tables match MAME's byte for byte in
-the attract, in all three builds.
+The colour tables are the same in every scene. The textures, palette, luma
+and colour tables match MAME's byte for byte in the attract, in all three
+builds.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+The **Stages** tab has the fifteen stages of the three courses the title
+offers: Asia, America and Europe, five stages each. The expert course plays
+ten of the same stages, and each stage's notes say which courses use it.
+A stage is the two terrain blocks its scene record names, the ground and
+water and what stands on them (huts, trees, piers), drawn where the game
+draws them and with the stage's own texture set. The Asia course's first
+stage was put beside MAME's attract at frame 3000: the river, the sandy
+shore, the huts and the jungle match. The light is an estimate that lights
+that stage as MAME does; how the game turns it is not worked out.
+
+Not there yet: the boats, tanks and aircraft the stage's script sends, the
+stage's own camera path, and cells, characters and motions. See
 [TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
 
 ## Sky Target

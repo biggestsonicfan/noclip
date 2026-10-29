@@ -7028,9 +7028,10 @@ const gunblade = {
  * year sooner: the same model table, the same texture loader and colour
  * scheme, so js/texture.js's Pilot Kids section reads it and js/colors.js has
  * a short section of its own. The three programs keep every table at the
- * same offset but the texture load list (`loads`).
+ * same offset but the texture load list (`loads`), the course table and
+ * the material table.
  */
-function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
+function zeroGunnerBuild({ id, name, program, extra = [], loads, courses, materials }) {
     return {
         id,
         name,
@@ -7065,10 +7066,10 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
          * js/texture.js's Pilot Kids section. Load 0 is the common one, and a
          * scene puts in a load of kind 1 and one of kind 2 over it, by the
          * two numbers at +0x24 of its record (0x62F6C). The records are listed
-         * at 0x6EE28 by stage. `sets` are the pairs they name: 0 is what
+         * by course (js/zerogun.js). `sets` are the pairs they name: 0 is what
          * MAME's attract has in at frame 600, 1 at frame 1500, 2 a load on its
-         * own; 3-7 are the first stage's five areas (the attract's frame
-         * 3000 is set 3), 8-12 the second's and 13-17 the third's.
+         * own; 3-7 are the Asia course's five stages (the attract's frame
+         * 3000 is set 3), 8-12 America's and 13-17 Europe's.
          */
         texture: {
             raw: {
@@ -7088,8 +7089,19 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
             zerogun: { table: 0x1050, count: 0x1a10 },
             solid: true,
         },
-        /* No stage, cell or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        lighting: {
+            /* 0x49210 uploads a copy of this at 0x502260 (0x48298 makes it)
+             * with function 6, start 0, count 31. */
+            materials: { source: 'maincpu', at: materials, count: 32, stride: 8 },
+            /* js/zerogun.js gives each scene the light of the turns 0x2000,
+             * 0x8000 at 0x502566 (0x4362C sends it through function 0xA),
+             * the other way round: an estimate, not derived. */
+            light: [0, -0.707107, -0.707107],
+        },
+        /* js/zerogun.js: the course table's scene records and their two
+         * terrain blocks. No cell or motion data is read yet. */
+        stageTable: { zerogun: { courses }, flat: true },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
@@ -7097,19 +7109,19 @@ const zerogun = zeroGunnerBuild({
     id: 'zerogun', name: 'Zero Gunner (Export, Model 2B)',
     program: [0x000000, 'epr-20439.15', 0x10125381, 'epr-20440.16', 0xce872747],
     extra: ['mpr-20296.11', 'mpr-20298.17'],
-    loads: 0x48080,
+    loads: 0x48080, courses: 0x6ee28, materials: 0x47fb0,
 });
 /* The clones are known by their programs alone, so that zerogun.zip missing
  * is said as such. */
 const zerogunj = zeroGunnerBuild({
     id: 'zerogunj', name: 'Zero Gunner (Japan, Model 2B)',
     program: [0x000000, 'epr-20290.15', 0x9ce3ad21, 'epr-20291.16', 0x7267a03d],
-    loads: 0x480d0,
+    loads: 0x480d0, courses: 0x6efa8, materials: 0x48000,
 });
 const zeroguna = zeroGunnerBuild({
     id: 'zeroguna', name: 'Zero Gunner (Export, Model 2A)',
     program: [0x000000, 'epr-20437.12', 0xfad30cc0, 'epr-20438.13', 0xca364408],
-    loads: 0x47fa0,
+    loads: 0x47fa0, courses: 0x6e1e8, materials: 0x47ed0,
 });
 
 /*
