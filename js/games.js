@@ -3555,6 +3555,44 @@ const vcop = {
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
+/* ---- Music from the sound driver's table ---------------------------------- */
+
+/*
+ * Music for the sets with no stages and no song table of their own (Virtua
+ * Cop 2, Virtua Striker, Motor Raid and the rest that call this): nothing in
+ * the i960's program lists or names their songs, so the list is the sound
+ * driver's. The Model 2 boards from 1995 on run Sega's driver whose UART
+ * handler starts entry `last` of group `middle` - 0x10 in the table the long
+ * at program 0x801C points to (Power Sled's notes, m2-hle2's
+ * src/board/sound_hle.h); every entry of group 0x10 starts in the music slot
+ * (type byte 0), so A0 10 nn is song nn and the group's count is the list.
+ * The older driver (Virtua Striker, INDY 500, and Desert Tank's Model 1
+ * board) starts sequence nn on channel cc with AE cc nn and keeps no count;
+ * there the songs are the codes that play on, measured.
+ *
+ * Every song listed was played on the board (tools/sound's native harness)
+ * from a reset, the explorer's way: boot, `warmup`, the code. A song code
+ * takes over from the one playing by itself — 03 then 05 is 05's envelope
+ * from a fresh board on every set — and a stop sent right ahead of it costs
+ * the song on the older builds (Manx TT's driver drops the code; Virtua Cop
+ * 2's and Over Rev's wait 4 s more), so `replaces`. `warmup` is when the
+ * driver starts listening: it keeps what comes before and plays it then,
+ * 12 to 14 s after the reset on the older builds, 3 on CRX_drv's.
+ *
+ * `songs` is [middle byte, count, first entry]; `status` the command's status
+ * byte.
+ */
+function driverSongs({ program, samples, sampleChip, songs, status = 0xa0, boot, stop, warmup }) {
+    return {
+        program, samples, sampleChip, boot, stop, warmup, replaces: true,
+        music: {
+            list: { groups: [songs], status, label: 'track' },
+            own: 'none',
+            hint: 'The songs in the sound driver\'s table, by command: nothing in the game names them',
+        },
+    };
+}
+
 /* ---- Virtua Cop 2 --------------------------------------------------------- */
 
 /*
@@ -3680,7 +3718,19 @@ const vcop2 = {
          * for the explorer. */
         light: [-0.140028, -0.700140, -0.700140],
         courses: {},
-        sound: null,
+        /* The Model 2A's sound board, 24 songs in group 0x10. The boot sends
+         * A0 00 01 and A0 10 00 (frames 672 and 724 in MAME), the attract
+         * A0 10 16. The driver listens from 14 s on, and every song opens
+         * with about 4 s of quiet of its own. */
+        sound: driverSongs({
+            program: ['epr-18530.30', 0xac9c8357],
+            samples: [
+                ['mpr-18529.31', 0xf76715b1], ['mpr-18528.32', 0x287a2f9a],
+                ['mpr-18527.36', 0xe6a49314], ['mpr-18526.37', 0x6516d9b5],
+            ],
+            songs: [0x10, 24],
+            warmup: 14,
+        }),
     }),
     regions: {
         /* Two pairs of 1MB. */
@@ -3778,6 +3828,23 @@ const VSTRIKER_SHARED = {
  * colour routine and the RAM word its ramp reads MONITOR from. Every table the
  * explorer reads is at the same data ROM address in both.
  */
+/*
+ * Both builds' sound board: the older driver, the songs AE 01 01 to AE 01 11
+ * (channel 1; nothing past 0x11 plays on). The attract sends AE 00 03 and
+ * BE 1A 7F at boot and AE 01 02 later; AE 00 01 stops every channel. The
+ * driver listens from 12.6 s on. The zips call the program ep18072.31; its
+ * CRC finds it.
+ */
+const VSTRIKER_SOUND = driverSongs({
+    program: ['epr-18072.31', 0x73eabb58],
+    samples: [['mpr-18063.32', 0xb74d7c8a], ['mpr-18064.33', 0x783b9910], ['mpr-18065.34', 0x046b55fe]],
+    songs: [0x01, 17, 1],
+    status: 0xae,
+    boot: [0xAE, 0x00, 0x03, 0xBE, 0x1A, 0x7F],
+    stop: [0xAE, 0x00, 0x01],
+    warmup: 14,
+});
+
 function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutine }) {
     return {
         ...daytonaBuild({
@@ -3796,7 +3863,7 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
              * for the explorer. */
             light: [0, -0.867019, -0.498286],
             courses: {},
-            sound: null,
+            sound: VSTRIKER_SOUND,
         }),
         regions: {
             /* Two pairs of 128KB. */
@@ -6543,6 +6610,17 @@ const motoraid = {
      * or queued (0x21BCF0, 0x21BDA0, as 0x5194B4 says).
      */
     cells: { pictures: { table: 0x87860, count: 882 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    /* CRX_drv 3.2.8's board: 18 songs in group 0x10 (06 is a quiet one,
+     * 3 s long). The driver listens 3 s after the reset. */
+    sound: driverSongs({
+        program: ['epr-20029.30', 0x927d31b9],
+        samples: [
+            ['mpr-20030.31', 0xb70ab686], ['mpr-20031.32', 0x84da70e4],
+            ['mpr-20032.36', 0x15516d35], ['mpr-20033.37', 0x8c8ed187],
+        ],
+        songs: [0x10, 18],
+        warmup: 4,
+    }),
     features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -6672,6 +6750,18 @@ const manxtt = {
      * group 9 and its palette, byte for byte.
      */
     cells: { cgm: {}, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    /* 26 songs in group 0x10. A code that comes right behind
+     * another is lost, so a stop ahead of a song silences it; a song alone
+     * replaces the last. The driver listens from 14 s on. */
+    sound: driverSongs({
+        program: ['epr-18924a.30', 0xad6f40ec],
+        samples: [
+            ['mpr-18763.31', 0x1bcb2283], ['mpr-18764.32', 0x0dc6a860],
+            ['mpr-18765.36', 0xca4a803c], ['mpr-18766.37', 0xe41892ea],
+        ],
+        songs: [0x10, 26],
+        warmup: 14,
+    }),
     features: { stages: true, characters: false, motions: false, cells: true },
 };
 
@@ -6683,7 +6773,7 @@ const manxtt = {
  * Twin's data with its program moved about; the addresses it changes are
  * `program`'s.
  */
-function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, courses, materials, cells }) {
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, courses, materials, cells, sound }) {
     const prog = [program[1], program[3]];
     return {
         id, name,
@@ -6783,6 +6873,7 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
         /* The 1 MB pair at 0x1000000, as the cells' second bank names it. */
         xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
         cells,
+        sound,
         features: { stages: true, characters: false, motions: false, cells: !!cells },
     };
 }
@@ -6830,6 +6921,24 @@ const INDY500_CELLS = {
     colorxlat: true,
 };
 
+/*
+ * The sound board: Virtua Striker's older driver, the songs AE 01 00 on
+ * (nine for the Twin's program, eight for the Deluxe's; the next is silent),
+ * the samples the same four chips. The attract sends AE 02 13, an effect.
+ * The driver listens from 13.5 s on.
+ */
+const indy500Sound = (program, songs) => driverSongs({
+    program,
+    samples: [
+        ['mpr-18241.32', 0x3a380ae1], ['mpr-18242.33', 0x1cc3deae],
+        ['mpr-18243.34', 0xa00a0053], ['mpr-18244.35', 0xbfa75beb],
+    ],
+    songs: [0x01, songs],
+    status: 0xae,
+    boot: [0xAE, 0x00, 0x03, 0xBE, 0x1A, 0x7F],
+    stop: [0xAE, 0x00, 0x01],
+    warmup: 14,
+});
 const indy500 = indy500Build({
     id: 'indy500', name: 'INDY 500 Twin (Revision A)',
     program: [0x000000, 'epr-18254a.15', 0xad0f1fc5, 'epr-18255a.16', 0x784daab8],
@@ -6841,6 +6950,7 @@ const indy500 = indy500Build({
     courses: 0x6a5b0,
     materials: 0x2d590,
     cells: INDY500_CELLS,
+    sound: indy500Sound(['epr-18391.31', 0x79579b72], 9),
 });
 /* The Deluxe's data ROM bank is the Twin's, at the same addresses; its XTRA
  * bank's tables moved into the program ROM (its XTRA loader 0x9EB40 reads
@@ -6867,6 +6977,8 @@ const indy500d = indy500Build({
     courses: 0xafe90,
     materials: 0x33a40,
     cells: INDY500D_CELLS,
+    /* Its samples are in indy500.zip, the parent's. */
+    sound: indy500Sound(['epr-18253.31', 0x2934e034], 8),
 });
 
 /*
@@ -7035,7 +7147,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses, cells }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses, cells, sound }) {
     return {
         id,
         name,
@@ -7054,6 +7166,7 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         ...(courses ? { stageTable: { jaleco: courses, flat: true } } : {}),
         /* The tile chip's CG files (js/jalecocells.js). */
         cells,
+        sound,
         /* No fighter or motion data is read yet. */
         features: { stages: !!courses, characters: false, motions: false, bodies: false, cells: !!cells },
     };
@@ -7140,6 +7253,16 @@ const sgt24h = jalecoBuild({
     },
     /* The tile chip's CG files: the directory at data 0xE00000 (0x3CF8C). */
     cells: { files: { dir: 0x02e00000 }, charBytes: 0x80000, colorxlat: true },
+    /* One 4 MB sample chip; seven songs in group 0x10. The attract sends
+     * A0 00 02, A0 08 04, A0 08 01 and, after its settings, A0 10 04. The
+     * driver listens from 14 s on. */
+    sound: driverSongs({
+        program: ['epr-19157.31', 0x8ffea0cf],
+        samples: [['mpr-19154.32', 0x7cd9e679]],
+        sampleChip: 0x400000,
+        songs: [0x10, 7],
+        warmup: 14,
+    }),
 });
 
 /*
@@ -7213,6 +7336,15 @@ const overRevCourses = (records, lists, counts) => ({
     records: { at: records, count: 6, stride: 0x1c },
     courses: lists.map((list, i) => ({ list, count: counts + i * 16 })),
 });
+/* Both Over Revs' sound board: two 4 MB sample chips, seven songs in group
+ * 0x10. The driver listens from 14 s on; the songs open with 4 s of quiet. */
+const OVERREV_SOUND = driverSongs({
+    program: ['epr-20002.31', 0x7efb069e],
+    samples: [['mpr-20003.32', 0x149ac22b], ['mpr-20004.34', 0x0b9c5410]],
+    sampleChip: 0x400000,
+    songs: [0x10, 7],
+    warmup: 14,
+});
 const overrev = jalecoBuild({
     id: 'overrev',
     name: 'Over Rev (Model 2C, Revision A)',
@@ -7231,6 +7363,7 @@ const overrev = jalecoBuild({
     colorSets: 7,
     courses: overRevCourses(0xcd8b0, [0xedf90, 0xedfa0, 0xedfc0, 0xedfd8], 0xedf50),
     cells: OVERREV_CELLS,
+    sound: OVERREV_SOUND,
 });
 /* Known by its program alone, so that overrev.zip missing is said as such. */
 const overrevb = jalecoBuild({
@@ -7251,6 +7384,7 @@ const overrevb = jalecoBuild({
     colorSets: 7,
     courses: overRevCourses(0xcd880, [0xedee0, 0xedef0, 0xedf10, 0xedf28], 0xedea0),
     cells: OVERREV_CELLS,
+    sound: OVERREV_SOUND,
 });
 
 /* ---- Dynamite Baseball 97 ------------------------------------------------- */
@@ -7333,6 +7467,18 @@ const dynabb97 = {
      * program's byte per record at 0xAF680 (js/dynabbcells.js). */
     cells: { slots: { table: 0x02bb0000, count: 0x938, kinds: 0xaf680 }, charBytes: 0x80000, colorxlat: true },
     /* No player or motion data is read yet. */
+    /* CRX_drv 3.2.8's board: 31 songs in group 0x10, the driver listening
+     * 3 s after the reset. The zips name the sample chips by other numbers;
+     * their CRCs find them. */
+    sound: driverSongs({
+        program: ['epr-19849.31', 0xb0d5bff0],
+        samples: [
+            ['mpr-19850.32', 0xe1fd27bf], ['mpr-19851.33', 0xdc644077],
+            ['mpr-19852.34', 0xcfda4efd], ['mpr-19853.35', 0xcfc64857],
+        ],
+        songs: [0x10, 31],
+        warmup: 4,
+    }),
     features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -7462,6 +7608,15 @@ const gunblade = {
         colorxlat: true,
     },
     /* No stage or object record is read yet. */
+    /* Two 4 MB sample chips, 23 songs in group 0x10; the attract sends
+     * AE 10 0F. The driver listens from 14 s on. */
+    sound: driverSongs({
+        program: ['epr-18990.31', 0x02b1b0d1],
+        samples: [['mpr-18978.32', 0x0f78b3e3], ['mpr-18979.34', 0xf13ea36f]],
+        sampleChip: 0x400000,
+        songs: [0x10, 23],
+        warmup: 14,
+    }),
     features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -7531,6 +7686,18 @@ const ZEROGUN_CELLS = {
  * same offset but the texture load list (`loads`), the course table and
  * the material table.
  */
+/*
+ * CRX_drv 3.4.9's board: two sample chips, 16 songs in group 0x10, the driver
+ * listening 3 s after the reset. The Model 2A build's zip names the chips
+ * .30 to .32; their CRCs find them.
+ */
+const ZERO_GUNNER_SOUND = driverSongs({
+    program: ['epr-20302.31', 0x44ff50d2],
+    samples: [['mpr-20303.32', 0xc040973f], ['mpr-20304.33', 0x6decfe83]],
+    songs: [0x10, 16],
+    warmup: 4,
+});
+
 function zeroGunnerBuild({ id, name, program, extra = [], loads, courses, materials }) {
     return {
         id,
@@ -7589,6 +7756,7 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads, courses, materi
             zerogun: { table: 0x1050, count: 0x1a10 },
             solid: true,
         },
+        sound: ZERO_GUNNER_SOUND,
         lighting: {
             /* 0x49210 uploads a copy of this at 0x502260 (0x48298 makes it)
              * with function 6, start 0, count 31. */
@@ -7709,6 +7877,17 @@ const skytargt = {
      * loaders 0x78A90 and 0x789F0 put a picture from its scroll group's block,
      * and the draw 0x78BB0 adds block << 7 to each entry. */
     cells: { pictures: { table: 0xebfb0, count: 573 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    /* 39 songs in group 0x10; the attract sends A0 10 10. The driver
+     * listens from 14 s on. */
+    sound: driverSongs({
+        program: ['epr-18408.30', 0x6deb9657],
+        samples: [
+            ['mpr-18424.31', 0x590a4338], ['mpr-18423.32', 0xc356d765],
+            ['mpr-18422.36', 0xb4f3cea6], ['mpr-18421.37', 0x00522390],
+        ],
+        songs: [0x10, 39],
+        warmup: 14,
+    }),
     features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -7797,6 +7976,15 @@ const skisuprg = {
     /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
      * 0xB05C0, 946 entries (920-945 in the second program chip). */
     cells: { pictures: { table: 0xb05c0, count: 946 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    /* CRX_drv 3.2.8's board: two 4 MB sample chips, 18 songs in group 0x10,
+     * the driver listening 3 s after the reset. */
+    sound: driverSongs({
+        program: ['epr-19491.31', 0x1c9b15fd],
+        samples: [['mpr-19504.32', 0x9419ec08], ['mpr-19505.34', 0xeba7f41d]],
+        sampleChip: 0x400000,
+        songs: [0x10, 18],
+        warmup: 4,
+    }),
     features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -7895,6 +8083,16 @@ const waverunr = {
      * 0x8E1B0, 1059 entries; the last 215 through XTRA_DATA (`xtra`). Load
      * 0x8D650, draw 0x8D720 (adds block << 7). */
     cells: { pictures: { table: 0x8e1b0, count: 1059 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    /* CRX_drv 3.2.7's board: two 4 MB sample chips. Group 0x10 has 15
+     * entries; the last plays nothing, so 14 songs. The driver listens 3 s
+     * after the reset. */
+    sound: driverSongs({
+        program: ['epr-19284.31', 0xefe5f0f3],
+        samples: [['mpr-19295.32', 0xb14eeb09], ['mpr-19296.34', 0xb4b9faff]],
+        sampleChip: 0x400000,
+        songs: [0x10, 14],
+        warmup: 4,
+    }),
     features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -8144,6 +8342,17 @@ const bel = {
     /* The 2D pictures: Daytona's records (draw 0x76FC0), 393 end to end, and
      * its CG pairs (loader 0x645F0) in two tables, the boot's first. */
     cells: { records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true },
+    /* 24 songs in group 0x10; the attract starts A0 10 15, then A0 10 12.
+     * The driver listens from 13 s on. */
+    sound: driverSongs({
+        program: ['mpr-20249.31', 0xdc24f13d],
+        samples: [
+            ['mpr-20250.32', 0x91b735d3], ['mpr-20251.33', 0x703a947b],
+            ['mpr-20252.34', 0x8f48f375], ['mpr-20253.35', 0xca6aa17c],
+        ],
+        songs: [0x10, 24],
+        warmup: 13,
+    }),
     features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
@@ -8223,6 +8432,11 @@ const DESERT_CELLS = {
  * Daytona USA's library: the same texture upload, luma copy and colour ramp,
  * at other addresses.
  */
+const DESERT_SOUND_STOP = [
+    0xF8, 0xF8, 0xFF,
+    0x8E, 0x08, 0x50, 0x8E, 0x09, 0x50, 0x8E, 0x02, 0x7F, 0x8E, 0x22, 0x60, 0x8E, 0x23, 0x60,
+    0x8E, 0x2A, 0x7F, 0x8E, 0x2B, 0x7F, 0x8E, 0x2D, 0x7F, 0x8E, 0x30, 0x7F,
+];
 const desert = {
     id: 'desert',
     name: 'Desert Tank',
@@ -8313,6 +8527,28 @@ const desert = {
     stageTable: { desert: true, flat: true },
     cells: DESERT_CELLS,
     /* No tank or motion data is read yet. */
+    /*
+     * Daytona's Model 1 sound board with a program of its own; the first
+     * MultiPCM's second socket is empty (the null). The songs
+     * are AE 04 01 to AE 04 0E, the attract's AE 04 02 among them (frame 1103
+     * in MAME). `boot` is what the program sends at frame 9: sound off, then
+     * note off on the effect channels; the attract sends it again between
+     * runs, and it stops a song. Unlike the Model 2 board's drivers this one
+     * takes a stop right ahead of the song, and listens 1 s after the reset.
+     */
+    sound: {
+        board: 'model1',
+        program: ['epr-16985.7', 0x8c4d9056],
+        samples: [['mpr-16986.32', 0x559612f9], null, ['mpr-16988.4', 0xbc705875], ['mpr-16989.5', 0x1b616b31]],
+        boot: DESERT_SOUND_STOP,
+        stop: DESERT_SOUND_STOP,
+        warmup: 1,
+        music: {
+            list: { groups: [[0x04, 14, 1]], status: 0xae, label: 'track' },
+            own: 'none',
+            hint: 'The songs on the sound board, by command: nothing in the game names them',
+        },
+    },
     features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
