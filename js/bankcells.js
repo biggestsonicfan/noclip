@@ -43,6 +43,20 @@ export function bankTables(rom) {
                 : null);
         }
     });
+    /* `recolours`, after every bank's own: a CG's tiles with the colours
+     * another palette call gives them (0x55F10 with g2 bit 0 writes the
+     * groups 128 on, which a draw with g2 bit 14 picks), for the cells it
+     * names. */
+    let first = 0;
+    rom.game.cells.banks.forEach((B, bank) => {
+        for (const R of B.recolours ?? []) {
+            const L = out.cgs[first + R.cg];
+            if (L && scrollPtrOk(rom, R.pal)) {
+                out.cgs.push({ ...L, pal: R.pal, recolour: R, name: `${B.name} ${R.cg}, ${R.name}` });
+            }
+        }
+        first += B.cgCount;
+    });
     cache.set(rom, out);
     return out;
 }
@@ -74,16 +88,23 @@ function fits(c, L) {
 }
 
 /** The CGs for a cell, best first. The program names one for some cells
- * (`screens`); the tables keep a CG's cells together, in CG order, so any
- * other cell takes a CG of its own bank between the ones named for the cells
- * before and after it that holds all its tiles: the nearest after the CG
- * before, as the tables run; js/cells.js picks among those by their seams. */
+ * (`screens`), and a few with two (INDY 500's cell 124 is "NAME" with CG 15
+ * and "BAY SIDE STREET" with CG 46): the first named leads, the rest follow.
+ * The tables keep a CG's cells together, in CG order, so any other cell takes
+ * a CG of its own bank between the ones named for the cells before and after
+ * it that holds all its tiles: the nearest after the CG before, as the tables
+ * run; js/cells.js picks among those by their seams. */
 export function rankBankCGs(rom, cell, c, named) {
     const { cells, cgs } = bankTables(rom);
     const own = named.get(cell);
-    if (own !== undefined) return [{ cg: own, cover: 1 }];
+    const recoloured = cgs.flatMap((L, cg) => (L?.recolour?.cells.includes(cell) ? [cg] : []));
+    if (own !== undefined) {
+        const also = (rom.game.cells.screens ?? []).filter((s) => s.cg !== own && s.cells.includes(cell));
+        return [...recoloured, own, ...new Set(also.map((s) => s.cg))].map((cg) => ({ cg, cover: 1 }));
+    }
     const bank = cells[cell]?.bank;
-    const first = cgs.findIndex((L) => L?.bank === bank), last = cgs.findLastIndex((L) => L?.bank === bank);
+    const mine = (L) => L?.bank === bank && !L.recolour;
+    const first = cgs.findIndex(mine), last = cgs.findLastIndex(mine);
     let lo = first, hi = last;
     for (let i = cell - 1; i >= 0 && cells[i].bank === bank; i--) if (named.has(i)) { lo = named.get(i); break; }
     for (let i = cell + 1; i < cells.length && cells[i].bank === bank; i++) if (named.has(i)) { hi = named.get(i); break; }

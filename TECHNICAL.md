@@ -7436,27 +7436,57 @@ entries. CG 0 of each bank is empty.
 - **The font.** 0x53278 expands a 1bpp font at char 0, from data 0x2C00000
   (0x53080 at boot). The panel does not load it, and no cell needs it.
 
-The panel loads a CG from block 0. `screens` are the 48 call sites that name
-both a cell and a CG by constant; one more call gives CG 33 the palette
-0x2C39DF0 with g2 = 1, which the panel does not follow. The tables keep a CG's
-cells together and in CG order. So any other cell takes a CG of its own bank,
-between the CGs named for the nearest named cells before and after it, that
-holds every tile and group it names. Of those, the one whose tiles join up
-best wins (seamScore).
+The panel loads a CG from block 0. `screens` are the call sites that name
+both a cell and a CG by constant (`addo 31, n` is 31 + n). The tables keep a
+CG's cells together and in CG order. So any other cell takes a CG of its own
+bank, between the CGs named for the nearest named cells before and after it,
+that holds every tile and group it names. Of those, the one whose tiles join
+up best wins (seamScore).
+
+- **Two CGs for a cell.** Cell 124 is "NAME" with CG 15 and "BAY SIDE
+  STREET" with CG 46; MAME's attract draws the second. A cell named by more
+  than one screen offers its CGs in that order.
+- **Recolours.** 0x55F10 with g2 bit 0 writes the CG's colours from group
+  first block + 128 on, and a draw whose g2 has bit 14 picks those groups.
+  0x56624 gives CG 33 the colours at 0x2C39DF0 (three groups, as CG 33's 330
+  tiles need), and 0x56954 draws cell 352, Bayside's course map, with them:
+  red, the plain one white. `recolours` adds such a CG after both banks'
+  own (Twin CG 74, Deluxe 68), and the cells it names lead with it.
+- **XTRA's last cell.** The Twin's XTRA palette table starts on its cell
+  table's last pointer: cell 59 (global 500) is "SECTION", which 0x4F594
+  draws with CG 12, and is also CG 0's palette, which nothing loads.
+- **By sight.** Nothing names cell 33; it is "FASTEST LAP TIME" only with
+  CG 2. The Deluxe's XTRA draw 0x9F5B0 names cells 0 and 1 with CG 1, 10
+  with CG 2, 11 with CG 3 and 13 with CG 4 (0xA1020 loads CG 2's and 3's
+  palettes from the list's own entries); its cells 26..33 are the small
+  digits 1..8, CG 6's, which the ranking split over CGs 4..6.
 
 **Checked against MAME.**
-- MAME `indy500to`, frames 300..3000, and `indy500d`, frames 1500 and 2100:
+- MAME `indy500`, frames 300..3000, and `indy500d`, frames 1500 and 2100:
   every loaded CG (data 1, 8, 9, 13..18, 45, 46, 49, 53, 54, 58; XTRA 1 and on)
   has the panel's tiles at its first block, byte for byte.
 - The colours match too, except CGs 13 and 14, which MAME fills with flat
-  0xFA0C (a flash), and CG 53, which the game darkens from frame 2100 (a fade).
+  0xFA0C (a flash; 0x511BC..0x51AA4 load them from program 0x52ED0..0x52F10),
+  and CG 53, which the game darkens from frame 2100 (a fade, 0x513EC).
 - The snapshots' TOP 10 RANKING, NAME/TOTAL TIME, places, AT/MT, VIEW BUTTON
   text and SEGA logo are the panel's cells.
+- A coined race (`indy500`, two coins, start at frame 1500 on, gas held;
+  frames 2100..9000 every 300), each cell found in tile RAM and drawn from
+  MAME's char and palette RAM with the CG at its block: pixel-exact are the
+  transmission select, the countdown and lap digits (101..104, 128..132,
+  151..168, 204, 224, 303..306), the race results (346..350, 362, 367, 383,
+  391, 396, 398, 434) and the ranking (4, 125, 194, 476, 499). CG 21's large
+  digits (205..223) match where nothing covers them.
+- The Deluxe's attract (`indy500d`, frames 1500..7200), graded the same way:
+  the data cells it draws (2, 125..137, 151..168, 194, 425, 426) are
+  pixel-exact; 122 and 123 are flat (the flash). It draws no XTRA cell, so
+  the Deluxe XTRA CGs above rest on 0x9F5B0 and on sight.
 
-**What is missing.** The Twin's XTRA cell 59 is really CG 0's palette
-pointer. A few small cells (e.g. 34, a strip of HUD words) take a CG that
-garbles them, so they probably draw with two CGs loaded. The Deluxe's XTRA
-cells have no `screens`; they rank by fit and seams alone.
+**What is missing.** Cell 34 (35 by 4, entries 0..139 in order) draws no
+words with any CG, row- or column-major; it may be unused. CG 22's colours
+change in a race (24 of 64 differ; cells 265 and 300), and no 0x55F10 call
+names it. 0x51A50 gives CG 8 a second set of colours (XTRA 0x64B0430) with
+g2 = 1, but no constant draw picks them.
 
 **Leads.** A course record's +0x0C points at 16-byte records of {x, z float,
 a word, 0}, which look like the course line; +0x08 points at a program table
@@ -8151,7 +8181,11 @@ palette dumped at frames 600, 1500 and 3000 in `zerogun`, and at 600 and
 1500 in `zerogunj` and `zeroguna`. The boot's CG matches both byte for byte
 at every frame in all three. File 7 (the attract's first scene, record
 0x5786B0) matches both at 600 and 1500, file 8 (scene 0x5771FC) at 3000.
-The other files were not loaded in the attract.
+The other files were not loaded in the attract. A coined game (frames
+1500..9000: helicopter and course select, mission 1, continue, ranking)
+draws cells 9..31, 56..85, 130, 136, 142, 143, 147, 185..219 pixel-exact;
+69, 71 and 73 (the helicopters not chosen) are drawn with entry bit 14, so
+in the second colour set, which the panel does not show.
 
 **Leads.** The file words also sit in the scene records at 0x574000 to
 0x57D300 (file 7 at +0x34 of 0x5786B0, files 8 to 10 at +0x30 of
@@ -8935,7 +8969,10 @@ matches character RAM byte for byte at every frame, and the palette at
 every colour it writes but pen 0, until a later CG is loaded over groups
 0x5F on. CG 3, the title, matches both at frames 3000 and 4800; CG 12,
 mission 1's sky, at 1800, 2400 and 4200. The other CGs were not loaded in
-the attract.
+the attract. A coined game (frames 1500..9000, gas and gun held) draws the
+HUD (34, 35, 61..80, 88, 98, 105..109, 146, 165, 169) and the title (14..16)
+and 38 pixel-exact; the radar frames 200..207 overlap one another, each
+whole once.
 
 **Leads.** `0x3CB00` writes group 0x12's colours by a condition (from
 0x289CE80 or 0x289CE60; called at 0xA4A4 and 0x27280); it is not modelled.
@@ -11576,7 +11613,10 @@ whose colours the game turns while the attract runs (a gradient that moves
 from frame to frame). The title fill, `0x82D8`, is not entered in the attract
 (its callers are `0x2B6C`, when 0x502100 is 0, `0x4ED4` and `0x3D528`), so
 CGs 4 to 7 are checked only by drawing the cells they rank first for, which
-come out as whole pictures.
+come out as whole pictures. A coined game (frames 1200..9000, trigger held
+in bursts) draws cells 60..202 (CG 0) and 264..290 (CG 4) pixel-exact, among
+them 276..278, which the seams had given CG 0; `screens` names CG 4 for
+them and the title's other cells that CG 0 also draws seamlessly.
 
 **Leads.** Groups 9 and 0xB's turning colours; the stage fills of stages
 other than 0 were not met in MAME's attract.
@@ -11698,15 +11738,22 @@ Two pictures bring their own characters, over 0x180 on:
   and the colours at 0x2825D90 to groups 3-5. Its record, 0x28252B0's
   last, is cell 762, in its own CG 3.
 - 0x6C2E0 copies 0x80 characters from 0x2890000 (0x2D00, 0x2DE4) for cell
-  761, but its colours, group 0x83, come from a fade in RAM (0x514550,
-  built from the table at 0x2825DB0). noclip does not build it, so the cell
-  is black.
+  761, the SEGA logo. Its colours, group 0x83, come from a fade: 0x2C00
+  (vblank) brightens the 52 colours at 0x2825D10 towards white into
+  0x514550 by the factors at 0x2825DB0 (1.0 down to 0 over ~30 frames), and
+  0x2D00 copies them out, the last five to group 0x83. The fade ends on the
+  ROM colours, so CG 4, mode 0 with those five (0x2825D70) and the
+  characters, draws the logo as it ends up.
 
 **Checked against MAME.** `vstriker` was dumped at attract frames 300 to
 3000. Characters 0x80-0x3FFF and the palette match mode 0 at frames
 300-1200 and mode 2 at 1500-3000 byte for byte. Each cell of CGs 0 and 2,
 drawn from MAME's tile RAM with the cell's own record, is pixel-exact
-against `renderCell`. Mode 1 is not shown in the attract.
+against `renderCell`. Mode 1 is not shown in the attract. A coined run
+(coin at 3000, start, shots; frames to 7200) adds mode 1's match-up cells
+(365, 366, 369, 376, 380, 416..419, 425), pixel-exact. A tile RAM write tap
+over 15000 attract frames never sees cell 761's entries, so CG 4 is from
+the code only.
 
 **Leads.** 0x2BDC fades group 0x44 from 0x2825CF0 in RAM, and 0xA708 writes
 the face palette. 0x6A778 and its neighbours write tilemap 0x1004000
