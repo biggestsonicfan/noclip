@@ -47,6 +47,7 @@
 
 import { I960 } from './i960.js';
 import { MAIN_DATA_BASE, readModelName } from './romset.js';
+import { gameLighting } from './stages.js';
 
 const SHEET_BYTES = 0x100000;
 const TEX_RAM = 0x11000000;
@@ -207,4 +208,72 @@ export function dynabbModelSets(rom, index, decoded, textured) {
     const t = /^..[HV]/.test(name) ? TEAM_PREFIXES.indexOf(name.slice(0, 2)) : -1;
     if (t >= 0) return { sets: [def - (def % nt) + t], how: 'team' };
     return null;
+}
+
+/*
+ * The ballparks (Stages tab). The game draws a stadium in 0x6BB80 (and its
+ * branch at 0x6BD44 when 0x5D4A48 is 5 or 6): it walks a list of halfword
+ * pairs {base model, variant slot}, to a 0, and draws model base +
+ * 0x5D4CD0[slot] with 0xA5380 or 0xA5510, sphere-culled through the model
+ * table and with no matrix, the pieces being in world space. The list is the
+ * one at +0x5C of the view record (0x5D4700 + 0x5D397C * 0x60), taken from a
+ * camera shot's group in the table at 0x1A0C30 (the shot records at 0x1B3C8C
+ * on point at it): four words a group, the lists of stadium 0, 1 and 2 and a
+ * 0. Each list is what that shot sees, so a stadium is every piece its
+ * column of the table names. Model 0x1ABD (Q1_SOTO) gets a coprocessor
+ * set-up of its own first (command 0x505, 430.0) that is not followed here.
+ *
+ * The variant slots pick a level of detail (slot 9: Q2_shita_b, _bb, _bbb),
+ * a frame of the crowd's cheering (4) or of a flag (1 to 3), or the home
+ * team's scoreboard (10); the stage draws every piece's base model, slot
+ * 0's, the most detailed and the first frame. The stadiums are named only by
+ * their models' prefixes, Q1_ to Q3_, which are also the stadium a texture
+ * set loads (set stadium * 12 + team, team 0 here).
+ */
+export function readDynabbStages(rom) {
+    const T = rom.game.stageTable.dynabb;
+    const cv = rom.mainCpuView;
+    const nt = rom.game.texture.raw.teams.length;
+    const lit = gameLighting(rom);
+    const out = [];
+    for (let s = 0; s < T.stadiums; s++) {
+        const seen = new Map();
+        let shots = 0;
+        for (let g = 0; g < T.groups; g++) {
+            let p = cv.getUint32(T.table + g * 16 + s * 4, true);
+            if (!p) continue;
+            shots++;
+            for (let m; (m = cv.getUint16(p, true)); p += 4) {
+                if (!seen.has(m)) seen.set(m, cv.getUint16(p + 2, true));
+            }
+        }
+        const set = s * nt;
+        const draws = [...seen.keys()].map((model) => ({ model, pos: [0, 0, 0], set }));
+        out.push({
+            slot: s,
+            placements: true,
+            mixedSets: false,
+            num: s,
+            name: `Stadium Q${s + 1}`,
+            chapter: s,
+            draws,
+            objects: [],
+            sky: null,
+            panorama: null,
+            views: null,
+            texSets: [set],
+            texSet: [set, set],
+            tint: [1, 1, 1],
+            bright: 1,
+            light: lit?.light ?? [0, 1, 0],
+            materials: lit?.materials ?? Array.from({ length: 32 }, () => ({ diffuse: 0, ambient: 255 })),
+            colorCycles: [],
+            flags: 0,
+            floorSize: 0,
+            bgColor555: 0,
+            meta: [['stadium', s], ['texture set', set], ['camera shots', shots], ['pieces', draws.length],
+                ['animated pieces', [...seen.values()].filter((k) => k).length]],
+        });
+    }
+    return out;
 }
