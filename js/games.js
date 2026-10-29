@@ -3642,13 +3642,14 @@ const vcop2 = {
     },
     patches: [],
     paletteFixes: [],
-    stageTable: null,
+    /* The stage draw's table 0x63374, by stage, route and segment (js/vcop2.js). */
+    stageTable: { flat: true, vcop2: { count: 4 } },
     objects: null,
     area: null,
     sky: null,
     cells: null,
     rig: null,
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /* ---- Virtua Striker ------------------------------------------------------- */
@@ -3749,13 +3750,14 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
         },
         patches: [],
         paletteFixes: [],
-        stageTable: null,
+        /* The match draw's stadium, 0x64D10 and 0x65070 (js/vstriker.js). */
+        stageTable: { flat: true, vstriker: true },
         objects: null,
         area: null,
         sky: null,
         cells: null,
         rig: null,
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
