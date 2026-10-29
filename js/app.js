@@ -12,9 +12,12 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, readRallyStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
+import { readVcop2Stages } from './vcop2.js';
+import { readVstrikerStages } from './vstriker.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readLastbrnxStages, lastbrnxPaletteCycles } from './lastbrnx.js';
+import { readRacerStages } from './racers.js';
 import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readDaytonaCars, readDaytonaRuns, daytonaRunList, poseDaytonaCar } from './daytonacar.js';
@@ -25,7 +28,15 @@ import {
 } from './airwlkrs.js';
 import { readBelBodies, readBelMotions, belMotionList, poseBel } from './belplayers.js';
 import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
+import { readTopskatrStages } from './topskatr.js';
+import { readDesertStages } from './desert.js';
+import { readMotoraidStages } from './motoraid.js';
+import { readSkytargtStages } from './skytargt.js';
+import { readZerogunStages } from './zerogun.js';
+import { readJalecoStages } from './jaleco.js';
+import { readDynabbStages } from './dynabb.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
+import { readWaverunrStages } from './waverunr.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -726,7 +737,7 @@ function useRomColorLuts(stage, fighter = null) {
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
-    const luma = buildLumaram(state.rom);
+    const luma = buildLumaram(state.rom, stage.texSet[1]);
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,
@@ -6762,6 +6773,8 @@ function loadGameContent() {
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
+        else if (T.vcop2) state.stages = readVcop2Stages(state.rom);
+        else if (T.vstriker) state.stages = readVstrikerStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
         else if (T.von) {
@@ -6774,7 +6787,16 @@ function loadGameContent() {
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
+        else if (T.waverunr) state.stages = readWaverunrStages(state.rom);
         else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
+        else if (T.topskatr) state.stages = readTopskatrStages(state.rom);
+        else if (T.racer) state.stages = readRacerStages(state.rom);
+        else if (T.desert) state.stages = readDesertStages(state.rom);
+        else if (T.motoraid) state.stages = readMotoraidStages(state.rom);
+        else if (T.skytargt) state.stages = readSkytargtStages(state.rom);
+        else if (T.zerogun) state.stages = readZerogunStages(state.rom);
+        else if (T.jaleco) state.stages = readJalecoStages(state.rom);
+        else if (T.dynabb) state.stages = readDynabbStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
