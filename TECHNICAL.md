@@ -7248,6 +7248,65 @@ two rows left from the pointer table 0xA1ED0, three to each value of work
 RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
 2500: sheets, colorxlat, luma and palette the same.
 
+### Top Skater (`js/topskatr.js`)
+
+Sega's 1997 skateboard game on Model 2C (MAME's `topskatr`, Revision A,
+Export). Its own engine, not Wave Runner's: its own mesh packing, whole-bank
+sheets and colour key points. Each table was found from the code that uses
+it, and checked against MAME's texture, colour, luma and palette RAM in the
+attract (frames 1500 and 3000). Addresses are the program ROM's.
+
+**Model table.** 0x8F390, 16 bytes an entry ({tpa, tha, 0x800000 | polygon
+word, count}), 1901 entries. The draws name runs of it (`lda 0x90c70[g7*16]`
+at 0x1A564, 0x90CD0 at 0x30F14, 0x932E0 and 0x945F0 at 0x1628 and 0x3A044),
+and a course record (0x2A66C + 36 * n, +0x14) names its own run (0x94600,
+0x932F0, 0x96A50).
+
+**Meshes.** The draw (0x3330 to 0x334C) loads the entry's first three words,
+sets the fourth to 0 and stores the four to the geometry FIFO, so the count
+is not used: the engine stops at the first attribute word whose link type
+(bits 0-1) is 0. The stream is the first edge's two points (24 bytes), then
+per polygon its attribute word and the points it adds, two for a quad (bit 0
+set) and one for a triangle, with no normal and no padding point.
+`topskatrMesh` lays it back out as 40-byte records for `decodeModel`, with
+plane normals. 1897 entries decode (143,004 faces, 132,081 textured). MAME's
+geometry HLE reads the stream with normals, so its pictures are broken and
+only its RAM can be graded against.
+
+**Textures.** 0x3F9E0(bank, sheet) copies the megabyte at data 0x2000000 +
+bank * 0x100000 onto a sheet as it stands, a slice a frame (run table
+0x3F9C0/0x3F9C4); no mip dealing. The boot (0x3F808) puts bank 0 on sheet 0.
+A scene puts bank 1 or 2 on sheet 1 (0x60C70 from the table at 0x5EE10). Banks
+3 to 15 of the data ROM are other data; nothing loads them as sheets.
+
+**Palette.** 0x20AD0 writes the {count, colours} block at 0x98D5C from entry
+0. Entries 8, 9 and 28 are animated in the attract.
+
+**Colour tables.** Run with `js/i960.js` in the game's order: the boot's
+0x20DA0 (square-root ramps on the even rows and row 31, a flat level per row
+in entries 64 to 255, row 0 by 0x9B318 and 0x9BD70), then 0x213D0(7, -1)
+through 0x3A2F0, which rewrites the even rows. A scene's 0x9C1B0(scene)
+interpolates eleven key-point lists (pointers at 0x9B030 + scene * 60, read
+by 0x9BE70) into work RAM 0x5D7190; the vblank's 0x9D3B0 copies them to the
+odd rows 1 to 21 after a three-frame wait (work RAM 0x5D52D8), so it is run
+four times. The scene goes with its bank (0x60C40: scene 0 with bank 1,
+scene 1 with bank 2). Scenes 2 to 8 give the same tables as 1. Rows 25, 27
+and 29 are animated in the attract (0x9C220, from 0x582A0, a row at a time)
+and are left as the scene sets them.
+
+**Luma.** The boot's 0x47F30: two bands of (k + 1) >> 1, then 0x2080 bytes
+from 0xB7D84 at entry 0x800.
+
+**Checked.** At frame 1500 sheet 0 (bank 0), sheet 1 (bank 2), colorxlat,
+luma and palette match MAME byte for byte. At frame 3000 all match but 576
+colorxlat entries in rows 25, 27 and 29 and palette entries 8, 9 and 28.
+
+**Leads.** Courses: records at 0x2A66C, 36 bytes (+0 bank, +0x14 model
+run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
+0x3370. The colour fade is a state machine at 0x976B0 (shadows at work RAM
+0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
+1 to 8. 0x220F0 sets another luma mode, unused in the attract.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

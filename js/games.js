@@ -6277,6 +6277,69 @@ const segawski = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Top Skater (MAME `topskatr`, Revision A, Export), Model 2C, 1997. Its own
+ * engine, not Wave Runner's: js/topskatr.js. See README and TECHNICAL.md.
+ */
+const topskatr = {
+    id: 'topskatr',
+    name: 'Top Skater',
+    identify: ['epr-19755a.15', 'epr-19756a.16', 'mpr-19735.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19755a.15', 0xb80633b9, 'epr-19756a.16', 0x472046a2]],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19735.11', 0x8e509266, 'mpr-19736.12', 0x094e0a0d],
+                [0x800000, 'mpr-19737.9', 0x281a7dde, 'mpr-19738.10', 0xf688327e],
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19741.17', 0x111a6e29, 'mpr-19742.21', 0x28510aff]],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19740.27', 0xb20f508b, 'mpr-19739.25', 0x8120cfd8]],
+        },
+    },
+    /*
+     * 1901 entries of 16 bytes in the program ROM at 0x8F390: tpa, tha,
+     * 0x800000 | polygon word, polygon count, Wave Runner's layout. The
+     * draws name parts of it (`lda 0x90c70[g7*16]` at 0x1A564, 0x90CD0 at
+     * 0x30F14, 0x932E0 and 0x945F0 at 0x1628/0x3A044), and a course record
+     * (0x2A66C + 36 * n, +0x14) names its own run of it (0x94600, 0x932F0,
+     * 0x96A50).
+     */
+    modelTable: { offset: 0x8f390, count: 1901, stride: 16, source: 'maincpu', packed: true },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /* A set is a scene: its bank on sheet 1 and its colour key points
+     * (js/topskatr.js). Set 1 is the attract's. */
+    topskatr: {
+        banks: 0x02000000,
+        bootBank: 0,
+        sets: [{ bank: 1, colors: 0 }, { bank: 2, colors: 1 }],
+        ramps: [[0x20da0, []], [0x213d0, [7, 0xffffffff]]],
+        scene: 0x9c1b0,
+        copy: 0x9d3b0,
+    },
+    /* {count, colours} at 0x98D5C onto the face palette from entry 0 (0x20AD0). */
+    paletteProgram: 0x98d5c,
+    texture: { raw: { layout: 'topskatr' }, sets: 2, residentSet: null, defaultSet: 1 },
+    colors: {
+        /* The boot's 0x47F30: two bands of (k + 1) >> 1, then 0x2080 bytes
+         * of the program ROM at 0xB7D84 from entry 0x800 (0x11401000). */
+        luma: { source: 'maincpu', ramps: 2, data: 0xb7d84, bytes: 0x2080, at: 0x800 },
+        topskatr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6284,7 +6347,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, skisuprg, waverunr, segawski];
+    pltkids, pltkidsa, skisuprg, waverunr, segawski, topskatr];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

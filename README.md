@@ -27,6 +27,7 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Top Skater* has its models — see [Top Skater](#top-skater).
 
 Three views, and a fourth for the 2D art:
 
@@ -1225,6 +1226,27 @@ which is the one used here; it may be the player's choice of skier).
 
 There is no Stages tab, no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Top Skater
+
+`topskatr.zip` carries Top Skater (Model 2C, Revision A, Export). The
+**Models** tab has the program's model table, 1901 entries (1897 have a
+mesh), with the textures, palette and colour tables the game loads for them.
+
+Its meshes are packed tighter than the other Model 2 games': no normal and
+no padding point per polygon. MAME reads them the usual way, which is why its
+`topskatr` draws broken polygons; the viewer reads them the way the program
+hands them to the geometry engine.
+
+The texture picker's two sets are the two scenes the game sets up, each a
+texture bank with its colour tables. A model opens on set 1, the one the
+attract shows. Nothing found yet says which set a model belongs to: the
+arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
+tables, luma and palette match MAME's RAM in the attract byte for byte, but
+for three colour rows and three palette entries the attract animates.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Running it
 
