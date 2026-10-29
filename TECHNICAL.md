@@ -7138,6 +7138,68 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Super GT 24h and Over Rev (`js/jaleco.js`)
+
+Jaleco's two Model 2 racers, Super GT 24h (1996, MAME's `sgt24h`, Model 2B
+CRX) and Over Rev (1997), keep none of the AM2 tables but share one
+framework: the same `../h/globl.h` and `define.h` fault strings, the same
+model table, the same boot colour routines and the same texture loader at
+other addresses. One profile builder (`jalecoBuild` in js/games.js) serves
+them. Every table was found from the code that reads it, in MAME's i960
+disassembly, and every result was held against MAME's RAM (Lua dumps of
+texture, colorxlat, luma and palette RAM at fixed frames).
+
+**Models.** The table is 16-byte entries in the data ROM: texture word,
+material word, mesh pointer, polygon count. The draw routines (sgt24h
+0x72C30, 0x72C60, 0x72C90) send an entry to the geometry engine four words
+at a time (`st 0x101, 0x800010`, `ldq`, `stq` to 0x804000). Super GT 24h
+has 2238 entries at data 0x80F480; the list of 0x1C-stride pointers into
+them starts right after, at 0x818060. Mesh pointers are data addresses
+past a 16-byte header (`meshPtr` subtract 0x02000010, add 0x10).
+
+**Face palette.** 0x72000 copies {count, colours} from the program ROM
+(0x72CF4: 0x1B7 colours) to palette RAM 0x1802000; MAME reads it as
+`palram[color + 0x1000]`.
+
+**Colorxlat and luma.** The boot (0x5A120) runs three routines, and the
+viewer runs the same ones with js/i960.js (`colors.i960` in the profile,
+as for Sega Rally): 0x5A920 builds every row as a ramp out of the byte
+table at 0x5A900, 0x5AA10 lays the odd rows from 0x67CA4 over it, and
+0x5AB10 copies the 0x8000 bytes at 0x687E5 to luma RAM at 0x11400000, a
+byte every halfword (so `lumaRam`/`lumaStep` in js/colors.js). A scene then
+lays more rows through the queue at 0x530370, which 0x3CAF0 drains: a record
+is {rows, destination list, variants, source}, and variant v's rows are 16
+bytes each, each byte four colorxlat entries. The title and the races queue
+data 0x2BEB860 variant 128 (rows 1 and 3, from 0x3DF30; its 640 variants
+are the race's hours) and 0xCB2B0 variant 0 (rows 5, 7, 9, 11, 21, 23 and
+29, from 0x3DF60, variant by 0x530630). The viewer runs 0x3CAF0 on those two
+after the boot's three, with the record address and variant in g0 and g1.
+Colorxlat, luma and palette RAM match MAME's at frames 300 (boot only) and
+1800 (the attract race), no byte different.
+
+**Textures.** Nothing is packed. The loaders (0x5A2B0 for sheet 0, 0x5A470
+for sheet 1) take a data address and blit (0x5A630) its first 0x80000 bytes,
+512 by 512 halfwords, to the sheet's first half, then the next 0x80000 as
+ten mip rectangles split between the two sheets' second halves, sheet 1's
+loader with the halves swapped, so the two chains interleave. The blit's
+loop (`cmpible`) copies one 16-byte quad past each row's end; on the 2B,
+where 0x11100000 mirrors 0x11000000, a quad past a sheet's end lands at its
+start, and js/jaleco.js wraps it the same way. The loader then sets the
+first eight halfwords of 0x11000000 to 0xFFFF. Boot loads data 0x0 to sheet
+0 and 0x100000 to sheet 1 (0x5A13C); a course reloads sheet 1 from the
+program's table at 0xED8B0 (0x3F4C0: data 0x100000, 0x200000, 0x300000,
+0x400000, then the four again), and 0x77850 loads 0x500000. Those are sets
+0..4. Set 0 matches MAME's texture RAM at frames 300 to 2700, no halfword
+different.
+
+**Not done, and leads.** No course is put together: the course's model
+lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
+read the model table besides the draw routines, and the pointer list at
+data 0x818060 is the place to start. The car is single models; which parts
+make one car, and the colour rows per hour (variant by the race clock), are
+open. 0x3DD14 changes palette entries per frame. The tile chip's pictures
+and the sound program were not looked at.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

@@ -511,9 +511,16 @@ function runColorRoutines(rom) {
     if (rom.i960Colors) return rom.i960Colors;
     const C = rom.game.colors.i960;
     const prog = rom.maincpu;
-    const [from, to, at] = C.copy;
     const ram = new Uint8Array(0x100000);
-    ram.set(prog.subarray(from, to), at - 0x500000);
+    if (C.copy) {
+        const [from, to, at] = C.copy;
+        ram.set(prog.subarray(from, to), at - 0x500000);
+    }
+    /* Luma RAM: Model 2A's a byte every four bytes, 2B's (0x11400000,
+     * umask 0x00ff) one every two. */
+    const lumaRam = C.lumaRam ?? LUMA_RAM;
+    const lumaStep = C.lumaStep ?? 4;
+    const data = rom.mainData;
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);
@@ -522,6 +529,7 @@ function runColorRoutines(rom) {
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + COLOR_RAM_BYTES) return [pal, a - COLOR_RAM];
+        if (a >= MAIN_DATA_BASE && a < MAIN_DATA_BASE + data.length) return [data, a - MAIN_DATA_BASE];
         throw new Error(`colour routine read 0x${a.toString(16)}`);
     };
     const read = (a, n) => {
@@ -533,8 +541,8 @@ function runColorRoutines(rom) {
     const write = (a, v, n) => {
         /* One byte lane of a 32-bit unit, stored here as the even byte of a
          * halfword the way a luma dump has it (buildLumaram). */
-        if (a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
-            luma[((a - LUMA_RAM) >> 2) * 2] = v & 0xff;
+        if (a >= lumaRam && a < lumaRam + (LUMA_BYTES / 2) * lumaStep) {
+            luma[Math.floor((a - lumaRam) / lumaStep) * 2] = v & 0xff;
             return;
         }
         const [b, o] = where(a);
@@ -544,8 +552,10 @@ function runColorRoutines(rom) {
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
-    for (const entry of C.run) {
-        if (!cpu.call(entry, [], { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
+    /* An entry is a routine's address, or [address, g0, g1, ...]. */
+    for (const run of C.run) {
+        const [entry, ...args] = [run].flat();
+        if (!cpu.call(entry, args, { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
     }
     const cxlat = pal.slice(0x10000, 0x10000 + CXLAT_BYTES);
     return (rom.i960Colors = { cxlat, luma });

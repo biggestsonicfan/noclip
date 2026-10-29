@@ -983,7 +983,7 @@ function describeTextureGuess(g) {
     case 'boot': return state.rom.game.texture.raw?.layout === 'airwlkrs'
         ? `${sets}: the boot pages, which every court has`
         : state.rom.game.texture.raw
-        ? `sheet ${state.rom.game.texture.raw.layout === 'srallyc' ? 0 : 1} only, the bank boot loads for every course`
+        ? `sheet ${['srallyc', 'jaleco'].includes(state.rom.game.texture.raw.layout) ? 0 : 1} only, the bank boot loads for every course`
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
     case 'only': return `${sets}: the only texture RAM the game loads`;

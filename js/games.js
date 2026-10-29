@@ -6034,6 +6034,100 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
+/* ---- Super GT 24h (Jaleco) ------------------------------------------------ */
+
+/*
+ * Jaleco's racers share one framework (js/jaleco.js has the texture
+ * loader): the model table is 16-byte entries in the data ROM,
+ * texture word, material word, mesh pointer and polygon count, sent to the
+ * geometry engine four words at a time (`st 0x101, 0x800010`, `ldq`, `stq` to
+ * 0x804000); the face palette is {count, colours} in the program ROM, copied
+ * to 0x1802000; and three boot routines, run here by js/i960.js as
+ * js/colors.js does for Sega Rally, build colorxlat (a ramp worked out by
+ * one, odd rows laid over it by the next) and copy luma RAM out of the
+ * program ROM, a byte every halfword from 0x11400000.
+ */
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors }) {
+    return {
+        id,
+        name,
+        identify,
+        regions,
+        modelTable: { offset: table[0], count: table[1], stride: 16 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        paletteProgram: palette,
+        paletteOffset: null,
+        texture,
+        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* No stage, fighter or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+/*
+ * Super GT 24h (MAME's `sgt24h`, Model 2B CRX, 1996).
+ *
+ * The table: 2238 entries at data 0x80F480, up to 0x818060, where the list of
+ * pointers into it starts; 0x72C30, 0x72C60 and 0x72C90 draw from it.
+ *
+ * Colours: 0x72000 copies the 0x1B7 colours at 0x72CF6 to the face palette.
+ * The boot (0x5A120) then runs 0x5A920 (every row a ramp out of the byte
+ * table at 0x5A900), 0x5AA10 (odd rows from the table at 0x67CA4) and 0x5AB10
+ * (luma, the 0x8000 bytes at 0x687E5). A scene lays more rows over them
+ * through the queue at 0x530370, drained by 0x3CAF0: a record is {rows,
+ * destination list, variants, source}, and variant v's rows are 16 bytes
+ * each, each byte four colorxlat entries. The title and the races queue data
+ * 0x2BEB860 variant 128 (rows 1 and 3, 0x3DF30; its 640 variants are the
+ * race's hours) and 0xCB2B0 variant 0 (rows 5, 7, 9, 11, 21, 23 and 29,
+ * 0x3DF60), which run here after the boot's three. Colorxlat, luma and palette RAM match MAME's at the
+ * title and in the attract race (frames 300 and 1800), no byte different.
+ *
+ * Textures: sheet 0 from data 0x0 and sheet 1 from data 0x100000 at boot
+ * (0x5A13C); a course reloads sheet 1 from the program's table at 0xED8B0
+ * (0x3F4C0: data 0x100000, 0x200000, 0x300000, 0x400000, then the four
+ * again), and 0x77850 loads data 0x500000 (set 4). Set 0 is the boot's, the
+ * one MAME's attract shows.
+ */
+const sgt24h = jalecoBuild({
+    id: 'sgt24h',
+    name: 'Super GT 24h',
+    identify: ['epr-19155.15', 'epr-19156.16', 'mpr-19146.11', 'mpr-19150.17'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19155.15', 0x593952fd, 'epr-19156.16', 0xa91fc4ee]],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19146.11', 0xd66b5b0f, 'mpr-19147.12', 0xd5558f48],
+                [0x800000, 'mpr-19148.9', 0xa14c86db, 'mpr-19149.10', 0x94ef5849],
+            ],
+        },
+        polygons: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19150.17', 0xe0ad870e, 'mpr-19151.21', 0xe2a1b125]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19153.27', 0x136adfd0, 'mpr-19152.25', 0x363769a2]],
+        },
+    },
+    table: [0x80f480, 2238],
+    palette: 0x72cf4,
+    texture: {
+        raw: {
+            layout: 'jaleco',
+            sheet0: 0x02000000,
+            sets: [0x02100000, 0x02200000, 0x02300000, 0x02400000, 0x02500000],
+        },
+        sets: 5,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6041,7 +6135,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa];
+    pltkids, pltkidsa, sgt24h];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
