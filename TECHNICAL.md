@@ -7357,10 +7357,25 @@ to 0x1802000 by 0x1C8C0 from the frame hook (0x696C0). 0x1C950, 0x1C9F0 and
 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or 0xFC00 for a moment of the
 attract mode (MAME's frame 6000 is in one of them); not ported.
 
-**Leads.** A course record's +0x08 points at a program table (0xBB60 for
-record 0) and +0x0C on is a run of consecutive model numbers (0x399.. for
-record 0, 0x48F.. for 2, 0x678.. for 3, 0xA09.. for 7), which look like the
-course's segments. The pictures are "CGM 1.0" files, as Sega Rally's
+**Stages** (`js/racers.js`). 0xAA10 sets a course up from its record
+(0x3F4 bytes at 0xBEB0) into 0x202630 (the number) and 0x202634: +0 and +4
+the texture pair, +8 a table of 20-byte {first, last, routine, ?, argument}
+entries the draw calls by segment range, +0xC the sixty segments, +0x100
+their low-detail copies (drawn now and then when +0xFC is set), +0x1F4 a
+second model per segment, drawn with it when +0x1F0 is set. The draw is
+0xAEA0 (`remi 60`), each segment with no matrix, so in world space. The
+course menu's labels at 0x15B80 (pointers at 0x15C10) and the table at
+0x57460 ({record, ?, list} by choice) give NOVICE, INTERMEDIATE, EXPERT
+(records 1, 2, 3), the three as SS (4, 5, 6: the same courses on copies of
+the models, 921.., 1411.., 1838..) and OMAKE (7); record 0 is record 4
+again. The tab has records 1..7, every segment and second model, on the
+record's set. MAME's attract runs 0x202630 = 1, 2, 3 in turn: the grandstand
+circuit, the alpine one and the town, Country Circuit, Grunwald Circuit and
+Brickwall Town. Not in the tab: the +8 scenes, the cars, a sky (none found)
+and the light (Sega Rally's stands in). Function 6 is 32 pairs from 0x736B0
+(0x1BA4, 0x10FA4, 0x7C2B0, through 0x73648).
+
+**Leads.** The pictures are "CGM 1.0" files, as Sega Rally's
 (js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
 (epr-19275.2s, mpr-19262..19265); not traced.
 

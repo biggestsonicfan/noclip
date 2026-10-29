@@ -6713,7 +6713,38 @@ const stcc = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /* Function 6 from 0x736B0, 32 pairs (0x1BA4, 0x10FA4, 0x7C2B0, through
+     * 0x73648). The light is a stand-in, Sega Rally's. */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x736b0, count: 32, stride: 8 },
+    },
+    /*
+     * The course records (js/racers.js), in the order of the course menu's
+     * labels at 0x15B80 (0x15C10 points at them) and of the course table at
+     * 0x57460, {record, ?, list} by choice: NOVICE, INTERMEDIATE, EXPERT,
+     * the three again as SS (records 4 to 6, the same courses on copies of
+     * their models) and OMAKE, the bonus course (record 7). Record 0 is
+     * record 4 again. The attract runs records 1, 2, 3 in turn (0x202630).
+     */
+    stageTable: {
+        racer: {
+            kind: 'stcc',
+            records: 0xbeb0,
+            stride: 0x3f4,
+            courses: [
+                { record: 1, set: 0, name: 'Country Circuit (Novice)' },
+                { record: 2, set: 1, name: 'Grunwald Circuit (Intermediate)' },
+                { record: 3, set: 2, name: 'Brickwall Town (Expert)' },
+                { record: 4, set: 0, name: 'Country Circuit (Novice SS)' },
+                { record: 5, set: 1, name: 'Grunwald Circuit (Intermediate SS)' },
+                { record: 6, set: 2, name: 'Brickwall Town (Expert SS)' },
+                { record: 7, set: 3, name: 'Omake (the bonus course)' },
+            ],
+        },
+        flat: true,
+    },
+    features: { stages: true, characters: false, motions: false, cells: false },
 };
 
 /* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */
