@@ -23,6 +23,7 @@ import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
+import { readBelBodies, readBelMotions, belMotionList, poseBel } from './belplayers.js';
 import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
@@ -154,6 +155,8 @@ const state = {
     headTurn: [0, 0],
     /* Dynamite Baseball 97: the player's part list, DYNABB_ROLES' index. */
     playerRole: 0,
+    /* Behind Enemy Lines' far models (#char-far). */
+    belFar: false,
     /* Virtual-On: the aim the fight gives a robot, the upper body's twist on
      * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
      * 0x10000 a turn; see poseVonRobot. */
@@ -3569,6 +3572,15 @@ const BODY_RIGS = {
         read: readDynabbPlayers, motions: readDynabbMotions, list: dynabbMotionList,
         pose: (rom, body, motion, frame, opts) => poseDynabbPlayer(rom, body, motion, frame, { role: state.playerRole, travel: opts.travel }),
     },
+    /* Behind Enemy Lines' soldiers: sixteen parts off the actor, the game's
+     * draw run. A motion moves at its rate (0x20 half a row a tick, 0x40 a
+     * row), and the draw blends between rows as the game's does. */
+    bel: {
+        read: readBelBodies, motions: readBelMotions, list: belMotionList,
+        pose: (rom, body, motion, frame, opts) => poseBel(rom, body, motion,
+            opts.clock != null ? opts.clock / 256 + 1 : frame, { travel: opts.travel, far: state.belFar }),
+        clocks: (rom, motion, { backward }) => airwlkrsClocks(motion, motion.rate * 4, backward),
+    },
 };
 
 function bodyRig() {
@@ -5541,7 +5553,7 @@ function renderBodyMotionPanel() {
         <span>frames</span><b>${d.frames}</b>
         ${size}
         ${link && times ? `<span>hits from · cancel · free</span><b>${times.hit} · ${times.cancel} · ${times.end}</b>` : ''}
-        ${m.clocks && !m.clocks.air ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
+        ${m.clocks && !m.clocks.air && state.rom.game.rig?.kind === 'airwlkrs' ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
     ` : '<span>motion</span><b>none fits this body</b>');
 
     const scrub = $('#motion-frame');
@@ -6179,6 +6191,10 @@ function wireOptions() {
         state.travel = e.target.checked;
         poseRig();
     });
+    $('#char-far').addEventListener('change', (e) => {
+        state.belFar = e.target.checked;
+        poseRig();
+    });
     $('#char-mirror').addEventListener('change', (e) => {
         state.mirrored = e.target.checked;
         poseRig();
@@ -6643,6 +6659,7 @@ function applyGameFeatures() {
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* Dynamite Baseball 97's players: who the part list draws. */
     $('#role-field').hidden = state.rom.game.rig?.kind !== 'dynabb';
+    $('#char-far-field').hidden = state.rom.game.rig?.kind !== 'bel';
     /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
     $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
     /* Virtua Cop's enemies turn the upper body toward the player. */
@@ -6658,10 +6675,10 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers', Dynamite Baseball's, Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * Air Walkers', Dynamite Baseball's, Behind Enemy Lines', Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
      * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'powsled', 'vcop', 'daytona'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;

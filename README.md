@@ -39,7 +39,7 @@ Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
-*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
+*Behind Enemy Lines* has its models and soldiers — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1398,7 +1398,9 @@ needs its set picked by hand. The colour tables are the same in every scene.
 The textures, palette, luma and colour tables match MAME's byte for byte in
 the attract, in all three builds.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+There is no Stages tab, no cells and no characters yet. The game has no
+motions to show: its helicopters' and enemies' moving parts are objects
+turned by their own scripts. See
 [TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
 
 ## Sky Target
@@ -1513,8 +1515,16 @@ sheets as they are first set up.
 Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frame 1500.
 
-There is no Stages tab, no cells, no characters and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
+The **Animation** tab has the soldiers: 58 bodies (the 23 uniforms with
+their heads and weapons, each sixteen parts with a near and a far model)
+and their 83 motions: aiming, walking, running, falls. It runs the game's
+own draw for every frame, blending between rows as the game does, and
+matches MAME's copro output to 1e-6. The motions have no names in the
+game. There are no creatures to animate: the cow is one rigid model.
+
+There is no Stages tab, no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs) and
+[the soldiers](TECHNICAL.md#behind-enemy-lines-soldiers-jsbelplayersjs).
 
 ## Desert Tank
 

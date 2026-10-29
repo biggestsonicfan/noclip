@@ -493,6 +493,7 @@
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
         <label class="check" id="char-mirror-field" hidden title="The motions played the other way round: VF2's and Sonic the Fighters' player +0 bit 6, Air Walkers' player +0xF4, a Virtua Cop enemy's +0x8A0"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
         <label class="check" id="char-backward-field" hidden title="The motion played backward, last frame first: Air Walkers' player +0xEC" data-i18n-title="char.backward.title"><input type="checkbox" id="char-backward"> <span data-i18n="char.backward">backward</span></label>
+        <label class="check" id="char-far-field" hidden title="The models the game draws 18 or more away, the rows not blended: Behind Enemy Lines' actor +0x64" data-i18n-title="char.far.title"><input type="checkbox" id="char-far"> <span data-i18n="char.far">far models</span></label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
         <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
         <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
@@ -754,6 +755,20 @@
         <em>Role</em> swaps the parts as <code>0xCDCD0</code> does: the
         batter's, pitcher's and catcher's hands and heads. The skin the game
         stretches between joints (copro <code>0x7A</code>) isn't drawn.
+      </div>
+      <div class="note" id="anim-note-bel" data-i18n="note.bel" hidden>
+        A soldier is an actor record (136 of them at data
+        <code>0x2BDDF10</code>): sixteen parts, hips, chest, head, arms,
+        weapon and legs, each a near and a far model, every part hung off
+        the actor itself rather than a parent. The bodies are the 58 sets of
+        models the actors are drawn with. A motion is every part's turns
+        and place for each row, 83 of them; every motion fits every
+        soldier, and the lead ones are those its own actors play. The game
+        has no names for them. The explorer runs the game's draw
+        (<code>0x51C20</code>), so it blends between rows as the game does;
+        a motion at rate 0x20 moves half a row a frame, at 0x40 a row.
+        <em>Far models</em> are the ones drawn 18 or more away, the rows
+        not blended. The hips carry the walk; <em>root travel</em> shows it.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of

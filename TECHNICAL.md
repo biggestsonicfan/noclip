@@ -7697,6 +7697,23 @@ tables after the boot (frame 51), and they match MAME's entry for entry.
   a model to its set.
 - The tile chip and the music are not looked at.
 
+**No motions.** Zero Gunner has no motion tables (looked for in #1887).
+These addresses are the program's copy in RAM, 0x500000 on. A
+helicopter, its rotor, a gunship and its turrets are a tree of objects:
+a pool of 128 of 0x200 bytes at 0x5025B0 (0x541780 clears it, 0x5418E0
+hands one out), the root at 0x210000, each object's +4 its parent, +8 its
+first child, +0xC its next sibling, +0x84..+0x8C its place and
++0x90..+0x98 its angles on its parent's (composed by op 0x31, 0x55B610).
+Each object runs its own byte-code script (+0x20, run by 0x556E30, ops
+from the table at 0x55D4E0; a negative word waits that many frames), in
+the program at about 0x574000..0x58A000: op 0x27 sets an angle, op 0x26 a
+turn a frame (the rotor, 0.023 at 0x578A34), and others ease a part to a
+target the script gives. None of the op handlers in 0x55A900..0x55F800
+reads a table from the data ROM; the one read near the draws,
+0x2078700[model] (0x40 bytes a model, to the copro), is bounds, not
+animation. An Animation tab would have to run the objects and their
+scripts frame by frame, not play a motion.
+
 ### Sky Target (`js/texture.js`, `js/colors.js`)
 
 Sega's 1995 flight shooter on Model 2A CRX (MAME's `skytargt`). It shares
@@ -8009,6 +8026,62 @@ pointers 0x2986F60[scene] (read at 0x10CC). A record's +0x10 points at byte
 strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
 0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
 0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
+
+### Behind Enemy Lines' soldiers (`js/belplayers.js`)
+
+The Animation tab's soldiers are posed by the game's own draw, run on
+js/i960.js with js/doa.js's copro (its command set is DOA's, unchanged).
+There are no creatures: no named object is an animal with a skeleton, and
+the cow `o_hilary` (record 2883) is one rigid model. The soldiers' models
+have no names of their own: they are records 477..770, which the object
+directory files under `o_fireball_01`.
+
+**Actors.** 136 records of 0x1A0 bytes at data 0x2BDDF10..0x2BEBC10, each
+its own compiled unit followed by its SCCS strings (`vars.h`, `event.h`):
++0x04 + 8k the motion slot k plays (k = 0..10), +0x60 + 8k part k's near
+and far model (model table records, 0x28B7C78 + 20i), +0x100 the part
+count, 16. The parts are hips, chest, head, upper arm, forearm and hand
+right, weapon, thigh, shin and foot right, then the left arm and leg; the
+sides were read from a rifle pose. A uniform u (1..23) is records
+493 + 10(u − 1) on; feet and the left hand are 733, the heads 739 or 741,
+the weapons 748, 738 or 745. Only the heads and hands have far models of
+their own. The bodies are the 58 distinct near sets, each with the actors
+that use it; its lead motions are theirs. A live actor in work RAM has
++0x1C/+0x1E/+0x20 its turns X/Y/Z, +0x24 its place, +0x38 the ROM
+record, +0x60 its frame (a float, in rows), +0x6E its slot, and bit 9 of
++0 means no shadow.
+
+**Motions.** 0x40-byte records, 83 distinct among the slots, at data
+0x29DAD30..0x2BDDE50: +0 the rows, +4 an event list (+0xC its count, not
+decoded), +8 the rows less one, +0x10 the rate (0x20 or 0x40: rows a tick
+× 64), +0x14 a turn and +0x18 a step (x y z) that 0x52B54 adds to the
+actor's heading and place when the motion ends. A row is 16 parts of
+`{short rx, ry, rz, x, y, z}`, the angles 0x10000 to the turn and the
+place over 2048. The hips' place carries the travel. Slot 9 holds the
+rate-0x40 falls; what picks a slot was not traced, and the motions have
+no names.
+
+**Draw.** 0x51C20(actor, motion, frame), from 0x52C60 and 0x52D0C: push,
+translate to the place, turn Y, X and Z by the actor's turns; the far list
+(+0x64) when the camera (`*0x5A7E84 + 0x24`) is 18 or more away (0x51EBC),
+else the near one. Near, at rate below 0x40, it blends: the midpoint of
+two rows between 0.4 and 0.6 of a row (angles as 16-bit), else row +
+fraction × (next − row). Unless bit 9, the shadow (record 2260) under the
+hips. Each part: translate (x y z)/2048, turn Z by −rz, Y by ry, X by rx,
+the model (0x11EE0), pop: every part hangs from the actor, none from
+another. The head is drawn again when 0x5FA108 > 0.
+
+**Checked.** MAME's attract gameplay (scene 2) with breakpoints at
+0x51C20 and 0x11EE0 and a write watchpoint on the geometrizer port
+0x8040B0, enabled only inside the draw, gives the board's own matrices.
+Eight calls at frames 4200..4202 and 4500..4502 (three bodies, three
+motions, near and far, whole and half rows): with the camera taken out at
+the hips, all 16 parts match to 1.8e-6 in turn and 8e-6 in place. The
+soldiers' tiles are all on sheet 1 (y ≥ 1024), scene 2's bank 0x2400000,
+so a body opens on set 6; whether scenes 0 and 1's bank 0x2C00000 has them
+was not checked. The `*_data.h` rigid tracks (falling trees, train and
+bridge deaths) and the `*_model_swap.h` flipbooks (`boydley_death`,
+records 887..966) are not characters and not read.
 
 ### Desert Tank (`js/games.js`)
 

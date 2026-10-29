@@ -7556,7 +7556,9 @@ const bel = {
         bel: { ramps: 0x62a70, table: 0x62dd0, scene: 2 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The soldiers: actor records posed by the game's draw (js/belplayers.js). */
+    rig: { kind: 'bel' },
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: false },
 };
 
 /*
