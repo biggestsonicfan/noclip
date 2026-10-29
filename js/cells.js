@@ -456,12 +456,6 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
-    if (C.scriptDirs) {
-        const hex = (a) => `0x${a.toString(16).toUpperCase()}`;
-        for (const dirs of C.scriptDirs) all.push({ dirs, name: dirs.map(hex).join(' + ') });
-        cgCache.set(rom, all);
-        return all;
-    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -469,6 +463,12 @@ function cgListsAll(rom) {
             const dirs = group ? [C.groups.boot, dir] : [dir];
             all.push({ dirs, name: group ? `data ${hex(dir)} over the boot's` : `the boot's, data ${hex(dir)}` });
         }
+        cgCache.set(rom, all);
+        return all;
+    }
+    if (C.scriptDirs) {
+        const hex = (a) => `0x${a.toString(16).toUpperCase()}`;
+        for (const dirs of C.scriptDirs) all.push({ dirs, name: dirs.map(hex).join(' + ') });
         cgCache.set(rom, all);
         return all;
     }
