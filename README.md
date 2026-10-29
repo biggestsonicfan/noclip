@@ -30,6 +30,9 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
+Jaleco's *Super GT 24h* and *Over Rev* have their models — see
+[Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
+Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 
 Three views, and a fourth for the 2D art:
 
@@ -1281,6 +1284,68 @@ The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
 There is no Stages tab, no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
+## Super GT 24h
+
+`sgt24h.zip` (Jaleco, 1996, Model 2B CRX). The **Models** tab has all 2238
+entries of the model table: the cars, the course pieces, the pit and the
+grandstands, with the textures the game loads, its face palette and its
+colour tables as the boot and the race build them.
+
+The texture picker's sets 0..4 are what sheet 1 holds: sets 0..3 are the
+four the course table names (set 0 is also the boot's, the one MAME's attract
+race shows) and set 4 a bank one routine loads by itself. Sheet 0 is the same in every set.
+Nothing found yet says which course a model belongs to, so a course piece
+needs its set picked by hand. Textures, palette, luma and colour tables
+match MAME's at the title and in the attract race byte for byte. The colour
+tables are those of the hour the title and the attract use: the race has
+640 versions of two rows, one per stretch of its 24 hours, and the viewer
+shows one.
+
+There is no Stages tab, no cars put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
+
+## Over Rev
+
+`overrev.zip` is the Model 2C CRX build, Revision A (Jaleco, 1997);
+`overrevb.zip` beside it is the Model 2B CRX build, Revision B, offered as a
+variant (its zip holds only the program, so it wants `overrev.zip` with it).
+The **Models** tab has all 1893 entries of the model table, the same in both
+builds: the cars, the course pieces and the scenery, with the game's
+textures, face palette and colour tables.
+
+The texture picker's sets 0..6 are what sheet 1 holds: set 0 is the boot's,
+and sets 1..6 the six courses' in data order (Tsukuba, Shibuya's other
+version, Shibuya, Futou, Touge, Touge's other version). Sheet 0 is the same
+in every set. A course piece needs its course's set picked by hand. Colour
+tables and luma match MAME's at the title on both boards byte for byte, and
+the textures in the attract race but for sixteen bytes something later
+writes. Some luma bands change during a race; the viewer shows the boot's.
+
+There is no Stages tab, no cars put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
+
+## Dynamite Baseball 97
+
+`dynabb.zip` as the container has it is MAME's `dynabb97` (Sega, 1997,
+Model 2B CRX, Revision A). The **Models** tab has all 7890 entries of the
+model table with the game's own names: the twelve teams' players in home
+and visitor kits, joint by joint, the three stadiums' pieces, the ball, the
+bats and the menus, with the textures, face palette and colour tables the
+game builds for a stadium and a team.
+
+The texture picker's sets 0..35 are stadium × 12 + team, both sides of the
+field the team's. The stadiums are 0..2 (their pieces are named `Q1_` to
+`Q3_`), the teams 0..11 Swallows, Carp, Giants, BayStars, Dragons, Tigers,
+BlueWave, Marines, Lions, Fighters, Hawks and Buffaloes. A model opens on
+the set its name points at — a player on his team's at stadium 1, a stadium
+piece on its stadium's with team 0 — and the rest on set 12, stadium 1 and
+team 0, the set MAME's attract opens on. Textures, colour tables, luma and
+face palette match MAME's in the attract mode byte for byte, but for 119
+halfwords of sheet 0 the game copies about at run time.
+
+There is no Stages tab, no players put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1329,6 +1394,15 @@ and its USA build `lastbrnxu.zip`.
 beside it.
 
 `vcop2.zip` carries Virtua Cop 2.
+
+`sgt24h.zip` carries Super GT 24h.
+
+`overrev.zip` carries Over Rev; its Model 2B build wants `overrevb.zip`
+beside it.
+
+`dynabb.zip` carries Dynamite Baseball 97 when it holds MAME's `dynabb97`
+chips (`epr-19833a.15` and the rest); the 1996 Dynamite Baseball is not
+read yet.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

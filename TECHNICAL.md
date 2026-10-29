@@ -7329,6 +7329,170 @@ course's segments. The pictures are "CGM 1.0" files, as Sega Rally's
 (js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
 (epr-19275.2s, mpr-19262..19265); not traced.
 
+### Super GT 24h and Over Rev (`js/jaleco.js`)
+
+Jaleco's two Model 2 racers, Super GT 24h (1996, MAME's `sgt24h`, Model 2B
+CRX) and Over Rev (1997), keep none of the AM2 tables but share one
+framework: the same `../h/globl.h` and `define.h` fault strings, the same
+model table, the same boot colour routines and the same texture loader at
+other addresses. One profile builder (`jalecoBuild` in js/games.js) serves
+them. Every table was found from the code that reads it, in MAME's i960
+disassembly, and every result was held against MAME's RAM (Lua dumps of
+texture, colorxlat, luma and palette RAM at fixed frames).
+
+**Models.** The table is 16-byte entries in the data ROM: texture word,
+material word, mesh pointer, polygon count. The draw routines (sgt24h
+0x72C30, 0x72C60, 0x72C90) send an entry to the geometry engine four words
+at a time (`st 0x101, 0x800010`, `ldq`, `stq` to 0x804000). Super GT 24h
+has 2238 entries at data 0x80F480; the list of 0x1C-stride pointers into
+them starts right after, at 0x818060. Mesh pointers are data addresses
+past a 16-byte header (`meshPtr` subtract 0x02000010, add 0x10).
+
+**Face palette.** 0x72000 copies {count, colours} from the program ROM
+(0x72CF4: 0x1B7 colours) to palette RAM 0x1802000; MAME reads it as
+`palram[color + 0x1000]`.
+
+**Colorxlat and luma.** The boot (0x5A120) runs three routines, and the
+viewer runs the same ones with js/i960.js (`colors.i960` in the profile,
+as for Sega Rally): 0x5A920 builds every row as a ramp out of the byte
+table at 0x5A900, 0x5AA10 lays the odd rows from 0x67CA4 over it, and
+0x5AB10 copies the 0x8000 bytes at 0x687E5 to luma RAM at 0x11400000, a
+byte every halfword (so `lumaRam`/`lumaStep` in js/colors.js). A scene then
+lays more rows through the queue at 0x530370, which 0x3CAF0 drains: a record
+is {rows, destination list, variants, source}, and variant v's rows are 16
+bytes each, each byte four colorxlat entries. The title and the races queue
+data 0x2BEB860 variant 128 (rows 1 and 3, from 0x3DF30; its 640 variants
+are the race's hours) and 0xCB2B0 variant 0 (rows 5, 7, 9, 11, 21, 23 and
+29, from 0x3DF60, variant by 0x530630). The viewer runs 0x3CAF0 on those two
+after the boot's three, with the record address and variant in g0 and g1.
+Colorxlat, luma and palette RAM match MAME's at frames 300 (boot only) and
+1800 (the attract race), no byte different.
+
+**Textures.** Nothing is packed. The loaders (0x5A2B0 for sheet 0, 0x5A470
+for sheet 1) take a data address and blit (0x5A630) its first 0x80000 bytes,
+512 by 512 halfwords, to the sheet's first half, then the next 0x80000 as
+ten mip rectangles split between the two sheets' second halves, sheet 1's
+loader with the halves swapped, so the two chains interleave. The blit's
+loop (`cmpible`) copies one 16-byte quad past each row's end; on the 2B,
+where 0x11100000 mirrors 0x11000000, a quad past a sheet's end lands at its
+start, and js/jaleco.js wraps it the same way. The loader then sets the
+first eight halfwords of 0x11000000 to 0xFFFF. Boot loads data 0x0 to sheet
+0 and 0x100000 to sheet 1 (0x5A13C); a course reloads sheet 1 from the
+program's table at 0xED8B0 (0x3F4C0: data 0x100000, 0x200000, 0x300000,
+0x400000, then the four again), and 0x77850 loads 0x500000. Those are sets
+0..4. Set 0 matches MAME's texture RAM at frames 300 to 2700, no halfword
+different.
+
+**Over Rev.** `overrev` (Model 2C, Revision A) and `overrevb` (Model 2B,
+Revision B) share every ROM but the program, so one table: 1893 entries at
+data 0x80CEC0, up to 0x814510. The two programs run the same boot at the
+same addresses (0x11F64 on): 0x12760, 0x12850 and 0x12950 for colorxlat and
+luma (luma from the 0x8000 bytes at 0x37F09), then 0x120F0 for sheet 0 (data
+0x0) and 0x122B0 for sheet 1 (data 0x100000), blit 0x12470. They differ in
+where the palette is, {count, colours} at 0x2A7A4 in the 2B build and
+0x32A44 in the 2C, 769 colours, copied by 0x177F0.
+
+Before the loads, 0x12080 copies the data ROM's first 0x100000 halfwords to
+0x11000000 a halfword every four bytes, through all four MB of the sheets
+and their mirrors; the loads go over most of it, and js/jaleco.js does the
+same (`fill`). The 2C's texture RAM is two 2 MB shares with no mirror, so
+there the blit's extra quad does not wrap within a sheet (`window`).
+
+A course loads sheet 1 from its record in the program's table at 0xCD8B0
+(0x1C bytes: texture source, then the course's name): Tsukuba data 0x200000,
+Shibuya 0x400000, Touge 0x600000, Futou 0x500000, and the other versions of
+Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
+
+Checked against MAME on both boards: colorxlat and luma at the title (frame
+400) no byte different. Colorxlat does not change in the attract race; luma
+bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
+keeps the boot's. Texture RAM matches at the title and in the attract race
+(Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
+sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
+
+**Not done, and leads.** No course is put together: the course's model
+lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
+read the model table besides the draw routines, and the pointer list at
+data 0x818060 is the place to start. The car is single models; which parts
+make one car, and the colour rows per hour (variant by the race clock), are
+open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
+read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
+copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
+found in. The tile chip's pictures and the sound programs were not looked
+at.
+
+### Dynamite Baseball 97 (`js/dynabb.js`)
+
+Sega's Dynamite Baseball 97 (MAME's `dynabb97`, Model 2B CRX, Revision A)
+is the Jaleco racers' framework a version on: the same model table entries,
+the same draw and the same texture loader, grown. Like them, every table
+was found from the code that reads it in MAME's i960 disassembly, and every
+result was held against MAME's RAM (Lua dumps of texture, colorxlat, luma,
+palette and work RAM at frames 300, 600, 1500, 3000 and 4500 of the attract
+mode, with a debugger breakpoint logging each texture load's arguments).
+
+**Models.** 7890 16-byte entries at data 0xAFFD00 (the draw 0xA5280,
+`lda 0x2AFFD00[g0*16]`, `st 0x101, 0x800010`, `ldq`, `stq` to 0x804000;
+also 0xA4F20, 0xA50EC, 0xA5354, 0xA54D0, 0xA5658, 0xCDEA8, 0xCEF48). Mesh
+pointers as in the racers. The names are a table the racers lack: {model,
+name pointer} pairs at data 0xB5C400, 7887 of them, ended by a pointer of
+0xFFFFFFFF, each name 32 bytes padded with spaces at 0xB1EA20..0xB5C400,
+sorted, likely so the game can find a model by its name (0xC2F40 and
+0xC2F98 read the pairs). `modelNames.pairs` in the profile; js/romset.js
+reads it.
+Models 0..2 have none. A player is parts named for their joints (`J_KAO`
+face, `J_MUNE` chest, `J_KATA` shoulder, `J_MOMO` thigh, `J_HIZA` knee),
+prefixed with the team and `H` or `V` for the home or visitor kit.
+
+**Textures.** The loader is a dispatcher, 0x81420: a data address in g0, a
+sheet in g1, a layout in g2, through the jump table at 0x81464. Layout 0
+(0x81530) is the racers' whole page and ten mip rectangles (blit 0x819C0);
+32 (0x81668), 33 and 50 (0x81728), 48 (0x817F0) and 49 (0x818C0) copy packed
+rectangles into parts of the sheets (blit 0x81A00). js/dynabb.js runs
+0x81420 itself with js/i960.js against a bus of the program, work RAM, the
+data ROM and the two sheets with their mirrors, rather than port the five
+layouts. The boot (0x80C28) clears the sheets (0x80DE0) and loads the
+stadium (0x809A0, layout 32, sheet 0), data 0x2855500 (layout 33, sheet 0),
+a team's two halves (0x80920 layout 48 and 0x80960 layout 50, sheet 1,
+0xAAA00 apart per team) and data 0x2800000 (layout 49, sheet 1). A game
+reloads them through 0x84550 (team A, 0x5B961C), 0x84670 (team B, 0x5B95F4)
+and 0x84790 (the stadium, `0x809A0[0x138840[n]]`, kept at 0x5B9628). The
+viewer's set is stadium × 12 + team with both teams the same; the teams'
+order is that of their name prefixes in the model table, checked for Carp,
+Lions and Buffaloes by the lettering on their shirts. MAME's texture RAM
+matches the boot (frame 300, sheet 0 and 1) and two attract games (teams 0
+and 10 at stadium 1, frames 1500 and 3000; 0 and 6, frame 4500) on sheet 1
+exactly and on sheet 0 but for 119 halfwords at 0xFC3C0 that 0x848E0 copies
+within texture RAM at run time.
+
+**Colours.** Also run, not ported (`dynabbColors`): the boot's 0x82040
+(colorxlat's 32 rows, k·sqrt(x) + (1 − k)·x² with k = 0.7 from 0x82034,
+× 1.1 unless the byte at 0x5CA37B is 1), 0x82430 (odd rows, via 0x82530,
+from data 0x2BAE830) and 0x82620 (luma from data 0x2BA0B50); the game's
+palette set-up 0x99DB0 ({count, colours} blocks at data 0x2BA94D2,
+0x2BA8D6C, 0x2BA8E48, 0x2BA8B9E and 0x2BA8B16 to entries 0, 0x100, 0x200,
+0x300 and 0x37A, copier 0x844D0); then the colour halves of the loads,
+0x84570 (team A: rows 1, 3, 5 from 0xD82E0, palette 0xD8370 to entry
+0x100), 0x84690 (team B: rows 7, 9, 11 from 0xD8320, palette 0xD83B0 to
+0x200) and 0x847D0 (stadium: row 15 from 0xD8360, palette 0xD83F0 to 0).
+Their rows go through 0x82200, the same curve with per-stadium flags from
+0x82470. The square root is the coprocessor's: the i960 writes a command
+(0x16802D2D) and x to the FIFO at 0x884000 and reads the answer, and the
+copro program is the one 0x825B0 uploads from 0x664EC; the viewer's bus
+answers with a float square root. Colorxlat, luma and the face palette
+(0x1802000) match MAME's at frames 1500 and 4500 with no byte different.
+Palette RAM below 0x1802000, which 0x82200's callers address, is not the
+face palette; its +0x10000 is colorxlat.
+
+**Not done, and leads.** No stadium is put together and no player
+assembled. If the game finds models by name (0xC2F40), the stadium's
+and players' lists are likely name lists: look for callers of 0xC2F40 and
+of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
+(0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
+teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
+are test-menu colour tweaks. Motions, the tile chip's pictures and the
+sound program (`epr-19849.31`) were not looked at.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

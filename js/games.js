@@ -6666,11 +6666,270 @@ const stcc = {
      * every two (the 2B/2C map). Both match MAME's byte for byte.
      */
     colors: {
-        i960: { run: [0x6ac60, [0x6ae50, 0x32120], 0x730f0], lumaRam: [0x11400000, 1] },
+        i960: { run: [0x6ac60, [0x6ae50, 0x32120], 0x730f0], lumaRam: 0x11400000, lumaStep: 2 },
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
     features: { stages: false, characters: false, motions: false, cells: false },
+};
+
+/* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */
+
+/*
+ * Jaleco's two racers share one framework (js/jaleco.js has the texture
+ * loader both run): the model table is 16-byte entries in the data ROM,
+ * texture word, material word, mesh pointer and polygon count, sent to the
+ * geometry engine four words at a time (`st 0x101, 0x800010`, `ldq`, `stq` to
+ * 0x804000); the face palette is {count, colours} in the program ROM, copied
+ * to 0x1802000; and three boot routines, run here by js/i960.js as
+ * js/colors.js does for Sega Rally, build colorxlat (a ramp worked out by
+ * one, odd rows laid over it by the next) and copy luma RAM out of the
+ * program ROM, a byte every halfword from 0x11400000.
+ */
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors }) {
+    return {
+        id,
+        name,
+        identify,
+        regions,
+        modelTable: { offset: table[0], count: table[1], stride: 16 },
+        meshPtr: { subtract: 0x02000010, add: 0x10 },
+        paletteProgram: palette,
+        paletteOffset: null,
+        texture,
+        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* No stage, fighter or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+/*
+ * Super GT 24h (MAME's `sgt24h`, Model 2B CRX, 1996).
+ *
+ * The table: 2238 entries at data 0x80F480, up to 0x818060, where the list of
+ * pointers into it starts; 0x72C30, 0x72C60 and 0x72C90 draw from it.
+ *
+ * Colours: 0x72000 copies the 0x1B7 colours at 0x72CF6 to the face palette.
+ * The boot (0x5A120) then runs 0x5A920 (every row a ramp out of the byte
+ * table at 0x5A900), 0x5AA10 (odd rows from the table at 0x67CA4) and 0x5AB10
+ * (luma, the 0x8000 bytes at 0x687E5). A scene lays more rows over them
+ * through the queue at 0x530370, drained by 0x3CAF0: a record is {rows,
+ * destination list, variants, source}, and variant v's rows are 16 bytes
+ * each, each byte four colorxlat entries. The title and the races queue data
+ * 0x2BEB860 variant 128 (rows 1 and 3, 0x3DF30; its 640 variants are the
+ * race's hours) and 0xCB2B0 variant 0 (rows 5, 7, 9, 11, 21, 23 and 29,
+ * 0x3DF60), which run here after the boot's three. Colorxlat, luma and palette RAM match MAME's at the
+ * title and in the attract race (frames 300 and 1800), no byte different.
+ *
+ * Textures: sheet 0 from data 0x0 and sheet 1 from data 0x100000 at boot
+ * (0x5A13C); a course reloads sheet 1 from the program's table at 0xED8B0
+ * (0x3F4C0: data 0x100000, 0x200000, 0x300000, 0x400000, then the four
+ * again), and 0x77850 loads data 0x500000 (set 4). Set 0 is the boot's, the
+ * one MAME's attract shows.
+ */
+const sgt24h = jalecoBuild({
+    id: 'sgt24h',
+    name: 'Super GT 24h',
+    identify: ['epr-19155.15', 'epr-19156.16', 'mpr-19146.11', 'mpr-19150.17'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19155.15', 0x593952fd, 'epr-19156.16', 0xa91fc4ee]],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19146.11', 0xd66b5b0f, 'mpr-19147.12', 0xd5558f48],
+                [0x800000, 'mpr-19148.9', 0xa14c86db, 'mpr-19149.10', 0x94ef5849],
+            ],
+        },
+        polygons: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19150.17', 0xe0ad870e, 'mpr-19151.21', 0xe2a1b125]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19153.27', 0x136adfd0, 'mpr-19152.25', 0x363769a2]],
+        },
+    },
+    table: [0x80f480, 2238],
+    palette: 0x72cf4,
+    texture: {
+        raw: {
+            layout: 'jaleco',
+            sheet0: 0x02000000,
+            sets: [0x02100000, 0x02200000, 0x02300000, 0x02400000, 0x02500000],
+        },
+        sets: 5,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+});
+
+/*
+ * Over Rev (MAME's `overrev`, Model 2C CRX, Revision A, 1997) and its Model
+ * 2B build (`overrevb`, Revision B: its zip holds the program alone, and the
+ * rest is read from overrev.zip beside it). One data ROM, so one table: 1893
+ * entries at data 0x80CEC0, up to 0x814510.
+ *
+ * The two programs run the same boot at the same addresses (0x11F64 on):
+ * 0x12760, 0x12850 and 0x12950 for colorxlat and luma (luma the 0x8000
+ * bytes at 0x37F09), 0x12080 for the fill and 0x120F0 for sheet 0 (data 0x0),
+ * then sheet 1 (0x122B0, data 0x100000). They differ in where the palette
+ * table is: {count, colours} at 0x2A7A4 in the 2B build, 0x32A44 in the 2C,
+ * 769 colours, copied by 0x177F0 (0x17800).
+ *
+ * A course loads sheet 1 from its record in the program's table at 0xCD8B0,
+ * {texture source, ...} and the course's name, 0x1C bytes each: Tsukuba
+ * (data 0x200000), Shibuya (0x400000), Touge (0x600000), Futou (0x500000),
+ * Shibuya and Touge's other versions (0x300000, 0x700000). Set 0 is the
+ * boot's data 0x100000, then the six in data order.
+ *
+ * Checked against MAME on both boards: colorxlat and luma at the title
+ * (frame 400) no byte different. Colorxlat does not change in the attract
+ * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
+ * and these are the boot's.
+ */
+const OVERREV_DATA = {
+    mainData: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-19996.11', 0x21928a00, 'mpr-19997.12', 0x2a169cab],
+            [0x800000, 'mpr-19994.9', 0xe691fbd5, 'mpr-19995.10', 0x82a7828e],
+        ],
+    },
+    polygons: {
+        size: 0x400000,
+        parts: [[0x000000, 'mpr-19998.17', 0x6a834574, 'mpr-19999.21', 0xff590a2d]],
+    },
+    textures: {
+        size: 0x400000,
+        parts: [[0x000000, 'mpr-20001.27', 0x6ca236aa, 'mpr-20000.25', 0x894d8ded]],
+    },
+};
+const overRevTexture = (window) => ({
+    raw: {
+        layout: 'jaleco',
+        sheet0: 0x02000000,
+        sets: [0x02100000, 0x02200000, 0x02300000, 0x02400000, 0x02500000, 0x02600000, 0x02700000],
+        fill: true,
+        /* The 2C's texture RAM is two 2 MB shares with no mirror. */
+        window,
+    },
+    sets: 7,
+    residentSet: null,
+    defaultSet: 0,
+});
+const overrev = jalecoBuild({
+    id: 'overrev',
+    name: 'Over Rev (Model 2C, Revision A)',
+    identify: ['epr-20124a.15', 'epr-20125a.16', 'mpr-19996.11', 'mpr-19998.17'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-20124a.15', 0x74beb8d7, 'epr-20125a.16', 0xdef64456]],
+        },
+        ...OVERREV_DATA,
+    },
+    table: [0x80cec0, 1893],
+    palette: 0x32a44,
+    texture: overRevTexture(0x200000),
+    colors: [0x12760, 0x12850, 0x12950],
+});
+/* Known by its program alone, so that overrev.zip missing is said as such. */
+const overrevb = jalecoBuild({
+    id: 'overrevb',
+    name: 'Over Rev (Model 2B, Revision B)',
+    identify: ['epr-19992b.15', 'epr-19993b.16'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19992b.15', 0x6d3e78d5, 'epr-19993b.16', 0x765dc9ce]],
+        },
+        ...OVERREV_DATA,
+    },
+    table: [0x80cec0, 1893],
+    palette: 0x2a7a4,
+    texture: overRevTexture(0x100000),
+    colors: [0x12760, 0x12850, 0x12950],
+});
+
+/* ---- Dynamite Baseball 97 ------------------------------------------------- */
+
+/*
+ * Dynamite Baseball 97 (MAME's `dynabb97`, Sega, Model 2B CRX, Revision A,
+ * 1997; the container's dynabb.zip carries it). The framework is the Jaleco
+ * racers' again, a version on: the same 16-byte model table entries sent the
+ * same way (the draw 0xA5280, `lda 0x2AFFD00[g0*16]`), 7890 of them at data
+ * 0xAFFD00, and the same texture loader grown into a dispatcher that copies
+ * packed rectangles (js/dynabb.js). The names are a table of its own:
+ * {model, name pointer} pairs at data 0xB5C400 (7887 of them, to a pointer of
+ * 0xFFFFFFFF), each name 32 bytes padded with spaces (read by 0xC2F40);
+ * models 0 to 2 have none.
+ *
+ * A set is one of the three stadiums and one of the twelve teams, set
+ * stadium * 12 + team, both sides of the field the team's: texture RAM, the
+ * colorxlat rows and the face palette are each the stadium's and the two
+ * sides' (js/dynabb.js runs the routines that load them). Set 12, stadium 1
+ * and team 0, is the one MAME's attract opens on.
+ */
+const DYNABB_TEAMS = Array.from({ length: 12 }, (_, t) => [0x02000000 + t * 0xaaa00, 0x02055500 + t * 0xaaa00]);
+const dynabb97 = {
+    id: 'dynabb97',
+    name: 'Dynamite Baseball 97 (Revision A)',
+    identify: ['epr-19833a.15', 'epr-19834a.16', 'mpr-19841.11', 'mpr-19843.17'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19833a.15', 0xd99ed1b2, 'epr-19834a.16', 0x24192bb1],
+                [0x100000, 'epr-19831a.13', 0x0527ea40, 'epr-19832a.14', 0x2f380a40],
+            ],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19841.11', 0x989309af, 'mpr-19842.12', 0xeec54070],
+                [0x0800000, 'mpr-19839.9', 0xd5a74cf4, 'mpr-19840.10', 0x45704e95],
+                [0x1000000, 'mpr-19837.7', 0xc02187d9, 'mpr-19838.8', 0x546b61cd],
+                [0x1800000, 'mpr-19835.5', 0xa3b0a37c, 'mpr-19836.6', 0xd70a32aa],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19843.17', 0x019bc583, 'mpr-19845.21', 0x2d23e73a],
+                [0x800000, 'mpr-19844.18', 0x150198d6, 'mpr-19846.22', 0xfe53cd17],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19848.27', 0x4c0526b7, 'mpr-19847.25', 0xfe55edbd]],
+        },
+    },
+    modelTable: { offset: 0xaffd00, count: 7890, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    modelNames: { pairs: 0xb5c400 },
+    palette: { layout: 'dynabb' },
+    paletteOffset: null,
+    texture: {
+        raw: {
+            layout: 'dynabb',
+            /* 0x809A0, layout 32 on sheet 0. */
+            stadiums: [0x028fff00, 0x029aa900, 0x02a55300],
+            /* 0x80920 (layout 48) and 0x80960 (layout 50), on sheet 1. */
+            teams: DYNABB_TEAMS,
+            /* The boot's other two: [source, sheet, layout]. */
+            fixed: [[0x02855500, 0, 33], [0x02800000, 1, 49]],
+        },
+        sets: 36,
+        residentSet: null,
+        defaultSet: 12,
+    },
+    colors: { dynabb: true, solid: true },
+    /* No stage, player or motion data is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
@@ -6681,7 +6940,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vcop2, vstrikero, vstriker, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc];
+    pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc, sgt24h, overrev, overrevb, dynabb97];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

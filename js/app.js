@@ -983,9 +983,11 @@ function describeTextureGuess(g) {
     case 'boot': return state.rom.game.texture.raw?.layout === 'airwlkrs'
         ? `${sets}: the boot pages, which every court has`
         : state.rom.game.texture.raw
-        ? `sheet ${state.rom.game.texture.raw.layout === 'srallyc' ? 0 : 1} only, the bank boot loads for every course`
+        ? `sheet ${['srallyc', 'jaleco'].includes(state.rom.game.texture.raw.layout) ? 0 : 1} only, the bank boot loads for every course`
         : `${sets}: the boot set holds every tile it samples`;
     case 'course': return `${sets}: the course whose records name it`;
+    case 'team': return `${sets}: the team its name begins with, at the default stadium`;
+    case 'stadium': return `${sets}: the stadium its name begins with, with the default team`;
     case 'only': return `${sets}: the only texture RAM the game loads`;
     case 'title': return `${sets}: drawn in the intro, on the title's page`;
     case 'home': return `${sets}: on the home side's team page, team 0`;

@@ -16,6 +16,7 @@ import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
 import { motoraidScene } from './motoraid.js';
 import { i960Palette } from './colors.js';
+import { dynabbColors } from './dynabb.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -386,19 +387,36 @@ export function addModelTriples(rom, triples) {
  *
  * `modelNames.ptrs` is a table of pointers to C strings, `skip` entries in, one
  * per model; entries past `count` are the second half of a table that repeats
- * the first and take the same names.
+ * the first and take the same names. `modelNames.pairs` is instead a table of
+ * {model, name pointer} pairs up to a pointer of -1, names padded with spaces
+ * (Dynamite Baseball).
  */
 export function readModelName(rom, index) {
     const n = rom.game.modelNames;
     if (!n || index < 0) return null;
     const dv = rom.mainDataView;
-    const at = n.ptrs + (n.skip + (index % n.count)) * 4;
-    if (at + 4 > rom.mainData.length) return null;
-    const off = dv.getUint32(at, true) - MAIN_DATA_BASE;
+    let ptr;
+    if (n.pairs !== undefined) {
+        if (!rom.modelNamePtrs) {
+            rom.modelNamePtrs = new Map();
+            for (let at = n.pairs; at + 8 <= rom.mainData.length; at += 8) {
+                const p = dv.getUint32(at + 4, true);
+                if (p === 0xffffffff) break;
+                rom.modelNamePtrs.set(dv.getUint32(at, true), p);
+            }
+        }
+        ptr = rom.modelNamePtrs.get(index);
+        if (ptr === undefined) return null;
+    } else {
+        const at = n.ptrs + (n.skip + (index % n.count)) * 4;
+        if (at + 4 > rom.mainData.length) return null;
+        ptr = dv.getUint32(at, true);
+    }
+    const off = ptr - MAIN_DATA_BASE;
     if (off < 0 || off >= rom.mainData.length) return null;
     let end = off;
     while (end < rom.mainData.length && end - off < 64 && rom.mainData[end] !== 0) end++;
-    return String.fromCharCode(...rom.mainData.subarray(off, end));
+    return String.fromCharCode(...rom.mainData.subarray(off, end)).trimEnd();
 }
 
 /*
@@ -433,6 +451,13 @@ export function facePalette(rom) {
     }
     if (p?.layout === 'motoraid') {
         const out = motoraidScene(rom, set).face;
+        rom.facePalettes.set(set, out);
+        return out;
+    }
+    /* Dynamite Baseball 97: the stadium's and the team's, by the game's own
+     * routines (js/dynabb.js). */
+    if (p?.layout === 'dynabb') {
+        const out = dynabbColors(rom, set).palette;
         rom.facePalettes.set(set, out);
         return out;
     }

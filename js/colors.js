@@ -33,6 +33,7 @@ import { MAIN_DATA_BASE } from './romset.js';
 import { dynamcopScene } from './dynamcop.js';
 import { motoraidScene } from './motoraid.js';
 import { I960 } from './i960.js';
+import { dynabbColors } from './dynabb.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -157,6 +158,8 @@ export function buildLumaram(rom) {
     /* A game that names its luma table copies it rather than working it out,
      * whatever it runs for colorxlat (Manx TT's 0x3828). */
     if (rom.game.colors.i960 && !rom.game.colors.luma) return runColorRoutines(rom).luma.slice();
+    /* Dynamite Baseball 97's is the boot's, whichever set (js/dynabb.js). */
+    if (rom.game.colors.dynabb) return dynabbColors(rom, rom.game.texture.defaultSet).luma.slice();
     /* Last Bronx works its out too (0x1A50): band b of divisor d takes
      * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
     const bands = rom.game.colors.luma?.bands;
@@ -551,14 +554,16 @@ function runColorRoutines(rom, colorSet = 0) {
         const [from, to, at] = C.copy;
         ram.set(prog.subarray(from, to), at - 0x500000);
     }
+    /* Luma RAM: Model 2A's a byte every four bytes from 0x12800000, 2B's and
+     * 2C's (0x11400000, umask 0x00ff) one every two: `lumaRam`, `lumaStep`. */
+    const lumaRam = C.lumaRam ?? LUMA_RAM;
+    const lumaStep = C.lumaStep ?? 4;
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);
     const backup = new Uint8Array(BACKUP_BYTES);
     const data = rom.mainData;
     const b2 = C.board === '2b';
-    /* STCC keeps luma RAM at 0x11400000 too, but only its even bytes count. */
-    const [lumaRam, lumaShift] = C.lumaRam ?? [LUMA_RAM, 2];
     const where = (a) => {
         if (a < prog.length) return [prog, a];
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
@@ -578,8 +583,8 @@ function runColorRoutines(rom, colorSet = 0) {
     const write = (a, v, n) => {
         /* One byte lane of a 32-bit unit, stored here as the even byte of a
          * halfword the way a luma dump has it (buildLumaram). */
-        if (!b2 && a >= lumaRam && a < lumaRam + (LUMA_BYTES << (lumaShift - 1))) {
-            luma[((a - lumaRam) >> lumaShift) * 2] = v & 0xff;
+        if (!b2 && a >= lumaRam && a < lumaRam + (LUMA_BYTES / 2) * lumaStep) {
+            luma[Math.floor((a - lumaRam) / lumaStep) * 2] = v & 0xff;
             return;
         }
         const [b, o] = where(a);
@@ -591,8 +596,10 @@ function runColorRoutines(rom, colorSet = 0) {
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
+    /* An entry is a routine's address, or [address, g0, g1, ...]; an
+     * argument of 'set' stands for the colour set asked for. */
     for (const step of C.run) {
-        const [entry, ...args] = [].concat(step);
+        const [entry, ...args] = [step].flat();
         const g = args.map((v) => (v === 'set' ? set : v));
         if (!cpu.call(entry, g, { maxSteps: 4_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
     }
@@ -723,6 +730,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.i960) return runColorRoutines(rom, colorSet).cxlat.slice();
+    if (rom.game.colors.dynabb) return dynabbColors(rom, colorSet).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
