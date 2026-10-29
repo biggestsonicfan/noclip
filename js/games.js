@@ -6355,8 +6355,23 @@ const motoraid = {
         },
         solid: true,
     },
-    /* No course, rider or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /*
+     * The geometry's lighting: 0x305B0 sends the 32 material words at program
+     * 0x2F010 (geometrizer function 6 through 0x30510, each with its
+     * coefficient), and 0x3BED4 makes the light by turning (0, 0, 1) by
+     * 0x2000 about Y and -0x2000 about X (copro 0x15, 0x14, 0x1A), then into
+     * the camera's frame (copro 0x0C), and sends it as function 0x0A. Taken
+     * back through the camera at attract frame 3000 it is (-0.5, -0.7071,
+     * 0.5) in the world. Z negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.5, -0.7071, -0.5],
+        materials: { at: 0x2f010, count: 32 },
+    },
+    /* The courses (js/motoraid.js): each scene's ring of segments. No rider or
+     * motion data is read yet. */
+    stageTable: { motoraid: true, flat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /*
@@ -7743,8 +7758,22 @@ const desert = {
         ramp: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8, top: 0x100 },
         solid: true,
     },
-    /* No mission, tank or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /*
+     * The geometry's lighting as the boot sends it: 0x2FF4C hands 0x377F0 the
+     * 32 material words at data 0x289188C (geometrizer function 6, each with
+     * a coefficient of 1.0), and the world light is the three singles at
+     * data 0x285A1F8, which 0x13358 turns into the camera's frame (copro
+     * 0x1A) into 0x520A0C for 0xD1D0 to send. Z negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.45, -0.89, 0.45],
+        materials: { source: 'mainData', at: 0x89188c, count: 32, stride: 4 },
+    },
+    /* The missions (js/desert.js): the block grid and the objects, placed by
+     * the game's own object routines. */
+    stageTable: { desert: true, flat: true },
+    /* No tank or motion data is read yet. */
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,

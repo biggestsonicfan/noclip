@@ -7179,6 +7179,42 @@ palette, colorxlat and luma windows naming the routines.
   0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
   which 0x16E38 animates). The other scenes' tables are the same routines
   run with another n and were not held against MAME.
+- **Courses (the Stages tab).** A scene's course is the record `ld
+  0x2990840[n*4]` (data ROM), read by the course tasks 0x9B660, 0x9B690 and
+  0x9B6C0 (installed at 0x9B5D0 and 0x9B610): a count, then a pointer to
+  that many model numbers, one a segment of the course's ring. Scenes 0 to 6
+  have one (69, 38, 60, 54, 79, 19 and 108 segments, models 2312 on, 2963
+  on, 3106 on, 3545 on, 4092 on, 5327 on and 7332 on); scene 7 has none.
+  0x216A70 draws the course: copro 0x11 gives the camera's matrix, sent to
+  the geometrizer as function 0x0B (0x8000B0); then the segments round the
+  bike's (index mod the count, ahead and behind) go as bare models, function
+  1 (0x800010) and the model's 16-byte entry at 0x4F500, with no matrix of
+  their own. So a segment is already in the world, and js/motoraid.js reads
+  the list as it stands, each on its scene's texture set. 0x2990860[n] is a
+  second record of the same shape (the same for scenes 0 to 4, none for
+  5 to 7) that the course tasks pass as g1 and 0x216A70 does not use.
+- **Lighting.** 0x305B0 sends the 32 materials at program 0x2F010 (8-byte
+  {material word, coefficient} records, function 6 through 0x30510). The
+  light is made by 0x3BED4: (0, 0, 1) turned 0x2000 about Y and -0x2000
+  about X (copro 0x15, 0x14, 0x1A), then into the camera's frame (copro
+  0x0C), and sent as function 0x0A. Taken back through the camera matrix at
+  attract frame 3000 it is (-0.5, -0.7071, 0.5) in the world.
+- **Checked (courses).** A write tap on the geometrizer and copro windows at
+  attract frame 3000 (scene 2) showed 0x216A70's draws and the camera matrix
+  it sends; the explorer put at that camera's eye and heading shows the same
+  picture as MAME's snapshot: the wooden track, the bridge over it, the rock
+  walls and the water. The other six were looked at whole: each is one
+  joined, textured course.
+- **Missing.** The sky and the background (MAME's frame 3000 has an orange
+  sky and clouds), the bikes and riders, and anything the race places
+  besides the track. 0x2166A0 sorts draws into buckets at 0x5781D0 and
+  0x578290 (an object pass not read). The course names are pictures; no
+  text names them.
+- **Leads.** Animation: the bike and rider draw at 0x207940-0x207AD0 sends
+  15 parts a bike from 48-byte matrices; the scene number is 0x517AE0 and
+  0x21C930 sets a scene up. Cells: 0x19050/0x191BC animate the luma tables
+  and 0x16E38 the colours; the program has a debug text "CourseNo : %d"
+  (unread). Music: not looked at.
 
 ### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
 
@@ -8136,7 +8172,7 @@ and 0x5FA114). A play-through in MAME (coin, start) is needed to see a
 mission's scenery being drawn; on this machine it did not reach a snapshot
 in ten minutes, so the missions' scenery is still to be found.
 
-### Desert Tank (`js/games.js`)
+### Desert Tank (`js/games.js`, `js/desert.js`)
 
 Sega and Martin Marietta's 1994 game on the original Model 2 (MAME's
 `desert`, flagged not working; it boots and runs its attract, texture RAM,
@@ -8181,11 +8217,71 @@ the high-score tank, and 3590-3600, the training yard: the truck 996, the
 crates 107, the barrel 216, the hut 873, the ground 1053-1145 and 1718-1751)
 draw recognisably, textured and coloured as in MAME's pictures.
 
-**Leads.** Missions: the byte at 0x52106F, read by 0x5CAC, 0x6130, 0x68E0,
-0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C among
-others. The copro data ROM (epr-16980/16981), which MAME calls collision
-and height-map data, is not read. Lighting: the material table and light are
-not read yet. Cells: the tile palette is laid by 0x3C8F4 at boot and faded
+**Missions (the Stages tab).** A mission is the byte at 0x52106F; its
+set-up, 0x37860, takes from tables by it the map (0x521170 = `ld
+0x43204[n*4]`: 0x2200000, 0x2300000, 0x2380000), the block table (0x521174 =
+`ld 0x285A528[n*4]`, 256 model records: models 1324-1579 for mission 0,
+1580-1835 for 1, 1836-2091 for 2) and the object lists (0x521188 = `ld
+0x28573B4[n*4]`, none for mission 0). The texture bank is `ld 0x1678[n*4]`,
+so a mission's set is n. The blocks are Daytona's 16x16 grid of 128-unit
+blocks (get_m_block), each model already in world space: 0xEF50 to 0xF120
+draws them through 0xF300 under a bare push. js/desert.js reads them
+straight from the table.
+
+The objects come from running the program on js/i960.js (js/doa.js's
+machine). The spawner 0x16C60 walks the lists of 28-byte records (x, y, z
+singles; angles about X, Y, Z as halfwords at +0xC..+0x10; type at +0x14;
+two halfwords at +0x18, +0x1A) into 0x5C-byte tasks from *(0x520058) (place
+at +0x24, angles at +0x1E..+0x22, type at +0x30, first model at +0x34,
+routine at +0xC; the slot after the last gets 0x168A0). Each task's routine
+is then run with the task in 0x521038, and again when it hands over to
+another. Most are 0x17110, which works out the task's block into +0x3C and
+installs 0x17010: if 0x520100[block] is set, push, translate, turn Y then X
+then Z (copro 0x15, 0x14, 0x16), 0xF300 on +0x34, pop. 0xF300 sends the
+matrix out (copro 0x11) and then the 16-byte {oba, tpa, tha, count} entries
+of its list up to a zero; the explorer hooks it and keeps the copro's
+matrix for each entry. Two copro calls needed help: 0x43 (0x23060, the
+distance between two x, z points), which the collision grid 0x16A20 under
+the spawner uses, is added in js/desert.js; and 0x194A0's objects start
+from the camera matrix at 0x521200 (copro 0x07), which is set to the
+identity. Mission 1 gives 161 tasks and 197 pieces, mission 2 178 and 202;
+none fails and no copro command is left unread.
+
+The board draws only the blocks in view: 0xEDE0 (reached from 0xDCC8 with
+the camera task's block, from its +0x30 and +0x38, and the heading at
+0x5211A0) reads a list pointer at `ld (map + 0x60000)` + (block * 16 +
+heading >> 12) * 4, a count byte then block numbers, clears 0x520100 and
+0x520200, marks the listed blocks in 0x520100 and draws them. On mission 2,
+blocks 0x68, 0x69, 0x75, 0x78 and 0x79 take their list from 0x285AAC4,
+0x285AB04, 0x285AB44, 0x285AB84 and 0x285ABC4 (the jump table at 0xEE30);
+on mission 1 block 0xA7 from 0x285AE50; each 16 lists, one a heading
+sector. With bits 22-25 of 0x521028 set (0xF068 on) the camera's block and
+the four beside it are drawn too. The stage's 'camera' view does this round
+the explorer's camera; where a block has no list it shows the camera's
+block and those four.
+
+Lighting: the 32 material words at data 0x289188C go to the geometrizer
+(func 6, 0x377F0, from 0x2FF4C); the world light (-0.45, -0.89, -0.45) at
+data 0x285A1F8 is turned into camera space by 0x13358 (copro 0x1A) into
+0x520A0C and sent by 0xD1D0.
+
+**Checked (missions).** The board's camera matrix and heading were read
+from MAME at attract frames 1500, 4000 (the training yard, mission 1),
+5000 and 5300 (the canyon, mission 2) and the explorer was put at the same
+eye (fov 75): the huts, the water tower, crates, barrels, pylons and cables,
+fences, the flag and the rock walls stand where MAME draws them, textured.
+In the 'camera' view the canyon's far walls and peak that the whole grid
+shows are gone, as on the board; the lists read for those cameras (seven
+and nine blocks) name the blocks round the camera.
+
+**Missing.** The moving tanks and vehicles (not in the object lists), the
+sky, objects' damage models (the type's other five pointers) and the
+0x521028 neighbour rule.
+
+**Leads.** The mission byte 0x52106F is also read by 0x5CAC, 0x6130,
+0x68E0, 0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C.
+The copro data ROM (epr-16980/16981), which MAME calls collision and
+height-map data, is not read. Cells: the tile palette is laid by 0x3C8F4 at boot and faded
 by 0x3C790 and 0x3D59C. Music: the sound board is Daytona's Model 1 board
 (epr-16985, mpr-16986/16988/16989); the program writes its latch,
 0x1C00012, in 0x30534 to 0x30718.

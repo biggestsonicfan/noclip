@@ -1195,12 +1195,23 @@ face palette and colour tables the game builds for them.
 The texture picker's sets 0..7 are the eight scenes the game loads, each its
 bank on sheet 1 over the boot's on sheet 0; set 1, the attract's second scene,
 is the one a model opens on. The colour tables and palette of a set are made
-by running the game's own boot and scene routines. Nothing read yet says which
-scene a model belongs to, so a course's part needs its set picked by hand.
+by running the game's own boot and scene routines. A course's segment opens
+on its scene's set; other models need their set picked by hand.
 The sheets, luma and colour tables of set 1 match MAME's at attract frame 1800
 byte for byte, and the boot's colours match it at frame 600.
 
-There is no Stages tab, no riders and no motions yet. See
+The **Stages** tab has the seven courses, one a scene (0 to 6; scene 7 has
+none): a snow mountain, an arena with red rock, a canyon with a wooden
+track (the attract's race), an island in the sea, a red city, the
+how-to-play straight and a night city. Each is the scene's ring of track
+segments, as the game lists them, on the scene's texture set and colours,
+under the game's light. The course names are pictures in the game, so the
+tab describes them. From the board's own camera at attract frame 3000 (scene
+2), the explorer's picture matches MAME's: the same wooden track, bridge,
+rock walls and water. The sky, the bikes and anything else the race places
+are not there.
+
+There are no riders and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
 
 ## Virtua Cop 2
@@ -1598,15 +1609,32 @@ huts and the desert itself.
 The program is built on Daytona USA's: the same texture upload, luma copy
 and colour ramp, at other addresses. The texture picker's sets 0..2 are the
 three banks a mission's set-up can put on sheet 0, over the boot's bank on
-sheet 1; set 1 is the attract's, and a model opens on it. Nothing read yet
-says which mission a model belongs to, so a model with the wrong picture on
-sheet 0 may need another set.
+sheet 1; set 1 is the attract's, and a model opens on it. A model a mission
+draws opens on that mission's set; for the rest, one with the wrong picture
+on sheet 0 may need another set.
 
 Set 1's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frames 600 and 1200.
 
-There is no Stages tab, no cells and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs).
+The **Stages** tab has the three missions: the Desert Mission (mission 1,
+the training yard and the attract's first run), the Canyon Mission (mission
+2) and mission 0, a third map with ground but no objects that the attract
+never reaches. Each is the mission's 16x16 grid of ground blocks and the
+objects its lists place (huts, crates, barrels, pylons, fences, towers,
+parked vehicles), on the mission's texture set. The program's own object
+code places the objects, run in the explorer. The view picker's second
+choice, the blocks the board draws round the camera, shows only the blocks
+the game's own look-up lists for the camera's block and heading, and the
+objects on them.
+
+From the board's own camera at attract frames 1500 and 4000 (the desert)
+and 5000 and 5300 (the canyon), the explorer's picture matches MAME's:
+the same buildings, fences, pylons and cables, crates and rock walls. The
+tanks and other vehicles that move are not there: the object lists do not
+place them. The sky is not drawn either.
+
+There are no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs-jsdesertjs).
 
 ## Running it
 

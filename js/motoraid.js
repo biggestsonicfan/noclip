@@ -31,6 +31,7 @@
 
 import { I960 } from './i960.js';
 import { MAIN_DATA_BASE } from './romset.js';
+import { gameLighting } from './stages.js';
 
 const COLOR_RAM = 0x01800000;
 const COLOR_RAM_BYTES = 0x20000;
@@ -103,4 +104,69 @@ export function motoraidScene(rom, set) {
     rom.motoraidScenes ??= new Map();
     if (!rom.motoraidScenes.has(scene)) rom.motoraidScenes.set(scene, runScene(rom, scene));
     return rom.motoraidScenes.get(scene);
+}
+
+/*
+ * The courses (the Stages tab).
+ *
+ * A scene's course is the record `ld 0x2990840[n*4]` (read by 0x9B660,
+ * 0x9B690 and 0x9B6C0, the course tasks): a count, then a pointer to that
+ * many model numbers, one a segment of the course's ring. 0x216A70 draws
+ * them: it loads the camera's matrix (copro 0x11, out to the geometrizer as
+ * 0x8000B0) and then sends each segment round the bike's, ahead and behind,
+ * as a bare model (geometrizer 0x800010 and the model's 16-byte entry at
+ * 0x4F500), with no matrix of its own. So a segment is already in the world,
+ * and a course is its list. Scene 7 has none.
+ */
+const COURSES = 0x2990840;
+/* No course name was found as text in either ROM (the names are pictures), so
+ * each is named by scene and by what it is. Scene 2 is the attract's race and
+ * scene 5 its how-to-play straight. */
+const COURSE_NAMES = [
+    'snow mountain', 'arena and red rock', 'canyon and wooden track', 'island and sea',
+    'red city', 'how-to-play straight', 'night city',
+];
+
+export function readMotoraidStages(rom) {
+    const t = rom.game.modelTable;
+    const dv = rom.mainDataView;
+    const data = (a) => dv.getUint32(a - MAIN_DATA_BASE, true);
+    const lit = gameLighting(rom);
+    const stages = [];
+    for (let n = 0; n < rom.game.texture.sets; n++) {
+        const rec = data(COURSES + n * 4);
+        if (!rec) continue;
+        const count = data(rec), list = data(rec + 4);
+        const draws = [];
+        for (let i = 0; i < count; i++) {
+            const model = data(list + i * 4);
+            if (model < t.count) draws.push({ model, pos: [0, 0, 0], set: n, layer: 'ground', ops: [] });
+        }
+        stages.push({
+            slot: stages.length,
+            placements: true,
+            mixedSets: false,
+            num: n,
+            name: `Scene ${n}: ${COURSE_NAMES[n] ?? 'course'}`,
+            chapter: n,
+            draws,
+            objects: [],
+            sky: null,
+            zones: [],
+            views: [['all', 'Everything']],
+            view: 'all',
+            union: 'all',
+            texSets: [n],
+            texSet: [n, n],
+            tint: [1, 1, 1],
+            bright: 1,
+            light: lit.light,
+            materials: lit.materials,
+            colorCycles: [],
+            flags: 0,
+            floorSize: 0,
+            meta: [['scene', n], ['segments', count]],
+        });
+    }
+    return stages;
 }
