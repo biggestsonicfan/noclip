@@ -7886,9 +7886,58 @@ from 0xB7D84 at entry 0x800.
 luma and palette match MAME byte for byte. At frame 3000 all match but 576
 colorxlat entries in rows 25, 27 and 29 and palette entries 8, 9 and 28.
 
-**Leads.** Courses: records at 0x2A66C, 36 bytes (+0 bank, +0x14 model
-run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
-0x3370. The colour fade is a state machine at 0x976B0 (shadows at work RAM
+**Courses** (`readTopskatrStages`). A start point (0x2A5A0 + 20 * n: x, y,
+z, heading, course; nine of them, debug names at 0x2A760) names its course;
+0x39F60 keeps it at 0x5830A4 and takes the record at 0x2A660 + 36 * course:
++0 the drop a lap (-4000), +4 the last section (0x582730), +0xC the bank
+for sheet 1 (0x3D1C0 to 0x3F9E0), +0x10 the colour scene (1, 0, 1, the
+scene that goes with the bank), +0x20 the run of model entries
+(0x582734). The section draw at 0x3C040 to 0x3C1D8 sends entry run + 16 * k
+under the camera's matrix alone, so the sections stand at identity; past the
+last section it goes on 4000 lower (copro 0x2A). Course 0 is entries 1319 to
+1513 on bank 2, course 1 entries 1014 to 1189 on bank 1, course 2 entry 1900
+on bank 2. The sky dome is entry 0x932E0 (1013) on course 1 and 0x945F0
+(1318) on the others (0x3A034), sent at 0x35D1C with the camera's turn and
+no translation, so it is drawn at the eye. The names are the bookkeeping
+screen's: 0x16E90 adds a run to 0x1D00384 for course 0, which 0x15290 shows
+as HARD COURSE, to 0x1D002E8 for course 1 (EASY COURSE, 0x14FE0) and to
+0x1D00420 for course 2 (HIDE COURSE, 0x15410).
+
+Props: 0x198F0(course) takes three lists from 0x198D0 + 12 * course (none
+for course 2). The third, {handler, entry, limit} records, spawns one task a
+prop (0x1B170). Every handler sends the camera's matrix and the entry and
+dies when the section 0x5830AC passes the limit's low half (0x3E7: never).
+0x1B450, 0x1B590 and 0x1BF80 draw the entry; 0x1B2F0 is a 120-frame
+flipbook from entry + 16 * (limit >> 16); 0x1B1A0 a 60-frame one on
+0x5830A8; 0x1B6D0 shows the frame 0x57BFA4 names; 0x1BC90 swaps the entry
+and the next every 30 frames; 0x1BB50 draws whichever of six entries
+0x57BF80 holds (set up by 0x1B8B0, each its own until a skater sets it
+off, 0x1B900); 0x1BDE0 is 0x1BC90 4000 lower (copro 10, 0x2A 0, -4000, 0).
+The stage shows each prop's first frame. Entry 401 on course 0 (0x90CA0) is
+left out: MAME draws it from 0x1C348 under its own matrix. The first list
+(section events, {section, handler} to 999, run by 0x19960) and the second
+(group spawns, {count, handler, data}, run by 0x19A30: people walking a path
+at 0x90C70, markers 395 by 0x1AF60) are dynamic and not shown.
+
+Light and materials: 0x3B68C loads the light (0.398, -0.882, 0.252) from
+0x34890 when a course starts; 0x35880 turns it by the camera into the 0x0A
+command each frame. The material slots are the boot's 32 {word, float} at
+0x3F6D0 (0x20F30, to 0x57C1D0, sent as the 0x06 command).
+
+Checked against MAME's geometrizer list (a Lua tap on 0x800000 and
+0x804000): the attract runs course 0 (frames 300 to 6000, every 50th), and
+course 1 was run by copying start point 6 over the attract's five. Every
+section and prop the stage has is sent under the camera's own matrix, the
+sky under its turn with no translation, and the light comes back to 0x34890's
+vector through the camera on every frame. What MAME draws that the stage
+lacks is the HUD, the skaters, entry 401, the 395 markers, 1516 (0x1AF38)
+and flipbook frames. Course 2 stops MAME's attract with an unhandled i960
+opcode, so it was checked from the code only. MAME's own pictures are broken
+(the packed meshes), so the explorer's were checked by eye: the night town,
+the park and the arena come out textured and joined up.
+
+**Leads.** Attract title: 0x3018 to 0x336C draws 1319, 1320, a flipbook of
+1591 to 1710 (0x95700) and 1496 to 1513 4000 lower. The colour fade is a state machine at 0x976B0 (shadows at work RAM
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 

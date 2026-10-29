@@ -38,7 +38,7 @@ Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models — see [Top Skater](#top-skater).
+*Top Skater* has its models and its three courses — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
@@ -1479,13 +1479,24 @@ no padding point per polygon. MAME reads them the usual way, which is why its
 hands them to the geometry engine.
 
 The texture picker's two sets are the two scenes the game sets up, each a
-texture bank with its colour tables. A model opens on set 1, the one the
-attract shows. Nothing found yet says which set a model belongs to: the
-arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
-tables, luma and palette match MAME's RAM in the attract byte for byte, but
-for three colour rows and three palette entries the attract animates.
+texture bank with its colour tables. A model a course draws opens on that
+course's set; any other opens on set 1, the one the attract shows. Set 1's
+texture sheets, colour tables, luma and palette match MAME's RAM in the
+attract byte for byte, but for three colour rows and three palette entries
+the attract animates.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Stages** tab has the three courses, named as the game's bookkeeping
+screen names them: the Hard course (the night town the attract runs, 195
+sections), the Easy course (the daytime park, 176 sections) and the Hidden
+course (the indoor arena, one model). Each is the run of section models its
+course record names, the props its object list spawns, and the sky dome
+that goes round the camera, under the bank and colours the course loads
+(set 1 for the Hard and Hidden courses, set 0 for the Easy one) and the
+course's light. Animated props show their first frame. The people, markers
+and other pieces the course spawns as the run goes on, and the skaters, are
+not in it.
+
+There are no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Behind Enemy Lines

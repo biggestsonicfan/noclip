@@ -7481,7 +7481,11 @@ const topskatr = {
         topskatr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The courses (js/topskatr.js, readTopskatrStages): the records at
+     * 0x2A660 + 36 * n, the object lists at 0x198D0 + 12 * n, and the two sky
+     * domes 0x3A044 picks between. */
+    stageTable: { topskatr: { records: 0x2a660, count: 3, objects: 0x198d0, skies: [0x945f0, 0x932e0] } },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /*
