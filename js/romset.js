@@ -17,6 +17,9 @@ import { dynamcopPalette } from './dynamcop.js';
 import { motoraidScene } from './motoraid.js';
 import { i960Palette } from './colors.js';
 import { dynabbColors } from './dynabb.js';
+import { skisuprgPalette } from './skisuprg.js';
+import { waverunrPalette } from './waverunr.js';
+import { belModelName } from './bel.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -398,6 +401,8 @@ export function addModelTriples(rom, triples) {
 export function readModelName(rom, index) {
     const n = rom.game.modelNames;
     if (!n || index < 0) return null;
+    /* Behind Enemy Lines names objects, not table entries (js/bel.js). */
+    if (n.directory) return belModelName(rom, index);
     const dv = rom.mainDataView;
     let ptr;
     if (n.pairs !== undefined) {
@@ -448,8 +453,9 @@ export function facePalette(rom) {
         rom.facePalettes.set(set, out);
         return out;
     }
-    if (p?.layout === 'dynamcop') {
-        const out = dynamcopPalette(rom, set);
+    const own = { dynamcop: dynamcopPalette, skisuprg: skisuprgPalette, waverunr: waverunrPalette }[p?.layout];
+    if (own) {
+        const out = own(rom, set);
         rom.facePalettes.set(set, out);
         return out;
     }

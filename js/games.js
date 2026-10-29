@@ -7178,6 +7178,385 @@ const skytargt = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/* ---- Ski Super G ---------------------------------------------------------- */
+
+/*
+ * Sega's 1996 skiing game on Model 2C (MAME `skisuprg`). Its program is the
+ * same generation as Sega Rally's: the model table is Rally's 16-byte one,
+ * and the sheets are raw banks in the data ROM, uploaded as The House of the
+ * Dead uploads them. js/skisuprg.js has the scenes, the sheets, the face
+ * palette and colorxlat; README's Ski Super G section and TECHNICAL.md say
+ * how each was found.
+ */
+const skisuprg = {
+    id: 'skisuprg',
+    name: 'Sega Ski Super G',
+    identify: ['epr-19489.15', 'epr-19490.16', 'mpr-19494.11'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19489.15', 0x1df948a7, 'epr-19490.16', 0xe6fc24d3],
+                [0x100000, 'epr-19551.13', 0x3ee8f0d5, 'epr-19552.14', 0xbaa2e49a],
+            ],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19494.11', 0xf19cdb5c, 'mpr-19495.12', 0xd42e5ef2],
+                [0x800000, 'mpr-19492.9', 0x4805318f, 'mpr-19493.10', 0x39daa909],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19496.17', 0x0e9aef4e, 'mpr-19497.21', 0x5397efe9],
+                [0x800000, 'mpr-19498.18', 0x32e5ae60, 'mpr-19499.22', 0x2b9f5b48],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19501.27', 0x66d7b02e, 'mpr-19500.25', 0x905f5798]],
+        },
+    },
+    /*
+     * 5519 entries of 16 bytes in the program ROM at 0x195900: tpa, tha,
+     * 0x800000 | polygon word, polygon count, as Sega Rally's. The draws
+     * (0x47900 and 29 more sites) set function 0x101 at 0x800010 and send an
+     * entry whole, `lda 0x195900[g0*16]`, `ldq` and `stq` to 0x804000. The
+     * table ends at 0x1AB1F0, where 0xFFFFFFFF fill starts. Program 0x180000 has an older copy, the same for its first 4871
+     * entries, and data 0xE45460 another; no code reads either.
+     */
+    modelTable: { offset: 0x195900, count: 5519, stride: 16, source: 'maincpu' },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* The face palette by scene (skisuprgPalette): the boot's block at
+     * 0x47DA8 from 0, the scene's from 500. */
+    palette: { layout: 'skisuprg', base: 0x47da8, first: 500 },
+    paletteOffset: null,
+    /*
+     * A set is a scene (skisuprgScenes): the menus' two, the attract's
+     * in-between screens (0x43454's bank 0x2400000, the default), then the
+     * four courses' records.
+     */
+    skisuprg: {
+        bootBank: 0x02000000,
+        scenes: [
+            { name: 'menus', bank: 0x02300000, palette: 0x48108, colors: 0x9ee60 },
+            { name: 'menus, second colours', bank: 0x02300000, palette: 0x48108, colors: 0x9ef20 },
+            { name: 'attract', bank: 0x02400000, palette: 0x47eea, colors: 0x9ede0 },
+        ],
+        courses: { at: 0xa4700, stride: 40, count: 4 },
+    },
+    texture: {
+        raw: { layout: 'skisuprg' },
+        sets: 7,
+        residentSet: null,
+        defaultSet: 2,
+    },
+    /* Luma: 0x44580 copies the 0x7F80 bytes at 0x3970, one a halfword.
+     * Colorxlat: the ramps (0x43DF0) and the scene's table (0x44260), run. */
+    colors: {
+        luma: { source: 'maincpu', data: 0x3970, bytes: 0x7f80 },
+        skisuprg: { ramps: 0x43df0, table: 0x44260 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/*
+ * Sega's 1996 jet-ski game on Model 2C (MAME `waverunr`, Revision A). The
+ * program is Ski Super G's generation and Sega Water Ski's, which runs the
+ * same code; js/waverunr.js has the scenes, the sheets, the face palette and
+ * colorxlat for both. README's Wave Runner section and TECHNICAL.md say how
+ * each was found.
+ */
+const waverunr = {
+    id: 'waverunr',
+    name: 'Wave Runner',
+    identify: ['epr-19282a.15', 'epr-19283a.16', 'mpr-19291.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19282a.15', 0x5df58604, 'epr-19283a.16', 0xbca188e1]],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19291.11', 0x54431d67, 'mpr-19292.12', 0x9152d979],
+                [0x0800000, 'mpr-19293.9', 0xb168bea9, 'mpr-19294.10', 0xc731e659],
+                ...Array.from({ length: 16 }, (_, i) =>
+                    [0x1000000 + i * 0x100000, 'epr-19278.7', 0x29ed421d, 'epr-19279.8', 0x6ae9f899]),
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19287.17', 0x203b9e45, 'mpr-19288.21', 0x4a488e4d],
+                [0x0800000, 'mpr-19289.18', 0x35361cb3, 'mpr-19290.22', 0x67300826],
+                ...Array.from({ length: 15 }, (_, i) =>
+                    [0x1000000 + i * 0x100000, 'epr-19304.19', 0x1a7d9521, 'epr-19305.23', 0x00412412]),
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19286.27', 0x3ccc33cb, 'mpr-19285.25', 0xa070fbd0],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x800000 + i * 0x100000, 'epr-19303.28', 0xfcffc8a0, 'epr-19302.26', 0xbd00933a]),
+            ],
+        },
+    },
+    /*
+     * 3457 entries of 16 bytes in the program ROM at 0x6A7C0: tpa, tha,
+     * 0x800000 | polygon word, polygon count, as Ski Super G's. The draws (53
+     * sites) send an entry whole, `lda 0x6a7c0[gX*16]`, `ldq` and `stq` to
+     * 0x804000 after `st 0x101, 0x800010`.
+     */
+    modelTable: { offset: 0x6a7c0, count: 3457, stride: 16, source: 'maincpu' },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    palette: { layout: 'waverunr' },
+    paletteOffset: null,
+    /* A set is a scene (waverunrScenes): the four courses by their tables,
+     * then the two scenes that name theirs in the code. */
+    waverunr: {
+        bootBank: 0x02000000,
+        fill: 0xbbbb,
+        ramps: 0x34ec0,
+        palette: { top: 0x10080, blocks: [[0x2858b60, 0], [0x84350, 300]], first: 500 },
+        courses: {
+            count: 4, palettes: 0x973e0, banks: 0x973f0,
+            colorTable: 0x35040, colorIndex: [0, 1, 2, 3], patches: 0x2848b60,
+        },
+        scenes: [
+            { name: 'scene 0x4AF60', bank: 0x02200000, palette: 0x2858fda, colors: 0xa2bd7 },
+            { name: 'scene 0x2CBE0', bank: 0x02500000, palette: 0x2859556, colors: 0xa2bd7 },
+        ],
+    },
+    texture: { raw: { layout: 'waverunr' }, sets: 6, residentSet: null, defaultSet: 0 },
+    colors: {
+        /* 0x35220: luma RAM cleared, then 0x4000 bytes of the data ROM at
+         * 0x85C408 to the entries from 0x3200. */
+        luma: { data: 0x85c408, bytes: 0x4000, at: 0x3200 },
+        waverunr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/*
+ * Sega Water Ski (MAME `segawski`, Revision A), Model 2C, 1997: Wave Runner's
+ * program carried on, its routines about 0x1A960 further in and its tables
+ * in the data ROM, read through the XTRA window at 0x6000000. js/waverunr.js
+ * serves both.
+ */
+const segawski = {
+    id: 'segawski',
+    name: 'Sega Water Ski',
+    identify: ['epr-19963a.15', 'epr-19964a.16', 'mpr-19980.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19963a.15', 0x89c9cb0d, 'epr-19964a.16', 0xc382cefe]],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19980.11', 0x709804f2, 'mpr-19981.12', 0xa1e8ec09],
+                [0x0800000, 'mpr-19982.9', 0x41c398bb, 'mpr-19983.10', 0xe210dea2],
+                [0x1000000, 'mpr-19984.7', 0x14b967d1, 'mpr-19985.8', 0x57827677],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x1800000 + i * 0x100000, 'epr-19961.5', 0xcc34ecaf, 'epr-19962.6', 0xe8a30e5e]),
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19972.17', 0x493c0f8f, 'mpr-19973.21', 0x01b6f8e1],
+                [0x0800000, 'mpr-19974.18', 0x2bd947d3, 'mpr-19975.22', 0x07e6b699],
+                [0x1000000, 'mpr-19976.19', 0xf9496566, 'mpr-19977.23', 0xb3dbf54b],
+                [0x1800000, 'mpr-19978.20', 0xc80f4ed7, 'mpr-19979.24', 0x1c0db4d2],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19969.27', 0xc0c33d39, 'mpr-19968.25', 0xb8d2f04f],
+                [0x800000, 'mpr-19971.28', 0xc8708096, 'mpr-19970.26', 0xc59d8d36],
+            ],
+        },
+    },
+    /*
+     * 13331 entries of 16 bytes in the data ROM at 0x1291D60, Wave Runner's
+     * layout; the draws name it through the XTRA window, `lda 0x6291d60`.
+     */
+    modelTable: { offset: 0x1291d60, count: 13331, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    palette: { layout: 'waverunr' },
+    paletteOffset: null,
+    /* A set is a course (0x909B0, 0x90A00, 0x909F0 by work RAM 0x56E094):
+     * palette 0x90970, bank 0x90990, colour table 0x4F990. The tables run to
+     * seven, but only the first four differ; the boot and 0x7B690 use the
+     * first's and the fourth's. */
+    waverunr: {
+        bootBank: 0x02000000,
+        fill: 0xbbbb,
+        ramps: 0x4f810,
+        /* 0x90A90 takes three rows of a course's colour table from here, by
+         * work RAM 0x56E090 (a player choice? 0 in the attract). */
+        rowSwap: { table: 0xa1ed0, select: 0 },
+        palette: { blocks: [[0x62c5e94, 0]], first: 500 },
+        courses: {
+            count: 4, palettes: 0x90970, banks: 0x90990,
+            colorTable: 0x4f990, colorIndex: [0, 1, 2, 3], patches: 0x622c390,
+        },
+    },
+    texture: { raw: { layout: 'waverunr' }, sets: 4, residentSet: null, defaultSet: 0 },
+    colors: {
+        /* 0x4FB80: luma RAM cleared, then 0x4000 bytes of the data ROM at
+         * 0x12C984C (`lda 0x62c984c`) to the entries from 0x3200. */
+        luma: { data: 0x12c984c, bytes: 0x4000, at: 0x3200 },
+        waverunr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/*
+ * Top Skater (MAME `topskatr`, Revision A, Export), Model 2C, 1997. Its own
+ * engine, not Wave Runner's: js/topskatr.js. See README and TECHNICAL.md.
+ */
+const topskatr = {
+    id: 'topskatr',
+    name: 'Top Skater',
+    identify: ['epr-19755a.15', 'epr-19756a.16', 'mpr-19735.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19755a.15', 0xb80633b9, 'epr-19756a.16', 0x472046a2]],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19735.11', 0x8e509266, 'mpr-19736.12', 0x094e0a0d],
+                [0x800000, 'mpr-19737.9', 0x281a7dde, 'mpr-19738.10', 0xf688327e],
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-19741.17', 0x111a6e29, 'mpr-19742.21', 0x28510aff]],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19740.27', 0xb20f508b, 'mpr-19739.25', 0x8120cfd8]],
+        },
+    },
+    /*
+     * 1901 entries of 16 bytes in the program ROM at 0x8F390: tpa, tha,
+     * 0x800000 | polygon word, polygon count, Wave Runner's layout. The
+     * draws name parts of it (`lda 0x90c70[g7*16]` at 0x1A564, 0x90CD0 at
+     * 0x30F14, 0x932E0 and 0x945F0 at 0x1628/0x3A044), and a course record
+     * (0x2A66C + 36 * n, +0x14) names its own run of it (0x94600, 0x932F0,
+     * 0x96A50).
+     */
+    modelTable: { offset: 0x8f390, count: 1901, stride: 16, source: 'maincpu', packed: true },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    paletteOffset: null,
+    /* A set is a scene: its bank on sheet 1 and its colour key points
+     * (js/topskatr.js). Set 1 is the attract's. */
+    topskatr: {
+        banks: 0x02000000,
+        bootBank: 0,
+        sets: [{ bank: 1, colors: 0 }, { bank: 2, colors: 1 }],
+        ramps: [[0x20da0, []], [0x213d0, [7, 0xffffffff]]],
+        scene: 0x9c1b0,
+        copy: 0x9d3b0,
+    },
+    /* {count, colours} at 0x98D5C onto the face palette from entry 0 (0x20AD0). */
+    paletteProgram: 0x98d5c,
+    texture: { raw: { layout: 'topskatr' }, sets: 2, residentSet: null, defaultSet: 1 },
+    colors: {
+        /* The boot's 0x47F30: two bands of (k + 1) >> 1, then 0x2080 bytes
+         * of the program ROM at 0xB7D84 from entry 0x800 (0x11401000). */
+        luma: { source: 'maincpu', ramps: 2, data: 0xb7d84, bytes: 0x2080, at: 0x800 },
+        topskatr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/*
+ * Behind Enemy Lines (MAME `bel`), Model 2C, Sega / EPL Productions, 1997.
+ * Its own engine: js/bel.js. See README and TECHNICAL.md.
+ */
+const bel = {
+    id: 'bel',
+    name: 'Behind Enemy Lines',
+    identify: ['epr-20225.15', 'epr-20226.16', 'mpr-20233.11'],
+    regions: {
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x000000, 'epr-20225.15', 0x4abc6b59, 'epr-20226.16', 0x43e05b3a],
+                [0x040000, 'epr-20223.13', 0x61b1be98, 'epr-20224.14', 0xeb2d7dbf],
+            ],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-20233.11', 0x3e079a3b, 'mpr-20234.12', 0x58bde826],
+                [0x400000, 'mpr-20231.9', 0xb3393e93, 'mpr-20232.10', 0xda4a2e11],
+                [0x800000, 'mpr-20229.7', 0xcdec7bf4, 'mpr-20230.8', 0xa166fa87],
+                [0xc00000, 'mpr-20227.5', 0x1277686e, 'mpr-20228.6', 0x49cb5568],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-20244.17', 0x9d2a8660, 'mpr-20240.21', 0x51615908],
+                [0x400000, 'mpr-20243.18', 0x48671f7c, 'mpr-20239.22', 0x6cd8d8a5],
+                [0x800000, 'mpr-20242.19', 0xe7f86ac7, 'mpr-20238.23', 0x0a480c7c],
+                [0xc00000, 'mpr-20241.20', 0x51974b98, 'mpr-20237.24', 0x89b5d8b6],
+            ],
+        },
+        textures: {
+            size: 0xc00000,
+            parts: [
+                [0x000000, 'mpr-20247.27', 0x00b0417d, 'mpr-20245.25', 0x36490a08],
+                [0x800000, 'mpr-20248.28', 0x0ace6bef, 'mpr-20246.26', 0x250d6ca1],
+            ],
+        },
+    },
+    /*
+     * The data ROM's table at 0x8B7C78, 20 bytes a record: {object, tpa, tha,
+     * count, 0x28Cxxxx}. The game sends the first three to the geometry
+     * engine as they stand (0x120A4..0x120B0, with the count + 1). The object
+     * directory at 0x973748 (js/bel.js) points at it, 0x28B7C78 its first.
+     * After 3183 records the table goes on with 2D pieces in polygon RAM.
+     */
+    modelTable: { offset: 0x8b7c78, count: 3183, stride: 20, fields: { mesh: 0, uv: 4, mat: 8 } },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    modelNames: { directory: true },
+    /* 0x71D60 copies the 906 colours at data 0x8CDB78 (to 0x8CE28C) from entry 0. */
+    paletteOffset: 0x8cdb78,
+    paletteCount: 906,
+    /* Sheet banks by scene (js/bel.js): 3 scenes of 3 sheet-0 entries. */
+    bel: {
+        sheet0: 0x020647a0,
+        sheet1: 0x02064780,
+        scenes: 3,
+        entries: 3,
+        twoScene: 2,
+        objects: { at: 0x973748, count: 538 },
+    },
+    texture: { raw: { layout: 'bel' }, sets: 9, residentSet: null, defaultSet: 6 },
+    colors: {
+        luma: { bel: true, band: 0x64320, first: 0x64420, firstBands: 3 },
+        bel: { ramps: 0x62a70, table: 0x62dd0, scene: 2 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
@@ -7187,7 +7566,8 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
     pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc, sgt24h, overrev, overrevb, dynabb97,
-    gunblade, zerogun, zerogunj, zeroguna, skytargt];
+    gunblade, zerogun, zerogunj, zeroguna, skytargt,
+    skisuprg, waverunr, segawski, topskatr, bel];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

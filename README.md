@@ -36,6 +36,10 @@ Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
+Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
+*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Top Skater* has its models — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1409,6 +1413,103 @@ the title and in the first stage.
 
 There is no Stages tab, no cells, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
+
+## Ski Super G
+
+`skisuprg.zip` carries Sega Ski Super G (Model 2C). The **Models** tab has
+all 5519 entries of the program's model table, every one with a mesh, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game sets up, each a texture
+bank, a palette block and a colour table: 0 and 1 the menus (two colour
+tables), 2 the attract's in-between screens, which a model opens on, and 3
+to 6 the four courses. Nothing found yet says which scene a model belongs
+to, so a model needs its set picked by hand: the course miniatures of the
+course select look right under set 0, the snow, trees and banners under set
+2. Set 2's texture sheets, colour tables, luma and palette match MAME's RAM
+in the attract byte for byte; the courses' sets are read from their records
+and were not reached in MAME.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
+
+## Wave Runner
+
+`waverunr.zip` carries Wave Runner (Model 2C, Revision A). The **Models** tab
+has all 3457 entries of the program's model table, with the textures,
+palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game sets up: 0 to 3 the four
+courses, then two more scenes that name their own bank, palette and colour
+table in the code (0x4AF60 and 0x2CBE0, not identified yet). A model opens on
+set 0, the first course, which the attract shows. Nothing found yet says
+which course a model belongs to: the beach of model 2826, for one, wants set
+1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
+in the attract byte for byte.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Sega Water Ski
+
+`segawski.zip` carries Sega Water Ski (Model 2C, Revision A), which runs Wave
+Runner's program carried on. The **Models** tab has all 13331 entries of the
+data ROM's model table (one is empty), with the textures, palette and colour
+tables the game loads for them.
+
+The texture picker's sets are the four courses; a model opens on set 0, the
+first course, which the attract shows. Nothing found yet says which course a
+model belongs to. Set 0's texture sheets, colour tables, luma and palette
+match MAME's RAM in the attract byte for byte. Three colour rows of every
+course come from a table picked by a value in work RAM (0 in the attract,
+which is the one used here; it may be the player's choice of skier).
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Top Skater
+
+`topskatr.zip` carries Top Skater (Model 2C, Revision A, Export). The
+**Models** tab has the program's model table, 1901 entries (1897 have a
+mesh), with the textures, palette and colour tables the game loads for them.
+
+Its meshes are packed tighter than the other Model 2 games': no normal and
+no padding point per polygon. MAME reads them the usual way, which is why its
+`topskatr` draws broken polygons; the viewer reads them the way the program
+hands them to the geometry engine.
+
+The texture picker's two sets are the two scenes the game sets up, each a
+texture bank with its colour tables. A model opens on set 1, the one the
+attract shows. Nothing found yet says which set a model belongs to: the
+arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
+tables, luma and palette match MAME's RAM in the attract byte for byte, but
+for three colour rows and three palette entries the attract animates.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
+
+## Behind Enemy Lines
+
+`bel.zip` carries Behind Enemy Lines (Sega / EPL Productions, Model 2C; MAME
+calls it not working, but its attract runs). The **Models** tab has the
+data ROM's model table, 3183 entries, named from the game's own object
+directory (`o_c130`, `o_intro_hummer`, `o_fuelc_1_100`; a piece after an
+object's first is shown as `name +k`), with the textures, palette and colour
+tables the game loads.
+
+The texture picker's nine sets are the game's three scenes with the three
+banks each one can put on sheet 0. A model opens on set 6 (scene 2, the
+one the boot and the attract use, with its first bank). Nothing found yet
+says which set a model belongs to, so a model that comes out with the wrong
+picture may need another set. In the attract the game streams pieces of
+another bank into part of the sheets as it goes; the viewer shows the scene's
+sheets as they are first set up.
+
+Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
+byte at attract frame 1500.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Running it
 

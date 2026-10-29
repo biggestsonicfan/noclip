@@ -34,6 +34,10 @@ import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
 import { buildJalecoTexram } from './jaleco.js';
 import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
+import { buildSkisuprgTexram } from './skisuprg.js';
+import { buildWaverunrTexram } from './waverunr.js';
+import { buildTopskatrTexram } from './topskatr.js';
+import { buildBelTexram } from './bel.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 import { I960 } from './i960.js';
 
@@ -691,7 +695,7 @@ function copyRect(src, srcBase, dst, dstBase, x0, y0, x1, y1) {
     }
 }
 
-function uploadRawBank(md, base, tex, toSheet1) {
+export function uploadRawBank(md, base, tex, toSheet1) {
     const near = toSheet1 ? SHEET1 : SHEET0;
     const far = toSheet1 ? SHEET0 : SHEET1;
     copyRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
@@ -2010,6 +2014,10 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'jaleco') return buildJalecoTexram(rom, texSets);
         if (layout === 'dynabb') return buildDynabbTexram(rom, texSets);
+        if (layout === 'skisuprg') return buildSkisuprgTexram(rom, texSets);
+        if (layout === 'waverunr') return buildWaverunrTexram(rom, texSets);
+        if (layout === 'topskatr') return buildTopskatrTexram(rom, texSets);
+        if (layout === 'bel') return buildBelTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'gunblade') return buildGunbladeTexram(rom, texSets);
         if (layout === 'skytargt') return buildSkytargtTexram(rom, texSets);
