@@ -6199,6 +6199,84 @@ const waverunr = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Sega Water Ski (MAME `segawski`, Revision A), Model 2C, 1997: Wave Runner's
+ * program carried on, its routines about 0x1A960 further in and its tables
+ * in the data ROM, read through the XTRA window at 0x6000000. js/waverunr.js
+ * serves both.
+ */
+const segawski = {
+    id: 'segawski',
+    name: 'Sega Water Ski',
+    identify: ['epr-19963a.15', 'epr-19964a.16', 'mpr-19980.11'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19963a.15', 0x89c9cb0d, 'epr-19964a.16', 0xc382cefe]],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19980.11', 0x709804f2, 'mpr-19981.12', 0xa1e8ec09],
+                [0x0800000, 'mpr-19982.9', 0x41c398bb, 'mpr-19983.10', 0xe210dea2],
+                [0x1000000, 'mpr-19984.7', 0x14b967d1, 'mpr-19985.8', 0x57827677],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x1800000 + i * 0x100000, 'epr-19961.5', 0xcc34ecaf, 'epr-19962.6', 0xe8a30e5e]),
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19972.17', 0x493c0f8f, 'mpr-19973.21', 0x01b6f8e1],
+                [0x0800000, 'mpr-19974.18', 0x2bd947d3, 'mpr-19975.22', 0x07e6b699],
+                [0x1000000, 'mpr-19976.19', 0xf9496566, 'mpr-19977.23', 0xb3dbf54b],
+                [0x1800000, 'mpr-19978.20', 0xc80f4ed7, 'mpr-19979.24', 0x1c0db4d2],
+            ],
+        },
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19969.27', 0xc0c33d39, 'mpr-19968.25', 0xb8d2f04f],
+                [0x800000, 'mpr-19971.28', 0xc8708096, 'mpr-19970.26', 0xc59d8d36],
+            ],
+        },
+    },
+    /*
+     * 13331 entries of 16 bytes in the data ROM at 0x1291D60, Wave Runner's
+     * layout; the draws name it through the XTRA window, `lda 0x6291d60`.
+     */
+    modelTable: { offset: 0x1291d60, count: 13331, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    palette: { layout: 'waverunr' },
+    paletteOffset: null,
+    /* A set is a course (0x909B0, 0x90A00, 0x909F0 by work RAM 0x56E094):
+     * palette 0x90970, bank 0x90990, colour table 0x4F990. The tables run to
+     * seven, but only the first four differ; the boot and 0x7B690 use the
+     * first's and the fourth's. */
+    waverunr: {
+        bootBank: 0x02000000,
+        fill: 0xbbbb,
+        ramps: 0x4f810,
+        /* 0x90A90 takes three rows of a course's colour table from here, by
+         * work RAM 0x56E090 (a player choice? 0 in the attract). */
+        rowSwap: { table: 0xa1ed0, select: 0 },
+        palette: { blocks: [[0x62c5e94, 0]], first: 500 },
+        courses: {
+            count: 4, palettes: 0x90970, banks: 0x90990,
+            colorTable: 0x4f990, colorIndex: [0, 1, 2, 3], patches: 0x622c390,
+        },
+    },
+    texture: { raw: { layout: 'waverunr' }, sets: 4, residentSet: null, defaultSet: 0 },
+    colors: {
+        /* 0x4FB80: luma RAM cleared, then 0x4000 bytes of the data ROM at
+         * 0x12C984C (`lda 0x62c984c`) to the entries from 0x3200. */
+        luma: { data: 0x12c984c, bytes: 0x4000, at: 0x3200 },
+        waverunr: true,
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6206,7 +6284,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, skisuprg, waverunr];
+    pltkids, pltkidsa, skisuprg, waverunr, segawski];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

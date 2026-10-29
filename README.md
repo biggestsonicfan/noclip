@@ -26,7 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
-*Wave Runner* has its models — see [Wave Runner](#wave-runner).
+*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 
 Three views, and a fourth for the 2D art:
 
@@ -1205,6 +1205,23 @@ set 0, the first course, which the attract shows. Nothing found yet says
 which course a model belongs to: the beach of model 2826, for one, wants set
 1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
 in the attract byte for byte.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Sega Water Ski
+
+`segawski.zip` carries Sega Water Ski (Model 2C, Revision A), which runs Wave
+Runner's program carried on. The **Models** tab has all 13331 entries of the
+data ROM's model table (one is empty), with the textures, palette and colour
+tables the game loads for them.
+
+The texture picker's sets are the four courses; a model opens on set 0, the
+first course, which the attract shows. Nothing found yet says which course a
+model belongs to. Set 0's texture sheets, colour tables, luma and palette
+match MAME's RAM in the attract byte for byte. Three colour rows of every
+course come from a table picked by a value in work RAM (0 in the attract,
+which is the one used here; it may be the player's choice of skier).
 
 There is no Stages tab, no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).

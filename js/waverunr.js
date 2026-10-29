@@ -20,10 +20,11 @@ import { SHEET_BYTES } from './atlas.js';
 import { runRoutines, CXLAT_AT, CXLAT_BYTES } from './skisuprg.js';
 
 /* A data address as the program names it: the program ROM below its end, the
- * data ROM at 0x2000000 or through the XTRA window at 0x6000000. */
+ * data ROM at 0x2000000, or its second half through the XTRA window, 0x6000000
+ * being data 0x1000000 (Water Ski's model table, 0x6291D60, is 0x1291D60). */
 function bytesAt(rom, a) {
     if (a < rom.maincpu.length) return [rom.maincpu, a];
-    const o = a >= 0x6000000 ? a - 0x6000000 : a - MAIN_DATA_BASE;
+    const o = a >= 0x6000000 ? a - 0x6000000 + 0x1000000 : a - MAIN_DATA_BASE;
     return [rom.mainData, o];
 }
 
@@ -105,12 +106,13 @@ export function buildWaverunrTexram(rom, texSets) {
  * The face palette: 0x351C0 writes the block at 0x10080 down from entry 1023
  * (once, at the boot), then every scene writes the {count, colours} blocks at
  * 0x2858B60 from entry 0 and 0x84350 from 300 and its own from 500
- * (0x36360, which stops at entry 1023).
+ * (0x36360, which stops at entry 1023). Water Ski has the top block's routine
+ * (0x4FB20) but never calls it, and no block at 300.
  */
 export function waverunrPalette(rom, set) {
     const W = rom.game.waverunr;
     const out = new Int32Array(1024).fill(-1);
-    {
+    if (W.palette.top) {
         const [b, o] = bytesAt(rom, W.palette.top);
         const n = b[o] | (b[o + 1] << 8);
         for (let i = 0; i < n && i < 1024; i++) out[1023 - i] = b[o + 2 + i * 2] | (b[o + 3 + i * 2] << 8);
@@ -132,6 +134,10 @@ export function waverunrPalette(rom, set) {
  * table as 0x35060 lays it: a row count byte, then per row 64 {r, g, b} bytes,
  * the rows going to 1, 3, 5... of the three channels (0x1810200 on, 0x400
  * apart). The grey switch at 0x513334 is left off, as in MAME's attract.
+ * Water Ski's writer (0x90A90, a row a frame) takes the rows that come with
+ * four, three and two rows left from elsewhere: pointer table 0xA1ED0, three
+ * to a selector in work RAM 0x56E090 (`rowSwap`; 0 in the attract, which is
+ * the one taken here).
  */
 export function buildWaverunrColorxlat(rom, colorSet) {
     const W = rom.game.waverunr;
@@ -143,12 +149,17 @@ export function buildWaverunrColorxlat(rom, colorSet) {
     const out = rom.waverunrRamps.slice();
     const [b, o] = bytesAt(rom, table);
     const rows = b[o];
-    let p = o + 1;
+    const swap = W.rowSwap;
     for (let r = 0; r < rows && r < 16; r++) {
+        let [src, p] = [b, o + 1 + r * 192];
+        const left = rows - r;
+        if (swap && left >= 2 && left <= 4) {
+            [src, p] = bytesAt(rom, rom.mainCpuView.getUint32(swap.table + (swap.select * 3 + 4 - left) * 4, true));
+        }
         for (let i = 0; i < 64; i++, p += 3) {
             for (let ch = 0; ch < 3; ch++) {
                 const at = ch * 0x4000 + (1 + 2 * r) * 0x200 + i * 2;
-                out[at] = b[p + ch];
+                out[at] = src[p + ch];
                 out[at + 1] = 0;
             }
         }

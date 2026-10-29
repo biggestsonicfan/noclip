@@ -7230,6 +7230,24 @@ own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
 calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
 identified.
 
+**Sega Water Ski.** MAME's `segawski` (Revision A) runs the same program,
+its routines about 0x1A960 further on and its tables in the data ROM's
+second half, which the program reads through the XTRA window: 0x6000000 is
+data 0x1000000. The model table is data 0x1291D60 (`lda 0x6291d60[g0*16]`,
+105 sites), 13331 entries, one of them empty (13330 decode: 924,050 faces,
+863,975 textured). The boot is 0x4EE2C: ramps 0x4F810, colour table 0x4F9B0,
+luma 0x4FB80 (data 0x12C984C), sheets 0x4F6B0 (0x2000000 and 0x2100000
+through 0x4F540). A course (work RAM 0x56E094) takes its palette block from
+0x90970, its bank from 0x90990 and its colour table from 0x4F990 (0x909B0,
+0x90A00, 0x909F0), then the 0xBBBB fill (0x51F50) and eight blocks from data
+0x122C390 (0x5B860). The tables run to seven entries, but only the first
+four differ; 0x7B690 repeats the fourth course's. The palette has one fixed
+block, 0x62C5E94 from entry 0; the top block's routine (0x4FB20) is never
+called. The colour-table writer 0x90A90 takes the rows with four, three and
+two rows left from the pointer table 0xA1ED0, three to each value of work
+RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
+2500: sheets, colorxlat, luma and palette the same.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
