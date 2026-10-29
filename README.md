@@ -27,6 +27,9 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
+AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
+Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
+*Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
 
 Three views, and a fourth for the 2D art:
 
@@ -1223,6 +1226,60 @@ luma and the colour tables match MAME's at boot byte for byte.
 The kits, the per-team textures and the stadium are set up in play, from
 the team tables, so the models show the boot's look. There is no Stages
 tab, no motions, no cells and no music yet.
+
+## Manx TT Superbike
+
+`manxtt.zip` is MAME's Revision D, the deluxe cabinet's program. The game is
+Sega Rally's engine, and opens the same way. The **Models** tab has all 3532
+entries of the model table, every one with a mesh: the bikes, the riders, the
+course segments of Laxey Coast and the TT course, the map of the island and
+the leaderboards, with the textures, palette, luma and colour tables the game
+makes. The boot's texture RAM, its palette, its luma and its colour tables
+match MAME's byte for byte; the colour tables come from running the game's
+own routine.
+
+The texture picker's sets 0..2 are the three banks the game deals over its
+boot bank; set 0 is the one the boot leaves in. Which course uses which bank
+is not known yet, so a course model may need its set picked by hand.
+
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
+
+## INDY 500
+
+`indy500.zip` is MAME's `indy500to`, the Twin cabinet's Revision A; the Deluxe
+(`indy500d.zip`) opens with that zip beside it. The **Models** tab has all 3571
+entries of the model table, 3570 with a mesh: the cars, the race queen, the
+three courses in segments, the leaderboards and the scenery, with the textures,
+palette, luma and colour tables the game makes. All of them match MAME's byte
+for byte, in the attract mode on course 0 and in a race on course 1; the colour
+tables come from running the game's own routines.
+
+The texture picker's sets 0..2 are the three courses, each its own pair of
+texture banks and its own colour table; set 3 is the pair the game loads for
+its other screens. The cars are on every course's banks; a course model needs
+its course picked, and the race queen is on set 1's.
+
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
+
+## Sega Touring Car Championship
+
+`stcc.zip` is MAME's `stcca`, Revision A. The **Models** tab has all 2811
+entries of the model table: the cars, the courses in segments, the scenery and
+the title's lettering, with the textures, palette, luma and colour tables the
+game makes. The colour tables come from running the game's own routines, and
+they, the palette and luma match MAME's byte for byte. Texture RAM matches
+too, both sheets, in the attract mode's first race; on the next two courses
+three bytes differ, which the first course's patches left behind on the board.
+
+The texture picker's sets 0..3 are the course records' texture pairs, and
+set 4 is the title's. The cars are on every set; a course model needs its
+course's set picked.
+
+The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
 ## Running it
 

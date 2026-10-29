@@ -6357,14 +6357,331 @@ const motoraid = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Manx TT Superbike (Revision D, the DX cabinet's program; MAME manxtt), a
+ * Model 2A AM3 game on Sega Rally's engine: the same 16-byte model table, the
+ * same texture deal and colour code the program runs itself, and the same
+ * "CGM 1.0" pictures. What moves is where each table is.
+ */
+const manxtt = {
+    id: 'manxtt',
+    name: 'Manx TT Superbike (Revision D)',
+    identify: ['epr-18822d.12', 'epr-18823d.13', 'epr-18824d.14', 'epr-18825d.15'],
+    identifyCrc: [0x4f435990, 0xb8eddb5c, 0xaca9f61f, 0x5a1d7799],
+    regions: {
+        /* Two pairs of 128 KB chips; MAME mirrors them to 0x200000, which
+         * nothing here reads. */
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x000000, 'epr-18822d.12', 0x4f435990, 'epr-18823d.13', 0xb8eddb5c],
+                [0x040000, 'epr-18824d.14', 0xaca9f61f, 'epr-18825d.15', 0x5a1d7799],
+            ],
+        },
+        /* Luma and the pictures in the first pair, the texture banks in the
+         * second, a third that is not textures, and a 1 MB pair of pictures
+         * at 0xC00000. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-18751.10', 0x773ad43d, 'mpr-18752.11', 0x4da3719e],
+                [0x400000, 'mpr-18749.8', 0xc3fe0eea, 'mpr-18750.9', 0x40b55494],
+                [0x800000, 'mpr-18747.6', 0xa65ec1e8, 'mpr-18748.7', 0x375e3748],
+                [0xc00000, 'epr-18862.4', 0x9adc3a30, 'epr-18863.5', 0x603742e9],
+            ],
+        },
+        polygons: {
+            size: 0xc00000,
+            parts: [
+                [0x000000, 'mpr-18753.16', 0x33ddaa0d, 'mpr-18756.20', 0x28713617],
+                [0x400000, 'mpr-18754.17', 0x09aabde5, 'mpr-18757.21', 0x25fc92e9],
+                [0x800000, 'mpr-18755.18', 0xbf094d9e, 'mpr-18758.22', 0x1b5473d0],
+            ],
+        },
+        /* The UV and material streams; the sheets are raw in the data ROM. */
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18760.25', 0x4e3a4a89, 'mpr-18759.24', 0x278d8742]],
+        },
+        copro: {
+            size: 0x400000,
+            optional: true,
+            parts: [[0x000000, 'mpr-18761.28', 0x4e39ec05, 'mpr-18762.29', 0x4ab165d8]],
+        },
+    },
+    /*
+     * 3532 entries of 16 bytes in the program ROM at 0xBB00, tpa, tha, oba
+     * and a polygon count, up to 0x197B0. The draws read it 105 times as
+     * `lda 0xBB00[gN*16]` and send the four words to the TGP's FIFO.
+     */
+    modelTable: { source: 'maincpu', offset: 0xbb00, count: 3532, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* {count, colours} at 0x7A404, copied to the face palette (0x1802000) by
+     * 0x6770 in the boot's 0x6830. Verified against MAME's palette RAM. */
+    paletteProgram: 0x7a404,
+    paletteOffset: null,
+    /*
+     * Sega Rally's deal (uploadSrallycBank in js/texture.js) at 0x3A20 (g0
+     * the bank, g1 the flag; g0 = -1 goes on with the upload in progress,
+     * a slice a frame), with its run table at 0x3960 and its banks from
+     * main_data 0x400000 (`shlo 20; lda 0x2400000(g0)`). The boot (0x3720,
+     * 0x3750) deals bank 0 with the flag 0, then bank 1 with the flag 1;
+     * 0x8480 deals bank 2, 0x274F4 bank 1, 0x6532C cycles 0..3, and the
+     * attract scripts (0x19960, 0x199F0, through 0x1D8E0) deal 3, 2 and 1.
+     * A set is the bank laid over bank 0. Set 0, bank 1, is MAME's texture
+     * RAM after the boot halfword for halfword.
+     */
+    texture: {
+        raw: { layout: 'srallyc', runTable: 0x3960, bankBase: 0x400000, banks: [1, 2, 3], bootBank: 0 },
+        sets: 3,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * colorxlat by the boot's own 0x6830 (0x68B0's gamma ramp and the rows
+     * 0x76B0 and 0x7754 lay over it), run out of the ROM, which matches
+     * MAME's byte for byte. Luma is 0x3828's copy: main_data bytes 0..0x407F
+     * to luma RAM 0x12800000.
+     */
+    colors: {
+        i960: { run: [0x6830] },
+        luma: { data: 0, bytes: 0x4080 },
+        solid: true,
+    },
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    features: { stages: false, characters: false, motions: false, cells: false },
+};
+
+/*
+ * INDY 500 (Revision A; MAME indy500to, the Twin, and indy500d, the Deluxe),
+ * a Model 2B AM5 game. Nothing of Sega Rally's survives but the board: a
+ * 20-byte model table in the data ROM, texture banks dealt by a rectangle
+ * table, and colour tables the program builds per course. The Deluxe is the
+ * Twin's data with its program moved about; the addresses it changes are
+ * `program`'s.
+ */
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun }) {
+    const prog = [program[1], program[3]];
+    return {
+        id, name,
+        identify: prog,
+        identifyCrc: [program[2], program[4]],
+        regions: {
+            maincpu: { size: 0x100000, parts: [program] },
+            /* Two 8 MB pairs of banks, luma, the palette and the model table,
+             * then a 1 MB pair seen through XTRA 0x6400000. */
+            mainData: {
+                size: 0x1100000,
+                parts: [
+                    [0x000000, 'mpr-18237.11', 0x37e4255a, 'mpr-18238.12', 0xbf837bac],
+                    [0x800000, 'mpr-18239.9', 0x9a2db86e, 'mpr-18240.10', 0xab46a35f],
+                    data,
+                ],
+            },
+            polygons: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-18233.17', 0x48a024d3, 'mpr-18234.21', 0x1178bfc8],
+                    [0x800000, 'mpr-18235.18', 0xe7d70d59, 'mpr-18236.22', 0x6ca29e0e],
+                ],
+            },
+            /* One 8 MB pair, which the model table's tpa and tha also reach
+             * with bit 22 set: the board mirrors it. */
+            textures: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-18232.27', 0xf962347d, 'mpr-18231.25', 0x673d5338],
+                    [0x800000, 'mpr-18232.27', 0xf962347d, 'mpr-18231.25', 0x673d5338],
+                ],
+            },
+            copro: {
+                size: 0x100000,
+                optional: true,
+                parts: [[0x000000, 'epr-18249.29', 0xa399f023, 'epr-18250.30', 0x7479ad52]],
+            },
+        },
+        /*
+         * 3571 entries of 20 bytes in the data ROM at 0xC00460: tpa, tha, oba,
+         * a polygon count and an info pointer. Entry 0 is empty. An oba is a
+         * word index with bit 23 set, which `subtract` takes off.
+         */
+        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 } },
+        meshPtr: { subtract: 0x02000000, add: 0 },
+        /* {count, colours} at data 0xC11B5C, 961 of them, to 0x1802000
+         * (0x2F0D0), and 0x2DFB0's table of 19 laid down from entry 1023:
+         * table 0x53C40C & 7 of the eight at 0x6CBF0, which is 0 in the
+         * attract mode and the races MAME was run to. */
+        paletteOffset: 0xc11b5e,
+        paletteCount: 961,
+        paletteTop: top,
+        /*
+         * A set is a course: the record at 0x6A5B0 + 24 * course names its two
+         * banks at +0x10 and +0x14 (0x16F50), (4, 5) for course 0, (0, 1) for
+         * 1 and (2, 3) for 2. The boot deals (0, 1) and the attract mode the
+         * course it shows; 0x36B9C and 0x63D44 deal (6, 7), and 0x56320 the
+         * colour table 3 that goes with it.
+         */
+        texture: {
+            raw: { layout: 'indy500', rects, rectCount: 37, pairs: [[4, 5], [0, 1], [2, 3], [6, 7]] },
+            sets: 4,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        /*
+         * colorxlat by the program's own 0x2DD80 (the base ramp) and 0x2DE70
+         * (g0 = k, the rows of the table data[0xC3CE5C + 4k] points at), k the
+         * course (0x16F78). Luma is 0x2E010's copy, data 0xC122E0..+0x4000,
+         * and then 0x180 bytes over the start of it.
+         */
+        colors: {
+            i960: { run: colorRun, sets: 4 },
+            luma: { data: 0xc122e0, bytes: 0x4000, over: [lumaOver] },
+            solid: true,
+        },
+        depth: { recede: 0, nearMin: 0.02, layers: true },
+        features: { stages: false, characters: false, motions: false, cells: false },
+    };
+}
+
+const indy500 = indy500Build({
+    id: 'indy500', name: 'INDY 500 Twin (Revision A)',
+    program: [0x000000, 'epr-18254a.15', 0xad0f1fc5, 'epr-18255a.16', 0x784daab8],
+    data: [0x1000000, 'epr-18389.7', 0xd22ea019, 'epr-18390.8', 0x38e796e5],
+    rects: 0x6c860,
+    lumaOver: { data: 0x10b0850, bytes: 0x180 },
+    top: { at: 0x1048de0 },
+    colorRun: [0x2dd80, [0x2de70, 'set']],
+});
+/* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
+ * epr-18345/18346. The CRCs find either. */
+const indy500d = indy500Build({
+    id: 'indy500d', name: 'INDY 500 Deluxe (Revision A)',
+    program: [0x000000, 'epr-18251a.15', 0xfdabb40b, 'epr-18252a.16', 0x4935832a],
+    data: [0x1000000, 'epr-18345.7', 0x854b1037, 'epr-18346.8', 0x1a68acdc],
+    rects: 0xb1fd0,
+    lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
+    top: { source: 'maincpu', at: 0x1b3a4 },
+    colorRun: [0x34230, [0x34320, 'set']],
+});
+
+/*
+ * Sega Touring Car Championship (Revision A; MAME stcca), a Model 2C AM
+ * Annex game. Sega Rally's board code under it: the model table in the program
+ * ROM, Sega Rally's texture deal with a run-length source (js/texture.js
+ * buildStccTexram), and colour tables the boot works out on the i960.
+ */
+const stcc = {
+    id: 'stcc',
+    name: 'Sega Touring Car Championship (Revision A)',
+    identify: ['epr-19272a.15', 'epr-19273a.16'],
+    identifyCrc: [0x20cedd05, 0x1b0ab4d6],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19272a.15', 0x20cedd05, 'epr-19273a.16', 0x1b0ab4d6]],
+        },
+        /* An 8 MB pair, then a 1 MB pair the board repeats to 0xFFFFFF; the
+         * boot's patch list is read at 0xC4BCEC, so the repeat at 0xC00000 is
+         * kept and the ones nothing reads are not. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-19257.11', 0xac28ee24, 'mpr-19258.12', 0xf5ba7d78],
+                [0x800000, 'epr-19270.9', 0x7bd1d04e, 'epr-19271.10', 0xd2d74f85],
+                [0xc00000, 'epr-19270.9', 0x7bd1d04e, 'epr-19271.10', 0xd2d74f85],
+            ],
+        },
+        /* An 8 MB pair and a 1 MB pair repeated through 0x800000..0xFFFFFF,
+         * which the table's oba reaches all of. */
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19251.17', 0xe06ff7ba, 'mpr-19252.21', 0x68509993],
+                [0x800000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0x900000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xa00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xb00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xc00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xd00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xe00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xf00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+            ],
+        },
+        /* A 4 MB pair at 0 and 0x400000, a 1 MB pair repeated from 0x800000. */
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19254.27', 0x1ec49c02, 'mpr-19253.25', 0x41ba79fb],
+                [0x400000, 'mpr-19254.27', 0x1ec49c02, 'mpr-19253.25', 0x41ba79fb],
+                [0x800000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0x900000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xa00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xb00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xc00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xd00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xe00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xf00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+            ],
+        },
+        copro: {
+            size: 0x400000,
+            optional: true,
+            parts: [[0x000000, 'mpr-19255.29', 0xd78bf030, 'mpr-19256.30', 0xcb2b2d9e]],
+        },
+    },
+    /*
+     * 2811 entries of 16 bytes in the program ROM at 0x32490 (tpa, tha, oba
+     * and a polygon count), read as `lda 0x32490[gN*16]` (0x6B80, 0xAE38,
+     * 0xB1E8 and on) and `ld 0x3249C[gN*16]` for the count.
+     */
+    modelTable: { source: 'maincpu', offset: 0x32490, count: 2811, stride: 16 },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /* {count, colours} at 0x65660, 495 of them, copied to the face palette
+     * (0x1802000) by 0x1C8C0, which 0x696C0 runs from the frame's hook.
+     * 0x1C950, 0x1C9F0 and 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or
+     * 0xFC00 for a moment of the attract mode. */
+    paletteProgram: 0x65660,
+    paletteOffset: null,
+    /*
+     * A set is the pair a course record names (0xBEB0 + 0x3F4 * k: records
+     * 0, 1 and 4 share the first, 2 and 5 the second, 3 and 6 the third, 7
+     * has its own), then the title's. All are dealt over the boot's
+     * {0x400000, 0xC4BCEC}. Offsets in the data ROM.
+     */
+    texture: {
+        raw: {
+            layout: 'stcc',
+            runTable: 0x6a300,
+            boot: [0x400000, 0xc4bcec],
+            sets: [[0x4771ec, 0xc4c34c], [0x4fe190, 0], [0x5e1814, 0], [0x6bb5d8, 0xc4df40], [0x708d08, 0]],
+        },
+        sets: 5,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * colorxlat by the boot's own routines (0x6A1F0): 0x6AC60 the gamma ramp
+     * in every row, then 0x6AE50 the odd rows from the ramp keys at 0x32120
+     * (0x1350). Luma is 0x730F0's, worked out, written to 0x11400000 a byte
+     * every two (the 2B/2C map). Both match MAME's byte for byte.
+     */
+    colors: {
+        i960: { run: [0x6ac60, [0x6ae50, 0x32120], 0x730f0], lumaRam: [0x11400000, 1] },
+        solid: true,
+    },
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    features: { stages: false, characters: false, motions: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
- * show, and the 2A builds, which have no fighters yet. */
+ * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
+ * goes ahead of the Twin, since its zip opens with the Twin's beside it. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vcop2, vstrikero, vstriker, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, motoraid];
+    pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
