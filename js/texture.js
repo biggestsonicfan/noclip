@@ -1392,6 +1392,51 @@ export function bankTextureSet(rom, index) {
     return bankSets[Math.min(bank, bankSets.length - 1)];
 }
 
+/* ---- Sky Target ---- */
+
+/*
+ * Sky Target's banks are raw and dealt out like The House of the Dead's
+ * (RAW_MIP_RECTS): the boot's 0x369E0 puts the bank at 0x2000000 in with its
+ * full size on sheet 0, and a stage's 0x36B50 its record's bank (+0 of the
+ * 24-byte records at 0xF6578) with its full size on sheet 1. Both copy with
+ * 0x36E10, which takes a row as ((x1 - x0 + 1) / 8 + 1) * 8 halfwords: eight
+ * more than the rectangle, laid on linearly, so a row's tail spills into the
+ * next row (or, past the last sheet, into the luma table; js/colors.js). The
+ * spill is copied. Set `raw.boot` is the boot's bank alone. MAME's texture
+ * RAM matches at the title (boot) and in the first stage, byte for byte.
+ */
+function skytargtRect(md, srcBase, tex, dstBase, x0, y0, x1, y1) {
+    const n = (Math.trunc((x1 - x0 + 1) / 8) + 1) * 16;
+    for (let y = y0; y <= y1; y++) {
+        const a = ((y << 9) + x0) * 2;
+        const src = md.subarray(srcBase + a, Math.min(srcBase + a + n, md.length));
+        const at = dstBase + a;
+        tex.set(src.subarray(0, Math.max(0, Math.min(src.length, tex.length - at))), at);
+    }
+}
+
+function skytargtBank(md, base, tex, toSheet1) {
+    const near = toSheet1 ? SHEET1 : SHEET0;
+    const far = toSheet1 ? SHEET0 : SHEET1;
+    skytargtRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
+    for (const [x0, y0, x1, y1, same] of RAW_MIP_RECTS) {
+        skytargtRect(md, base + 0x80000, tex, (same ? near : far) + 0x80000, x0, y0, x1, y1);
+    }
+}
+
+function buildSkytargtTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    skytargtBank(rom.mainData, raw.bootBank - MAIN_DATA_BASE, tex, false);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : raw.boot;
+    if (set !== raw.boot) {
+        const bank = rom.mainCpuView.getUint32(raw.records + set * raw.stride, true);
+        skytargtBank(rom.mainData, bank - MAIN_DATA_BASE, tex, true);
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
 /* ---- Last Bronx ----------------------------------------------------------- */
 
 /*
@@ -1733,7 +1778,7 @@ export function programTextureSets(rom, index, decoded) {
     if (T.raw?.layout === 'lastbrnx') return lastbrnxModelSets(rom, index, decoded);
     /* Pilot Kids: nothing read yet says which scene a model is drawn in, so
      * only an untextured one is answered; the rest open on the title's set. */
-    if (T.raw?.layout === 'pltkids' || T.raw?.layout === 'gunblade') {
+    if (T.raw?.layout === 'pltkids' || T.raw?.layout === 'gunblade' || T.raw?.layout === 'skytargt') {
         return decoded && !sampledTiles(decoded).length ? { sets: [], how: 'untextured' } : null;
     }
     if (T.raw?.layout === 'copy') {
@@ -1800,6 +1845,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'gunblade') return buildGunbladeTexram(rom, texSets);
+        if (layout === 'skytargt') return buildSkytargtTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {
             const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);

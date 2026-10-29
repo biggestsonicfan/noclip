@@ -188,6 +188,11 @@ export function buildLumaram(rom) {
      * 0..127, and copies the ROM's from entry `at` on. */
     for (let i = 0; i < ramps * LUMA_BAND; i++) luma[i * 2] = ((i % LUMA_BAND) + 1) >> 1;
     for (let i = 0; i < n; i++) luma[(at + i) * 2] = md[data + i];
+    /* Sky Target's texture copier runs past the last sheet into the first
+     * entries (js/texture.js), after the table is in: the low bytes of the
+     * halfwords at data `spill.data`. */
+    const spill = rom.game.colors.luma.spill;
+    for (let i = 0; spill && i < spill.entries; i++) luma[i * 2] = rom.mainData[spill.data + i * 2];
     return luma;
 }
 
@@ -394,6 +399,59 @@ function buildZerogunColorxlat(rom) {
     for (let k = 0; k < md[Z.count] && 2 * k + 1 < 32; k++) {
         for (let luma = 0; luma < 64; luma++) {
             for (let ch = 0; ch < 3; ch++) put(ch, 2 * k + 1, luma, md[at++]);
+        }
+    }
+    return out;
+}
+
+/* ---- Sky Target ---- */
+
+/*
+ * Sky Target's colorxlat, all three channels from one RAM staging (0x51FA10,
+ * 0x520A10, 0x521A10; 0x2D350 copies it up every frame). Row r is
+ * a = 6r + r / 6 + 64 (row 0 zero) in slots 64 on (0x37120), and in slots
+ * 0..63 max((a * (l + 1)) >> 6, r) (0x37290, the byte table at 0x37100).
+ * Then 0x37390 lays 14 tables of 64 {r, g, b} bytes over odd rows 1..27,
+ * from the list a stage record's +4 points at (`records`, 24 bytes each), or
+ * the boot's list (`bootList`) for the boot set. Each byte is scaled by the
+ * single float at 0xE6AE8 the brightness setting picks (1.1 on fresh NVRAM,
+ * `gain`), truncated and held at 255; stages 5 and 8 take 1.0 (`flat`).
+ * A stage's 0x374D0 lays a row 21 from the list at record +0xC, and 0x37590
+ * then the four rows of 0xC0 bytes at `fixed` (0x640F85C) over rows 19, 21,
+ * 23 and 25, so record +0xC never shows. The 0x64 addresses are the data
+ * ROM's last megabyte through the XTRA_DATA mirror. MAME's matches entry for
+ * entry at the title and in the first stage.
+ */
+function buildSkytargtColorxlat(rom, colorSet) {
+    const S = rom.game.colors.skytargt;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const cv = rom.mainCpuView;
+    const md = rom.mainData;
+    const at = (a) => (a >= 0x6000000 ? 0x1000000 + (a & 0xfffff) : a - 0x2000000);
+    const u32 = (a) => md[a] | (md[a + 1] << 8) | (md[a + 2] << 16) | (md[a + 3] * 0x1000000);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = luma < 64 ? Math.max((a * (luma + 1)) >> 6, row) : a;
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    const boot = colorSet < 0 || colorSet >= S.stages;
+    const rec = S.records + (boot ? 0 : colorSet) * S.stride;
+    const gain = !boot && S.flat.includes(colorSet) ? 1 : S.gain;
+    const list = at(boot ? S.bootList : cv.getUint32(rec + 4, true));
+    for (let k = 0; k < 14; k++) {
+        const t = at(u32(list + k * 4));
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 1 + 2 * k, luma, Math.min(Math.trunc(md[t + luma * 3 + ch] * gain), 255));
+        }
+    }
+    if (boot) return out;
+    for (let k = 0; k < 4; k++) {
+        const t = at(S.fixed) + k * 0xc0;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 19 + 2 * k, luma, md[t + luma * 3 + ch]);
         }
     }
     return out;
@@ -741,6 +799,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
     if (rom.game.colors.gunblade) return buildGunbladeColorxlat(rom, colorSet);
     if (rom.game.colors.zerogun) return buildZerogunColorxlat(rom);
+    if (rom.game.colors.skytargt) return buildSkytargtColorxlat(rom, colorSet);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);

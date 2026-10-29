@@ -6214,6 +6214,72 @@ const zeroguna = zeroGunnerBuild({
     loads: 0x47fa0,
 });
 
+/*
+ * Sega's 1995 flight shooter on Model 2A CRX. Its own engine, nothing shared
+ * with the AM2 games beyond the board's draw: `st 0x101, 0x800010` and the
+ * table entry's first three words to 0x804000. Its data ROM's last megabyte
+ * (epr-18404/18405) is what the program reads through the XTRA_DATA mirror at
+ * 0x6400000 for its colour, luma and palette tables. A stage is a 24-byte
+ * record at 0xF6578 (the index in RAM at 0x5290C0; set up by 0xD1C90):
+ * +0 texture bank, +4 colour row list, +8 palette table, +0xC row-21 list,
+ * +0x10 a data pointer not yet read. The sets here are its twelve records
+ * and the boot (12), which is what the title shows.
+ */
+const skytargt = {
+    id: 'skytargt',
+    name: 'Sky Target',
+    identify: ['epr-18406.12', 'epr-18407.13', 'mpr-18415.10', 'mpr-18413.16'],
+    identifyCrc: [0xfde9c00a, 0x35f8b529],
+    regions: {
+        maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18406.12', 0xfde9c00a, 'epr-18407.13', 0x35f8b529]] },
+        mainData: {
+            size: 0x1100000,
+            parts: [
+                [0x0000000, 'mpr-18415.10', 0xd7a1bbd7, 'mpr-18416.11', 0xb77c9243],
+                [0x0800000, 'mpr-18417.8', 0xa0d03f63, 'mpr-18418.9', 0xc7a6f97f],
+                [0x1000000, 'epr-18404.6', 0xf1407ec4, 'epr-18405.7', 0x00b40f9e],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18413.16', 0x1c4d416c, 'mpr-18409.20', 0x666037ef],
+                [0x800000, 'mpr-18414.17', 0x858885ba, 'mpr-18410.21', 0xb821a695],
+            ],
+        },
+        textures: { size: 0x800000, parts: [[0x000000, 'mpr-18412.25', 0x4db52f8b, 'mpr-18411.24', 0x9c2dc40c]] },
+    },
+    /*
+     * 24204 entries of 16 bytes in the data ROM at 0xDE3D00: texture word,
+     * material word, mesh pointer, polygon count. All 217 distinct objects
+     * MAME's attract draws in its first 3000 frames are entries of it.
+     */
+    modelTable: { offset: 0xde3d00, count: 24204, stride: 16 },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /* js/romset.js's `records` layout: {count, colours} at 0x640FB5C from
+     * entry 0 (0x232D0), then the stage record's +8 table from entry 500
+     * (0x39060). MAME's matches for every stage it showed. */
+    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 12 },
+    /* js/texture.js's Sky Target section: the boot bank, then the record's. */
+    texture: {
+        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 12 },
+        sets: 13,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* Luma: 0x376E0 copies 0x4000 bytes from 0x6400000; the texture copy's
+     * spill then zeroes entries 0..7. Colorxlat: js/colors.js's section. */
+    colors: {
+        luma: { source: 'mainData', data: 0x1000000, bytes: 0x4000, spill: { data: 0x100000, entries: 8 } },
+        skytargt: {
+            records: 0xf6578, stride: 24, stages: 12, bootList: 0x6410580,
+            gain: Math.fround(1.1), flat: [5, 8], fixed: 0x640f85c,
+        },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6221,7 +6287,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, gunblade, zerogun, zerogunj, zeroguna];
+    pltkids, pltkidsa, gunblade, zerogun, zerogunj, zeroguna, skytargt];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

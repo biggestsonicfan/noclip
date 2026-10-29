@@ -27,6 +27,7 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+*Sky Target* has its models — see [Sky Target](#sky-target).
 
 Three views, and a fourth for the 2D art:
 
@@ -1216,6 +1217,24 @@ the attract, in all three builds.
 There is no Stages tab, no cells, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
 
+## Sky Target
+
+`skytargt.zip` carries Sega's 1995 flight shooter on Model 2A. The
+**Models** tab has all 24204 entries of the model table, with the textures,
+palette and colour tables the game loads for them.
+
+The texture picker's sets are the game's twelve stage records, 0 to 11, and
+set 12 is what the boot loads, which the title shows. Records 0, 1 and 9
+share a texture bank and palette, and differ in their colour tables (9 is
+another list). Nothing found yet says which stage a model belongs to, so a
+stage's part needs its set picked by hand.
+
+The textures, palette, luma and colour tables match MAME's byte for byte at
+the title and in the first stage.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1263,7 +1282,7 @@ and its USA build `lastbrnxu.zip`.
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
 beside it. `gunblade.zip` carries Gunblade NY. `zerogun.zip` carries Zero
 Gunner; its Japanese build wants `zerogunj.zip` beside it, and its Model 2A
-build `zeroguna.zip`.
+build `zeroguna.zip`. `skytargt.zip` carries Sky Target.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

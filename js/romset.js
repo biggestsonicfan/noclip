@@ -427,6 +427,26 @@ export function facePalette(rom) {
         return out;
     }
     const out = new Int32Array(1024).fill(-1);
+    if (p?.layout === 'records') {
+        /* Sky Target: {count, colours} at `base` from entry 0 (0x232D0), then
+         * the stage record's +`field` pointer's from entry `first` (0x39060),
+         * both in the data ROM's last megabyte through the XTRA_DATA mirror. */
+        const md = rom.mainData;
+        const dv = rom.mainDataView;
+        const at = (a) => 0x1000000 + (a & 0xfffff);
+        const table = (a, first) => {
+            const t = at(a);
+            const count = dv.getUint16(t, true);
+            for (let i = 0; i < count && first + i < 1024 && t + 4 + i * 2 <= md.length; i++) {
+                out[first + i] = dv.getUint16(t + 2 + i * 2, true);
+            }
+        };
+        table(p.base, 0);
+        const s = set >= 0 && set < p.sets ? set : 0;
+        table(rom.mainCpuView.getUint32(p.records + s * p.stride + p.field, true), p.first);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
     if (!p) {
         /* Sega Rally keeps its table in the program ROM (0x267B0 copies it). */
         const md = rom.game.paletteSource === 'maincpu' ? rom.maincpu : rom.mainData;
