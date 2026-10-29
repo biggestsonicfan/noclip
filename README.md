@@ -32,7 +32,7 @@ Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models and courses — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
-Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
+Baseball 97* has its models and ballparks — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
@@ -1366,7 +1366,15 @@ team 0, the set MAME's attract opens on. Textures, colour tables, luma and
 face palette match MAME's in the attract mode byte for byte, but for 119
 halfwords of sheet 0 the game copies about at run time.
 
-There is no Stages tab, no players put together and no motions yet. See
+The **Stages** tab has the three ballparks, `Stadium Q1` to `Stadium Q3`
+(the game names them only by their pieces' prefixes): every piece the
+game's camera shots draw of that stadium, in place, on the stadium's
+texture set with team 0. Q1 is a dome by the sea with the town around it,
+Q2 a dome seen from inside, Q3 an open park with its clock tower and the
+city at night. Crowds, flags and scoreboards stand on their first frame,
+and the stands at their most detailed.
+
+There are no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
 
 ## Gunblade NY

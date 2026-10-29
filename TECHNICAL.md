@@ -7532,10 +7532,33 @@ answers with a float square root. Colorxlat, luma and the face palette
 Palette RAM below 0x1802000, which 0x82200's callers address, is not the
 face palette; its +0x10000 is colorxlat.
 
-**Not done, and leads.** No stadium is put together and no player
-assembled. If the game finds models by name (0xC2F40), the stadium's
-and players' lists are likely name lists: look for callers of 0xC2F40 and
-of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
+**Ballparks (Stages tab, `readDynabbStages`).** The stadium draw is
+0x6BB80 (and its branch at 0x6BD44, taken when 0x5D4A48 is 5 or 6). It
+walks a list of halfword pairs {base model, variant slot}, ended by a 0,
+and draws model base + 0x5D4CD0[slot] through 0xA5380 or 0xA5510: culled
+on the model table entry's sphere, no matrix, the pieces being in world
+space. Model 0x1ABD (`Q1_SOTO`) is preceded by a coprocessor set-up of its
+own (command 0x505 with 0x9001212, 0, 0, 430.0). The list is the one at
++0x5C of the view record, 0x5D4700 + 0x5D397C × 0x60, which a camera shot
+fills from its group in the table at 0x1A0C30 (the shot records from
+0x1B3C8C point at it): 54 groups of four words, the lists of stadiums 0, 1
+and 2 and a 0. A list holds what that shot sees, so the viewer's stadium is
+every piece its column names, 70, 93 and 86 pieces; `stageTable.dynabb` in
+the profile. The slots (frame 3000: slot 4 = 0x11, 9 = 1, 10 = 0x38, the
+rest 0) choose a level of detail (slot 9: `Q2_shita_b`, `_bb`, `_bbb`), a
+frame of the crowd's cheering (`Q3_oen_ey00` on), of a flag (1 to 3) or the
+home team's scoreboard (10, `Q3_sc_baffu00r`, `_baystar00r`, ...); the
+viewer draws slot 0's model, the most detailed and the first. The texture
+set is the stadium's with team 0 (stadium × 12). Checked headless against
+MAME's attract frames: the Q1 outfield wall (navy, the FUJIFILM and maxell
+boards, the crowd above) and the Q2 roof and stands, as the game draws them.
+
+**Not done, and leads.** No player is assembled. Who fills 0x5D4CD0's
+slots each frame (the crowd and flag clocks, the scoreboard by home team)
+was not followed, nor the special set-up of `Q1_SOTO`. If the game finds
+models by name (0xC2F40), the players' lists are likely name lists: look
+for callers of 0xC2F40 and of the draws above; the players are drawn with a
+matrix by 0xA5300 (from 0xCFB84 on in the attract). The game's set-up of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions, the tile chip's pictures and the

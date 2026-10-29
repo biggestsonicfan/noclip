@@ -6969,8 +6969,11 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
-    /* No stage, player or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The ballparks: a camera shot's group of three lists, one a stadium,
+     * at 0x1A0C30 (js/dynabb.js). */
+    stageTable: { dynabb: { table: 0x1a0c30, groups: 54, stadiums: 3 }, flat: true },
+    /* No player or motion data is read yet. */
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /*
