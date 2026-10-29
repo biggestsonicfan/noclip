@@ -7340,6 +7340,13 @@ The Twin title (frame 6500) is the `rogo_x` cell
 black "Twin" script over it, which is in no CGM file (polygons too); the
 Isle of Man screen is `iom16` with the program file 0x77730's MHK over it,
 both exact.
+Played further (0x51405A held, a coin, start, the throttle; frames 300 to
+15000: transmission select, races, YOUR RANK, the course select with LAXEY
+COAST and T.T. COURSE, the leaderboard), 52 cells sit whole in MAME's
+tilemaps, at the group the file was loaded to, and render from MAME's
+character and palette RAM the same as from their own file, pixel for
+pixel: 26 files (CGs 3, 4, 7, 8, 9, 11, 13, 17, 18, 20, 30, 31, 35 to 37,
+53, 54, 59, 61, 75 to 79, 83 and 91). No cell found there differs.
 
 **Leads.** The map of the island is model 1213 to 1216, the leaderboards
 1628 and 1629. The attract is scripted from the tables at 0x19960 and 0x199F0
@@ -7543,6 +7550,11 @@ RAM (six, seven by frame 6000, from group 9) has its tiles and colours there
 byte for byte, and the rendered stc_url, insert_coins and credit_ patterns are MAME's
 snapshot's pixels exactly where the game draws them, also in the green
 moment of frame 6000 (the tile layer does not take the tint).
+Coined and played (frames 300 to 15000: the selects, races, results), 158
+cells sit whole in MAME's tilemaps and render from MAME's character and
+palette RAM the same as from their own file, pixel for pixel, from 41
+files; a few `tmcR_` patterns are in two files with the same tiles, and
+MAME's are the other copy's. No cell found there differs.
 
 **Leads.** Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
 (epr-19275.2s, mpr-19262..19265); not traced.
@@ -7697,7 +7709,13 @@ its 272 callers 189 pass 0x8000 (the category bit), 31 pass 0, 13 pass 0x4000
 and 4 pass 0xC000. Bit 14 moves the entry's group up by 128: the select
 screens draw the choice not taken so (LONG COURSE and 3 LAPS on MAME's
 course select), and file 1's variant record holds exactly those groups, darker.
-The explorer draws every pattern with 0x8000.
+The explorer draws every pattern with 0x8000, and offers the greyed ones a
+second time after the files' cells, drawn with 0xC000 and named `greyed n`
+after the cell they grey: every pattern of a file with a variant record
+whose groups, each + 128, are all in the record. That is 13 in Super GT 24h
+(file 1's course, lap and direction buttons, 521 to 533) and 10 in Over Rev
+(file 1's 6 x 7 icons, 1283 to 1292); no pattern has only some of its groups
+there.
 
 The boot's file (data 0xE2C3E8) fills characters 0 to 0x19FF and groups 0 to
 51 (176 patterns: fonts, digits, HUD captions); files 1 to 5 start at
@@ -7714,8 +7732,18 @@ up (frames 700 to 5200, the course select) the boot's and file 1, but for
 colour 15 of group 64, which code stores (the blinking frame round the
 current choice). 30 of file 1's patterns sit whole in MAME's tilemaps, and
 Course select, SHORT COURSE and the lap buttons render the same as MAME's
-screen pixel for pixel. Files 3 to 6 were not reached in MAME; the loader
-reads them the same way.
+screen pixel for pixel. Played on (three coins and a start, frames 300 to
+15000: the course and gear selects, a race to its finish, the results),
+70 cells of the boot's file and files 1 and 2 sit whole in the tilemaps
+and render from MAME's character and palette RAM the same as from their
+own file, among them the greyed LONG COURSE and 3 LAPS (527 and 528, at
+0xC000 in map 0, groups 206, 207 and 211): pixel for pixel. A longer
+attract on empty NVRAM (to frame 20000) loads file 5, the title, and its
+three cells there (493, 495, 497) are exact too. Files 3 (the colour bars
+and the cross hatch), 4 and 6 were not reached: in the test menu the
+cursor gets to COLOR BAR and CROSS HATCH (Service 1 steps it down from
+EXIT) but Test does not open them in MAME, as it does SOUND TEST and COIN
+ASSIGNMENTS.
 
 Over Rev has the same files and the same routines, in the code the boot
 copies to RAM 0x200000 (ROM 0x60000 on): the directory at data 0xD00000
@@ -7730,7 +7758,12 @@ same data ROM, so their 1283 cells are the same. Against MAME on both boards
 are in character and palette RAM byte for byte but for colours 0 and 1, which
 the code clears afterwards (the file stores 0x8000), and Mode Select, the
 mode captions and the controls hint render the same as MAME's screen pixel
-for pixel. The other files were not reached.
+for pixel. Played on (coins, start; frames 300 to 15000: Mode Select,
+Gear Select, races, CONTINUE, the title), 190 cells render from MAME's
+character and palette RAM the same as from their own file, pixel for
+pixel: the boot's 25, file 1's 83 (with the greyed 1284 and 1289), file
+2's 6, file 4's 38, file 11's 19 and file 12's 19. Files 3, 5 to 10, 13
+and 14 were not reached.
 
 **Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
 (0x47700, 0x4A450, 0x4A760, 0x4B5B0, 0x4B2E0, 0x4BAD0, 0x4B870, 0x4CDB0)
@@ -7857,7 +7890,13 @@ loaded (3 at first, 27 by frame 1600) has its chain in character RAM and its
 colours in palette RAM at its slot's block byte for byte, 35 cells sit whole
 in MAME's tilemaps (entries plus the block), and the five compared with the
 screen (the batter panels 1860 and 1872, 1515, 1604 and 2179) match it pixel
-for pixel. Blocks 0 to 7 (characters below 0x400) are not the allocator's;
+for pixel. Coined and played (a start, button 1, the bat swung every two
+seconds; frames 300 to 15000, the team select, the order, at bat), 72 cells
+sit whole in the tilemaps (entries plus the block) and render from MAME's
+character and palette RAM the same as from their owner, from 20 owners
+(CGs 67, 156, 157, 159, 160, 163, 164, 167, 170, 188, 189, 197, 199, 206,
+208, 219, 237, 238, 274 and 294). Entry 0x8000 is a picture's first tile
+here, not an empty one (1859, 1944 and 2284 begin with it). Blocks 0 to 7 (characters below 0x400) are not the allocator's;
 0xAF0BC to 0xAF208 write characters there, and were not followed.
 
 **Not done, and leads.** No player is assembled. Who fills 0x5D4CD0's
