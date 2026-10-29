@@ -32,6 +32,11 @@
  * one starts at character 0x2000, group 64, so it is loaded over the boot's,
  * and the boot's stays. Each block is a 128-character group's worth and its
  * entries name that group, so a cell's colours are its own file's.
+ *
+ * The greyed items follow the files' cells: every pattern of a file with a
+ * variant record whose groups, each + 128, are all in the record is offered
+ * a second time, drawn with 0xC000 (sgt24h's course and lap buttons, Over
+ * Rev's 6 x 7 mode icons).
  */
 
 import { scrollAt, scrollPtrOk, TILE_BYTES } from './scroll.js';
@@ -66,20 +71,31 @@ export function jalecoFiles(rom) {
     return out;
 }
 
-/* Every cell, {at, file, pattern}: the files' patterns in directory order. */
+/* Every cell, {at, file, pattern, grey}: the files' patterns in directory
+ * order, then the greyed ones, each with `of`, the cell it greys. */
 const cellCache = new WeakMap();
 export function jalecoCells(rom) {
     let out = cellCache.get(rom);
     if (out) return out;
     out = [];
     jalecoFiles(rom).forEach((f, file) => {
-        f.patterns.forEach((at, pattern) => { if (scrollPtrOk(rom, at)) out.push({ at, file, pattern }); });
+        f.patterns.forEach((at, pattern) => { if (scrollPtrOk(rom, at)) out.push({ at, file, pattern, grey: false }); });
     });
     cellCache.set(rom, out);
+    const files = jalecoFiles(rom);
+    const plain = out.length;
+    for (let of = 0; of < plain; of++) {
+        const c = out[of], v = files[c.file].variant;
+        if (!v || !scrollPtrOk(rom, v)) continue;
+        const groups = new Set();
+        for (let g = word(rom, v) - 1; g >= 0; g--) groups.add(half(rom, word(rom, v + 4) + g * 2));
+        const cell = readJalecoCell(rom, of);
+        if (cell && cell.entries.every((e) => groups.has(((e >> 7) & 0x7f) + 128))) out.push({ ...c, grey: true, of });
+    }
     return out;
 }
 
-/** A cell's size and entries, the draw's 0x8000 set. */
+/** A cell's size and entries, the draw's 0x8000 set (0xC000 when greyed). */
 export function readJalecoCell(rom, cell) {
     const c = jalecoCells(rom)[cell];
     if (!c) return null;
@@ -88,8 +104,14 @@ export function readJalecoCell(rom, cell) {
     if (!cols || !rows || cols > MAX_SIDE || rows > MAX_SIDE) return null;
     if (R.off + PATTERN_HEAD + cols * rows * 2 > R.u8.length) return null;
     const entries = new Uint16Array(cols * rows);
-    for (let i = 0; i < entries.length; i++) entries[i] = R.view.getUint16(R.off + PATTERN_HEAD + i * 2, true) | 0x8000;
+    for (let i = 0; i < entries.length; i++) entries[i] = R.view.getUint16(R.off + PATTERN_HEAD + i * 2, true) | (c.grey ? 0xC000 : 0x8000);
     return { cols, rows, entries };
+}
+
+/** A greyed cell's name. */
+export function jalecoCellName(rom, cell) {
+    const c = jalecoCells(rom)[cell];
+    return c?.grey ? `greyed ${c.of}` : '';
 }
 
 /** CG n is file n, over the boot's (file 0) for every other one. */

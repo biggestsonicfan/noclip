@@ -181,7 +181,7 @@ import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { bankTables, loadBankCG, rankBankCGs } from './bankcells.js';
 import { stackCGs, loadStacked, applyCopies } from './stackcells.js';
-import { jalecoCells, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
+import { jalecoCells, jalecoCellName, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
 import { dynabbCells, dynabbCGs, dynabbCellCG, loadDynabbCG, readDynabbCell } from './dynabbcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
@@ -376,9 +376,10 @@ function readCgm(u8, o, base) {
 }
 
 /** A cell's name, where the game gives it one: a Sega Rally pattern's own,
- * or what a Virtual On map shows. */
+ * or what a Virtual On map shows; or a Jaleco item's greyed copy. */
 export function cellName(rom, cell) {
     const C = rom.game.cells;
+    if (C?.files) return jalecoCellName(rom, cell);
     return C?.cgm || C?.maps ? listedCells(rom)[cell]?.name ?? '' : '';
 }
 
