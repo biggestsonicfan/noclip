@@ -31,7 +31,13 @@
 
 import { MAIN_DATA_BASE } from './romset.js';
 import { dynamcopScene } from './dynamcop.js';
+import { motoraidScene } from './motoraid.js';
 import { I960 } from './i960.js';
+import { dynabbColors } from './dynabb.js';
+import { buildSkisuprgColorxlat } from './skisuprg.js';
+import { buildWaverunrColorxlat } from './waverunr.js';
+import { buildTopskatrColorxlat } from './topskatr.js';
+import { buildBelColorxlat, buildBelLuma } from './bel.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -153,7 +159,13 @@ export function buildLumaram(rom) {
         for (let i = 0; i < 256; i++) luma[i * 2] = ((i & 127) + 1) >> 1;
         return luma;
     }
-    if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
+    /* A game that names its luma table copies it rather than working it out,
+     * whatever it runs for colorxlat (Manx TT's 0x3828). */
+    if (rom.game.colors.i960 && !rom.game.colors.luma) return runColorRoutines(rom).luma.slice();
+    /* Dynamite Baseball 97's is the boot's, whichever set (js/dynabb.js). */
+    if (rom.game.colors.dynabb) return dynabbColors(rom, rom.game.texture.defaultSet).luma.slice();
+    /* Behind Enemy Lines repeats one band (js/bel.js). */
+    if (rom.game.colors.luma?.bel) return buildBelLuma(rom, LUMA_BYTES);
     /* Last Bronx works its out too (0x1A50): band b of divisor d takes
      * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
     const bands = rom.game.colors.luma?.bands;
@@ -188,6 +200,18 @@ export function buildLumaram(rom) {
      * 0..127, and copies the ROM's from entry `at` on. */
     for (let i = 0; i < ramps * LUMA_BAND; i++) luma[i * 2] = ((i % LUMA_BAND) + 1) >> 1;
     for (let i = 0; i < n; i++) luma[(at + i) * 2] = md[data + i];
+    /* INDY 500 copies its table and then a second over the start of it
+     * (0x2E010: 0x180 bytes from XTRA 0x64B0850, the Deluxe's 0x3442C from
+     * its program ROM). */
+    for (const o of rom.game.colors.luma.over ?? []) {
+        const from = o.source === 'maincpu' ? rom.maincpu : rom.mainData;
+        for (let i = 0; i < o.bytes; i++) luma[i * 2] = from[o.data + i];
+    }
+    /* Sky Target's texture copier runs past the last sheet into the first
+     * entries (js/texture.js), after the table is in: the low bytes of the
+     * halfwords at data `spill.data`. */
+    const spill = rom.game.colors.luma.spill;
+    for (let i = 0; spill && i < spill.entries; i++) luma[i * 2] = rom.mainData[spill.data + i * 2];
     return luma;
 }
 
@@ -282,8 +306,11 @@ function buildRampColorxlat(rom, colorSet) {
     }
     const shift = C.shift?.[colorSet];
     if (shift) shiftRamp(out, shift);
+    if (C.lift) liftRamp(out, C.lift);
     const band = C.band?.tables[colorSet];
-    if (band !== undefined) writeBand(rom.mainData, band, set);
+    if (band !== undefined) {
+        writeBand(C.band.source === 'maincpu' ? rom.maincpu : rom.mainData, band, set, C.band.blueBit);
+    }
     return out;
 }
 
@@ -364,6 +391,166 @@ function buildPltkidsColorxlat(rom, colorSet) {
     table(0, 1);
     const scene = P.scenes[colorSet];
     if (scene) table(scene, 11);
+    return out;
+}
+
+/* ---- Zero Gunner ---- */
+
+/*
+ * Zero Gunner's colorxlat, the same in every scene: Pilot Kids' scheme with
+ * another ramp (0x489E0). Row r of all three channels is, for slot l of
+ * 0..63, ((6r + r / 6 + 64) * (l + 1)) >> 6, row 0 zero, floored at r (the
+ * byte table at 0x489C0); slots 64 on keep slot 63's. Then 0x48AD0 lays the
+ * program's table over the first 64 slots of odd rows 1, 3, ...: `count`
+ * (0x1A10) rows of 64 {r, g, b} bytes from `table` (0x1050). MAME's matches
+ * it entry for entry, from the boot (frame 51) to the attract's end.
+ */
+function buildZerogunColorxlat(rom) {
+    const Z = rom.game.colors.zerogun;
+    const md = rom.maincpu;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = Math.max((a * (Math.min(luma, 63) + 1)) >> 6, row);
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    let at = Z.table;
+    for (let k = 0; k < md[Z.count] && 2 * k + 1 < 32; k++) {
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 2 * k + 1, luma, md[at++]);
+        }
+    }
+    return out;
+}
+
+/* ---- Sky Target ---- */
+
+/*
+ * Sky Target's colorxlat, all three channels from one RAM staging (0x51FA10,
+ * 0x520A10, 0x521A10; 0x2D350 copies it up every frame). Row r is
+ * a = 6r + r / 6 + 64 (row 0 zero) in slots 64 on (0x37120), and in slots
+ * 0..63 max((a * (l + 1)) >> 6, r) (0x37290, the byte table at 0x37100).
+ * Then 0x37390 lays 14 tables of 64 {r, g, b} bytes over odd rows 1..27,
+ * from the list a stage record's +4 points at (`records`, 24 bytes each), or
+ * the boot's list (`bootList`) for the boot set. Each byte is scaled by the
+ * single float at 0xE6AE8 the brightness setting picks (1.1 on fresh NVRAM,
+ * `gain`), truncated and held at 255; stages 5 and 8 take 1.0 (`flat`).
+ * A stage's 0x374D0 lays a row 21 from the list at record +0xC, and 0x37590
+ * then the four rows of 0xC0 bytes at `fixed` (0x640F85C) over rows 19, 21,
+ * 23 and 25, so record +0xC never shows. The 0x64 addresses are the data
+ * ROM's last megabyte through the XTRA_DATA mirror. MAME's matches entry for
+ * entry at the title and in the first stage.
+ */
+function buildSkytargtColorxlat(rom, colorSet) {
+    const S = rom.game.colors.skytargt;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const cv = rom.mainCpuView;
+    const md = rom.mainData;
+    const at = (a) => (a >= 0x6000000 ? 0x1000000 + (a & 0xfffff) : a - 0x2000000);
+    const u32 = (a) => md[a] | (md[a + 1] << 8) | (md[a + 2] << 16) | (md[a + 3] * 0x1000000);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = luma < 64 ? Math.max((a * (luma + 1)) >> 6, row) : a;
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    const boot = colorSet < 0 || colorSet >= S.stages;
+    const rec = S.records + (boot ? 0 : colorSet) * S.stride;
+    const gain = !boot && S.flat.includes(colorSet) ? 1 : S.gain;
+    const list = at(boot ? S.bootList : cv.getUint32(rec + 4, true));
+    for (let k = 0; k < 14; k++) {
+        const t = at(u32(list + k * 4));
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 1 + 2 * k, luma, Math.min(Math.trunc(md[t + luma * 3 + ch] * gain), 255));
+        }
+    }
+    if (boot) return out;
+    for (let k = 0; k < 4; k++) {
+        const t = at(S.fixed) + k * 0xc0;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 19 + 2 * k, luma, md[t + luma * 3 + ch]);
+        }
+    }
+    return out;
+}
+
+/* ---- Gunblade NY ---- */
+
+/*
+ * Gunblade NY's colorxlat, all three channels alike. Luma 64..127 of row r
+ * hold (215r / 31) + 40, row 0 zero (the boot's 0x16020). Luma 0..63 of the
+ * even rows and row 31 are what 0x16800 lays over them at the attract's start
+ * in curve 7, the one it takes while the byte at 0x54C0EE is 0, as it is on
+ * fresh NVRAM (0x6BAA8): v = r * a / 31, a running from 64 by 6.4 - l / 10 a
+ * step (l the luma, the quotient truncated), single floats, at most 255.
+ *
+ * The odd rows 1..29 are the scene's, key-framed (0xC84E0, from 0xC88C0 with
+ * the scene's table number): `ld 0xC75C0[(table * 15 + (row - 1) / 2) * 4]`
+ * points at {count, then count keys of position, red, green, blue}, all
+ * single floats of 0..1. A key goes in slot trunc(position * 63 + 0.1) as
+ * trunc(c * 255 + 0.1) a channel; each slot up to a key is the line from the
+ * last key (slot 0's zeros before the first), slots past the last stay 0.
+ * A slot's value v writes sqrt(v / 255) * 255, row 3's (sqrt(v / 255) * 3 /
+ * 4 + 0.25) * 255. The texture profile's `raw.sets` gives the table each
+ * set's scene picks (`keys` is 0xC75C0).
+ * No entry differs from MAME's colorxlat in the attract's city (table 0), its
+ * stage film (6) and the title (8).
+ */
+function buildGunbladeColorxlat(rom, colorSet) {
+    const C = rom.game.colors.gunblade;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const f32 = Math.fround;
+    const all = (row, luma, v) => { for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v); };
+    for (let row = 0; row < 32; row++) {
+        const k = row ? Math.trunc((215 * row) / 31) + 40 : 0;
+        for (let luma = 64; luma < 128; luma++) all(row, luma, k);
+    }
+    for (let row = 0; row < 32; row += row === 30 ? 1 : 2) {
+        let a = 64;
+        for (let luma = 0; luma < 64; luma++) {
+            a = f32(a + f32(Math.trunc(-luma / 10) + f32(6.4)));
+            all(row, luma, row ? Math.min(Math.trunc(f32(f32(row * a) / 31)), 255) : 0);
+        }
+    }
+    const raw = rom.game.texture.raw;
+    const table = (raw.sets[colorSet] ?? raw.sets[raw.bootSet])[1];
+    for (let row = 1; row < 31; row += 2) {
+        let p = cv.getUint32(C.keys + (table * 15 + ((row - 1) >> 1)) * 4, true);
+        if (p + 4 > rom.maincpu.length) continue;
+        const keys = Math.trunc(cv.getFloat32(p, true));
+        const slots = Array.from({ length: 64 }, () => [0, 0, 0, 0]);
+        for (let i = 0; i < keys && p + 20 <= rom.maincpu.length; i++, p += 16) {
+            const at = Math.trunc(f32(cv.getFloat32(p + 4, true) * 63) + 0.1);
+            if (at < 0 || at > 63) continue;
+            slots[at] = [1, ...[8, 12, 16].map((o) => Math.trunc(f32(cv.getFloat32(p + o, true) * 255) + 0.1) & 0xffff)];
+        }
+        let last = 0;
+        for (let at = 0; at < 64; at++) {
+            if (!slots[at][0]) continue;
+            const d = at - last;
+            for (let j = 1; j <= d; j++) {
+                for (let c = 1; c < 4; c++) {
+                    const from = slots[last][c], to = slots[at][c];
+                    slots[last + j][c] = (from + Math.trunc(((to - from) * j) / d)) & 0xffff;
+                }
+            }
+            last = at;
+        }
+        for (let at = 0; at < 64; at++) {
+            for (let ch = 0; ch < 3; ch++) {
+                let x = f32(Math.sqrt(f32(slots[at][ch + 1] / 255)));
+                if (row === 3) x = f32(f32(f32(x * 3) / 4) + 0.25);
+                put(ch, row, at, Math.trunc(f32(x * 255)));
+            }
+        }
+    }
     return out;
 }
 
@@ -503,25 +690,59 @@ function buildVonColorxlat(rom, field, robots) {
  * came out byte for byte as m2-hle2's board holds them in the attract mode,
  * and neither changes from course to course. The routines take about 220,000
  * instructions between them, once per ROM set.
+ *
+ * Virtua Striker (Model 2B) runs from its program ROM, so there is no `copy`.
+ * Its routines read tables out of the data ROM (mapped at 0x2000000) and the
+ * test menu's MONITOR setting out of backup RAM 0x1D00000, which the boot
+ * also copies into work RAM: `settings` are the addresses that get the
+ * panel's cabinet choice (0 PROJECTER, 1 CRT). Its luma RAM is the 2B board's,
+ * a byte every halfword from 0x11400000 (`board: '2b'`), which is the layout a
+ * dump has, so it is stored as it is written. The palette RAM the routines
+ * leave is kept too: the face palette is read out of it (i960Palette).
+ *
+ * INDY 500's change with the course: an entry may be [entry, ...args], an
+ * argument of 'set' standing for the colour set asked for (0x2DE70's g0, the
+ * course; see js/games.js indy500). The tables are kept per set and setting.
  */
 const COLOR_RAM = 0x01800000;
 const COLOR_RAM_BYTES = 0x20000;
 const LUMA_RAM = 0x12800000;
-function runColorRoutines(rom) {
-    if (rom.i960Colors) return rom.i960Colors;
+const LUMA_RAM_2B = 0x11400000;
+const BACKUP_RAM = 0x01d00000;
+const BACKUP_BYTES = 0x4000;
+function runColorRoutines(rom, colorSet = 0) {
     const C = rom.game.colors.i960;
+    const setting = rom.cabinet ?? rom.game.colors.cabinet ?? 0;
+    const set = C.sets ? Math.min(Math.max(colorSet | 0, 0), C.sets - 1) : 0;
+    const key = `${setting}:${set}`;
+    rom.i960Colors ??= new Map();
+    if (rom.i960Colors.has(key)) return rom.i960Colors.get(key);
     const prog = rom.maincpu;
-    const [from, to, at] = C.copy;
+    /* Manx TT and Virtua Striker run their colour routines straight out of
+     * the ROM: no `copy`. */
     const ram = new Uint8Array(0x100000);
-    ram.set(prog.subarray(from, to), at - 0x500000);
+    if (C.copy) {
+        const [from, to, at] = C.copy;
+        ram.set(prog.subarray(from, to), at - 0x500000);
+    }
+    /* Luma RAM: Model 2A's a byte every four bytes from 0x12800000, 2B's and
+     * 2C's (0x11400000, umask 0x00ff) one every two: `lumaRam`, `lumaStep`. */
+    const lumaRam = C.lumaRam ?? LUMA_RAM;
+    const lumaStep = C.lumaStep ?? 4;
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);
+    const backup = new Uint8Array(BACKUP_BYTES);
+    const data = rom.mainData;
+    const b2 = C.board === '2b';
     const where = (a) => {
         if (a < prog.length) return [prog, a];
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + COLOR_RAM_BYTES) return [pal, a - COLOR_RAM];
+        if (a >= BACKUP_RAM && a < BACKUP_RAM + BACKUP_BYTES) return [backup, a - BACKUP_RAM];
+        if (b2 && a >= LUMA_RAM_2B && a < LUMA_RAM_2B + LUMA_BYTES) return [luma, a - LUMA_RAM_2B];
+        if (a >= MAIN_DATA_BASE && a < MAIN_DATA_BASE + data.length) return [data, a - MAIN_DATA_BASE];
         throw new Error(`colour routine read 0x${a.toString(16)}`);
     };
     const read = (a, n) => {
@@ -533,22 +754,44 @@ function runColorRoutines(rom) {
     const write = (a, v, n) => {
         /* One byte lane of a 32-bit unit, stored here as the even byte of a
          * halfword the way a luma dump has it (buildLumaram). */
-        if (a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
-            luma[((a - LUMA_RAM) >> 2) * 2] = v & 0xff;
+        if (!b2 && a >= lumaRam && a < lumaRam + (LUMA_BYTES / 2) * lumaStep) {
+            luma[Math.floor((a - lumaRam) / lumaStep) * 2] = v & 0xff;
             return;
         }
         const [b, o] = where(a);
+        if (b === prog || b === data) throw new Error(`colour routine wrote ROM 0x${a.toString(16)}`);
         for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
     };
+    for (const [at, n] of C.settings ?? []) write(at, setting, n);
     const cpu = new I960({
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
-    for (const entry of C.run) {
-        if (!cpu.call(entry, [], { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
+    /* An entry is a routine's address, or [address, g0, g1, ...]; an
+     * argument of 'set' stands for the colour set asked for. */
+    for (const step of C.run) {
+        const [entry, ...args] = [step].flat();
+        const g = args.map((v) => (v === 'set' ? set : v));
+        if (!cpu.call(entry, g, { maxSteps: 4_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
     }
     const cxlat = pal.slice(0x10000, 0x10000 + CXLAT_BYTES);
-    return (rom.i960Colors = { cxlat, luma });
+    const out = { cxlat, luma, pal };
+    rom.i960Colors.set(key, out);
+    return out;
+}
+
+/**
+ * The face palette a game's own colour routines leave in palette RAM 0x1802000
+ * (runColorRoutines), as 1024 BGR555 colours.
+ *
+ * @param {object} rom loaded ROM set
+ * @returns {Int32Array} 1024 colours
+ */
+export function i960Palette(rom) {
+    const { pal } = runColorRoutines(rom);
+    const out = new Int32Array(1024);
+    for (let i = 0; i < 1024; i++) out[i] = pal[0x2000 + i * 2] | (pal[0x2001 + i * 2] << 8);
+    return out;
 }
 
 /*
@@ -573,14 +816,31 @@ function shiftRamp(cxlat, { top, add }) {
     }
 }
 
-/* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170). */
-function writeBand(md, band, set) {
+/*
+ * Virtua Cop 2's 0x168B8, run on the fresh ramp before the band: rows 1..31,
+ * luma 1..63, the low byte of each channel gains add[ch], held at 0xFF. A
+ * 0xFFFF entry keeps its 0xFF.
+ */
+function liftRamp(cxlat, add) {
+    for (let row = 1; row < 32; row++) {
+        for (let luma = 1; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) {
+                const o = ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2;
+                cxlat[o] = Math.min(cxlat[o] + add[ch], 0xff);
+            }
+        }
+    }
+}
+
+/* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170).
+ * Blue's low bit is bit 14 there and bit 15 in Virtua Cop 2's (0x16758). */
+function writeBand(md, band, set, blueBit = 14) {
     for (let row = 0; row < 32; row++) {
         for (let i = 0; i < GROUP_COLORS; i++) {
             const o = band + (row * GROUP_COLORS + i) * 2;
             const c = md[o] | (md[o + 1] << 8);
             for (let ch = 0; ch < 3; ch++) {
-                const v = (((c >> (4 * ch)) & 0xf) << 1) | ((c >> (12 + ch)) & 1);
+                const v = (((c >> (4 * ch)) & 0xf) << 1) | ((c >> (ch === 2 ? blueBit : 12 + ch)) & 1);
                 set(ch, row, PALETTE_LUMA0 + i, v << 3);
             }
         }
@@ -632,13 +892,23 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
+    /* Motor Raid: its boot and scene routines, run (js/motoraid.js). */
+    if (rom.game.colors.motoraid) return motoraidScene(rom, colorSet).cxlat.slice();
+    if (rom.game.colors.gunblade) return buildGunbladeColorxlat(rom, colorSet);
+    if (rom.game.colors.zerogun) return buildZerogunColorxlat(rom);
+    if (rom.game.colors.skytargt) return buildSkytargtColorxlat(rom, colorSet);
+    if (rom.game.colors.skisuprg) return buildSkisuprgColorxlat(rom, colorSet);
+    if (rom.game.colors.waverunr) return buildWaverunrColorxlat(rom, colorSet);
+    if (rom.game.colors.topskatr) return buildTopskatrColorxlat(rom, colorSet);
+    if (rom.game.colors.bel) return buildBelColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
-    if (rom.game.colors.i960) return runColorRoutines(rom).cxlat.slice();
+    if (rom.game.colors.i960) return runColorRoutines(rom, colorSet).cxlat.slice();
+    if (rom.game.colors.dynabb) return dynabbColors(rom, colorSet).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);

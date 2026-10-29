@@ -25,6 +25,21 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
+*Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
+AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
+Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
+*Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
+Jaleco's *Super GT 24h* and *Over Rev* have their models — see
+[Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
+Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
+*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+*Sky Target* has its models — see [Sky Target](#sky-target).
+Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
+*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Top Skater* has its models — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1171,6 +1186,331 @@ the boot fills it, so there is one CG.
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
 
+## Motor Raid
+
+`motoraid.zip` is Sega's 1997 bike race on Model 2A CRX. The **Models** tab
+has the 7671 entries of the model table (7669 with a mesh), with the textures,
+face palette and colour tables the game builds for them.
+
+The texture picker's sets 0..7 are the eight scenes the game loads, each its
+bank on sheet 1 over the boot's on sheet 0; set 1, the attract's second scene,
+is the one a model opens on. The colour tables and palette of a set are made
+by running the game's own boot and scene routines. Nothing read yet says which
+scene a model belongs to, so a course's part needs its set picked by hand.
+The sheets, luma and colour tables of set 1 match MAME's at attract frame 1800
+byte for byte, and the boot's colours match it at frame 600.
+
+There is no Stages tab, no riders and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
+
+## Virtua Cop 2
+
+`vcop2.zip` on its own. The **Models** tab has all 2994 entries of the model
+table, with the textures, palette and colour tables the game builds for them.
+The game runs Virtua Cop's library, so it takes Daytona USA's texture banks
+and Virtua Cop's ramp and band.
+
+The texture picker's sets 0..2 are the three banks a stage puts on sheet 0,
+over the bank the boot puts on sheet 1. With set 0, the sheets, the palette,
+luma and the colour tables match MAME's in the attract byte for byte. Sets 1
+and 2 were not reached in MAME.
+
+There is no Stages tab, no characters, no motions, no cells and no music yet.
+See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+
+## Virtua Striker
+
+`vstriker.zip` is Revision A. For the first release, give `vstrikro.zip`
+together with `vstriker.zip`, which holds the data, polygon and texture ROMs
+the two share. The **Models** tab has all 1537 entries of the model table,
+with the textures, palette and colour tables the boot builds for them. The
+game is a Model 2B title, and it uploads its texture bank the way Daytona USA
+does.
+
+noclip runs the game's own colour, luma and texture routines instead of
+porting them. The **Cabinet** select is the game's MONITOR setting:
+PROJECTER or CRT, which is the default on a fresh board. The two settings
+build different colour tables. With either setting, the sheets, the palette,
+luma and the colour tables match MAME's at boot byte for byte.
+
+The kits, the per-team textures and the stadium are set up in play, from
+the team tables, so the models show the boot's look. There is no Stages
+tab, no motions, no cells and no music yet.
+
+## Manx TT Superbike
+
+`manxtt.zip` is MAME's Revision D, the deluxe cabinet's program. The game is
+Sega Rally's engine, and opens the same way. The **Models** tab has all 3532
+entries of the model table, every one with a mesh: the bikes, the riders, the
+course segments of Laxey Coast and the TT course, the map of the island and
+the leaderboards, with the textures, palette, luma and colour tables the game
+makes. The boot's texture RAM, its palette, its luma and its colour tables
+match MAME's byte for byte; the colour tables come from running the game's
+own routine.
+
+The texture picker's sets 0..2 are the three banks the game deals over its
+boot bank; set 0 is the one the boot leaves in. Which course uses which bank
+is not known yet, so a course model may need its set picked by hand.
+
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
+
+## INDY 500
+
+`indy500.zip` is MAME's `indy500to`, the Twin cabinet's Revision A; the Deluxe
+(`indy500d.zip`) opens with that zip beside it. The **Models** tab has all 3571
+entries of the model table, 3570 with a mesh: the cars, the race queen, the
+three courses in segments, the leaderboards and the scenery, with the textures,
+palette, luma and colour tables the game makes. All of them match MAME's byte
+for byte, in the attract mode on course 0 and in a race on course 1; the colour
+tables come from running the game's own routines.
+
+The texture picker's sets 0..2 are the three courses, each its own pair of
+texture banks and its own colour table; set 3 is the pair the game loads for
+its other screens. The cars are on every course's banks; a course model needs
+its course picked, and the race queen is on set 1's.
+
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
+
+## Sega Touring Car Championship
+
+`stcc.zip` is MAME's `stcca`, Revision A. The **Models** tab has all 2811
+entries of the model table: the cars, the courses in segments, the scenery and
+the title's lettering, with the textures, palette, luma and colour tables the
+game makes. The colour tables come from running the game's own routines, and
+they, the palette and luma match MAME's byte for byte. Texture RAM matches
+too, both sheets, in the attract mode's first race; on the next two courses
+three bytes differ, which the first course's patches left behind on the board.
+
+The texture picker's sets 0..3 are the course records' texture pairs, and
+set 4 is the title's. The cars are on every set; a course model needs its
+course's set picked.
+
+The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
+
+## Super GT 24h
+
+`sgt24h.zip` (Jaleco, 1996, Model 2B CRX). The **Models** tab has all 2238
+entries of the model table: the cars, the course pieces, the pit and the
+grandstands, with the textures the game loads, its face palette and its
+colour tables as the boot and the race build them.
+
+The texture picker's sets 0..4 are what sheet 1 holds: sets 0..3 are the
+four the course table names (set 0 is also the boot's, the one MAME's attract
+race shows) and set 4 a bank one routine loads by itself. Sheet 0 is the same in every set.
+Nothing found yet says which course a model belongs to, so a course piece
+needs its set picked by hand. Textures, palette, luma and colour tables
+match MAME's at the title and in the attract race byte for byte. The colour
+tables are those of the hour the title and the attract use: the race has
+640 versions of two rows, one per stretch of its 24 hours, and the viewer
+shows one.
+
+There is no Stages tab, no cars put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
+
+## Over Rev
+
+`overrev.zip` is the Model 2C CRX build, Revision A (Jaleco, 1997);
+`overrevb.zip` beside it is the Model 2B CRX build, Revision B, offered as a
+variant (its zip holds only the program, so it wants `overrev.zip` with it).
+The **Models** tab has all 1893 entries of the model table, the same in both
+builds: the cars, the course pieces and the scenery, with the game's
+textures, face palette and colour tables.
+
+The texture picker's sets 0..6 are what sheet 1 holds: set 0 is the boot's,
+and sets 1..6 the six courses' in data order (Tsukuba, Shibuya's other
+version, Shibuya, Futou, Touge, Touge's other version). Sheet 0 is the same
+in every set. A course piece needs its course's set picked by hand. Colour
+tables and luma match MAME's at the title on both boards byte for byte, and
+the textures in the attract race but for sixteen bytes something later
+writes. Some luma bands change during a race; the viewer shows the boot's.
+
+There is no Stages tab, no cars put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
+
+## Dynamite Baseball 97
+
+`dynabb.zip` as the container has it is MAME's `dynabb97` (Sega, 1997,
+Model 2B CRX, Revision A). The **Models** tab has all 7890 entries of the
+model table with the game's own names: the twelve teams' players in home
+and visitor kits, joint by joint, the three stadiums' pieces, the ball, the
+bats and the menus, with the textures, face palette and colour tables the
+game builds for a stadium and a team.
+
+The texture picker's sets 0..35 are stadium × 12 + team, both sides of the
+field the team's. The stadiums are 0..2 (their pieces are named `Q1_` to
+`Q3_`), the teams 0..11 Swallows, Carp, Giants, BayStars, Dragons, Tigers,
+BlueWave, Marines, Lions, Fighters, Hawks and Buffaloes. A model opens on
+the set its name points at — a player on his team's at stadium 1, a stadium
+piece on its stadium's with team 0 — and the rest on set 12, stadium 1 and
+team 0, the set MAME's attract opens on. Textures, colour tables, luma and
+face palette match MAME's in the attract mode byte for byte, but for 119
+halfwords of sheet 0 the game copies about at run time.
+
+There is no Stages tab, no players put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
+
+## Gunblade NY
+
+`gunblade.zip` carries Sega AM3's 1995 shooter (Revision A, Model 2B). The
+**Models** tab has 5452 models, one for each mesh in the polygon ROMs, with the
+textures, palette and colour tables the game loads for them. 1528 of the 1529
+objects MAME's attract draws in its first 6000 frames are among them: the
+helicopters, the city blocks, the Statue of Liberty and the rest. The one
+left over is a bare mesh with no texture.
+
+The texture picker's sets 0..8 are the game's scenes. Each scene's own bank sits
+over the common one, and each set comes with its colour tables. A model opens
+on set 8, the title's. Set 0 is the attract's city and set 6 its stage film.
+Nothing found yet says which scene a model belongs to, so a scene's part needs
+its set picked by hand. The texture RAM, luma and colour tables match MAME's
+byte for byte in the city, the stage film and the title.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+
+## Zero Gunner
+
+`zerogun.zip` on its own is the export build on Model 2B. With
+`zerogunj.zip` beside it the Japanese build is offered as a variant, and
+with `zeroguna.zip` the Model 2A build is. Those two zips hold only their
+programs. The **Models** tab has all 7712 entries of the model table, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game loads:
+
+- sets 0 and 1 are the two the attract opens with;
+- set 2 is a load on its own;
+- sets 3 to 7 are the first stage's five areas;
+- sets 8 to 12 are the second stage's areas;
+- sets 13 to 17 are the third stage's areas.
+
+Nothing found yet says which scene a model belongs to, so a scene's part
+needs its set picked by hand. The colour tables are the same in every scene.
+The textures, palette, luma and colour tables match MAME's byte for byte in
+the attract, in all three builds.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+
+## Sky Target
+
+`skytargt.zip` carries Sega's 1995 flight shooter on Model 2A. The
+**Models** tab has all 24204 entries of the model table, with the textures,
+palette and colour tables the game loads for them.
+
+The texture picker's sets are the game's twelve stage records, 0 to 11, and
+set 12 is what the boot loads, which the title shows. Records 0, 1 and 9
+share a texture bank and palette, and differ in their colour tables (9 is
+another list). Nothing found yet says which stage a model belongs to, so a
+stage's part needs its set picked by hand.
+
+The textures, palette, luma and colour tables match MAME's byte for byte at
+the title and in the first stage.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
+
+## Ski Super G
+
+`skisuprg.zip` carries Sega Ski Super G (Model 2C). The **Models** tab has
+all 5519 entries of the program's model table, every one with a mesh, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game sets up, each a texture
+bank, a palette block and a colour table: 0 and 1 the menus (two colour
+tables), 2 the attract's in-between screens, which a model opens on, and 3
+to 6 the four courses. Nothing found yet says which scene a model belongs
+to, so a model needs its set picked by hand: the course miniatures of the
+course select look right under set 0, the snow, trees and banners under set
+2. Set 2's texture sheets, colour tables, luma and palette match MAME's RAM
+in the attract byte for byte; the courses' sets are read from their records
+and were not reached in MAME.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
+
+## Wave Runner
+
+`waverunr.zip` carries Wave Runner (Model 2C, Revision A). The **Models** tab
+has all 3457 entries of the program's model table, with the textures,
+palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game sets up: 0 to 3 the four
+courses, then two more scenes that name their own bank, palette and colour
+table in the code (0x4AF60 and 0x2CBE0, not identified yet). A model opens on
+set 0, the first course, which the attract shows. Nothing found yet says
+which course a model belongs to: the beach of model 2826, for one, wants set
+1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
+in the attract byte for byte.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Sega Water Ski
+
+`segawski.zip` carries Sega Water Ski (Model 2C, Revision A), which runs Wave
+Runner's program carried on. The **Models** tab has all 13331 entries of the
+data ROM's model table (one is empty), with the textures, palette and colour
+tables the game loads for them.
+
+The texture picker's sets are the four courses; a model opens on set 0, the
+first course, which the attract shows. Nothing found yet says which course a
+model belongs to. Set 0's texture sheets, colour tables, luma and palette
+match MAME's RAM in the attract byte for byte. Three colour rows of every
+course come from a table picked by a value in work RAM (0 in the attract,
+which is the one used here; it may be the player's choice of skier).
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
+
+## Top Skater
+
+`topskatr.zip` carries Top Skater (Model 2C, Revision A, Export). The
+**Models** tab has the program's model table, 1901 entries (1897 have a
+mesh), with the textures, palette and colour tables the game loads for them.
+
+Its meshes are packed tighter than the other Model 2 games': no normal and
+no padding point per polygon. MAME reads them the usual way, which is why its
+`topskatr` draws broken polygons; the viewer reads them the way the program
+hands them to the geometry engine.
+
+The texture picker's two sets are the two scenes the game sets up, each a
+texture bank with its colour tables. A model opens on set 1, the one the
+attract shows. Nothing found yet says which set a model belongs to: the
+arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
+tables, luma and palette match MAME's RAM in the attract byte for byte, but
+for three colour rows and three palette entries the attract animates.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
+
+## Behind Enemy Lines
+
+`bel.zip` carries Behind Enemy Lines (Sega / EPL Productions, Model 2C; MAME
+calls it not working, but its attract runs). The **Models** tab has the
+data ROM's model table, 3183 entries, named from the game's own object
+directory (`o_c130`, `o_intro_hummer`, `o_fuelc_1_100`; a piece after an
+object's first is shown as `name +k`), with the textures, palette and colour
+tables the game loads.
+
+The texture picker's nine sets are the game's three scenes with the three
+banks each one can put on sheet 0. A model opens on set 6 (scene 2, the
+one the boot and the attract use, with its first bank). Nothing found yet
+says which set a model belongs to, so a model that comes out with the wrong
+picture may need another set. In the attract the game streams pieces of
+another bank into part of the sheets as it goes; the viewer shows the scene's
+sheets as they are first set up.
+
+Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
+byte at attract frame 1500.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1216,7 +1556,20 @@ So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
 and its USA build `lastbrnxu.zip`.
 
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
+beside it. `gunblade.zip` carries Gunblade NY. `zerogun.zip` carries Zero
+Gunner; its Japanese build wants `zerogunj.zip` beside it, and its Model 2A
+build `zeroguna.zip`. `skytargt.zip` carries Sky Target.
+
+`vcop2.zip` carries Virtua Cop 2.
+
+`sgt24h.zip` carries Super GT 24h.
+
+`overrev.zip` carries Over Rev; its Model 2B build wants `overrevb.zip`
 beside it.
+
+`dynabb.zip` carries Dynamite Baseball 97 when it holds MAME's `dynabb97`
+chips (`epr-19833a.15` and the rest); the 1996 Dynamite Baseball is not
+read yet.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

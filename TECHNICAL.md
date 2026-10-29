@@ -7138,6 +7138,822 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Motor Raid (`js/motoraid.js`)
+
+Sega's 1997 bike race (MAME's `motoraid`) keeps none of the AM2 tables. Each
+was found from the code that uses it, with MAME's write taps on the texture,
+palette, colorxlat and luma windows naming the routines.
+
+- **Models.** 7671 entries of {texture word, material word, mesh pointer,
+  polygon count} in the program ROM at 0x4F500 (`lda 0x4F500` at 0x4F4E0),
+  up to a table of data pointers at 0x6D480. The mesh pointers are word
+  indices into the polygon ROM as in the other 2A games.
+- **Textures.** Raw banks, copied by 0x2F990 (source, sheet), which is The
+  House of the Dead's arrangement (`uploadRawBank`). The boot (0x2FB00) puts
+  0x02000000 on sheet 0 and 0x02100000 on sheet 1. A scene's set-up,
+  0x21C9B0, puts bank 0x21C910[n] on sheet 1, n the scene number at 0x517AE0;
+  RAM 0x200000 on is the program's copy of ROM 0xB0000 on, so the table is
+  ROM 0xCC910. Set 6's bank is 0x06700000, through the XTRA_DATA window
+  (data 0x1700000). Several routines load a bank directly (0x2300000 at
+  0x28DB8 and 0x8A224, 0x2700000 at 0x47078, 0x6700000 at 0x85C5C), each
+  a bank of the same table. A streaming loader (0x2F7B4/0x2F960, 38 steps of
+  the rectangle table 0x2F3E0) was not seen called.
+- **Luma.** 0x30060 clears the 0x8000 entries and copies 0x2800 bytes from
+  data 0x98DD40 to entry 0x3200 on. 0x19050/0x191BC animate 0x3200..0x327F;
+  the viewer keeps the copy.
+- **Colorxlat and the face palette** are made by running the routines on
+  js/i960.js, as Sega Rally's are. The boot builds the 32 rows with float
+  arithmetic and a gamma (0x2FC70, helpers 0x2FC20 and 0x2FBD0), then
+  0x2FE40(0) lays scene table 0 over the odd rows at luma 0..63: eight tables
+  at 0x2FE20, each a row count and then 64 (r, g, b) bytes a row. The palette
+  is {count, colours} from data 0x297A0F4 at entry 0 and 0x297A366 at entry
+  0x1F4 (0x13B48, 0x31270), and the top filled downward from entry 1023 out
+  of 0x16350 (0x2FFA0). A scene's set-up 0x21C930 lays 0x31270(0x1F4,
+  0x21C8F0[n]) and its colours: scenes 0 and 1 through 0x21CBE0 (every row
+  rebuilt, the table scaled; scene 1's red by 1.25), the rest through
+  0x21CA50(n). Those lay a row a frame through the task slots 0x37630 and
+  0x37660, which the viewer hooks to queue the task and run the queue dry.
+- **Checked.** MAME, attract mode: frame 600 is the boot's state (sheets,
+  colorxlat, palette, luma byte for byte) and frame 1800 scene 1's (sheets,
+  colorxlat and luma byte for byte, the face palette all but entries
+  0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
+  which 0x16E38 animates). The other scenes' tables are the same routines
+  run with another n and were not held against MAME.
+
+### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
+
+AM3's 1995 bike game on Model 2A (MAME's `manxtt`, Revision D, the DX
+cabinet's program) is Sega Rally's engine, and most of what the explorer does
+for it is Sega Rally's code with Manx TT's addresses. The program runs straight
+from its ROM: there is no copy to RAM, so the addresses below are the ROM's.
+
+**Models.** 3532 entries of 16 bytes at program 0xBB00, tpa, tha, oba and a
+polygon count, as Sega Rally's; the draws read them 105 times as `lda
+0xBB00[gN*16]`. Mesh pointers cover all 12 MB of polygon ROM, texture pointers
+its first 4 MB.
+
+**Textures.** 0x3A20 is Sega Rally's 0x3940 (`uploadSrallycBank`): g0 the
+bank, g1 the flag, the same two cursors and the same six-entry run table, at
+0x3960 here. A bank is main_data 0x400000 + bank * 1 MB (`shlo 20` then `lda
+0x2400000(g0)`), and g0 = -1 goes on with the upload in progress, a slice a
+frame. The boot (0x3720, 0x3750) deals bank 0 with the flag 0 and bank 1 with
+the flag 1. Banks 0..3 (data 0x400000..0x7FFFFF) are the only ones dealt:
+0x8480 deals 2, 0x274F4 1, 0x6532C cycles 0..3, and 0x1D8E0, which the attract
+scripts call from their tables at 0x19960 and 0x199F0 (entries {start, end,
+handler, arg1, arg2}), 3, 2 and 1. The explorer's sets are banks 1, 2 and 3
+over bank 0. Set 0 matches MAME's texture RAM after the boot, every byte of
+both sheets. Which course or scene uses which of banks 2 and 3 has not been
+worked out, so a sheet-1 model gets its set from the picker. A second routine,
+0x3CB0/0x3D00, copies a bank straight to sheet 1 (0x12400000), 0xFFF
+halfwords a call; nothing here uses it.
+
+**Colours.** The boot's 0x36F0 calls 0x6830, then `bal 0x3828` and `bal
+0x38B8`. 0x6830 builds colorxlat: 0x68B0's ramp is float arithmetic (a gamma,
+with constants at 0x68A0 and 0x68A4) over 32 rows of the three channels at
+0x1810000, 0x1814000 and 0x1818000, and 0x76B0 and 0x7754 lay rows over it.
+The explorer runs 0x6830 on `js/i960.js` straight out of the ROM
+(`runColorRoutines` without `copy`), and the result is MAME's colorxlat byte
+for byte. 0x6830 also writes the face palette: 0x6770 copies {count,
+colours} from 0x7A404, 738 colours, to 0x1802000 (`paletteProgram`), which
+matches MAME's palette RAM. Luma is 0x3828: main_data bytes 0..0x407F to luma
+RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
+0x3880 to the TGP's registers at 0x800000; what they are has not been worked
+out, so there is no `lighting` block and the lone model gets the placeholder
+light.
+
+**Leads.** The pictures are AM3's "CGM 1.0" files, as Sega Rally's (js/cells.js
+`cgm`): one in the program at 0xB250 and 101 in the data ROM from 0x280000.
+The map of the island is model 1213 to 1216, the leaderboards 1628 and 1629.
+The course is built from segments around 2099..2350, drawn by the race
+code that reads the model table; its course records were not looked for.
+MAME on empty NVRAM stays on the DX cabinet's motion-slider check, so the
+attract never ran there; the bank-to-course mapping needs a run past it
+(the Twin cabinet's settings, or m2-hle2).
+
+### INDY 500 (`js/texture.js`, `js/colors.js`)
+
+Sega's 1995 racer on Model 2B (MAME's `indy500to`, the Twin, Revision A, and
+`indy500d`, the Deluxe) shares nothing with Sega Rally but the board. The
+addresses are the Twin's. The Deluxe has its own last data pair, but every
+table read here is the same in it; its program is moved about
+(`indy500Build` in js/games.js lists the five addresses that change).
+
+**Models.** 3571 entries of 20 bytes at data 0xC00460: tpa, tha, oba, a polygon
+count and a pointer to more about the model. An oba is a word index with bit 23
+set. tpa and tha reach the texture ROM's 8 MB with bit 22 set as well, so the
+region repeats it at 0x800000, as the board's mirror does.
+
+**Textures.** The data ROM's first 8 MB are eight 1 MB banks, each laid out as
+a sheet already is. 0x2DAD0 (g0 the bank's address, g1 a slot, 0 or 1) queues
+one, and 0x2D8E0 deals it a rectangle a frame through 0x2D860 out of the table
+at 0x6C860: records 1..37 of {swap, half, x0, y0, x1, y1}. The sheet is the slot
+XOR swap; half adds 512 rows at both ends; a rectangle is rows y0..y1 of
+x0..x1, rounded up to eight texels (ldq/stq), at the same offset in the bank and
+on the sheet. So most of a bank lands on its slot's sheet and the corners
+with swap set land on the other. The boot (0x2DC98) deals banks 0 and 1. A
+course's set-up, 0x16F50, deals the two its record names: the records are 24
+bytes at 0x6A5B0 (a second copy at 0x6A5F8), +0x10 and +0x14 the banks, (4, 5)
+for course 0, (0, 1) for course 1, (2, 3) for course 2. 0x36B9C and 0x63D44
+deal (6, 7), and 0x56320 deals bank 6 with colour table 3. The explorer's set
+is the course (`pairs`, set 3 = (6, 7)). MAME's texture RAM at attract frame
+1500 is set 0 and in a course-1 race at frame 6000 set 1, both sheets
+byte for byte.
+
+**Colours.** 0x2DD80 builds colorxlat's base ramp, and 0x2DE70 (g0 = k) lays
+rows over it from the table data[0xC3CE5C + 4k] points at; k is the course
+(0x16F78, through 0x53C340), 0 at boot. The explorer runs both on
+`js/i960.js` (`runColorRoutines`, an argument of `'set'` standing for the
+colour set), with the data ROM mapped at 0x2000000; MAME's colorxlat is k = 0 at
+frame 1500 and k = 1 at 6000, byte for byte. Luma is 0x2E010: data
+0xC122E0..+0x4000 to luma RAM 0x11400000, a byte a halfword, then 0x180 bytes
+from XTRA 0x64B0850 (data 0x10B0850) over its start (`luma.over`; the Deluxe
+reads them from its program at 0xA8D94). The face palette is {count, colours}
+at data 0xC11B5C, 961 colours, to 0x1802000 (0x2F0D0), then 0x2DFB0 lays
+{count, colours} from entry 1023 downward, table 0x53C40C & 7 of the eight
+pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
+table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
+palette; it is not ported. Luma and palette match MAME.
+
+**Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
+lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
+like the course's segments at two distances; +0x0C points at 16-byte records
+of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
+program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
+format, and its tiles were not looked for. The sound board is the 68000 and
+SCSP of the other Model 2 games (epr-18391.31); its command writes were not
+traced.
+
+### Sega Touring Car Championship (`js/texture.js`, `js/colors.js`)
+
+AM Annex's 1996 racer on Model 2C (MAME's `stcca`, Revision A) is built on
+Sega Rally's board code. Addresses are Revision A's.
+
+**Models.** 2811 entries of 16 bytes in the program ROM at 0x32490: tpa, tha,
+oba and a polygon count (`lda 0x32490[gN*16]` at 0x6B80, 0xAE38, 0xB1E8 and on;
+`ld 0x3249C[gN*16]` reads the count). An oba is a word index with bit 23 set.
+The polygon ROM's last 1 MB pair and the texture ROM's are repeated through
+the top 8 MB of their regions, as MAME's ROM_COPYs have them, and the data
+ROM's at 0xC00000, where the boot's patch list is.
+
+**Textures.** 0x6A930 is Sega Rally's deal with its run table at 0x6A300 (the
+same six entries; `uploadSrallycBank`), g0 the flag, g1 the source and g2 a
+patch list. The source is not a raw bank but a run-length stream (0x6A6D8):
+skip a byte, then {u32 value, u8 count} records, each value written count
+times, decoded four words at a time (0x6A770, stq). After the deal, 0x6A8A0
+copies the patches, {u32 coord, i32 count, count words} until coord 0, the
+words to byte coord on a sheet chosen by 0x6A7B0 from where coord lies in the
+mip layout (`buildStccTexram`). The boot (0x1310) deals {0x2400000,
+0x2C4BCEC} with the flag 0. A course (0xAA10) deals its record's +0 and +4
+with the flag 1; the records are 0x3F4 bytes at 0xBEB0, and records 0, 1 and 4
+name the same pair, as do 2 and 5, and 3 and 6. The title and menus deal
+0x2708D08 with no patches (0x39E8, 0x5738, 0x3FAA4). The explorer's sets are
+records 0, 2, 3 and 7, then the title. MAME's texture RAM at attract frame
+1500 is set 0 byte for byte; at 3000 and 6000, sets 1 and 2 but for three
+bytes at tex0 0xFF3E5..0xFF3E9 that set 0's patches wrote and the later deals
+do not cover.
+
+**Colours.** The boot's 0x6A1F0 runs 0x6AC60, the gamma ramp in all 32 rows
+of colorxlat, and 0x1350 then runs 0x6AE50 with g0 = 0x32120, keyframed
+ramps over the odd rows. Luma is 0x730F0's, worked out and written to
+0x11400000 a byte a halfword (`lumaRam`). The explorer runs all three on
+`js/i960.js`; colorxlat and luma match MAME at frames 1500, 3000 and 6000.
+The face palette is {count, colours} at program 0x65660, 495 colours, copied
+to 0x1802000 by 0x1C8C0 from the frame hook (0x696C0). 0x1C950, 0x1C9F0 and
+0x1CA90 copy it ANDed with 0x801F, 0x83E0 or 0xFC00 for a moment of the
+attract mode (MAME's frame 6000 is in one of them); not ported.
+
+**Leads.** A course record's +0x08 points at a program table (0xBB60 for
+record 0) and +0x0C on is a run of consecutive model numbers (0x399.. for
+record 0, 0x48F.. for 2, 0x678.. for 3, 0xA09.. for 7), which look like the
+course's segments. The pictures are "CGM 1.0" files, as Sega Rally's
+(js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
+(epr-19275.2s, mpr-19262..19265); not traced.
+
+### Super GT 24h and Over Rev (`js/jaleco.js`)
+
+Jaleco's two Model 2 racers, Super GT 24h (1996, MAME's `sgt24h`, Model 2B
+CRX) and Over Rev (1997), keep none of the AM2 tables but share one
+framework: the same `../h/globl.h` and `define.h` fault strings, the same
+model table, the same boot colour routines and the same texture loader at
+other addresses. One profile builder (`jalecoBuild` in js/games.js) serves
+them. Every table was found from the code that reads it, in MAME's i960
+disassembly, and every result was held against MAME's RAM (Lua dumps of
+texture, colorxlat, luma and palette RAM at fixed frames).
+
+**Models.** The table is 16-byte entries in the data ROM: texture word,
+material word, mesh pointer, polygon count. The draw routines (sgt24h
+0x72C30, 0x72C60, 0x72C90) send an entry to the geometry engine four words
+at a time (`st 0x101, 0x800010`, `ldq`, `stq` to 0x804000). Super GT 24h
+has 2238 entries at data 0x80F480; the list of 0x1C-stride pointers into
+them starts right after, at 0x818060. Mesh pointers are data addresses
+past a 16-byte header (`meshPtr` subtract 0x02000010, add 0x10).
+
+**Face palette.** 0x72000 copies {count, colours} from the program ROM
+(0x72CF4: 0x1B7 colours) to palette RAM 0x1802000; MAME reads it as
+`palram[color + 0x1000]`.
+
+**Colorxlat and luma.** The boot (0x5A120) runs three routines, and the
+viewer runs the same ones with js/i960.js (`colors.i960` in the profile,
+as for Sega Rally): 0x5A920 builds every row as a ramp out of the byte
+table at 0x5A900, 0x5AA10 lays the odd rows from 0x67CA4 over it, and
+0x5AB10 copies the 0x8000 bytes at 0x687E5 to luma RAM at 0x11400000, a
+byte every halfword (so `lumaRam`/`lumaStep` in js/colors.js). A scene then
+lays more rows through the queue at 0x530370, which 0x3CAF0 drains: a record
+is {rows, destination list, variants, source}, and variant v's rows are 16
+bytes each, each byte four colorxlat entries. The title and the races queue
+data 0x2BEB860 variant 128 (rows 1 and 3, from 0x3DF30; its 640 variants
+are the race's hours) and 0xCB2B0 variant 0 (rows 5, 7, 9, 11, 21, 23 and
+29, from 0x3DF60, variant by 0x530630). The viewer runs 0x3CAF0 on those two
+after the boot's three, with the record address and variant in g0 and g1.
+Colorxlat, luma and palette RAM match MAME's at frames 300 (boot only) and
+1800 (the attract race), no byte different.
+
+**Textures.** Nothing is packed. The loaders (0x5A2B0 for sheet 0, 0x5A470
+for sheet 1) take a data address and blit (0x5A630) its first 0x80000 bytes,
+512 by 512 halfwords, to the sheet's first half, then the next 0x80000 as
+ten mip rectangles split between the two sheets' second halves, sheet 1's
+loader with the halves swapped, so the two chains interleave. The blit's
+loop (`cmpible`) copies one 16-byte quad past each row's end; on the 2B,
+where 0x11100000 mirrors 0x11000000, a quad past a sheet's end lands at its
+start, and js/jaleco.js wraps it the same way. The loader then sets the
+first eight halfwords of 0x11000000 to 0xFFFF. Boot loads data 0x0 to sheet
+0 and 0x100000 to sheet 1 (0x5A13C); a course reloads sheet 1 from the
+program's table at 0xED8B0 (0x3F4C0: data 0x100000, 0x200000, 0x300000,
+0x400000, then the four again), and 0x77850 loads 0x500000. Those are sets
+0..4. Set 0 matches MAME's texture RAM at frames 300 to 2700, no halfword
+different.
+
+**Over Rev.** `overrev` (Model 2C, Revision A) and `overrevb` (Model 2B,
+Revision B) share every ROM but the program, so one table: 1893 entries at
+data 0x80CEC0, up to 0x814510. The two programs run the same boot at the
+same addresses (0x11F64 on): 0x12760, 0x12850 and 0x12950 for colorxlat and
+luma (luma from the 0x8000 bytes at 0x37F09), then 0x120F0 for sheet 0 (data
+0x0) and 0x122B0 for sheet 1 (data 0x100000), blit 0x12470. They differ in
+where the palette is, {count, colours} at 0x2A7A4 in the 2B build and
+0x32A44 in the 2C, 769 colours, copied by 0x177F0.
+
+Before the loads, 0x12080 copies the data ROM's first 0x100000 halfwords to
+0x11000000 a halfword every four bytes, through all four MB of the sheets
+and their mirrors; the loads go over most of it, and js/jaleco.js does the
+same (`fill`). The 2C's texture RAM is two 2 MB shares with no mirror, so
+there the blit's extra quad does not wrap within a sheet (`window`).
+
+A course loads sheet 1 from its record in the program's table at 0xCD8B0
+(0x1C bytes: texture source, then the course's name): Tsukuba data 0x200000,
+Shibuya 0x400000, Touge 0x600000, Futou 0x500000, and the other versions of
+Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
+
+Checked against MAME on both boards: colorxlat and luma at the title (frame
+400) no byte different. Colorxlat does not change in the attract race; luma
+bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
+keeps the boot's. Texture RAM matches at the title and in the attract race
+(Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
+sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
+
+**Not done, and leads.** No course is put together: the course's model
+lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
+read the model table besides the draw routines, and the pointer list at
+data 0x818060 is the place to start. The car is single models; which parts
+make one car, and the colour rows per hour (variant by the race clock), are
+open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
+read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
+copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
+found in. The tile chip's pictures and the sound programs were not looked
+at.
+
+### Dynamite Baseball 97 (`js/dynabb.js`)
+
+Sega's Dynamite Baseball 97 (MAME's `dynabb97`, Model 2B CRX, Revision A)
+is the Jaleco racers' framework a version on: the same model table entries,
+the same draw and the same texture loader, grown. Like them, every table
+was found from the code that reads it in MAME's i960 disassembly, and every
+result was held against MAME's RAM (Lua dumps of texture, colorxlat, luma,
+palette and work RAM at frames 300, 600, 1500, 3000 and 4500 of the attract
+mode, with a debugger breakpoint logging each texture load's arguments).
+
+**Models.** 7890 16-byte entries at data 0xAFFD00 (the draw 0xA5280,
+`lda 0x2AFFD00[g0*16]`, `st 0x101, 0x800010`, `ldq`, `stq` to 0x804000;
+also 0xA4F20, 0xA50EC, 0xA5354, 0xA54D0, 0xA5658, 0xCDEA8, 0xCEF48). Mesh
+pointers as in the racers. The names are a table the racers lack: {model,
+name pointer} pairs at data 0xB5C400, 7887 of them, ended by a pointer of
+0xFFFFFFFF, each name 32 bytes padded with spaces at 0xB1EA20..0xB5C400,
+sorted, likely so the game can find a model by its name (0xC2F40 and
+0xC2F98 read the pairs). `modelNames.pairs` in the profile; js/romset.js
+reads it.
+Models 0..2 have none. A player is parts named for their joints (`J_KAO`
+face, `J_MUNE` chest, `J_KATA` shoulder, `J_MOMO` thigh, `J_HIZA` knee),
+prefixed with the team and `H` or `V` for the home or visitor kit.
+
+**Textures.** The loader is a dispatcher, 0x81420: a data address in g0, a
+sheet in g1, a layout in g2, through the jump table at 0x81464. Layout 0
+(0x81530) is the racers' whole page and ten mip rectangles (blit 0x819C0);
+32 (0x81668), 33 and 50 (0x81728), 48 (0x817F0) and 49 (0x818C0) copy packed
+rectangles into parts of the sheets (blit 0x81A00). js/dynabb.js runs
+0x81420 itself with js/i960.js against a bus of the program, work RAM, the
+data ROM and the two sheets with their mirrors, rather than port the five
+layouts. The boot (0x80C28) clears the sheets (0x80DE0) and loads the
+stadium (0x809A0, layout 32, sheet 0), data 0x2855500 (layout 33, sheet 0),
+a team's two halves (0x80920 layout 48 and 0x80960 layout 50, sheet 1,
+0xAAA00 apart per team) and data 0x2800000 (layout 49, sheet 1). A game
+reloads them through 0x84550 (team A, 0x5B961C), 0x84670 (team B, 0x5B95F4)
+and 0x84790 (the stadium, `0x809A0[0x138840[n]]`, kept at 0x5B9628). The
+viewer's set is stadium × 12 + team with both teams the same; the teams'
+order is that of their name prefixes in the model table, checked for Carp,
+Lions and Buffaloes by the lettering on their shirts. MAME's texture RAM
+matches the boot (frame 300, sheet 0 and 1) and two attract games (teams 0
+and 10 at stadium 1, frames 1500 and 3000; 0 and 6, frame 4500) on sheet 1
+exactly and on sheet 0 but for 119 halfwords at 0xFC3C0 that 0x848E0 copies
+within texture RAM at run time.
+
+**Colours.** Also run, not ported (`dynabbColors`): the boot's 0x82040
+(colorxlat's 32 rows, k·sqrt(x) + (1 − k)·x² with k = 0.7 from 0x82034,
+× 1.1 unless the byte at 0x5CA37B is 1), 0x82430 (odd rows, via 0x82530,
+from data 0x2BAE830) and 0x82620 (luma from data 0x2BA0B50); the game's
+palette set-up 0x99DB0 ({count, colours} blocks at data 0x2BA94D2,
+0x2BA8D6C, 0x2BA8E48, 0x2BA8B9E and 0x2BA8B16 to entries 0, 0x100, 0x200,
+0x300 and 0x37A, copier 0x844D0); then the colour halves of the loads,
+0x84570 (team A: rows 1, 3, 5 from 0xD82E0, palette 0xD8370 to entry
+0x100), 0x84690 (team B: rows 7, 9, 11 from 0xD8320, palette 0xD83B0 to
+0x200) and 0x847D0 (stadium: row 15 from 0xD8360, palette 0xD83F0 to 0).
+Their rows go through 0x82200, the same curve with per-stadium flags from
+0x82470. The square root is the coprocessor's: the i960 writes a command
+(0x16802D2D) and x to the FIFO at 0x884000 and reads the answer, and the
+copro program is the one 0x825B0 uploads from 0x664EC; the viewer's bus
+answers with a float square root. Colorxlat, luma and the face palette
+(0x1802000) match MAME's at frames 1500 and 4500 with no byte different.
+Palette RAM below 0x1802000, which 0x82200's callers address, is not the
+face palette; its +0x10000 is colorxlat.
+
+**Not done, and leads.** No stadium is put together and no player
+assembled. If the game finds models by name (0xC2F40), the stadium's
+and players' lists are likely name lists: look for callers of 0xC2F40 and
+of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
+(0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
+teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
+are test-menu colour tweaks. Motions, the tile chip's pictures and the
+sound program (`epr-19849.31`) were not looked at.
+
+### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
+
+Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`, Revision A) shares
+its library with Virtual-On, also AM3's, more than with Virtua Cop or House of
+the Dead. Everything below was checked against MAME: the shared build's RAM
+was dumped by a Lua script at attract frames 600 (the city), 1500 (the stage
+film) and 3000 (the title). The addresses are program ROM offsets; the program
+runs in place.
+
+**Models.** There is no model table. The boot and the game send an object as
+`st 0x101, 0x800010` followed by the texture word, the material word and
+`0x800000 | mesh word` to 0x804000, and those triples sit in the program and
+data ROMs, as on Virtual-On. So `modelTable.scan` walks the meshes end to end
+and takes each one's pointers from a triple naming it. Unlike Virtual-On, the
+meshes lie in four runs, one from the start of each pair of polygon chips
+(`scan.runs`: polygon words 0, 0x100000, 0x200000, 0x300000; each run ends at
+0xFFFFFFFF or at a word that is no mesh). That makes 5452 meshes. A write tap
+on 0x804000 after 0x101 caught 1529 objects in the attract's first 6000
+frames. 1528 were triples the scan has, on a mesh start; the other was mesh
+0xA with zero texture words.
+
+**Textures.** The banks are raw, not LZ: bank n is the megabyte at data
+n << 20. 0x5B100 sets a copy up and 0x5B168 does it a piece a frame, eight
+halfwords to a `stq`. The deal is the table at 0x5B040: six groups of eight
+words, each a repeat count and then run lengths in halfwords, ending at 0 or
+below. A run goes to the sheet being written, the same length is stepped
+over on the other, and then the two swap. A list that ends below 0 swaps
+them once more. The boot copies bank 0 with sheet 0 first (0x5AE48), and
+each scene's set-up copies its own bank with sheet 1 first
+(`mov 1, g1; call 0x5B100`; for example 0xDE780 and 0xEC544). Set s in the
+viewer is bank 0 then bank s + 1, and set 8 is bank 8 again. Both sheets
+match MAME's in the city (bank 1), the stage film (bank 7) and the title
+(bank 8).
+
+**Palette.** {count, colours} at 0xC57CC: 962 colours, which 0x155D0
+copies to the face palette. 0x15C30 then sets entries 18 to 53 by the flags
+at RAM 0x5039C0 to 0x5039CC, all 1 after the boot; these are
+`paletteFixes`. 0x159CC rewrites entries 8 to 28 every frame for the HUD,
+and 0x15598 and 0x155C8 write the tile chip's entries 0 to 31.
+
+**Luma.** Two grey ramps of 128, then 0x2080 bytes from 0xF2200 at entry
+0x800 (0x6A388), the layout Virtual-On uses.
+
+**Colour tables.** All three channels are alike.
+
+- Slots 64 to 127 of row r are 215r / 31 + 40, and 0 on row 0 (0x16020).
+- Slots 0 to 63 of the even rows and row 31 are what 0x16800 writes at the
+  attract's start in curve 7 (0x16ECC; the switch is at 0x1688C and the row
+  list at 0x167D0). The curve is 7 while byte 0x54C0EE is 0, which it is
+  on fresh NVRAM (callers 0x6BAA8, 0xC505C, 0xF1B8C). A runs from 64, gaining
+  6.4 - trunc(l / 10) a slot, and the slot is r * a / 31 in single floats,
+  at most 255.
+- Slots 0 to 63 of odd rows 1 to 29 are the scene's, from 0xC88C0 (table
+  0..8), which calls 0xC84E0 for each row. The word at 0xC75C0 +
+  (table * 15 + (row - 1) / 2) * 4 points at single floats: a count, then
+  that many keys of {position, red, green, blue}, each 0..1. A key goes in
+  slot trunc(position * 63 + 0.1), each channel trunc(c * 255 + 0.1). The
+  slots between keys are integer lines from the last key, starting from
+  zeros at slot 0, and the slots past the last key stay 0. A slot of value v
+  is written as sqrt(v / 255) * 255, and on row 3 as
+  (sqrt(v / 255) * 3 / 4 + 0.25) * 255.
+
+The boot's own pass (0xC83E0, 0xC9190, 0xC98D0) is written over entirely by
+these. The table a set uses is `texture.raw.sets[s][1]`: in MAME the city
+uses table 0, the stage film 6 and the title 8. With that, all three
+channels match MAME's in the three places. Later in the attract the game
+fades the tables (frame 3530 differs everywhere), and the viewer does not
+model the fade.
+
+**Leads.** The scene number is at RAM 0x508C94, and the switch on it at
+0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
+0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
+model to its set. The objects' records (which triple, where) are not found.
+Gunblade NY has no fighters or motions. Its enemies and vehicles move by
+script, and that script is not read. The tile chip (cells) and the music
+are not looked at.
+
+### Zero Gunner (`js/texture.js`, `js/colors.js`)
+
+Psikyo's 1997 shooter runs on Pilot Kids' engine, a year older. The builds
+are the export one on Model 2B CRX (MAME's `zerogun`), the Japanese one
+(`zerogunj`) and the export one on Model 2A (`zeroguna`). The three programs
+keep every table at the same offset, except the texture load list: 0x48080,
+0x480D0 and 0x47FA0. Their code moves by up to 0x180. The addresses below
+are `zerogun`'s. As in Pilot Kids, the program runs from a copy at RAM
+0x500000.
+
+Everything was checked against MAME. The shared build's RAM was dumped at
+attract frames 600, 1500 and 3000 in `zerogun`, and at frame 600 in the two
+clones. Its write taps named the routines below.
+
+**Model table.** The data ROM at 0x7FF80 holds 32 bytes an entry: texture
+word, material word, mesh pointer, polygon count, then two more texture
+words. It runs 7712 entries; {4, -1, 0, 0} follows. The draws (0x4D3A0 to
+0x4DB48) send words 0 to 3 after `st 0x101, 0x800010`, the same as Pilot
+Kids'. In the attract's first 3000 frames the game sent 294 distinct objects:
+
+- 207 are entries as they are;
+- 18 more are entries with word 4 or 5 for word 1;
+- 47 use mesh 0x22, a quad, with texture words worked out at run time
+  (sprites);
+- 18 have no mesh;
+- a few use meshes at 0x14F... that no entry names.
+
+**Textures.** The 315-5881 on the board is used, at 0x6C510, only to
+decrypt short constants for the game's checks. The pages are dealt by Pilot
+Kids' loader (0x48440, the RLE blit at 0x48760). The load list holds 25
+{source, kind}. Load 0 is kind 0, the common load. A scene adds one load of
+kind 1 and one of kind 2. Kind 2 (0x486B0) is a list of rectangles that
+Pilot Kids has in its program but never uses: a page 512 rows high in sheet
+0's second half, with its mips. A scene's record has its two load numbers at
++0x24 and +0x26, with -1 meaning none; they are read at 0x62F6C. The records
+are listed by stage: RAM 0x56EE28 holds one list for each stage, and each
+list points at the records. The pairs are:
+
+- (20, 21), the attract at frame 600;
+- (22, 23), at frame 1500;
+- (19, none);
+- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
+  8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the second stage;
+- (5, 6, 14, 15 or 7, with 18), the third stage.
+
+Both sheets match MAME's byte for byte at all three frames.
+
+**Palette.** The palette is {count, colours} at 0x87F4, 615 colours, which
+0x4DFA8 copies to the face palette. Entry 26 is later animated (0x538B8).
+
+**Luma.** 0x48B60 copies the 0x600 bytes at 0x1A20. 0x48C10 can lay a band
+of 128 from the same table over band 0. The attract's fade does that by
+frame 3000.
+
+**Colour tables.** 0x489E0 writes every row: slot l of 0..63 on row r is
+((6r + r / 6 + 64) * (l + 1)) >> 6, floored at r (the byte table at
+0x489C0), and row 0 is 0. Slots 64 to 255 keep slot 63's value. Then 0x48AD0
+lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
+on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
+tables after the boot (frame 51), and they match MAME's entry for entry.
+
+**Leads.**
+
+- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
+  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
+  0x502512 and 0x502510.
+- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
+  a model to its set.
+- The tile chip and the music are not looked at.
+
+### Sky Target (`js/texture.js`, `js/colors.js`)
+
+Sega's 1995 flight shooter on Model 2A CRX (MAME's `skytargt`). It shares
+no code with the AM2 games or with Psikyo's; only the board's draw is the
+same: `st 0x101, 0x800010`, then an entry's first three words to 0x804000.
+The data ROM's last megabyte (epr-18404/18405, data 0x1000000) is mirrored
+through XTRA_DATA every megabyte, so the program reads its colour, luma and
+palette tables at 0x64xxxxx; that is data 0x1000000 + (address & 0xFFFFF).
+
+Everything was checked against MAME's shared build: texture RAM, palette,
+colorxlat and luma were dumped at attract frames 600 (the title, after the
+boot), 1500 and 3000 (the first stage), and debugger watchpoints
+(`wpset` with `curpc`) named the routines below. The program's writes to
+main RAM do not reach a Lua write tap; watchpoints do.
+
+**Stages.** A stage is a 24-byte record at 0xF6578; the stage index is RAM
+0x5290C0, and 0xD1C90 sets a stage up from its record:
+
+- +0 the texture bank (0x36B50);
+- +4 the colour row list (0x37390);
+- +8 the palette table (0x39060);
+- +0xC a list of row-21 tables, taken by an argument (0x374D0);
+- +0x10 a data pointer, not read yet; +0x14 is 0.
+
+There are twelve records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
+0x2200000, 3 and 11 0x2300000, 4 0x2400000, 5 and 8 0x2500000, 6 0x2600000
+and 7 0x2700000.
+
+**Model table.** The data ROM at 0xDE3D00 holds 16 bytes an entry: texture
+word, material word, mesh pointer, polygon count. It runs 24204 entries. All
+217 distinct objects the attract sends in its first 3000 frames are entries
+of it.
+
+**Textures.** Banks are raw, a megabyte each, and dealt out in The House of
+the Dead's rectangles (RAW_MIP_RECTS). The boot's 0x369E0 (from 0x36758)
+loads bank 0x2000000 with its full size on sheet 0 and its mips on sheet 0's
+and sheet 1's second halves. A stage's 0x36B50 loads its record's bank the
+other way round: full size on sheet 1. Both copy through 0x36E10 (g0
+source, g1 destination, g2..g5 x0, y0, x1, y1; a halfword (x, y) is at
+((y << 9) + x) * 2 in both). It copies ((x1 - x0 + 1) / 8 + 1) * 8
+halfwords a row, eight more than the rectangle, linearly, so each row spills
+into the next one. The boot bank's last rectangle spills past sheet 1 into
+luma entries 0..7. Both sheets match MAME's byte for byte at all three
+frames, the spill included.
+
+**Palette.** 0x232D0 copies {count, colours} at 0x640FB5C to entry 0, and
+0x39060 the record's +8 table to entry 500 (0x18023E8). The boot's is
+0x640FD82, record 0's. MAME's matches in every stage it showed (0, 1 and 9).
+The palette below 0x1802000 is the tile chip's (the table at 0xEBFB0, the
+loaders 0x789F0 and 0x2CF20).
+
+**Luma.** 0x376E0 copies 0x4000 bytes from 0x6400000. The texture spill
+then writes entries 0..7, with zeros (data 0x100000 is zero).
+
+**Colour tables.** The game builds them in RAM (r, g, b at 0x51FA10,
+0x520A10 and 0x521A10, 32 rows of 0x80 bytes), and 0x2D350 and 0x2D450 copy
+them up every frame, through the fade factors at 0x51CA10 (0x2B55C and the
+like). Row r is a = 6r + r / 6 + 64 (row 0: 0) in slots 64..255 (0x37120);
+slots 0..63 are max((a * (l + 1)) >> 6, r) (0x37290; the byte table at
+0x37100). Then:
+
+- 0x37390 lays 14 tables of 64 {r, g, b} bytes over odd rows 1..27, from
+  the list at record +4 (the boot's list is 0x6410580). Each byte is scaled
+  by the single float at 0xE6AE8 + 4 * (byte 0x517D3A & 1), 1.1 on fresh
+  NVRAM, truncated, and held at 255. Stages 5 and 8 take 1.0.
+- A stage's 0x374D0 lays row 21 from record +0xC.
+- 0x37590 lays the four rows of 0xC0 bytes at 0x640F85C over rows 19, 21,
+  23 and 25, so record +0xC's row never shows in the dumps.
+
+They match MAME's entry for entry, at the boot and in the first stage.
+
+**Leads.**
+
+- Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
+  set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
+  0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
+  or path data and is not read.
+- Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
+  0x2CF20, and the tile RAM loader 0x78A90.
+- Fades: 0x2B55C and the factors at RAM 0x51CA10.
+- The music is not looked at.
+
+### Ski Super G (`js/skisuprg.js`)
+
+Sega's 1996 ski game on Model 2C (MAME's `skisuprg`). Each table was found
+from the code that uses it, and checked against MAME's texture, colour,
+luma and palette RAM dumped in the attract (frame 3000).
+
+**Model table.** The program ROM at 0x195900, 16 bytes an entry (the usual
+texture word, material word, mesh pointer, count), 5519 entries to 0x1AB1F0.
+The draw at 0x47900 and 29 more name it, all `lda 0x195900[g0*16]`, then
+`ldq` and `stq` to 0x804000 after `st 0x101, 0x800010`. Mesh pointers are
+main-data addresses from 0x2000010. All 5519 decode (222,547 faces, 178,850
+textured).
+
+**Textures.** The boot (0x43454) puts bank 0x2000000 on sheet 0 with 0x436C0
+and bank 0x2400000 on sheet 1 with 0x43830. Both are House of the Dead's
+upload, the first half of the bank straight onto its sheet and the mip
+levels of the second half dealt between the sheets by 0x43AF0
+(`uploadRawBank` in `js/texture.js`). Only 0x11660 writes sheet 0 again (bank
+0x2500000, when 0x5111AC is set; not seen in the attract).
+
+**Scenes.** Every scene calls 0x43830 (bank onto sheet 1), 0x460D0 (a
+{count, colours} block onto the face palette from entry 500, 0x18023E8) and
+0x44260 (a colour table) in a row. The menus name theirs in the code
+(0x22398, 0x25E80, 0x3615C, 0x60E54: 0x2300000, 0x48108, 0x9EE60; 0x278E8
+and 0x28D60 the same with 0x9EF20); the boot's is 0x2400000, 0x47EEA,
+0x9EDE0. A course takes its three from its 40-byte record at
+0xA4700 + course * 40, words +0x18, +0x1C and +0x20, read at 0x3DEA4 with the
+course in work RAM 0x51A190. Words +0x00 to +0x14 are floats, +0x24 a pointer
+(0xB7F40 for course 1); neither is read here.
+
+**Palette.** 0x11900 lays the {count, colours} block at 0x47DA8 from entry
+0; the scene's block goes from entry 500.
+
+**Colour tables.** Run with `js/i960.js`, as the boot does: 0x43DF0 works the
+ramps out (floating point, a square root) into a shadow at work RAM
+0x5121B0 and writes entries 64..255 of each row to colorxlat; 0x44260 lays
+the scene's table of 64 {r, g, b} a row over the shadow's odd rows. The
+vblank copies the shadow's 64 entries a row to colorxlat, even rows and row
+31 one frame (0x13AD0), odd rows 1..29 the next (0x13BD0): channel c, row r
+is 0x80 bytes at 0x5121B0 + c * 0x1000 + r * 0x80.
+
+**Luma.** A straight copy of the program's 0x7F80 bytes at 0x3970 to the
+start of luma RAM; the rest stays 0.
+
+**Leads.** Which models a scene draws, so that a model could open on its own
+set, is not found. A course's record (+0x24 and on) and the course loader
+0x3DEA4 are where a Stages tab would start. Lighting is not done.
+
+### Wave Runner and Sega Water Ski (`js/waverunr.js`)
+
+Sega's 1996 jet-ski game on Model 2C (MAME's `waverunr`, Revision A). Its
+program is Ski Super G's generation: the same 16-byte model table, the same
+raw banks. Each table was found from the code that uses it, and checked
+against MAME's texture, colour, luma and palette RAM in the attract (frames
+1300 and 3000). Addresses are the program ROM's.
+
+**Model table.** 0x6A7C0, 16 bytes an entry, 3457 entries, named by 53 draws
+(`lda 0x6a7c0[gX*16]`, then `ldq` and `stq` to 0x804000). All 3457 decode
+(174,094 faces, 153,651 textured).
+
+**Textures.** 0x34BF0(bank, sheet) is Ski Super G's 0x43830, the same calls
+to the rectangle copy 0x345C0 (`uploadRawBank`). The boot (0x34DC8) puts
+0x2000000 on sheet 0 and 0x2100000 on sheet 1. After a scene's bank,
+0x3F570(0xBBBB) fills the 16 x 8 halfwords at (0x1F0, 0x1F8) of both mip
+halves. A course then has 0x4AAC0 paste eight 64 x 64 blocks, 0x2000 bytes
+each from data 0x848B60, onto sheet 1 through 0x3EC50 (g1 = 0 is sheet 1),
+at The House of the Dead's eight places.
+
+**Scenes.** A course (work RAM 0x511F60) takes its palette block from
+0x973E0, its bank from 0x973F0 (0x2100000, 0x2200000, 0x2300000, 0x2400000)
+and its colour table from 0x35040 (0x97410, 0x97470, 0x97460). 0x4AF60 with
+0x4AFF4 and 0x2CBE0 with 0x2CD2C name theirs in the code (banks 0x2200000
+and 0x2500000, colour table 4 of 0x35040).
+
+**Palette.** 0x351C0 writes the {count, colours} block at 0x10080 down from
+entry 1023 (the boot's only). Every scene writes 0x2858B60 from entry 0,
+0x84350 from 300 and its own from 500 through 0x36360.
+
+**Colour tables.** 0x34EC0 works the ramps out in floating point, every
+entry of every row; it runs with `js/i960.js`. 0x35060 (or 0x97500, a row a
+frame) lays a table over them: a count byte, then 64 {r, g, b} bytes a row
+onto rows 1, 3, 5 and so on. A switch at 0x513334 averages each entry to grey.
+It is off in the attract and is not followed here.
+
+**Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
+0x85C408 to the entries from 0x3200.
+
+**Leads.** Which models a course draws, so that a model could open on its
+own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
+calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
+identified.
+
+**Sega Water Ski.** MAME's `segawski` (Revision A) runs the same program,
+its routines about 0x1A960 further on and its tables in the data ROM's
+second half, which the program reads through the XTRA window: 0x6000000 is
+data 0x1000000. The model table is data 0x1291D60 (`lda 0x6291d60[g0*16]`,
+105 sites), 13331 entries, one of them empty (13330 decode: 924,050 faces,
+863,975 textured). The boot is 0x4EE2C: ramps 0x4F810, colour table 0x4F9B0,
+luma 0x4FB80 (data 0x12C984C), sheets 0x4F6B0 (0x2000000 and 0x2100000
+through 0x4F540). A course (work RAM 0x56E094) takes its palette block from
+0x90970, its bank from 0x90990 and its colour table from 0x4F990 (0x909B0,
+0x90A00, 0x909F0), then the 0xBBBB fill (0x51F50) and eight blocks from data
+0x122C390 (0x5B860). The tables run to seven entries, but only the first
+four differ; 0x7B690 repeats the fourth course's. The palette has one fixed
+block, 0x62C5E94 from entry 0; the top block's routine (0x4FB20) is never
+called. The colour-table writer 0x90A90 takes the rows with four, three and
+two rows left from the pointer table 0xA1ED0, three to each value of work
+RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
+2500: sheets, colorxlat, luma and palette the same.
+
+### Top Skater (`js/topskatr.js`)
+
+Sega's 1997 skateboard game on Model 2C (MAME's `topskatr`, Revision A,
+Export). Its own engine, not Wave Runner's: its own mesh packing, whole-bank
+sheets and colour key points. Each table was found from the code that uses
+it, and checked against MAME's texture, colour, luma and palette RAM in the
+attract (frames 1500 and 3000). Addresses are the program ROM's.
+
+**Model table.** 0x8F390, 16 bytes an entry ({tpa, tha, 0x800000 | polygon
+word, count}), 1901 entries. The draws name runs of it (`lda 0x90c70[g7*16]`
+at 0x1A564, 0x90CD0 at 0x30F14, 0x932E0 and 0x945F0 at 0x1628 and 0x3A044),
+and a course record (0x2A66C + 36 * n, +0x14) names its own run (0x94600,
+0x932F0, 0x96A50).
+
+**Meshes.** The draw (0x3330 to 0x334C) loads the entry's first three words,
+sets the fourth to 0 and stores the four to the geometry FIFO, so the count
+is not used: the engine stops at the first attribute word whose link type
+(bits 0-1) is 0. The stream is the first edge's two points (24 bytes), then
+per polygon its attribute word and the points it adds, two for a quad (bit 0
+set) and one for a triangle, with no normal and no padding point.
+`topskatrMesh` lays it back out as 40-byte records for `decodeModel`, with
+plane normals. 1897 entries decode (143,004 faces, 132,081 textured). MAME's
+geometry HLE reads the stream with normals, so its pictures are broken and
+only its RAM can be graded against.
+
+**Textures.** 0x3F9E0(bank, sheet) copies the megabyte at data 0x2000000 +
+bank * 0x100000 onto a sheet as it stands, a slice a frame (run table
+0x3F9C0/0x3F9C4); no mip dealing. The boot (0x3F808) puts bank 0 on sheet 0.
+A scene puts bank 1 or 2 on sheet 1 (0x60C70 from the table at 0x5EE10). Banks
+3 to 15 of the data ROM are other data; nothing loads them as sheets.
+
+**Palette.** 0x20AD0 writes the {count, colours} block at 0x98D5C from entry
+0. Entries 8, 9 and 28 are animated in the attract.
+
+**Colour tables.** Run with `js/i960.js` in the game's order: the boot's
+0x20DA0 (square-root ramps on the even rows and row 31, a flat level per row
+in entries 64 to 255, row 0 by 0x9B318 and 0x9BD70), then 0x213D0(7, -1)
+through 0x3A2F0, which rewrites the even rows. A scene's 0x9C1B0(scene)
+interpolates eleven key-point lists (pointers at 0x9B030 + scene * 60, read
+by 0x9BE70) into work RAM 0x5D7190; the vblank's 0x9D3B0 copies them to the
+odd rows 1 to 21 after a three-frame wait (work RAM 0x5D52D8), so it is run
+four times. The scene goes with its bank (0x60C40: scene 0 with bank 1,
+scene 1 with bank 2). Scenes 2 to 8 give the same tables as 1. Rows 25, 27
+and 29 are animated in the attract (0x9C220, from 0x582A0, a row at a time)
+and are left as the scene sets them.
+
+**Luma.** The boot's 0x47F30: two bands of (k + 1) >> 1, then 0x2080 bytes
+from 0xB7D84 at entry 0x800.
+
+**Checked.** At frame 1500 sheet 0 (bank 0), sheet 1 (bank 2), colorxlat,
+luma and palette match MAME byte for byte. At frame 3000 all match but 576
+colorxlat entries in rows 25, 27 and 29 and palette entries 8, 9 and 28.
+
+**Leads.** Courses: records at 0x2A66C, 36 bytes (+0 bank, +0x14 model
+run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
+0x3370. The colour fade is a state machine at 0x976B0 (shadows at work RAM
+0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
+1 to 8. 0x220F0 sets another luma mode, unused in the attract.
+
+### Behind Enemy Lines (`js/bel.js`)
+
+Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own
+engine: not a Sega AM program, with C-style named objects, its own model
+table and whole-bank sheets with dealt mip levels. Each table was found from
+the code that uses it, and checked against MAME's texture, colour, luma and
+palette RAM in the attract (frames 600, 1500 and 3000). Addresses below
+0x80000 are the program ROM's; 0x2xxxxxx is the data ROM.
+
+**Model table.** Data 0x28B7C78, 20 bytes a record: {object, tpa, tha,
+count, pointer into 0x28Cxxxx}. The draw (0x11FD8 to 0x120B0: the matrix,
+then the object) loads the first three words and sends them to the geometry
+FIFO as they stand, with the count + 1 (0x120A4 to 0x120B0). The meshes are
+the usual 40-byte records. 3183 records decode (164,637 faces, 156,480
+textured); after them the table goes on with 2D pieces whose object words
+point into polygon RAM (0x8C7524 on).
+
+**Names.** The object directory at data 0x2973748, 538 {name, first record}
+pairs; the name is a 32-byte string. An object runs on to the next one's
+first record (`belModelName`).
+
+**Textures.** 0x72190(sheet, entry) copies a megabyte bank onto a sheet:
+the bank is 0x2064780[scene * 8 + entry * 4] for sheet 1 or
+0x20647A0[scene * 12 + entry * 4] for sheet 0, the scene the byte at work
+RAM 0x5A17C0 (2 from the boot, 0x10AC). The first 0x60000 halfwords go
+straight onto the sheet; the rest are eight mip levels of 0x80 down to 1
+rows, dealt between the sheets in runs from the table at data 0x298F8F0
+(0x200 >> k, the first run 0x100, run k doubled while k is past the level),
+as Daytona's 0x1388 deals them. MAME's texture RAM has every mip row on the
+other sheet from the one the routine addresses, as Daytona's does. The boot
+(0x1168, 0x1174) loads entry 0 onto both sheets; a scene's set-up (0x727D0)
+puts entry +0xCC of its record onto sheet 0, and entry 1 onto sheet 1 for
+scene 2, entry 0 for the others (0x72818). A texture set is one {scene,
+sheet-0 entry}: set = scene * 3 + entry.
+
+**Palette.** 0x71D60 copies the 906 colours at data 0x28CDB78 from entry 0.
+
+**Colour tables.** Run with `js/i960.js`, as the boot does (0x1008,
+0x1010): 0x62A70 works out the grey ramps of rows 0 to 31 (48 entries rising
+with the row, then 64 at the row's level), and 0x62DD0(2) lays 16 entries a
+row from entry 48 on, rows 0 to 27, from 0x60-byte rows of {r, g, b} at data
+0x21F0000 + 2 * 0x1000 (b - 0x74 + 0x40, times 0xA1 >> 7, held to 0..0xFF).
+
+**Luma.** 0x719C0 writes the 128 signed bytes at data 0x2064320 into all
+256 bands, then the 384 at 0x2064420 over bands 0 to 2.
+
+**Checked.** At frame 1500 sheet 0, sheet 1, colorxlat, luma and palette
+match MAME byte for byte. At frames 600 and 3000 colorxlat, luma and
+palette match; the sheets differ in rows 0x100 on, x 320 to 511, which hold
+pieces of bank 0x2600000 (entry 1) streamed in by the slot loader below.
+MAME's own pictures of the attract (the mission briefing, the C.A.T. title)
+show the same objects the viewer draws.
+
+**Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
+sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
+slots' banks, +0x4C the queue bytes, slot in bits 0-5 and bank above). Scenes:
+the byte at 0x5A17C0, bank tables 0x2064780 and 0x20647A0, per-scene data
+pointers 0x2986F60[scene] (read at 0x10CC). A record's +0x10 points at byte
+strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
+0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
+0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from
@@ -9609,6 +10425,97 @@ Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 **0xAF620**, all indexed with a 28-byte stride whose first halfword is an object
 type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
 and 0x98's groups (see above).
+
+### Virtua Cop 2 (`js/games.js`, `js/colors.js`)
+
+Virtua Cop 2 (MAME's `vcop2`, Model 2A, 1995) runs Virtua Cop's library
+moved up the program ROM, so the profile is `daytonaBuild`'s with the
+addresses changed. The boot calls the routines in this order (0x1EDC..0x1F2C):
+
+| routine | what it does |
+|---|---|
+| 0x164A0 | 1024 colours from data 0x4C0000 to the face palette (0x1802000) |
+| 0x16250 | the material table, geometry function 6: header 0x163E0 (start 0, count 32), parameters from 0x163E8, coefficients (all 100.0) from 0x16360 |
+| 0x166B8 | luma: `ld 0x16bd8` (0x42) bands of 128 bytes from program 0x16BDC, one byte to each word of 0x12800000 |
+| 0x1657C | bank 0x2300000 onto sheet 1 (0x12600000) |
+| 0x16594 | bank `0x18d14[g0*4]` onto sheet 0 (0x12200000); g0 is 0 at boot, the stage 0x502010 later (0x5030, 0x8DE8) |
+| 0x164D0 | the ramp, Virtua Cop's deluxe constants (12, 0x300, 0x1160, 0x8B) |
+| 0x168B8 | `lift`: 0x168C4 with g1..g3 = 8: the low byte of each channel of rows 1..31, luma 1..63, plus g1/g2/g3, held at 0xFF |
+| 0x16950 | grey and dimmed copies of the face palette into RAM 0x5D4000/0x5D5000 (not drawn from here) |
+| 0x16758 | one band of 16 colours a row over luma 48..63 of all 32 rows, from program 0x18D2C |
+
+0x165AC is Daytona's bank upload (`daytonaRuns`): its run table at 0x18CEC
+is 0x200 >> k as Daytona's 0x1494. The bank table is
+0x2000000, 0x2100000, 0x2200000 and then 0x2000000 three times, so the
+picker has three sets. The band's blue takes bit 15 of the colour for its
+low bit (`band.blueBit`), where Virtua Cop's 0x4328 takes bit 14. Two
+scenes call 0x168C4 with other adds: (12, 4, 2) at 0x33A8 and (12, 6, 4)
+at 0x4FF8 (stage 3); the profile keeps the boot's.
+
+The model table is 0xBB2 entries at data 0x4C8004, after the last index
+(0xBB1) at 0x4C8000, in the 1995 order {tpa, tha, oba, count}: the draws
+(0x160E0, 0x16178, 0x1620C) check `g0 < 0xBB2` and read
+`0x24c8004[g0*16]` from the boot's copy at RAM 0x200000 (0x21D4). Entry
+0xBB2 is 0xFFFFFFFF fill.
+
+There is no world light in ROM. Function 0xA (0x15FC4) is sent from 22
+places with a scene's own vector, most of them worked out by the copro; the
+profile takes the constant (-0.14, -0.7, 0.7) that 0x5648 sends.
+
+**Checked against MAME.** `vcop2` in the attract, texture RAM (both sheets),
+the colour tables, luma and the face palette dumped at frames 300, 900 and
+1800: set 0 matches all of them byte for byte. The attract never loads
+banks 1 or 2.
+
+**Leads.** The stage number is 0x502010; 0x516C is a table by it the stage
+start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
+SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
+pair 18520/18521) is not read by anything here.
+
+### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
+
+Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
+keeps Daytona USA's table layouts. The model table is 1537 entries of 16
+bytes at data 0x180800 ({mesh, uv, material}). The material table is 31
+pairs at data 0x825E30, sent by the boot at 0x8448..0x8458 (via 0x3F68). The
+light (0, -0.867, -0.498) is fixed, and it goes out every frame at 0x42A4
+(function 0xA through the copro port 0x880000).
+
+The colour code is not Daytona's, so noclip does not port it. `colors.i960`
+runs the boot's own routines in `js/i960.js`, against the program, the data
+ROM, backup RAM 0x1D00000 and the 2B luma at 0x11400000. Its tables come out
+whole, palette included (`palette.layout: 'i960'`):
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x9210 | 0x93E0 | palettes 0x1800000/0x1801000, face palette 0x1802000, colorxlat 0x1810000 (called from 0x842C) |
+| 0x806C | 0x811C | luma 0x11400000 |
+| 0x9E60 | 0xA050 | bank 0x2500000 to sheet 1, then the mip runs from data 0x82E594 (Daytona's upload) |
+| 0x9F70 | 0xA160 | the texture builder that runs after the upload |
+| 0x5D4210 | 0x5D4020 | RAM copy of MONITOR |
+
+Backup byte 0x1D0001A is MONITOR (0 PROJECTER, 1 CRT; the menu is at 0x745A0
+and its strings at 0x283C7C8). The profile writes it and its RAM copy from
+the Cabinet select before the run. 0x1D0001B is COUNTRY (0 USA, 1 JPN, 2 EXP;
+1 on a fresh board). The boot passes it to 0x9F70 in g0: with 1, the routine
+averages a 32x64-texel patch of sheet 1 down to half size on sheet 0
+(sheet 0 0xC8130..). Any other value takes the 0xA104 path, which spreads
+sheet 0 out into sheet 1. `texture.raw.run` always calls it with g0 = 1, so
+noclip shows the JPN board.
+
+**Checked against MAME.** I dumped `vstriker` at frame 300 with a fresh NVRAM
+(CRT) and with MONITOR held at 0 (PROJECTER). Both sheets and their mirrors,
+colorxlat, luma and the face palette match their Cabinet setting byte for
+byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
+24576 entries. Without 0x9F70, 144 halfwords of sheet 0 differed.
+`vstrikero` (CRT) matches as well.
+
+**Leads.** At frames 900 and 1800, play has changed these:
+- The team kits: 0xA708 writes face palette entries 0..178.
+- The per-team texture rectangles: 0x9D10/0x9D58 write sheet 0 0x100000..0x13FFFF, and 0x9DF8/0x9E04 write 0x113C0000.. and 0x111E0200... They are called from 0x9C30, with the tables at data 0x82E560, 0x82E4A0 and 0x82E4B8.
+- A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
+
+There are no model names in ROM.
 
 ## Animation
 

@@ -14,6 +14,12 @@ import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
 import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
+import { motoraidScene } from './motoraid.js';
+import { i960Palette } from './colors.js';
+import { dynabbColors } from './dynabb.js';
+import { skisuprgPalette } from './skisuprg.js';
+import { waverunrPalette } from './waverunr.js';
+import { belModelName } from './bel.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -317,12 +323,16 @@ function scanModelTable(rom) {
     const poly = rom.polygons;
     const pv = rom.polygonsView;
     const meshes = [];
-    for (let w = 0; w * 4 + MESH_RECORD <= poly.length;) {
-        if (pv.getUint32(w * 4, true) === 0xffffffff) break;
-        const m = meshWalk(poly, w);
-        if (!m) break;
-        meshes.push({ word: w, ...m });
-        w += 10 * m.n - 3;
+    /* Gunblade NY has a run in each pair of polygon chips (`scan.runs`, the
+     * polygon words they start at). */
+    for (const start of rom.game.modelTable.scan.runs ?? [0]) {
+        for (let w = start; w * 4 + MESH_RECORD <= poly.length;) {
+            if (pv.getUint32(w * 4, true) === 0xffffffff) break;
+            const m = meshWalk(poly, w);
+            if (!m) break;
+            meshes.push({ word: w, ...m });
+            w += 10 * m.n - 3;
+        }
     }
     const at = new Map(meshes.map((m, i) => [m.word, i]));
     const found = new Array(meshes.length).fill(null);
@@ -384,19 +394,38 @@ export function addModelTriples(rom, triples) {
  *
  * `modelNames.ptrs` is a table of pointers to C strings, `skip` entries in, one
  * per model; entries past `count` are the second half of a table that repeats
- * the first and take the same names.
+ * the first and take the same names. `modelNames.pairs` is instead a table of
+ * {model, name pointer} pairs up to a pointer of -1, names padded with spaces
+ * (Dynamite Baseball).
  */
 export function readModelName(rom, index) {
     const n = rom.game.modelNames;
     if (!n || index < 0) return null;
+    /* Behind Enemy Lines names objects, not table entries (js/bel.js). */
+    if (n.directory) return belModelName(rom, index);
     const dv = rom.mainDataView;
-    const at = n.ptrs + (n.skip + (index % n.count)) * 4;
-    if (at + 4 > rom.mainData.length) return null;
-    const off = dv.getUint32(at, true) - MAIN_DATA_BASE;
+    let ptr;
+    if (n.pairs !== undefined) {
+        if (!rom.modelNamePtrs) {
+            rom.modelNamePtrs = new Map();
+            for (let at = n.pairs; at + 8 <= rom.mainData.length; at += 8) {
+                const p = dv.getUint32(at + 4, true);
+                if (p === 0xffffffff) break;
+                rom.modelNamePtrs.set(dv.getUint32(at, true), p);
+            }
+        }
+        ptr = rom.modelNamePtrs.get(index);
+        if (ptr === undefined) return null;
+    } else {
+        const at = n.ptrs + (n.skip + (index % n.count)) * 4;
+        if (at + 4 > rom.mainData.length) return null;
+        ptr = dv.getUint32(at, true);
+    }
+    const off = ptr - MAIN_DATA_BASE;
     if (off < 0 || off >= rom.mainData.length) return null;
     let end = off;
     while (end < rom.mainData.length && end - off < 64 && rom.mainData[end] !== 0) end++;
-    return String.fromCharCode(...rom.mainData.subarray(off, end));
+    return String.fromCharCode(...rom.mainData.subarray(off, end)).trimEnd();
 }
 
 /*
@@ -417,12 +446,52 @@ export function facePalette(rom) {
     rom.facePalettes ??= new Map();
     if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
 
-    if (p?.layout === 'dynamcop') {
-        const out = dynamcopPalette(rom, set);
+    /* Virtua Striker's is what its own colour routine leaves in palette RAM
+     * (js/colors.js runColorRoutines). */
+    if (p?.layout === 'i960') {
+        const out = i960Palette(rom);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
+    const own = { dynamcop: dynamcopPalette, skisuprg: skisuprgPalette, waverunr: waverunrPalette }[p?.layout];
+    if (own) {
+        const out = own(rom, set);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
+    if (p?.layout === 'motoraid') {
+        const out = motoraidScene(rom, set).face;
+        rom.facePalettes.set(set, out);
+        return out;
+    }
+    /* Dynamite Baseball 97: the stadium's and the team's, by the game's own
+     * routines (js/dynabb.js). */
+    if (p?.layout === 'dynabb') {
+        const out = dynabbColors(rom, set).palette;
         rom.facePalettes.set(set, out);
         return out;
     }
     const out = new Int32Array(1024).fill(-1);
+    if (p?.layout === 'records') {
+        /* Sky Target: {count, colours} at `base` from entry 0 (0x232D0), then
+         * the stage record's +`field` pointer's from entry `first` (0x39060),
+         * both in the data ROM's last megabyte through the XTRA_DATA mirror. */
+        const md = rom.mainData;
+        const dv = rom.mainDataView;
+        const at = (a) => 0x1000000 + (a & 0xfffff);
+        const table = (a, first) => {
+            const t = at(a);
+            const count = dv.getUint16(t, true);
+            for (let i = 0; i < count && first + i < 1024 && t + 4 + i * 2 <= md.length; i++) {
+                out[first + i] = dv.getUint16(t + 2 + i * 2, true);
+            }
+        };
+        table(p.base, 0);
+        const s = set >= 0 && set < p.sets ? set : 0;
+        table(rom.mainCpuView.getUint32(p.records + s * p.stride + p.field, true), p.first);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
     if (!p) {
         /* Sega Rally keeps its table in the program ROM (0x267B0 copies it). */
         const md = rom.game.paletteSource === 'maincpu' ? rom.maincpu : rom.mainData;
@@ -445,6 +514,14 @@ export function facePalette(rom) {
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
+        /* {count, colours} laid from entry 1023 downward (INDY 500's 0x2DFB0),
+         * in the data ROM or the program ROM (`paletteTop.source`). */
+        const top = rom.game.paletteTop;
+        if (top) {
+            const tv = top.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+            const count = Math.min(tv.getUint16(top.at, true), 1024);
+            for (let i = 0; i < count; i++) out[1023 - i] = tv.getUint16(top.at + 2 + i * 2, true);
+        }
     } else if (p.blocks) {
         /* Air Walkers: a block is {first, count, colours} (0x16370), laid
          * over the boot's table, which is {count, colours} from 0 (0x16200). */

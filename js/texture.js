@@ -32,7 +32,14 @@ import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
+import { buildJalecoTexram } from './jaleco.js';
+import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
+import { buildSkisuprgTexram } from './skisuprg.js';
+import { buildWaverunrTexram } from './waverunr.js';
+import { buildTopskatrTexram } from './topskatr.js';
+import { buildBelTexram } from './bel.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
+import { I960 } from './i960.js';
 
 export { SHEET_BYTES };
 
@@ -688,7 +695,7 @@ function copyRect(src, srcBase, dst, dstBase, x0, y0, x1, y1) {
     }
 }
 
-function uploadRawBank(md, base, tex, toSheet1) {
+export function uploadRawBank(md, base, tex, toSheet1) {
     const near = toSheet1 ? SHEET1 : SHEET0;
     const far = toSheet1 ? SHEET0 : SHEET1;
     copyRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
@@ -799,8 +806,10 @@ function buildDaytonaTexram(rom, texSets) {
     let pages = 1;
     if (set !== null) {
         /* Daytona keeps the table in the program ROM; Virtua Cop names it by
-         * its data ROM address. */
-        const bank = raw.bankTable >= MAIN_DATA_BASE
+         * its data ROM address; Virtua Striker has no table, only its one bank
+         * (`banks`). */
+        const bank = raw.banks ? raw.banks[set]
+            : raw.bankTable >= MAIN_DATA_BASE
             ? rom.mainDataView.getUint32(off(raw.bankTable) + set * 4, true)
             : cv.getUint32(raw.bankTable + set * 4, true);
         if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
@@ -808,7 +817,42 @@ function buildDaytonaTexram(rom, texSets) {
             pages++;
         }
     }
+    for (const [entry, ...args] of raw.run ?? []) runTextureRoutine(rom, tex, entry, args);
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
+/*
+ * A boot routine that works on texture RAM once the banks are in, run as the
+ * game's own code (js/i960.js) against these sheets: the 2B board's texture
+ * RAM, 0x11000000 (sheet 0, mirrored at 0x11100000) and 0x11200000 (sheet 1,
+ * mirrored at 0x11300000). Virtua Striker's 0x9F70 (called at 0x10C4 with
+ * g0 1) averages a 32x64-texel patch of sheet 1 down to half size on sheet 0.
+ */
+function runTextureRoutine(rom, tex, entry, args) {
+    const prog = rom.maincpu;
+    const ram = new Uint8Array(0x100000);
+    const where = (a) => {
+        if (a < prog.length) return [prog, a];
+        if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
+        if (a >= 0x11000000 && a < 0x11400000) return [tex, ((a >> 21) & 1) * SHEET_BYTES + (a & 0xfffff)];
+        throw new Error(`texture routine read 0x${a.toString(16)}`);
+    };
+    const read = (a, n) => {
+        const [b, o] = where(a);
+        let v = 0;
+        for (let k = n - 1; k >= 0; k--) v = (v << 8) | b[o + k];
+        return v >>> 0;
+    };
+    const write = (a, v, n) => {
+        const [b, o] = where(a);
+        if (b === prog) throw new Error(`texture routine wrote ROM 0x${a.toString(16)}`);
+        for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
+    };
+    const cpu = new I960({
+        read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
+        write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
+    });
+    if (!cpu.call(entry, args, { maxSteps: 2_000_000 })) throw new Error(`texture routine 0x${entry.toString(16)} did not return`);
 }
 
 /* ---- Raw banks, Sega Rally's arrangement --------------------------------- */
@@ -844,8 +888,7 @@ function buildDaytonaTexram(rom, texSets) {
  * texture upload of its own: both sheets, every halfword, on the desert, the
  * mountain and the forest.
  */
-function uploadSrallycBank(rom, base, tex, flag) {
-    const md = rom.mainData;
+function uploadSrallycBank(rom, base, tex, flag, md = rom.mainData) {
     const cv = rom.mainCpuView;
     const table = rom.game.texture.raw.runTable;
     const word = (i) => cv.getInt32(table + i * 4, true);
@@ -874,16 +917,21 @@ function uploadSrallycBank(rom, base, tex, flag) {
 /*
  * Texture RAM for Sega Rally: the boot bank, then the set's course bank. A set
  * is a course variant, an index into the bank table.
+ *
+ * Manx TT Superbike is the same routine at 0x3A20 with its own run table
+ * (0x3960) and its banks from main_data 0x400000 (`bankBase`); it names no
+ * bank table, so a set is a bank of `banks` (see js/games.js manxtt).
  */
 function buildSrallycTexram(rom, texSets) {
     const raw = rom.game.texture.raw;
     const tex = new Uint8Array(SHEET_BYTES * 2);
-    const bank = (n) => MAIN_DATA_BANKS + n * SHEET_BYTES;
+    const bank = (n) => (raw.bankBase ?? MAIN_DATA_BANKS) + n * SHEET_BYTES;
     uploadSrallycBank(rom, bank(raw.bootBank), tex, 0);
     const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
     let pages = 1;
     if (sets.length) {
-        const n = rom.mainCpuView.getUint32(raw.bankTable + sets[sets.length - 1] * 4, true);
+        const set = sets[sets.length - 1];
+        const n = raw.banks ? raw.banks[set] : rom.mainCpuView.getUint32(raw.bankTable + set * 4, true);
         if (bank(n) + SHEET_BYTES <= rom.mainData.length) {
             uploadSrallycBank(rom, bank(n), tex, 1);
             pages++;
@@ -893,6 +941,107 @@ function buildSrallycTexram(rom, texSets) {
 }
 /* Where Sega Rally's bank 0 starts: 0x2200000 on the i960. */
 const MAIN_DATA_BANKS = 0x200000;
+
+/*
+ * Texture RAM for INDY 500: two 1 MB banks of the data ROM, laid out as the
+ * sheets already are, one a slot. 0x2DAD0 (g0 the bank, g1 the slot) queues
+ * a bank and 0x2D8E0 deals it a rectangle a frame through 0x2D860 from the
+ * table at `rects` (0x6C860 in the Twin, 0xB1FD0 in the Deluxe): records 1..37
+ * of {swap, half, x0, y0, x1, y1}, the sheet the slot XOR swap, half adding
+ * 512 rows to both ends. A rectangle is rows y0..y1 of x0..x1 rounded up to
+ * eight texels (ldq/stq), at the same place in the bank and on the sheet, so
+ * the rectangles with swap set trade the two banks' corners. A set is a
+ * course record's pair (0x16F50: record +0x10 and +0x14), `pairs[set]`.
+ */
+function buildIndyTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const deal = (src, slot) => {
+        for (let r = 1; r <= raw.rectCount; r++) {
+            const [swap, half, x0, y0, x1, y1] = [0, 4, 8, 12, 16, 20]
+                .map((k) => cv.getInt32(raw.rects + r * 24 + k, true));
+            const sheet = ((slot ^ swap) & 1) * SHEET_BYTES;
+            const bytes = Math.ceil((x1 - x0) / 8) * 16;
+            for (let y = y0; y <= y1; y++) {
+                const o = half * (SHEET_BYTES / 2) + y * 0x400 + x0 * 2;
+                if (src + o + bytes > md.length) return;
+                tex.set(md.subarray(src + o, src + o + bytes), sheet + o);
+            }
+        }
+    };
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const pair = raw.pairs[sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet];
+    pair.forEach((bank, slot) => deal(bank * SHEET_BYTES, slot));
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
+ * Texture RAM for Sega Touring Car Championship: Sega Rally's deal
+ * (uploadSrallycBank, run table 0x6A300) at 0x6A930, fed from a run-length
+ * stream instead of a raw bank, then a list of patches. g0 is the flag (-1
+ * goes on with the deal in progress), g1 the stream, g2 the patches.
+ *
+ * - The stream (0x6A6D8) skips its first byte, then is records of {u32 value,
+ *   u8 count}, the value written count times; 0x6A770 decodes four words at a
+ *   time and stores them with stq, so the deal reads it 16 bytes at a time.
+ * - A patch (0x6A8A0, one a call) is {u32 coord, i32 count, count words},
+ *   coord 0 ending the list: each word goes to the sheet at byte coord, coord
+ *   stepping by 4. 0x6A7B0 picks the sheet from where coord lies in the mip
+ *   layout: y = coord >> 10, x = coord & 0x3FF, y past 0x1FF folded to the
+ *   right half; at level L (0..4) a point left of 0x800 - (0x400 >> L) or
+ *   above 0x200 - (0x100 >> L) is on the flag's sheet for an even level and
+ *   the other one for an odd level, and past level 4 on the other one.
+ *
+ * The boot (0x1310) deals {0x2400000, patches 0x2C4BCEC} with the flag 0; a
+ * course deals its record's pair with the flag 1 (0xAA10, records of 0x3F4
+ * bytes at 0xBEB0, stream at +0 and patches at +4) and the title and menus
+ * 0x2708D08 with no patches (0x39E8, 0x5738, 0x3FAA4). A set is the pair laid
+ * over the boot's, `sets[set]`, as data ROM offsets.
+ */
+function buildStccTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const md = rom.mainData;
+    const dv = rom.mainDataView;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const unpack = (at) => {
+        const out = new Uint8Array(SHEET_BYTES);
+        let i = at + 1;
+        for (let o = 0; o < out.length && i + 5 <= md.length; i += 5) {
+            const v = md.subarray(i, i + 4);
+            const n = md[i + 4] || (out.length - o) / 4;
+            for (let k = 0; k < n && o < out.length; k++, o += 4) out.set(v, o);
+        }
+        return out;
+    };
+    const sheetOf = (c, flag) => {
+        let y = c >> 10, x = c & 0x3ff;
+        if (y > 0x1ff) { y -= 0x200; x += 0x400; }
+        const mine = flag ? SHEET_BYTES : 0, other = SHEET_BYTES - mine;
+        for (let lv = 0, h = 0x100, w = 0x400; lv < 5; lv++, h >>= 1, w >>= 1) {
+            if (y < 0x200 - h || x < 0x800 - w) return lv & 1 ? other : mine;
+        }
+        return other;
+    };
+    const deal = ([stream, patches], flag) => {
+        uploadSrallycBank(rom, 0, tex, flag, unpack(stream));
+        for (let p = patches; p && p + 8 <= md.length;) {
+            let coord = dv.getUint32(p, true);
+            const count = dv.getInt32(p + 4, true);
+            p += 8;
+            if (!coord) break;
+            for (let k = 0; k < count && p + 4 <= md.length; k++, p += 4, coord += 4) {
+                const at = sheetOf(coord, flag) + coord;
+                if (at + 4 <= tex.length) tex.set(md.subarray(p, p + 4), at);
+            }
+        }
+    };
+    deal(raw.boot, 0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    deal(raw.sets[sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet], 1);
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
 
 /*
  * Texture RAM for Dead or Alive. The program copies 128-row strips out of
@@ -1118,6 +1267,13 @@ function buildCopyTexram(rom) {
  * ends with a 16 by 32 rectangle of halfword 0x8888 (0x5C6F0). Kind 2 is in
  * the program but no load names it. m2-hle2's sheets match byte for byte, at
  * the title (load 8) and in the first stage (load 4).
+ *
+ * Zero Gunner has the same loader (0x48440, `raw.loads` 0x48080, 25 loads),
+ * but load 0 is kind 0, and a scene puts in one load of kind 1 and one of
+ * kind 2 over it. Its kind 2 (0x486B0), the third list below, is a page of
+ * 512 rows into sheet 0's second half, with its mips. A scene record has its
+ * two load numbers at +0x24 and +0x26, -1 for none (0x62F6C); `raw.sets`
+ * lists the pairs. MAME's sheets match byte for byte for three of them.
  */
 const PLTKIDS_KINDS = [
     [[0, 0, 0, 1024, 1024], [3, 0x200, 0, 512, 512], [1, 0x300, 0x200, 256, 256],
@@ -1126,6 +1282,8 @@ const PLTKIDS_KINDS = [
         [3, 0x300, 0x200, 256, 256], [3, 0x300, 0x300, 128, 256], [1, 0x380, 0x300, 128, 128],
         [1, 0x380, 0x380, 64, 128], [3, 0x3c0, 0x380, 64, 64], [3, 0x3c0, 0x3c0, 32, 64],
         [1, 0x3e0, 0x3c0, 32, 32], [1, 0x3e0, 0x3e0, 16, 32]],
+    [[1, 0, 0, 512, 1024], [3, 0x200, 0x200, 256, 512], [1, 0x300, 0x300, 128, 256],
+        [3, 0x380, 0x380, 64, 128], [1, 0x3c0, 0x3c0, 32, 64], [3, 0x3e0, 0x3e0, 16, 32]],
 ];
 const PLTKIDS_QUARTER = SHEET_BYTES / 2;
 
@@ -1158,12 +1316,14 @@ function pltkidsLoad(rom, tex, load) {
     }
 }
 
-/* Set s is the common load with scene load s + 1 over it. */
+/* Set s is the common load with scene load s + 1 over it, or with the loads
+ * `raw.sets[s]` names. */
 function buildPltkidsTexram(rom, texSets) {
     const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
     const tex = new Uint8Array(SHEET_BYTES * 2);
+    const set = sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet;
     pltkidsLoad(rom, tex, 0);
-    pltkidsLoad(rom, tex, (sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet) + 1);
+    for (const load of rom.game.texture.raw.sets?.[set] ?? [set + 1]) if (load > 0) pltkidsLoad(rom, tex, load);
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
 }
 
@@ -1254,6 +1414,59 @@ function buildVonTexram(rom, texSets) {
     return { sheet0: s0, sheet1: s1, pages };
 }
 
+/* ---- Gunblade NY ---- */
+
+/*
+ * Gunblade NY's banks are raw: a megabyte of the data ROM each, bank n at
+ * main_data n << 20, copied halfword for halfword (0x5B100 sets a bank up,
+ * 0x5B168 copies it a piece a frame, eight halfwords to a `stq`). The copy
+ * deals it over both sheets by the program's table at `raw.groups` (0x5B040):
+ * six groups of eight words, each a repeat count and a list of run lengths in
+ * halfwords that ends at 0 or below. A run goes to the sheet being written
+ * and the same length is stepped over on the other, then the two swap; a list
+ * ending below 0 swaps them once more. So the full-size pages land on the
+ * first sheet and the mip rectangles on both. The boot copies bank 0 with
+ * sheet 0 first and a scene its own bank with sheet 1 first (0x5AE48 and the
+ * scene set-ups, `mov 1,g1; call 0x5B100`), so a set is bank 0 then the
+ * scene's bank (`raw.sets`, [bank, colour table] by set). Byte for byte
+ * against MAME's texture RAM in the attract's city (bank 1), its stage film
+ * (bank 7) and the title (bank 8).
+ */
+function gunbladeBank(rom, tex, bank, sheet) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    let src = bank << 20;
+    let a = sheet * SHEET_BYTES, b = (1 - sheet) * SHEET_BYTES;
+    for (let g = 0; g < 6; g++) {
+        const at = raw.groups + g * 32;
+        const repeat = cv.getInt32(at, true);
+        for (let n = 0; n < repeat; n++) {
+            for (let k = 1; k < 8; k++) {
+                const run = cv.getInt32(at + k * 4, true);
+                if (run <= 0) {
+                    if (run < 0) [a, b] = [b, a];
+                    break;
+                }
+                const bytes = run * 2;
+                if (src + bytes <= md.length && a + bytes <= tex.length) tex.set(md.subarray(src, src + bytes), a);
+                src += bytes;
+                [a, b] = [b + bytes, a + bytes];
+            }
+        }
+    }
+}
+
+function buildGunbladeTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    gunbladeBank(rom, tex, 0, 0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < raw.sets.length);
+    const set = sets.length ? sets[sets.length - 1] : raw.bootSet;
+    gunbladeBank(rom, tex, raw.sets[set][0], 1);
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
 /*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
@@ -1274,11 +1487,13 @@ function buildRawTexram(rom, texSets) {
     let pages = 1;
     if (set !== null) {
         const bank = cv.getUint32(raw.bankTable + set * 4, true);
-        if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
-            uploadRawBank(md, off(bank), tex, true);
+        /* Motor Raid's set 6 is 0x06700000, through the XTRA_DATA window. */
+        const at = bank >= 0x06000000 ? xtraResolve(rom, bank).off : off(bank);
+        if (bank >= MAIN_DATA_BASE && at + SHEET_BYTES <= md.length) {
+            uploadRawBank(md, at, tex, true);
             pages++;
         }
-        for (let i = 0; i < RAW_PATCH_AT.length; i++) {
+        for (let i = 0; raw.patchTable !== undefined && i < RAW_PATCH_AT.length; i++) {
             const src = cv.getUint32(raw.patchTable + set * 32 + i * 4, true);
             if (!src || off(src) + 0x2000 > md.length) continue;
             /* The source is packed: 64 rows of 128 bytes, back to back. */
@@ -1326,6 +1541,51 @@ export function bankTextureSet(rom, index) {
     let bank = 0;
     for (let b = 0; b < rom.modelBanks.length && rom.modelBanks[b] <= i; b++) bank = b;
     return bankSets[Math.min(bank, bankSets.length - 1)];
+}
+
+/* ---- Sky Target ---- */
+
+/*
+ * Sky Target's banks are raw and dealt out like The House of the Dead's
+ * (RAW_MIP_RECTS): the boot's 0x369E0 puts the bank at 0x2000000 in with its
+ * full size on sheet 0, and a stage's 0x36B50 its record's bank (+0 of the
+ * 24-byte records at 0xF6578) with its full size on sheet 1. Both copy with
+ * 0x36E10, which takes a row as ((x1 - x0 + 1) / 8 + 1) * 8 halfwords: eight
+ * more than the rectangle, laid on linearly, so a row's tail spills into the
+ * next row (or, past the last sheet, into the luma table; js/colors.js). The
+ * spill is copied. Set `raw.boot` is the boot's bank alone. MAME's texture
+ * RAM matches at the title (boot) and in the first stage, byte for byte.
+ */
+function skytargtRect(md, srcBase, tex, dstBase, x0, y0, x1, y1) {
+    const n = (Math.trunc((x1 - x0 + 1) / 8) + 1) * 16;
+    for (let y = y0; y <= y1; y++) {
+        const a = ((y << 9) + x0) * 2;
+        const src = md.subarray(srcBase + a, Math.min(srcBase + a + n, md.length));
+        const at = dstBase + a;
+        tex.set(src.subarray(0, Math.max(0, Math.min(src.length, tex.length - at))), at);
+    }
+}
+
+function skytargtBank(md, base, tex, toSheet1) {
+    const near = toSheet1 ? SHEET1 : SHEET0;
+    const far = toSheet1 ? SHEET0 : SHEET1;
+    skytargtRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
+    for (const [x0, y0, x1, y1, same] of RAW_MIP_RECTS) {
+        skytargtRect(md, base + 0x80000, tex, (same ? near : far) + 0x80000, x0, y0, x1, y1);
+    }
+}
+
+function buildSkytargtTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    skytargtBank(rom.mainData, raw.bootBank - MAIN_DATA_BASE, tex, false);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : raw.boot;
+    if (set !== raw.boot) {
+        const bank = rom.mainCpuView.getUint32(raw.records + set * raw.stride, true);
+        skytargtBank(rom.mainData, bank - MAIN_DATA_BASE, tex, true);
+    }
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
 }
 
 /* ---- Last Bronx ----------------------------------------------------------- */
@@ -1647,6 +1907,9 @@ function rallyCourseModels(rom) {
  * - Last Bronx: see lastbrnxModelSets.
  * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  * - Pilot Kids: an untextured model only; nothing yet ties a model to a scene.
+ * - Super GT 24h, Over Rev: a model on sheet 0 alone is on the boot's pages.
+ * - Dynamite Baseball 97: by the team or stadium its name begins with.
+ * - Gunblade NY: the same; its triples are in the program, not in scene lists.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1668,8 +1931,24 @@ export function programTextureSets(rom, index, decoded) {
     if (T.raw?.layout === 'lastbrnx') return lastbrnxModelSets(rom, index, decoded);
     /* Pilot Kids: nothing read yet says which scene a model is drawn in, so
      * only an untextured one is answered; the rest open on the title's set. */
-    if (T.raw?.layout === 'pltkids') {
+    if (T.raw?.layout === 'pltkids' || T.raw?.layout === 'gunblade' || T.raw?.layout === 'skytargt') {
         return decoded && !sampledTiles(decoded).length ? { sets: [], how: 'untextured' } : null;
+    }
+    /* Super GT 24h and Over Rev: sheet 0's full-size pages are the boot's and
+     * no course replaces them; a model on them alone is drawn the same on
+     * every course. The rest are left to the picker. */
+    if (T.raw?.layout === 'jaleco') {
+        if (!decoded) return null;
+        const want = sampledTiles(decoded);
+        if (!want.length) return { sets: [], how: 'untextured' };
+        let sheet1 = false;
+        for (let i = 0; i < decoded.tiles.length; i += 4) {
+            if (decoded.tiles[i + 2] && decoded.tiles[i + 1] >= SHEET_H) sheet1 = true;
+        }
+        return sheet1 ? null : { sets: [], how: 'boot' };
+    }
+    if (T.raw?.layout === 'dynabb') {
+        return dynabbModelSets(rom, index, decoded, decoded && sampledTiles(decoded).length > 0);
     }
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
@@ -1733,8 +2012,18 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'lastbrnx') return buildLastbrnxTexram(rom, texSets, fighters);
         if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
+        if (layout === 'jaleco') return buildJalecoTexram(rom, texSets);
+        if (layout === 'dynabb') return buildDynabbTexram(rom, texSets);
+        if (layout === 'skisuprg') return buildSkisuprgTexram(rom, texSets);
+        if (layout === 'waverunr') return buildWaverunrTexram(rom, texSets);
+        if (layout === 'topskatr') return buildTopskatrTexram(rom, texSets);
+        if (layout === 'bel') return buildBelTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
+        if (layout === 'gunblade') return buildGunbladeTexram(rom, texSets);
+        if (layout === 'skytargt') return buildSkytargtTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
+        if (layout === 'indy500') return buildIndyTexram(rom, texSets);
+        if (layout === 'stcc') return buildStccTexram(rom, texSets);
         if (layout === 'dynamcop') {
             const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
             return buildDynamcopTexram(rom, sets.length ? sets[sets.length - 1] : 0);

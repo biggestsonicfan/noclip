@@ -22,6 +22,7 @@
  */
 
 import { readModelEntry, meshOffsetOf, facePalette } from './romset.js';
+import { topskatrMesh } from './topskatr.js';
 
 const VERTEX_PAIR_SIZE = 40;
 const MAX_VERTEX_PAIRS = 4096;
@@ -116,6 +117,11 @@ function polygonRamOffset(rom, meshPtr) {
  */
 export function decodeModel(rom, modelIdx, points = null, mesh = null) {
     if (!mesh && (modelIdx < 0 || modelIdx >= rom.game.modelTable.count)) return null;
+    /* Top Skater packs its meshes without normals (js/topskatr.js). */
+    if (!mesh && rom.game.modelTable.packed) {
+        mesh = topskatrMesh(rom, modelIdx);
+        if (!mesh) return null;
+    }
     const entry = mesh ? { uvPtr: mesh.uvPtr, matPtr: mesh.matPtr, meshPtr: 1 } : readModelEntry(rom, modelIdx);
     if (entry.meshPtr === 0) return null;
 
