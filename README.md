@@ -1503,7 +1503,9 @@ for three colour rows and three palette entries the attract animates.
 The **Animation** tab plays all 718 of the game's motions on any of the
 eight skaters, posed by the game's own animator, skeleton and draw: the
 skeleton matches MAME's attract to 4e-6, with the same 18 models. A frame
-is 1/60 s. The spring the attract adds to some joints and the motions'
+is 1/60 s. The seams bend as the game's skinning bends them, and the
+board shows its underside when it faces away from the camera, as the
+game draws it. The spring the attract adds to some joints and the motions'
 headings are left out, and the motions have no names.
 
 There is no Stages tab, no cells and no music yet. See

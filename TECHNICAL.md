@@ -8061,16 +8061,41 @@ that holds each part's origin still through 8 motions: the board and the
 hips are roots; legs, chest and head off the hips, the arms off the
 chest.
 
+**Board sides.** 0x545C0 turns (0, 1, 0) (0x54480) by the board's matrix
+(copro 9, 60, 36) and, when the result's depth is over 0.2 (0x3E4CCCCD),
+draws the record at RAM 0x500DF0 + 4k instead of the list's: `s1_ita_ura`
+.. `s6_ita_ura` (models 203..208), the undersides; skaters 7 and 8 name
+their one board again (128, 146). The boot copies ROM 0xBFF88 there with
+the rest of the data section (the same 0x440E68 as the part lists). Both
+sides are whole boards with the same bounds, so the viewer shows one, by
+the same test on its own camera. Left empty, the table is what the bus
+showed as the "garbled" board of motions 125, 225 and 236.
+
+**Second matrix.** Top Skater's geometrizer program (m2-hle2 420e7ba,
+after m2emulator's `tops` table) keeps a second matrix: 0x1B writes its 12
+words, 0x1C copies the matrix into it and reads nothing, and it outlives
+the object. A point whose x word has bit 0 set is drawn by it, which skins
+the seams: the chest's waist ring goes by the hips' slot turned half about
+Z, and skaters 2, 3 and 6's ankle rings, on their shins (models 29/30,
+48/49, 103/104), by the foot's slot · copro 46 (16384, a quarter turn
+about Z) · copro 43 (−`[[0x5D52B4] + 0x2C]`, the shin length; 0x54EB8 left,
+0x55138 right). 0x5D52B4 is the skeleton the skater pick (0x6D5B0) stores
+with 0x5CE94C (the index) and 0x5D52B0 (the list). The heads carry bit-0
+points too, under a second matrix equal to their own. These 0x1B writes
+were the four stray singles between the legs and the chest. The viewer
+lays a bent part's points out again in its own frame each frame.
+
 **Checked.** At MAME attract frame 3000 (skater 2): 0x52DD0 on MAME's pose
 within 4e-6 of its out buffer; the slots within 5e-6 but for one arm
 (slots 11..14, within 3.3e-3 of places near 10); the animator gives
 motions 553 and 189's states in MAME's RAM exactly; the draw's 279 copro
 results within 6.6e-5, with the same 18 models. Every motion's first and
-last frame on skaters 1 and 7 draws 18 parts with no unknown copro
-command. Copro 47 and 49 (turns about X and Z in radians) and 59 (the turn
+last frame on all eight skaters (11488 poses) draws with no unknown copro
+command, and every bent point lands on a point of the part it joins, but
+one of skater 8's waist ring, 0.058 off the hips' ring in the models
+themselves. Copro 47 and 49 (turns about X and Z in radians) and 59 (the turn
 reset, place kept) are read from the code; that frame doesn't send them.
-In some motions (125, 225, 236, …) the board reaches the bus as other
-words, and the explorer names it from the list. The attract's spring on
+The attract's spring on
 some channels after the animator (0x6F8C0) and the motion's heading are
 left out. The sponsor models (151..186) are in no part list. The skaters
 open on set 1, the attract's.

@@ -4811,6 +4811,26 @@ function placeFrameSkins(holder, skins, flash = null) {
     for (const p of pool.slice(skins.length)) showRigPart(p, false);
 }
 
+/*
+ * A part with two sides the game picks between by the camera (pose.viewSides;
+ * Top Skater's board, top and underside, 0x545C0): its second model is shown
+ * when the part's `axis` points away from the camera by more than `over`, its
+ * first otherwise. Picked again as each draw starts, since the camera moves
+ * between frames.
+ */
+const sideAxis = new THREE.Vector3(), sideView = new THREE.Vector3();
+function pickViewSides(camera) {
+    const m = state.motion;
+    for (const s of m?.viewSides ?? []) {
+        const slots = m.parts?.[s.part]?.slots ?? [];
+        if (slots.length < 2 || !slots[0].decoded || !slots[1].decoded) continue;
+        slots[0].mesh.updateWorldMatrix(true, false);
+        sideAxis.set(...s.axis).transformDirection(slots[0].mesh.matrixWorld);
+        const back = sideAxis.dot(camera.getWorldDirection(sideView)) > s.over;
+        slots.forEach((x, k) => showRigPart(x, k === (back ? 1 : 0)));
+    }
+}
+
 function swapRigGeometry(part, d) {
     part.mesh.geometry.dispose();
     part.mesh.geometry = buildGeometry(d);
@@ -4912,6 +4932,8 @@ function poseBodyRig() {
     m.spring = pose.spring;
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
+    m.viewSides = pose.viewSides ?? [];
+    pickViewSides(state.viewer.camera);
     placeExtras(m.extras, body, extras ?? [], null, m.flash, pose.shown);
     followRoot(m, pose.follow);
 
@@ -6968,7 +6990,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); };
+    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); pickViewSides(camera); };
     $('#tool-shot').hidden = false;
     $('#tool-export').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);

@@ -36,16 +36,30 @@
  * skater 5 and 0xC8D38 is the shadow, skater_kage). +0x48 is a record the
  * draw passes to 0x6F4C0.
  *
+ * The board draw (0x545C0) turns the board's up axis into the camera's
+ * frame and, if it points away by more than 0.2, draws the skater's
+ * underside (RAM 0x500DF0[k], from ROM 0xBFF88) instead of the list's top.
+ * Some parts' points go by the geometrizer's second matrix (skinning): the
+ * chest's waist ring is drawn in the hips' frame turned half about Z, and
+ * skaters 2, 3 and 6's ankle rings on their shins in the foot's frame,
+ * moved back the shin length the skeleton at 0x5D52B4 gives. The viewer
+ * lays those parts out again each frame.
+ *
  * Checked against MAME's RAM at attract frame 3000 (skater 2): the
  * skeleton's out within 4e-6, the 19 slot matrices within 0.0033 (all but
  * the right arm's within 5e-6), the draw's 279 copro results within 7e-5
  * of the board's, and the same 18 models; the animator gives the states of
- * motions 553 and 189 in MAME's RAM exactly. The attract also runs a
+ * motions 553 and 189 in MAME's RAM exactly. Every motion's first and last
+ * frame on all eight skaters draws with no unknown copro command, and every
+ * bent point lands on a point of the part it joins (skater 8's waist ring
+ * has one point 0.058 off the hips' ring in the models themselves). The
+ * attract also runs a
  * spring on some channels after the animator (0x6F8C0), which the viewer
  * and this module leave out.
  */
 
 import { doaMachine } from './doa.js';
+import { topskatrMesh } from './topskatr.js';
 
 const RAM = 0x500000;
 const MOTIONS = 0xc0038;
@@ -53,6 +67,15 @@ const MOTION_COUNT = 719;
 const TABLES = 0x34550;
 const KEY_TYPES = 0x500a40;
 const BOARD_SCALE = 0x5ce8b8;
+const SKELETON_AT = 0x5d52b4;
+/* The boards' undersides, one model record a skater: the boot copies the
+ * eight words at 0xBFF88 to 0x500DF0 with the rest of the data section
+ * (the part lists at 0xC8AB8 go to 0x509920 the same way). */
+const UNDERSIDES = 0xbff88;
+const UNDERSIDES_AT = 0x500df0;
+/* The board draw's test (0x545C0): the board's up axis, turned into the
+ * camera's frame, deeper than this draws the underside. */
+const UNDERSIDE_OVER = 0.2;
 const LOAD = 0x339d0;
 const ANIMATE = 0x343d0;
 const SKELETON = 0x52dd0;
@@ -239,13 +262,31 @@ function machine(rom) {
             this.maybeRun();
         } else data(w);
     };
+    /* Top Skater's geometrizer program has a second matrix (m2-hle2's
+     * geo_vertex_matrix, after m2emulator's "tops" table): 0x1B writes it,
+     * 0x1C copies the matrix into it and reads nothing, and a point whose x
+     * word has bit 0 set is drawn by it. It outlives the object. The draw
+     * object is 0x11, whose polygons carry no normals (js/topskatr.js). */
     const command = M.geo.command.bind(M.geo);
     M.geo.command = (c) => command(c === 0x11 ? 0x01 : c);
+    const maybeRun = M.geo.maybeRun.bind(M.geo);
+    M.geo.maybeRun = function () {
+        if (this.pending === 0x1c) {
+            this.pending = null;
+            this.m2 = this.m.slice();
+        } else if (this.pending === 0x1b) {
+            if (this.words.length < 12) return;
+            this.pending = null;
+            this.m2 = this.words.map((w) => new Float32Array(new Uint32Array([w]).buffer)[0]);
+        } else maybeRun();
+    };
+    M.geo.m2 = IDENTITY;
     M.drawn = [];
-    M.geo.object = () => M.drawn.push({ words: M.geo.words.slice(), m: M.geo.m.slice() });
+    M.geo.object = () => M.drawn.push({ words: M.geo.words.slice(), m: M.geo.m.slice(), m2: M.geo.m2.slice() });
     if (!M.cpu.call(TABLES, [], { maxSteps: 5_000_000 })) throw new Error('0x34550 did not return');
     [1, 2, 3, 0].forEach((v, i) => M.rv.setUint32(KEY_TYPES - RAM + 4 * i, v, true));
     M.rv.setFloat32(BOARD_SCALE - RAM, 1, true);
+    for (let k = 0; k < 8; k++) M.rv.setUint32(UNDERSIDES_AT - RAM + 4 * k, rom.mainCpuView.getUint32(UNDERSIDES + 4 * k, true), true);
     machines.set(rom, M);
     return M;
 }
@@ -273,6 +314,10 @@ function run(rom, body, motion, t) {
     const step = (addr, args, what) => {
         if (!M.cpu.call(addr, args, { maxSteps: 5_000_000 })) throw new Error(`${what} did not return`);
     };
+    M.geo.m2 = IDENTITY;
+    /* The skater's skeleton, as the game's pick (0x6D5B0) leaves it: the
+     * draw moves the ankles' second matrix back a shin's length from it. */
+    M.rv.setUint32(SKELETON_AT - RAM, body.skeleton, true);
     M.ram.fill(0, STATE - RAM, STATE - RAM + STATE_BYTES);
     M.ram.fill(0, POSE - RAM, POSE - RAM + STATE_BYTES);
     if (motion) {
@@ -286,18 +331,49 @@ function run(rom, body, motion, t) {
     resetCopro(M);
     M.drawn = [];
     step(DRAW, [0, body.list], '0x565D0');
-    /* Between the legs and the chest the draw sends four singles that the
-     * bus reads as an object too; keep the objects that are models. */
     const index = modelIndex(rom);
-    /* The board (0x545C0) is always drawn first; in some motions (125,
-     * 225, 236...) its object reaches the bus as other words, so it is
-     * named from the list. */
-    const board = M.drawn.shift();
-    return [{ model: partModel(rom, body.parts[0].record), m: board.m }, ...M.drawn.flatMap(({ words, m }) => {
+    return M.drawn.flatMap(({ words, m, m2 }) => {
         const c = index.get(words[2]) ?? [];
         const hit = c.find((e) => e[0] === words[0]) ?? c[0];
-        return hit ? [{ model: hit[1], m }] : [];
-    })];
+        return hit ? [{ model: hit[1], m, m2 }] : [];
+    });
+}
+
+/* The inverse of a rigid 3x4 (a turn and a place). */
+function invert(m) {
+    const r = transpose(m.slice(0, 9));
+    return [...r, ...apply([...r, 0, 0, 0], m.slice(9)).map((v) => -v)];
+}
+
+/*
+ * A part whose points pick the second matrix, laid out again in the part's
+ * own frame: each such point through the second matrix, then back through
+ * the inverse of the part's. Null when no point picks it, or the two
+ * matrices are the same. The chests' waists are drawn by the hips' matrix
+ * (turned half about Z), and some skaters' shins' ankles by the foot's.
+ */
+function bentMesh(rom, model, m, m2) {
+    if (m.every((v, k) => Math.abs(v - m2[k]) < 1e-6)) return null;
+    const mesh = topskatrMesh(rom, model);
+    if (!mesh) return null;
+    const bytes = mesh.bytes.slice();
+    const dv = new DataView(bytes.buffer);
+    const to = mulMat(invert(m), m2);
+    let bent = 0;
+    for (let r = 0; r + 40 <= bytes.length; r += 40) {
+        for (const o of [r, r + 12]) {
+            if (!(dv.getUint32(o, true) & 1)) continue;
+            const q = apply(to, [0, 4, 8].map((k) => dv.getFloat32(o + k, true)));
+            q.forEach((v, k) => dv.setFloat32(o + 4 * k, v, true));
+            bent++;
+        }
+    }
+    return bent ? { ...mesh, bytes } : null;
+}
+
+/* a * b, both 3x4. */
+function mulMat(a, b) {
+    return [...mulRot(a, b).slice(0, 9), ...apply(a, b.slice(9))];
 }
 
 /* The model a part list record names: the record is a copy of its model
@@ -307,6 +383,12 @@ function partModel(rom, record) {
     const c = modelIndex(rom).get(pv.getUint32(record + 8, true)) ?? [];
     const hit = c.find((e) => e[0] === pv.getUint32(record, true)) ?? c[0];
     return hit ? hit[1] : -1;
+}
+
+/* A skater's board underside (s1_ita_ura...; skaters 7 and 8 name their one
+ * board again). */
+function underside(rom, body) {
+    return partModel(rom, rom.mainCpuView.getUint32(UNDERSIDES + 4 * body.index, true));
 }
 
 function modelName(rom, i) {
@@ -371,18 +453,27 @@ function toThree(m) {
  * the skeleton at rest. */
 export function poseTopskatr(rom, body, motion, frame) {
     const f = motion ? Math.max(1, Math.min(frame, motion.frames)) - 1 : 0;
-    /* Match the draws to the parts by model: some motions leave the board
-     * out (it isn't drawn, so the part has no draw). */
+    /* The board comes first (0x545C0); the rest are matched to the parts by
+     * model. */
     const left = run(rom, body, motion, f / 60);
-    const drawn = body.parts.map((p) => {
+    const board = left.shift();
+    const drawn = body.parts.map((p, i) => {
+        if (i === 0) return board ?? null;
         const at = left.findIndex((d) => d.model === partModel(rom, p.record));
         return at < 0 ? null : left.splice(at, 1)[0];
     });
     const three = drawn.map((d) => toThree(d?.m ?? IDENTITY));
+    /* The parts with points on the second matrix are rebuilt each frame. */
+    const bent = drawn.map((d, i) => i > 0 && d && bentMesh(rom, d.model, d.m, d.m2));
+    /* The board's top and its underside: the game draws one or the other by
+     * which way the board faces the camera, so the viewer picks (viewSides). */
+    const sides = [...new Set([partModel(rom, body.parts[0].record), underside(rom, body)])].filter((x) => x >= 0);
     return {
         matrices: three,
         origins: three.map((e) => [e[12], e[13], e[14]]),
-        draws: drawn.map((d) => (d ? [d.model] : [])),
+        draws: drawn.map((d, i) => (i === 0 ? (d ? sides : []) : d && !bent[i] ? [d.model] : [])),
+        skins: bent.flatMap((mesh, i) => (mesh ? [{ ...mesh, matrix: three[i] }] : [])),
+        viewSides: sides.length > 1 ? [{ part: 0, axis: [0, 1, 0], over: UNDERSIDE_OVER }] : [],
         parents: body.parts.map((p) => p.parent),
     };
 }
