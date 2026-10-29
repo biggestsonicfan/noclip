@@ -721,7 +721,7 @@ function useRomColorLuts(stage, fighter = null) {
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
-    const luma = buildLumaram(state.rom);
+    const luma = buildLumaram(state.rom, stage.texSet[1]);
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,

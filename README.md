@@ -30,7 +30,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
-Jaleco's *Super GT 24h* has its models and courses and *Over Rev* its models — see
+Jaleco's *Super GT 24h* and *Over Rev* have their models and courses — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
@@ -1330,12 +1330,21 @@ textures, face palette and colour tables.
 The texture picker's sets 0..6 are what sheet 1 holds: set 0 is the boot's,
 and sets 1..6 the six courses' in data order (Tsukuba, Shibuya's other
 version, Shibuya, Futou, Touge, Touge's other version). Sheet 0 is the same
-in every set. A course piece needs its course's set picked by hand. Colour
+in every set. A course piece opens on its course's set. Colour
 tables and luma match MAME's at the title on both boards byte for byte, and
 the textures in the attract race but for sixteen bytes something later
-writes. Some luma bands change during a race; the viewer shows the boot's.
+writes. Each course copies luma bands of its own; a course in the Stages tab
+takes them, and they match MAME's in the attract race byte for byte.
 
-There is no Stages tab, no cars put together and no motions yet. See
+The **Stages** tab has the six courses under the game's own names: Tsukuba,
+Shibuya, Touge, Futou, and the other versions of Shibuya and Touge ("Shibuya
+e", "Touge e"), which are the same pieces on their own textures. Each is the
+course's grids of world-space pieces, on the texture set and luma the game
+loads for it. From the attract race's camera Tsukuba looks as MAME draws it:
+road, kerbs, barriers, boards and trees. The sky, the course's moving and
+extra objects, the cars and the material table are not there yet.
+
+There are no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
 ## Dynamite Baseball 97

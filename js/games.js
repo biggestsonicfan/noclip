@@ -6686,7 +6686,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, courses }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses }) {
     return {
         id,
         name,
@@ -6697,7 +6697,9 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         paletteProgram: palette,
         paletteOffset: null,
         texture,
-        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* `colorSets`: how many luma variants a course can ask for (Over Rev's
+         * 0x564EF0 step, 'set' in `colors`). */
+        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors, ...(colorSets ? { sets: colorSets } : {}) }, solid: true },
         /* The courses (readJalecoStages in js/jaleco.js); flat, so the Models
          * tab still asks the model for its set. */
         ...(courses ? { stageTable: { jaleco: courses, flat: true } } : {}),
@@ -6808,8 +6810,13 @@ const sgt24h = jalecoBuild({
  *
  * Checked against MAME on both boards: colorxlat and luma at the title
  * (frame 400) no byte different. Colorxlat does not change in the attract
- * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
- * and these are the boot's.
+ * race; luma does: the course set-up (RAM 0x54D960) calls 0x564EF0 (ROM
+ * 0xE4EF0, the 2B build's 0xE4E40) with the course record's +8, v, which
+ * copies the luma table's (0x37F09) v-th 0x4000 bytes over entries 0x4000 on
+ * (bands 128 to 255). Set v of the colours is that copy run after the boot's:
+ * Tsukuba's 2 matches MAME's luma in the attract race (frame 1800), no byte
+ * different. Without it a course's road and grass read the boot's zero bands
+ * and draw black.
  */
 const OVERREV_DATA = {
     mainData: {
@@ -6841,6 +6848,16 @@ const overRevTexture = (window) => ({
     residentSet: null,
     defaultSet: 0,
 });
+/*
+ * The courses: the records {texture source, course, luma variant, name}
+ * (six, 0x1C bytes each), and per course the list and count of its near cells' grid records
+ * (Revision A's 0xCC6D0, RAM 0x54C6D0, points 0x5A16B0 and 0x5A1670 at them;
+ * the 2B build has the same code at 0xCC6A0 and its tables 0xB0 back).
+ */
+const overRevCourses = (records, lists, counts) => ({
+    records: { at: records, count: 6, stride: 0x1c },
+    courses: lists.map((list, i) => ({ list, count: counts + i * 16 })),
+});
 const overrev = jalecoBuild({
     id: 'overrev',
     name: 'Over Rev (Model 2C, Revision A)',
@@ -6855,7 +6872,9 @@ const overrev = jalecoBuild({
     table: [0x80cec0, 1893],
     palette: 0x32a44,
     texture: overRevTexture(0x200000),
-    colors: [0x12760, 0x12850, 0x12950],
+    colors: [0x12760, 0x12850, 0x12950, [0xe4ef0, 'set']],
+    colorSets: 7,
+    courses: overRevCourses(0xcd8b0, [0xedf90, 0xedfa0, 0xedfc0, 0xedfd8], 0xedf50),
 });
 /* Known by its program alone, so that overrev.zip missing is said as such. */
 const overrevb = jalecoBuild({
@@ -6872,7 +6891,9 @@ const overrevb = jalecoBuild({
     table: [0x80cec0, 1893],
     palette: 0x2a7a4,
     texture: overRevTexture(0x100000),
-    colors: [0x12760, 0x12850, 0x12950],
+    colors: [0x12760, 0x12850, 0x12950, [0xe4e40, 'set']],
+    colorSets: 7,
+    courses: overRevCourses(0xcd880, [0xedee0, 0xedef0, 0xedf10, 0xedf28], 0xedea0),
 });
 
 /* ---- Dynamite Baseball 97 ------------------------------------------------- */

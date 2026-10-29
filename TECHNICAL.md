@@ -7405,8 +7405,13 @@ Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
 
 Checked against MAME on both boards: colorxlat and luma at the title (frame
 400) no byte different. Colorxlat does not change in the attract race; luma
-bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
-keeps the boot's. Texture RAM matches at the title and in the attract race
+bands 129 to 196 do. The course set-up (RAM 0x54D960) passes the record's
++8, v, to 0x564EF0 (ROM 0xE4EF0, the 2B build's 0xE4E40), which copies the
+luma table's v-th 0x4000 bytes (0x37F09 + 0x4000v) over entries 0x4000 on.
+The viewer runs it as colour set v after the boot's three (`colorSets`), and
+a course's stage asks for its v (Tsukuba 2, Shibuya 4, Touge 6, Futou 5):
+Tsukuba's matches MAME's luma at frame 1800, no byte different. Without it
+the road and grass read zero bands and draw black. Texture RAM matches at the title and in the attract race
 (Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
 sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
 
@@ -7431,8 +7436,22 @@ sheet 1 from 0xED8B0[course], sets 0..3. Trackside: 0x4AC10 draws the 16
 {model, course} pairs at 0xEFE60 (gated by cell bits at 0xEDF60/0xEDDC8)
 and 0x4CDE0 the model `0xF0120[course]` every frame; both are in.
 
+Over Rev runs its race code from RAM (ROM 0x80000 at 0x500000, ROM 0x60000
+at 0x200000). 0x54D660 (ROM 0xCD660), called from 0x54DB4C, draws through
+0x200060 out of `0x5A16B0[course]`, which 0x54C6D0 (ROM 0xCC6D0) points at
+the lists at 0xEDF90, 0xEDFA0, 0xEDFC0 and 0xEDFD8, counts at 0xEDF50 (16
+bytes a course). Kind 0 names two or three records (Tsukuba 0x28166E0 and
+0x2816940; Shibuya 0x2817760, 0x2817050 and 0x2818120; Touge 0x2818EC0 and
+0x2819F70; Futou 0x281AAD0); kinds 1 and 2 are the far cells' with less in
+them. The six stages are the records at 0xCD8B0 {texture source, course,
+luma variant, name}: 0x54D960 takes record 4 or 5 instead of course 1 or 2
+when 0x590DD0 is set. The 2B build has the code at 0xCC6A0 and its tables
+0xB0 back (records 0xCD880, lists 0xEDEE0..., counts 0xEDEA0). The Models
+tab opens a model on the set of the first course whose grid or trackside
+names it (`jalecoCourseSets`).
+
 Checked in headless Chrome from MAME's attract-race camera (Super GT 24h
-frame 1200, the eye from the course pieces' matrix):
+frame 1200, Over Rev frame 1800, the eye from the course pieces' matrix):
 the pieces stand where MAME draws them, on the right textures.
 
 **Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
