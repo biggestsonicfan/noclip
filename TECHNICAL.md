@@ -7712,14 +7712,44 @@ slots 0..63 are max((a * (l + 1)) >> 6, r) (0x37290; the byte table at
 
 They match MAME's entry for entry, at the boot and in the first stage.
 
+**Cells.** The tile chip's pictures are [Dead or Alive's](js/cells.js)
+(`pictures`), two years early: the program's table at 0xEBFB0 holds 573
+pictures of three pointers each, tiles, colours and map, in the data ROM
+and (from picture 530) its last megabyte through XTRA_DATA at 0x64xxxxx.
+The table ends where the next word is 0. A picture is loaded through a
+"scroll group", a little record whose +0 is its first block of 128
+characters (0x78B50, which stops with SCROLL GROUP ERROR when the group's
++0xC is not the picture's tiles):
+
+- 0x78A90, the tiles: chunks of a count and that many 32-byte tiles, until
+  a count of 0, each chunk from a block of its own, from character block *
+  128 (0x1080000 + block * 0x1000).
+- 0x789F0, the colours: a chunk's 16 colours to every block its tiles take,
+  in the RAM copy of the palette at 0x51B9F0 + block * 32, then 0x2CD40
+  copies them up. (0x2CF20 is the plain copy into the same RAM, for colours
+  the code sets itself.)
+- 0x78BB0, the draw (173 callers): the map's width and height as
+  halfwords, then halfword entries, each with block << 7 added (so the group
+  is the block, as on Dead or Alive) and the caller's category bit << 15
+  and bit 14, rows 0x80 bytes apart in the layer.
+
+So each picture is a cell with its own CG, loaded from block 0. In MAME's
+attract the title (frame 900: the logo, cell 45, layer 2, block 6; the SEGA
+mark, cell 427; INSERT COIN(S), cell 58; ©SEGA1995, cell 105) and the
+DAREDEVIL backdrop with the logo (frame 3000, cell 44, 2975 tiles) draw the
+same as the explorer's from the tile chip's own characters and colours,
+pixel for pixel, and the snapshots show the same picture with colorxlat.
+Pictures 2 to 5 are the boot's notices (the FBI's WINNERS DON'T USE
+DRUGS, the EPA's RECYCLE IT, the InVision sound credit); the rest are
+the how-to-play pages in Japanese and English, the wing select, the
+pilots' names and portraits, the story text and the ranking.
+
 **Leads.**
 
 - Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
   set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
   0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
   or path data and is not read.
-- Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
-  0x2CF20, and the tile RAM loader 0x78A90.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 

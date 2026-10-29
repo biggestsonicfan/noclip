@@ -7128,6 +7128,7 @@ const skytargt = {
     name: 'Sky Target',
     identify: ['epr-18406.12', 'epr-18407.13', 'mpr-18415.10', 'mpr-18413.16'],
     identifyCrc: [0xfde9c00a, 0x35f8b529],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18406.12', 0xfde9c00a, 'epr-18407.13', 0x35f8b529]] },
         mainData: {
@@ -7175,7 +7176,13 @@ const skytargt = {
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures (js/cells.js `pictures`): the program's table at
+     * 0xEBFB0, 573 of {tiles, colours, map}, Dead or Alive's format; the last
+     * 43 are in the data ROM's last megabyte, through XTRA_DATA (`xtra`). The
+     * loaders 0x78A90 and 0x789F0 put a picture from its scroll group's block,
+     * and the draw 0x78BB0 adds block << 7 to each entry. */
+    cells: { pictures: { table: 0xebfb0, count: 573 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Ski Super G ---------------------------------------------------------- */

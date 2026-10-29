@@ -35,7 +35,7 @@ Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
-*Sky Target* has its models — see [Sky Target](#sky-target).
+*Sky Target* has its models and its cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
@@ -1411,7 +1411,14 @@ stage's part needs its set picked by hand.
 The textures, palette, luma and colour tables match MAME's byte for byte at
 the title and in the first stage.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+The **Cells** tab has the game's 573 tile-chip pictures, each with its own
+tiles and colours: the title logo, the SEGA mark, the boot's notices (the
+FBI's and the EPA's, the InVision sound credit), the how-to-play pages in
+Japanese and English, the wing select, the pilots, the story pages and the
+ranking. The title's and the DAREDEVIL backdrop's match MAME's tile chip
+pixel for pixel.
+
+There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
 
 ## Ski Super G

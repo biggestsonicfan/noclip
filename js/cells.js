@@ -73,6 +73,11 @@
  * drawn over another's tiles. See js/games.js doab.cells and js/scroll.js
  * buildDoaSky, which reads the same table.
  *
+ * Sky Target (1995) has the same pictures two years early, in its program
+ * ROM (`programAt0`, table 0xEBFB0): the loaders 0x78A90 (tiles) and 0x789F0
+ * (colours) put a picture from a block its "scroll group" names, and the draw
+ * (0x78BB0) adds block << 7 to the entries. See js/games.js skytargt.cells.
+ *
  * The House of the Dead (hotdo) has the same pictures a year early, in its
  * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free
  * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its
