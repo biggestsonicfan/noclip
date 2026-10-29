@@ -123,10 +123,10 @@ Three views, and a fourth for the 2D art:
 
 And the stages have their music: tick **music** on the Stages tab and each
 arena plays the song the game plays on it, on the game's own sound board — its
-sound driver, ported to C by m2-hle2, and the SCSP it drives, emulated in the
-page by m2-hle2's board compiled to WebAssembly, and sent the same command the
-game sends when a round starts. It reads the sound ROMs only when switched on and runs at a few
-per cent of one core. See [Music](TECHNICAL.md#music-jssound).
+sound driver on its 68000 and the SCSP it drives, emulated in the page by
+m2-hle2's board ported to JavaScript, and sent the same command the game sends
+when a round starts. It reads the sound ROMs only when switched on and runs at
+a few per cent of one core. See [Music](TECHNICAL.md#music-jssound).
 
 ## Fighting Vipers
 
@@ -2087,8 +2087,8 @@ it knows about the board and the game comes from them:
 - [`m2-hle2`](https://github.com/biggestsonicfan/m2-hle2) — my Model 2 HLE
   emulator, in C11, with *Sonic The Fighters* as its reference game. The polygon
   decoder, material format and ROM layout here are ports of its
-  implementations, and the in-page music is its sound board compiled to
-  WebAssembly. It plays *Sonic The Fighters* (arcade and console versions),
+  implementations, and so is the in-page music: its sound board in
+  JavaScript, sample for sample the same. It plays *Sonic The Fighters* (arcade and console versions),
   *Sega Rally Championship* and *Cyber Troopers Virtual-On* in the browser at
   [arcade.sonicthefighte.rs](https://arcade.sonicthefighte.rs), *Sonic The
   Fighters* online too, and *Fighting Vipers* on the desktop build. *Virtua
@@ -2109,7 +2109,9 @@ geometry lighting in `geo_parse_np_ns` are what the shader here reproduces, and
 [stf-tools](https://github.com/biggestsonicfan/stf-tools) drives MAME to capture
 texture RAM and to diff against a real machine.
 Daytona's sound board plays MAME's MultiPCM (`gew.cpp`, `multipcm.cpp`, Miguel
-Angel Horna, BSD-3-Clause), by way of m2-hle2's port in `js/sound/board.wasm`.
+Angel Horna, BSD-3-Clause), by way of m2-hle2's port, in `js/sound/model1.js`;
+the SCSP is MAME's (`scsp.cpp`, `scspdsp.cpp`, BSD-3-Clause) the same way, in
+`js/sound/scsp.js`.
 Rendering is [three.js](https://threejs.org), loaded at a pinned version with
 its hashes in the import map rather than kept in the tree — the library from
 cdnjs, OrbitControls from jsDelivr.

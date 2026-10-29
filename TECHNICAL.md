@@ -35,11 +35,11 @@ js/
   sound/
     sound.js     the music switch: reads the sound ROMs, boots the board
     worklet.js   runs the board on the audio thread
-    board.wasm   m2-hle2's sound boards, Model 2 and Model 1, built by
-                 tools/sound/build.sh
-tools/sound/
-  board.c        the wasm's surface over m2-hle2's src/board/sound.h
-  build.sh       its emcc build
+    board.js     the sound boards, Model 2 and Model 1: m2-hle2's
+                 src/board/sound.h, ported
+    m68k.js      their 68000
+    scsp.js      the Model 2 board's SCSP and its DSP
+    model1.js    the Model 1 board's two MultiPCMs, YM3438 timers and UART
 ```
 
 The tools this document keeps citing are not in the tree. They live in
@@ -51,9 +51,8 @@ decodes the ROM through the `js/` modules above, so a check there measures this
 code rather than a copy of it. A `stf-tools/x` path below is a file at the root
 of that repository.
 
-Nothing is vendored and there is no build step for the page, with one
-exception: the two `js/sound/*.wasm`, which are compiled C and committed as built
-— see [Music](#music-jssound). `index.html`'s import map pins
+Nothing is vendored and there is no build step for the page.
+`index.html`'s import map pins
 three.js to cdnjs and its one addon, OrbitControls, to jsDelivr, and gives a
 SHA-512 for each of the three files in an `integrity` map — so the page gets
 those exact builds or none. That is not decorative: corrupting one hash and
@@ -6905,7 +6904,7 @@ order table, at the data section's place in each build.) The round start
 also has two turns the explorer leaves out, both about the fight rather
 than the stage: index 5 (Cross Street's) whenever 0x56BC80 is set, and the
 boss fight (0x27820), which sends A0 10 0B or A0 10 0C itself. Each song was
-rendered on `board.wasm` in node and holds its level, and the page plays
+rendered on the board (then `board.wasm`) in node and holds its level, and the page plays
 each stage's in headless Chrome.
 
 **Cells.** The tile chip's pictures are [Power Sled's
@@ -12604,26 +12603,38 @@ sound driver out of `epr-19021`, playing the four sample ROMs (`mpr-19022`–
 to play: three-byte MIDI-framed commands down a UART. m2-hle2 emulates that
 board — the 68000, the SCSP and its DSP, the UART's timing — and grades it
 against MAME's, song by song and key-on by key-on (its `tools/README.md`, "The
-sound board"). `board.wasm` is that emulation, built from m2-hle2's
-`src/board/sound.h` with a thin surface over it (`tools/sound/board.c`):
-load the ROMs, send a byte, render samples.
+sound board"). `js/sound/board.js` is that emulation in JavaScript, ported
+from m2-hle2's `src/board/sound.h` at `6a15509` with its 68000 (`m68k.js`, from
+`m68k_exec.h`), its SCSP (`scsp.js`, from `scsp.h`) and the Model 1 board's
+chips (`model1.js`, from `model1_sound.h`): load the ROMs, send a byte, render
+samples. Until #1900 it was that C compiled to WebAssembly (`board.wasm`, built
+by `tools/sound/build.sh`), which this replaced.
 
-**The driver in C.** m2-hle2 has the sound driver ported to C
-(`src/board/sound_hle.h`, and `sound_hle_crx.h` for CRX_drv), routine by
-routine with the driver's own RAM layout, writing the same SCSP registers and
-sound RAM the 68000 would; since m2-hle2 #1802 it is the board's default
-wherever the program ROM is a build it knows, picked by a hash of the driver's
-code. The page gets it with the rest of the board: Sonic the Fighters,
-Virtua Fighter 2, Fighting Vipers, Sega Rally, Dead or Alive, Virtual-On,
-Dynamite Cop and The House of the Dead (both builds) run the driver in C, and
-so do Daytona and Virtua Cop on the Model 1 board (below); Power Sled, Last
-Bronx and Daytona's 1993 build have builds it does not know and run theirs on
-the 68000, as before. `snd_driver()` says which, and the console logs it when the board
-starts. The i960's side is the same either way (the same UART, clocked the
-same), so nothing in `sound.js` changes with the driver. Graded in Node
-against the 68000 wasm, first stage song, 12 s each: the per-second loudness
-matches to a few thousandths in every game, and the board's work drops from
-21–35 ms to 10–18 ms of a core per second of sound.
+**Every driver on the 68000.** m2-hle2 also has most of these drivers ported
+to C (`src/board/sound_hle*.h`), which the wasm ran by default; the port here
+leaves them out and runs every game's own driver on the 68000, as the wasm did
+for Power Sled, Last Bronx and Daytona's 1993 build. The C drivers were graded
+against the 68000 to match its loudness to a few thousandths, so the music is
+the same, and a single path to keep in step with m2-hle2 is the smaller one.
+
+**Graded against the C.** Bit for bit. The wasm's surface built natively
+(`tools/sound/board.c`, in this repository's history, with `SND_NATIVE_TEST`,
+`SND_68K=1`, and `SND_M1=1` for the Model 1 board) and `board.js` in Node were given the same bytes at the same
+samples (the boot commands at 0.1 s, a song at 0.5 s) and their 16-bit output
+compared: Sonic the Fighters (`AE 10 04`), Virtua Fighter 2 (`AE 10 10`, the
+DSP's reverb running), Sega Rally, Dead or Alive, The House of the Dead (its
+banked 4 MB chips), Daytona and Daytona's 1993 build, 15–20 s each, 0 samples
+differ. Before that, the 68000 and the SCSP were each held to the C on their
+own: the 68000 instruction by instruction (registers, clocks, every bus access)
+over 60 M instructions of fuzzing that ran all 65,536 opcode words and 20 M of
+Sonic the Fighters' driver, and the SCSP replaying logs of every register
+access, tick and interrupt from three games. The one place they part is the
+68000's DIVS of 0x80000000 by -1, which traps the C (undefined behaviour) and
+sets the overflow flags here. Two pieces of the C chip's late sample-making
+show in its output and are kept: its quiet DSP, which `board.js` tells where
+each run ends (`scsp.sync()`) and when the 68000 touches the DSP's delay ring
+(`scsp.ramTouch`), the ring's pages left off the 68000's direct reads for it,
+as `sound.h` does.
 
 **What it sends.** The song is the one `stage_bgm_select` picks:
 `ld 0xDBFDC[r3*4], g0` at `0x3F6A8`, `r3` the `stage_num` byte masked to four
@@ -12643,33 +12654,29 @@ render quantum at a time: the board is asked for exactly the samples the
 speakers are about to take, so there is no buffer between them to fill or to
 starve, and its clock is the audio clock. The context is asked for at 44.1 kHz,
 the board's rate; a browser that gives another rate gets the board's output
-stepped across by a linear blend. The page hands the worklet the wasm's bytes
-rather than a compiled module — Chrome drops a `WebAssembly.Module` posted to a
-worklet without an error on either side.
+stepped across by a linear blend.
 
 **What it costs.** Nothing until the switch is ticked: the sound ROMs are not
 read with the set (`rom.readChip` fetches a member on demand). Ticking it reads
 8.5 MB out of the zips once — about three seconds to the first note, most of it
-the driver's own boot — and the board then makes a second of sound in about
-30 ms of one core on the 68000 (34× real time under Node; bit-identical to a
-native build of the same source), and in about half that with the driver in C. Unticked, the audio context is suspended, which stops the
-board.
+the driver's own boot — and the board then makes a second of sound in 40–90 ms
+of one core under Node (Sega Rally 41, Dead or Alive 66, Virtua Fighter 2 66,
+Sonic the Fighters 70, The House of the Dead 88; Daytona 30–40), against about
+30 ms for the wasm on the 68000. Most of what is left is the SCSP's DSP, which
+`scsp.js` compiles to a function of its own once a program has run 256 samples
+unchanged: the same steps with their fields made constants, which took The
+House of the Dead from 144 ms to 88. A page whose Content-Security-Policy
+refuses `new Function` gets the step-by-step DSP, the same samples a little
+slower; this page sets none. Unticked, the audio context is suspended, which
+stops the board.
 
-**Rebuilding.** `tools/sound/build.sh` with Emscripten on the path (or `EMCC`
-pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
-pointing at it). The wasm is committed because the site has no build step; a
-change to m2-hle2's `sound.h`, `sound_hle*.h`, `scsp.h`, `model1_sound.h` or
-`m68k*.h` is picked up by rebuilding
-it, and the commit should name the m2-hle2 commit it was built from. The first
-build is from `c4ed74f`, then `f797c4b`, which has the 68000 fix The House of
-the Dead's driver needs (below); then it, and `model1.wasm`, were from
-`cd73efd`, with the 68000's bit-op fix (`3d283a3f`) and, for the Model 1 board,
-#1006's. `board.wasm` was then from `f07cf01`, the driver in C as the default,
-and is now from `6a15509`, which adds Virtua Fighter 2's and Sega Rally's
-drivers and the Model 1 board with its drivers in C; `model1.wasm` is gone.
-The build stubs out
-`clock_gettime`: the board times its own work for m2-hle2's status display,
-which a page never reads, and libc's clock would have the module import WASI.
+**Keeping it in step.** The JavaScript is a port, so a change to m2-hle2's
+`sound.h`, `scsp.h`, `model1_sound.h` or `m68k*.h` is carried over by hand and
+graded again against the native build as above; the files name the commit
+they follow (`6a15509`). The wasm before it was built from `c4ed74f`, then
+`f797c4b`, which has the 68000 fix The House of the Dead's driver needs
+(below), `cd73efd` (the 68000's bit-op fix, `3d283a3f`, and #1006's Model 1
+board), `f07cf01` (the driver in C as the default) and last `6a15509`.
 
 ### Virtua Fighter 2's stage sounds (`js/sound/ambience.js`)
 
@@ -12800,19 +12807,19 @@ than the SCSP one: a 68000 at 10 MHz running the driver out of `epr-16720` and
 banked by the 68000), and a YM3438. The i960 talks to it the same way, bytes
 down an 8251 at 31250 baud. Virtua Cop has the same board.
 
-It is m2-hle2's board (`src/board/model1_sound.h`), in the same `board.wasm`
-as the Model 2 one: `sound.js` says which (`snd_board(1)`) before the ROMs go
-in. Its MultiPCM is MAME's (`gew.cpp`, `multipcm.cpp`), by way of the port this
+It is m2-hle2's board (`src/board/model1_sound.h`), ported to `model1.js` and
+run by the same `board.js` as the Model 2 one: `sound.js` says which
+(`new SoundBoardChip(true)`) before the ROMs go in. Its MultiPCM is MAME's (`gew.cpp`, `multipcm.cpp`), by way of the port this
 page first carried; the YM3438 is only its timers, which the driver polls for
 its tempo — Daytona never keys an FM voice. It makes the board's 44.1 kHz,
-the MultiPCM's steps and rates scaled to match. Daytona's and Virtua Cop's
-drivers run in C (m2-hle2 `sound_hle_m1.h`, `sound_hle_vcop.h`), the 1993
-build's on the 68000.
+the MultiPCM's steps and rates scaled to match. Every driver runs on the
+68000, as the 1993 build's always did (the wasm ran Daytona's and Virtua Cop's
+from m2-hle2's C, `sound_hle_m1.h` and `sound_hle_vcop.h`).
 
 The board's receiver drops a byte that arrives before the driver turns it on,
 and the next byte overwrites one the driver has not taken yet; on the board
 the i960 is still booting through all of that, but the page sends its first
-commands at once, so `board.c` holds them until the receiver is on and empty.
+commands at once, so `board.js` holds them until the receiver is on and empty.
 
 Until this board went into m2-hle2 the page had its own, `model1.wasm`: the
 same 68000 and MultiPCM with ymfm's whole YM3438. Graded against it in Node,
@@ -12827,8 +12834,8 @@ loudness envelope that follows MAME's at a correlation of 0.997 (quarter-second
 windows) at the same level to within a few per cent, the same spectrum to
 within 0.5 dB up to 10 kHz, and a waveform that lines up to 0.6–0.9 correlation
 in 0.3 s windows, with a steady 17 ms offset and a drift of 56 ppm, which is
-MAME's sample rates being whole numbers. The wasm's output is bit-identical to
-the native build's, and it makes 20 s of sound in about 0.6 s.
+MAME's sample rates being whole numbers. `board.js` is bit-identical to
+m2-hle2's native build of this board, and makes 20 s of sound in about 0.7 s.
 
 **Which song.** `start_setting` (0x3BF0 in the Saturn-ads build, labelled) is
 what sends the race's song:
@@ -13137,7 +13144,8 @@ set. That gives chapter 1 `A0 10 01`, chapter 2 `A0 10 02`, chapter 3
 **A 68000 bug, fixed in m2-hle2.** The first native runs were silent or
 clipped. m2-hle2's 68000 decoded `and.l Dn,<ea>` in group C as `exg`, and this
 driver is the first to use that instruction. m2-hle2 fixed it in `e3205e3`;
-`board.wasm` is now built from `f797c4b`, which includes it. The other games
+`board.wasm` was then built from `f797c4b`, which includes it, and `m68k.js`
+is ported from a later commit still. The other games
 play as they did before (checked in the page on Sonic The Fighters, Fighting
 Vipers, Virtua Fighter 2 and Dead or Alive).
 
@@ -13168,7 +13176,7 @@ Graded the same way as the finished game. MAME (`hotdp`) was coined, and a tap
 logged every UART byte for 100 s: the title `A0 10 00` at 15.8 s, then chapter 1's
 `A0 10 01` at 54.0 s as its first section starts. Those bytes were replayed at
 the same times through the board natively (m2-hle2 `f797c4b`, the build of
-`board.wasm`). Over the title (16–34 s) the loudness envelope follows MAME's at
+`board.wasm` at the time). Over the title (16–34 s) the loudness envelope follows MAME's at
 0.994 in 50 ms windows and 0.999 in quarter-second ones. Over chapter 1's song
 (54.5–76 s) it follows at 0.994 and 0.998. Both are within 3% of MAME's level.
 Chapter 2's song is read from the scripts and was not played in MAME. In the
@@ -13178,7 +13186,7 @@ page, the four Stage 1 entries play `A0 10 01` and the four Stage 2 entries play
 ### The music of the later games
 
 Sega Rally Championship, Virtual-On, Dynamite Cop and Power Sled run the
-Model 2 sound board (`board.wasm`) with their own programs and samples; the
+Model 2 sound board (`board.js`) with their own programs and samples; the
 specs are in js/games.js. A game whose program names its songs gives the
 list as `music.list` (js/sound/sound.js `listedSongs`), read out of the ROM:
 
