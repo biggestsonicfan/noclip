@@ -8020,6 +8020,61 @@ run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
+### Top Skater's skaters (`js/topskatrplayers.js`)
+
+The Animation tab runs the game's own steps, as its motion viewer
+(0x6C1E0, 0x6CADC) does, on js/doa.js's i960 machine: the load, the
+animator, the skeleton, the slots and the draw. Copro command numbers below
+are Top Skater's own.
+
+**Motions.** 718 pointers at 0xC0038 (index 0 null) into the data ROM; the
+game finds one as `0x5019DC[(id >> 10) & 15][id & 0x3FF]`, bank 0 only. A
+motion is three halfwords, its first and last frame and a heading (0x10000
+a turn), 15 group masks (bytes 6..0x14), then key streams from byte 22. A
+key is a time halfword (the frame through the table at 0x57E490, its low
+bits the type: hold, straight, or Hermite through copro 71) and a value
+halfword (an exponent through 0x582490 and 11 bits of mantissa); 0x34550
+builds both tables, and RAM 0x500A40 = {1, 2, 3, 0} maps the types.
+0x339D0(motion, state) loads one into a state of 0x1FE0 bytes (+0x1D80
+first frame, +0x1D84 last, +0x1D88 heading, +0x1D8C the length in
+seconds); 0x343D0(state, t in seconds, pose) brings every channel to t. A
+frame is 1/60 s.
+
+**Skeleton.** `0x6D570[k]` = {the part list in RAM, the skeleton}, the
+skeleton 0xA0 bytes of bone offsets and lengths at 0x99E80 + 0xA0k
+(thigh 4.6045, shin 4.5216, upper arm 2.3551, forearm 2.4598, head
+3.7994). 0x52DD0(pose, skeleton, out) turns the pose into a quaternion and
+a place a bone at 0x5CA900 + 572n; a limb is FK (mode bits 1: copro 59,
+Euler turns 58, the hinge 49) or IK (2: 60, an aim at the end point 72,
+the bend from the bone lengths 73). 0x537B0(out, skeleton, 0) makes 19
+slot matrices at 0x58C540 + 48n, skater-local.
+
+**Draw.** 0x565D0(_, list) draws 18 parts: the board first (0x545C0) from
+slot 0, scaled by the float at 0x5CE8B8 (1.0; zero leaves the board's
+matrix zero), then the hips, legs, chest, head and arms from slot 2 on;
+the shins and forearms (`j02`) turn a quarter about Z and move back a
+bone first. The part lists are at 0xC8AB8 + 0x50k (the boot copies them
+to 0x509920 + 0x50k): 18 model records of 16 bytes, copies of the model
+table's, then +0x48 a record for 0x6F4C0. 0xC8A68 repeats skater 5;
+0xC8D38 is the shadow (`skater_kage`). Parents, measured as the frame
+that holds each part's origin still through 8 motions: the board and the
+hips are roots; legs, chest and head off the hips, the arms off the
+chest.
+
+**Checked.** At MAME attract frame 3000 (skater 2): 0x52DD0 on MAME's pose
+within 4e-6 of its out buffer; the slots within 5e-6 but for one arm
+(slots 11..14, within 3.3e-3 of places near 10); the animator gives
+motions 553 and 189's states in MAME's RAM exactly; the draw's 279 copro
+results within 6.6e-5, with the same 18 models. Every motion's first and
+last frame on skaters 1 and 7 draws 18 parts with no unknown copro
+command. Copro 47 and 49 (turns about X and Z in radians) and 59 (the turn
+reset, place kept) are read from the code; that frame doesn't send them.
+In some motions (125, 225, 236, …) the board reaches the bus as other
+words, and the explorer names it from the list. The attract's spring on
+some channels after the animator (0x6F8C0) and the motion's heading are
+left out. The sponsor models (151..186) are in no part list. The skaters
+open on set 1, the attract's.
+
 ### Behind Enemy Lines (`js/bel.js`)
 
 Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own

@@ -7485,7 +7485,9 @@ const topskatr = {
         topskatr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The skaters: the game's animator, skeleton and draw run (js/topskatrplayers.js). */
+    rig: { kind: 'topskatr' },
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: false },
 };
 
 /*

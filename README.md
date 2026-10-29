@@ -38,7 +38,7 @@ Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models — see [Top Skater](#top-skater).
+*Top Skater* has its models and skaters — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models and soldiers — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
@@ -1500,8 +1500,15 @@ arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
 tables, luma and palette match MAME's RAM in the attract byte for byte, but
 for three colour rows and three palette entries the attract animates.
 
-There is no Stages tab, no cells, no characters and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
+The **Animation** tab plays all 718 of the game's motions on any of the
+eight skaters, posed by the game's own animator, skeleton and draw: the
+skeleton matches MAME's attract to 4e-6, with the same 18 models. A frame
+is 1/60 s. The spring the attract adds to some joints and the motions'
+headings are left out, and the motions have no names.
+
+There is no Stages tab, no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs) and
+[the skaters](TECHNICAL.md#top-skaters-skaters-jstopskatrplayersjs).
 
 ## Behind Enemy Lines
 

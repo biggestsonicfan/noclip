@@ -23,6 +23,7 @@ import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
+import { readTopskatrBodies, readTopskatrMotions, topskatrMotionList, poseTopskatr } from './topskatrplayers.js';
 import { readGunbladeBodies, readGunbladeMotions, gunbladeMotionList, poseGunblade } from './gunbladeplayers.js';
 import { readBelBodies, readBelMotions, belMotionList, poseBel } from './belplayers.js';
 import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
@@ -3588,6 +3589,8 @@ const BODY_RIGS = {
         read: readGunbladeBodies, motions: readGunbladeMotions, list: gunbladeMotionList,
         pose: (rom, body, motion, frame, opts) => poseGunblade(rom, body, motion, frame, { travel: opts.travel }),
     },
+    /* Top Skater's skaters: the game's animator, skeleton and draw run. */
+    topskatr: { read: readTopskatrBodies, motions: readTopskatrMotions, list: topskatrMotionList, pose: poseTopskatr },
 };
 
 function bodyRig() {
@@ -6651,7 +6654,7 @@ function applyGameFeatures() {
     const solved = ['vf2', 'doa', 'lastbrnx'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
-    $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
+    $('#char-travel-field').hidden = !bodies || solved || ['von', 'topskatr'].includes(state.rom.game.rig?.kind);
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers), and
      * Dead or Alive's, whose fight run poses player 2 itself. */
     const rival = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
@@ -6683,10 +6686,10 @@ function applyGameFeatures() {
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
      * Air Walkers', Dynamite Baseball's, Behind Enemy Lines', Gunblade NY's,
-     * Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * Top Skater's, Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
      * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'gunblade', 'powsled', 'vcop', 'daytona'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'gunblade', 'topskatr', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;

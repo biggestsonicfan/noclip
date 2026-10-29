@@ -785,6 +785,20 @@
         turned to the player and the far models are left out; 18 motions
         whose keys the game builds in RAM are not listed.
       </div>
+      <div class="note" id="anim-note-topskatr" data-i18n="note.topskatr" hidden>
+        The eight skaters share one skeleton of bone lengths and offsets
+        (<code>0x99E80</code>, 0xA0 bytes a skater) and one table of 718
+        motions (<code>0xC0038</code>), each a set of key streams, held,
+        straight or curved, with a time a key. The explorer runs the
+        game's own motion viewer's steps: the load (<code>0x339D0</code>),
+        the animator (<code>0x343D0</code>), the skeleton
+        (<code>0x52DD0</code>, its limbs bent to aim points or turned joint
+        by joint), the slots (<code>0x537B0</code>) and the draw
+        (<code>0x565D0</code>). A frame is 1/60 s. The board hangs from
+        nothing. The spring the attract adds on some channels
+        (<code>0x6F8C0</code>) and the motion's heading are left out, and
+        the game has no names for the motions.
+      </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of
         frames and a count of parts, every part a model of its own. A frame is
