@@ -37,7 +37,7 @@ Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
-*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Wave Runner* has its models and courses and *Sega Water Ski* its models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
@@ -1441,13 +1441,27 @@ palette and colour tables the game loads for them.
 
 The texture picker's sets are the scenes the game sets up: 0 to 3 the four
 courses, then two more scenes that name their own bank, palette and colour
-table in the code (0x4AF60 and 0x2CBE0, not identified yet). A model opens on
-set 0, the first course, which the attract shows. Nothing found yet says
-which course a model belongs to: the beach of model 2826, for one, wants set
-1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
-in the attract byte for byte.
+table in the code (0x4AF60 and 0x2CBE0, not identified yet). A model drawn
+only from the boot's sheet opens on set 0; one that a course's stage draws
+opens on that course (the first, where the third and fourth share one). The
+rest open on set 0, the first course, which the attract shows. Set 0's
+texture sheets, colour tables, luma and palette match MAME's RAM in the
+attract byte for byte.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Stages** tab has the four courses, *course 1* to *course 4* (the game
+names them nowhere in text). Each is the course's ground grid, the sea laid
+in tiles under it, and the things the course start places on it: the check
+gates, windmills, boats, palms, the animals of the third course and the
+first course's clouds. The explorer runs each placed object's own draw
+routine once on the program's code, so every piece stands where the game
+puts it. The fourth course is the third's grid with no objects. Seen from
+MAME's own camera in the attract (the first course, frame 1290), the gate,
+windmills and shore stand as in MAME's picture. Not there: the buoys (two
+lists of them, which nothing was seen to read), the riders, the live
+standings board, the sky. The light is not read; faces are at full
+ambient.
+
+There are no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Sega Water Ski

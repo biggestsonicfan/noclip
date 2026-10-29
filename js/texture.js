@@ -35,7 +35,7 @@ import { buildDynamcopTexram } from './dynamcop.js';
 import { buildJalecoTexram } from './jaleco.js';
 import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
 import { buildSkisuprgTexram } from './skisuprg.js';
-import { buildWaverunrTexram } from './waverunr.js';
+import { buildWaverunrTexram, waverunrModelSets } from './waverunr.js';
 import { buildTopskatrTexram } from './topskatr.js';
 import { buildBelTexram } from './bel.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
@@ -1910,6 +1910,7 @@ function rallyCourseModels(rom) {
  * - Super GT 24h, Over Rev: a model on sheet 0 alone is on the boot's pages.
  * - Dynamite Baseball 97: by the team or stadium its name begins with.
  * - Gunblade NY: the same; its triples are in the program, not in scene lists.
+ * - Wave Runner, Sega Water Ski: see waverunrModelSets.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1970,6 +1971,8 @@ export function programTextureSets(rom, index, decoded) {
         const course = rallyCourseModels(rom).get(index);
         return course != null ? { sets: [course], how: 'course' } : null;
     }
+    /* Wave Runner and Water Ski: see waverunrModelSets. */
+    if (T.raw?.layout === 'waverunr') return waverunrModelSets(rom, index, decoded);
     if (T.raw || T.bankSets) return null;
     if (!decoded) return null;
     const want = sampledTiles(decoded);

@@ -24,6 +24,7 @@ import {
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
+import { readWaverunrStages } from './waverunr.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -6736,6 +6737,7 @@ function loadGameContent() {
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
+        else if (T.waverunr) state.stages = readWaverunrStages(state.rom);
         else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }

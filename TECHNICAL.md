@@ -7810,9 +7810,54 @@ It is off in the attract and is not followed here.
 **Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
 0x85C408 to the entries from 0x3200.
 
-**Leads.** Which models a course draws, so that a model could open on its
-own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
-calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
+**Stages** (`readWaverunrStages`). A course is three things:
+
+- The ground: a grid of world-space models drawn under the camera's matrix
+  alone, 0x49A80 called from 0xA38B0 with `ld 0x285e110[course*4]`. A grid
+  record is {cell width, cell depth (both 64.0), columns, rows, first
+  column, last, first row, last, cell list}, the list a word a cell, row by
+  row: the model, or 0 for open water. Cell 64 is the one east and south of
+  the origin, as the models' own coordinates show. The fourth course has the
+  third's grid.
+- The objects: the course start (0xBF840) calls 0xBF7B0 with the course,
+  which hands 0xBFAA0 two lists of 28-byte records {x, y, z, word, yaw,
+  word, maker}, ended by a maker of 0 (0xAAD0/0xAB40, 0xABB0/0xAC40,
+  0xACA0/0xACE0, 0xADB0/0xADD0). 0xBFAA0 calls each maker for a task and
+  0xBFA60 copies the record's first six words to the task's +0x24..+0x38
+  (the yaw 0x10000 to the turn). A maker is `lda handler, g0; call 0x20F230`
+  (or 0x20F350), the handler the task's draw. The boot copies program
+  0xB0000 to 0x200000 and the tasks run there.
+- The backdrop: 0x60F0 makes the course's sky tasks the same way (the first
+  course's clouds, 0x6190, models from 2098). The sea is model 1907, 700
+  wide, which 0x283D0 draws under the camera every frame (its entry copied
+  from 0x71EF0); the explorer lays it in tiles over the grid.
+
+The explorer runs the makers and then each handler once on `js/i960.js`,
+with the copro and geometrizer of `js/doa.js` and no camera, and keeps what
+reaches the geometrizer: the culled draw 0x210200 (model in g0, tested
+against the view first) is answered as a draw under the copro's matrix. So
+each piece stands where its own first frame puts it. Checked against MAME's
+attract at frame 1290 (the first course): the geometrizer's matrices there,
+taken back through the camera's (the grid's, from 0xA38C4), put the check
+gate 2114, the windmill 2516 and the boat 2547 exactly at their records and
+turned by the yaw as js/doa.js turns about Y; the Stages tab seen from that
+camera shows the gate, the windmills and the shore as MAME's picture does.
+
+Not read: the 28-byte buoy lists at 0x8068 and 0x89B8 (function 0x2104E0;
+nothing names them and nothing read them in 1400 attract frames); 0x9390's
+standings board (0x9D80, digits 0x9E7 + n from the list at 0x51BA00, drawn
+only with players); the windmill blades (models 0xD81 on, entries past the
+table's 3457 count, a second table at 0x77FD0..0x78190); the riders; the
+light. Course names are not in the program's text.
+
+**Texture sets by model** (`waverunrModelSets`). The boot's bank is sheet
+0's and no course replaces it, so a model on sheet 0 alone is the boot's; a
+model on sheet 1 that a course's stage draws is on that course's set (the
+first such course).
+
+**Leads.** The rider draws at 0x20D124 and 0x20D2B4 (models 207..416) and
+0x2123D8 (models 757..862) are where an Animation tab would start; the
+cloud task 0x6190 steps its models by a clock. The two named scenes are not
 identified.
 
 **Sega Water Ski.** MAME's `segawski` (Revision A) runs the same program,
