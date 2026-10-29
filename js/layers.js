@@ -205,17 +205,33 @@ function facesOf(draws) {
     return faces;
 }
 
-/* Candidate pairs: faces whose boxes, grown by the gap, share a cell. */
+/* Candidate pairs: faces whose boxes, grown by the gap, share a cell. A face
+ * over more than BIG cells is left out of them and paired by its box against
+ * every face instead (see pairsOf): Power Sled's snowfields span hundreds of
+ * thousands of cells each, the biggest four and a half million, and filling
+ * those took the course twenty seconds to open (pinboard #1882). */
 const CELL = 32;
+const BIG = 4096;
 function cellsOf(faces, gap) {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const f of faces) {
+        f.c0 = f.lo.map((v) => Math.floor((v - gap) / CELL));
+        f.c1 = f.hi.map((v) => Math.floor((v + gap) / CELL));
+        f.big = (f.c1[0] - f.c0[0] + 1) * (f.c1[1] - f.c0[1] + 1) * (f.c1[2] - f.c0[2] + 1) > BIG;
+        if (f.big) continue;
+        for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], f.c0[a]); hi[a] = Math.max(hi[a], f.c1[a]); }
+    }
+    /* A cell's key is its place in the box of them all, a number: a string
+     * per cell was most of the time. */
+    const nx = hi[0] - lo[0] + 1, ny = hi[1] - lo[1] + 1;
     const cells = new Map();
     faces.forEach((f, i) => {
-        const c0 = f.c0 = f.lo.map((v) => Math.floor((v - gap) / CELL));
-        const c1 = f.c1 = f.hi.map((v) => Math.floor((v + gap) / CELL));
+        if (f.big) return;
+        const { c0, c1 } = f;
         for (let x = c0[0]; x <= c1[0]; x++) {
             for (let y = c0[1]; y <= c1[1]; y++) {
                 for (let z = c0[2]; z <= c1[2]; z++) {
-                    const k = `${x},${y},${z}`;
+                    const k = (x - lo[0]) + nx * ((y - lo[1]) + ny * (z - lo[2]));
                     const cell = cells.get(k);
                     if (cell) cell.list.push(i); else cells.set(k, { at: [x, y, z], list: [i] });
                 }
@@ -424,6 +440,16 @@ function pairsOf(faces, out, gap, cosine) {
             }
         }
     }
+    /* The faces too big for the cells, each against every other face whose
+     * box meets its own, a pair of two big ones once. */
+    faces.forEach((f, b) => {
+        if (!f.big) return;
+        for (let k = 0; k < faces.length; k++) {
+            const g = faces[k];
+            if (k === b || (g.big && k < b) || !boxesMeet(f, g, gap)) continue;
+            consider(Math.min(b, k), Math.max(b, k));
+        }
+    });
     return pairs;
 }
 
