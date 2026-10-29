@@ -33,6 +33,7 @@ import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
+import { I960 } from './i960.js';
 
 export { SHEET_BYTES };
 
@@ -799,8 +800,10 @@ function buildDaytonaTexram(rom, texSets) {
     let pages = 1;
     if (set !== null) {
         /* Daytona keeps the table in the program ROM; Virtua Cop names it by
-         * its data ROM address. */
-        const bank = raw.bankTable >= MAIN_DATA_BASE
+         * its data ROM address; Virtua Striker has no table, only its one bank
+         * (`banks`). */
+        const bank = raw.banks ? raw.banks[set]
+            : raw.bankTable >= MAIN_DATA_BASE
             ? rom.mainDataView.getUint32(off(raw.bankTable) + set * 4, true)
             : cv.getUint32(raw.bankTable + set * 4, true);
         if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
@@ -808,7 +811,42 @@ function buildDaytonaTexram(rom, texSets) {
             pages++;
         }
     }
+    for (const [entry, ...args] of raw.run ?? []) runTextureRoutine(rom, tex, entry, args);
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages };
+}
+
+/*
+ * A boot routine that works on texture RAM once the banks are in, run as the
+ * game's own code (js/i960.js) against these sheets: the 2B board's texture
+ * RAM, 0x11000000 (sheet 0, mirrored at 0x11100000) and 0x11200000 (sheet 1,
+ * mirrored at 0x11300000). Virtua Striker's 0x9F70 (called at 0x10C4 with
+ * g0 1) averages a 32x64-texel patch of sheet 1 down to half size on sheet 0.
+ */
+function runTextureRoutine(rom, tex, entry, args) {
+    const prog = rom.maincpu;
+    const ram = new Uint8Array(0x100000);
+    const where = (a) => {
+        if (a < prog.length) return [prog, a];
+        if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
+        if (a >= 0x11000000 && a < 0x11400000) return [tex, ((a >> 21) & 1) * SHEET_BYTES + (a & 0xfffff)];
+        throw new Error(`texture routine read 0x${a.toString(16)}`);
+    };
+    const read = (a, n) => {
+        const [b, o] = where(a);
+        let v = 0;
+        for (let k = n - 1; k >= 0; k--) v = (v << 8) | b[o + k];
+        return v >>> 0;
+    };
+    const write = (a, v, n) => {
+        const [b, o] = where(a);
+        if (b === prog) throw new Error(`texture routine wrote ROM 0x${a.toString(16)}`);
+        for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
+    };
+    const cpu = new I960({
+        read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
+        write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
+    });
+    if (!cpu.call(entry, args, { maxSteps: 2_000_000 })) throw new Error(`texture routine 0x${entry.toString(16)} did not return`);
 }
 
 /* ---- Raw banks, Sega Rally's arrangement --------------------------------- */

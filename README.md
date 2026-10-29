@@ -25,6 +25,8 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
+*Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
 
 Three views, and a fourth for the 2D art:
 
@@ -1188,6 +1190,40 @@ byte for byte, and the boot's colours match it at frame 600.
 There is no Stages tab, no riders and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
 
+## Virtua Cop 2
+
+`vcop2.zip` on its own. The **Models** tab has all 2994 entries of the model
+table, with the textures, palette and colour tables the game builds for them.
+The game runs Virtua Cop's library, so it takes Daytona USA's texture banks
+and Virtua Cop's ramp and band.
+
+The texture picker's sets 0..2 are the three banks a stage puts on sheet 0,
+over the bank the boot puts on sheet 1. With set 0, the sheets, the palette,
+luma and the colour tables match MAME's in the attract byte for byte. Sets 1
+and 2 were not reached in MAME.
+
+There is no Stages tab, no characters, no motions, no cells and no music yet.
+See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+
+## Virtua Striker
+
+`vstriker.zip` is Revision A. For the first release, give `vstrikro.zip`
+together with `vstriker.zip`, which holds the data, polygon and texture ROMs
+the two share. The **Models** tab has all 1537 entries of the model table,
+with the textures, palette and colour tables the boot builds for them. The
+game is a Model 2B title, and it uploads its texture bank the way Daytona USA
+does.
+
+noclip runs the game's own colour, luma and texture routines instead of
+porting them. The **Cabinet** select is the game's MONITOR setting:
+PROJECTER or CRT, which is the default on a fresh board. The two settings
+build different colour tables. With either setting, the sheets, the palette,
+luma and the colour tables match MAME's at boot byte for byte.
+
+The kits, the per-team textures and the stadium are set up in play, from
+the team tables, so the models show the boot's look. There is no Stages
+tab, no motions, no cells and no music yet.
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1234,6 +1270,8 @@ and its USA build `lastbrnxu.zip`.
 
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
 beside it.
+
+`vcop2.zip` carries Virtua Cop 2.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

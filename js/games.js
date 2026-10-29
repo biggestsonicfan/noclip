@@ -3555,6 +3555,243 @@ const vcop = {
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
+/* ---- Virtua Cop 2 --------------------------------------------------------- */
+
+/*
+ * Virtua Cop 2 (MAME's `vcop2`, Model 2A) runs Virtua Cop's library, moved up
+ * the program ROM to 0x16xxx: the same bank upload, ramp, band and luma copy,
+ * called in the same order at boot (0x1EDC..0x1F2C). What differs is listed
+ * on the fields below.
+ */
+const vcop2 = {
+    ...daytonaBuild({
+        id: 'vcop2',
+        name: 'Virtua Cop 2',
+        program: [0x000000, 'epr-18524.12', 0x1858988b, 'epr-18525.13', 0x0c13df3f],
+        data8: [0x800000, 'mpr-18522.6', 0x61d18536, 'mpr-18523.7', 0x61d08dc4],
+        modelTable: { offset: 0x4c8004, count: 0xbb2 },
+        /* 0x164A0: 1024 colours from data 0x4C0000 to the face palette. */
+        paletteOffset: 0x4c0000, paletteCount: 1024,
+        /* 0x165AC, Daytona's upload with the 2A board's sheets (0x12200000 and
+         * 0x12600000) and its run table at 0x18CEC. The boot (0x1657C) puts
+         * 0x2300000 on sheet 1; 0x16594 puts the scene's, `ld 0x18d14[g0*4]`,
+         * on sheet 0: 0x2000000, 0x2100000, 0x2200000, then 0x2000000 three
+         * times. g0 is the stage number 0x502010 (0x5028). */
+        bankTable: 0x18d14, bootBank: 0x2300000, texSets: 3,
+        luma: { source: 'maincpu', count: 0x16bd8, data: 0x16bdc },
+        cabinets: DAYTONA_CABINETS,
+        /* 0x16250 sends geometry function 6 from the header at 0x163E0 (start
+         * 0, count 32): parameters from 0x163E8, coefficients (all 100.0)
+         * from 0x16360. */
+        materials: { source: 'maincpu', at: 0x163e8, count: 32, stride: 4 },
+        /* No world light in ROM: every scene sends its own through function
+         * 0xA (0x15FC4), most of them worked out by the copro. This is the
+         * constant one 0x5648 sends, (-0.14, -0.7, 0.7), normalised; z negated
+         * for the explorer. */
+        light: [-0.140028, -0.700140, -0.700140],
+        courses: {},
+        sound: null,
+    }),
+    regions: {
+        /* Two pairs of 1MB. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-18524.12', 0x1858988b, 'epr-18525.13', 0x0c13df3f],
+                [0x100000, 'epr-18518.14', 0x7842951b, 'epr-18519.15', 0x31a30edc],
+            ],
+        },
+        /* The banks in the first pair, the model table and the palette in the
+         * second. The zip calls the last pair mpr-; MAME, epr-. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-18516.10', 0xa3928ff0, 'mpr-18517.11', 0x4bd73da4],
+                [0x400000, 'mpr-18514.8', 0x791283c5, 'mpr-18515.9', 0x6ba1ffec],
+                [0x800000, 'mpr-18522.6', 0x61d18536, 'mpr-18523.7', 0x61d08dc4],
+                [0xc00000, 'epr-18520.4', 0x1d4ec5e8, 'epr-18521.5', 0xb8b3781c],
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18513.16', 0x777a3633, 'mpr-18510.20', 0xe83de997]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18512.25', 0xd9bc7e71, 'mpr-18511.24', 0xcae77a4f]],
+        },
+    },
+    /* 0xBB2 entries at data 0x4C8004, after their count less one (0xBB1, at
+     * 0x4C8000), in the 1995 games' order: tpa, tha, oba, count. The draws
+     * (0x160E0, 0x16178, 0x1620C) read `0x24c8004[g0*16]` from the copy
+     * the boot makes at RAM 0x200000 (0x21D4). Model 0's headers start the
+     * texture ROM, so a tha of 0 is one. */
+    modelTable: { offset: 0x4c8004, count: 0xbb2, stride: 16, matAtZero: true },
+    /*
+     * The ramp is Virtua Cop's (0x164D0, the deluxe constants). Then 0x168B8
+     * lifts the low byte of every channel of rows 1..31, luma 1..63, by 8,
+     * held at 0xFF (`lift`; 0x168C4 is the same with the three adds in g1-g3,
+     * which two scenes call with (12, 4, 2) and (12, 6, 4)), and 0x16758 lays
+     * one band over luma 48..63 of every row from program 0x18D2C. Its blue
+     * takes bit 15 for its low bit, where Virtua Cop's takes bit 14.
+     */
+    colors: {
+        luma: { source: 'maincpu', count: 0x16bd8, data: 0x16bdc }, ramp: RAMP_DELUXE, solid: true,
+        lift: [8, 8, 8],
+        band: { source: 'maincpu', tables: [0x18d2c, 0x18d2c, 0x18d2c], blueBit: 15 },
+    },
+    patches: [],
+    paletteFixes: [],
+    stageTable: null,
+    objects: null,
+    area: null,
+    sky: null,
+    cells: null,
+    rig: null,
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/* ---- Virtua Striker ------------------------------------------------------- */
+
+/*
+ * Virtua Striker (MAME's `vstriker`, Revision A, and `vstrikero`, the first
+ * release), Model 2B. Its library is Daytona's and Virtua Cop's, a year on: the
+ * same model-table entry, mesh pointer and bank upload. The colours are not:
+ * the boot's colour routine (0x9210 in Revision A) dims the face palette and
+ * builds colorxlat out of floats and data-ROM tables, so the explorer runs that
+ * routine itself (js/colors.js runColorRoutines) rather than port it.
+ *
+ * The test menu's MONITOR setting (backup RAM 0x1D0001A: 0 PROJECTER, 1 CRT,
+ * which a fresh board has) picks the colorxlat constants, so it is the panel's
+ * cabinet choice here.
+ */
+const VSTRIKER_MONITORS = [{ name: 'PROJECTER' }, { name: 'CRT' }];
+const VSTRIKER_SHARED = {
+    /* 0x2000000-0x2800000; the third pair, each build's own, follows. */
+    data0: [0x000000, 'mpr-18055.11', 0x5aba9fc0, 'mpr-18056.12', 0x017f0c55],
+    data4: [0x400000, 'mpr-18053.9', 0x46c770c8, 'mpr-18054.10', 0x437af66e],
+    polygons: {
+        size: 0x800000,
+        parts: [
+            [0x000000, 'mpr-18057.17', 0x890d8806, 'mpr-18059.21', 0xc5cdf534],
+            [0x400000, 'mpr-18058.18', 0xd4cbdf7c, 'mpr-18060.22', 0x93d5c95f],
+        ],
+    },
+    textures: {
+        size: 0x400000,
+        parts: [[0x000000, 'mpr-18062.27', 0x126e7de3, 'mpr-18061.25', 0xc37f1c67]],
+    },
+};
+/*
+ * One build: `program` the two pairs, `data8` the third data pair, `colors` the
+ * colour routine and the RAM word its ramp reads MONITOR from. Every table the
+ * explorer reads is at the same data ROM address in both.
+ */
+function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutine }) {
+    return {
+        ...daytonaBuild({
+            id, name,
+            program: program[0], data8,
+            modelTable: { offset: 0x180800, count: 1537 },
+            paletteOffset: null, paletteCount: 1024,
+            bankTable: null, bootBank: 0x2400000, texSets: 1,
+            luma: {}, cabinets: VSTRIKER_MONITORS,
+            /* 0x8448 (Revision A) sends geometry function 6 from data
+             * 0x825E30: start 0, count 31, a parameter word and a distance
+             * coefficient each. */
+            materials: { source: 'mainData', at: 0x825e30, count: 31, stride: 8 },
+            /* 0x42A4 sends the one fixed light, (0, -0.87, 0.5), every frame
+             * (the display list's function 0xA in MAME); normalised, z negated
+             * for the explorer. */
+            light: [0, -0.867019, -0.498286],
+            courses: {},
+            sound: null,
+        }),
+        regions: {
+            /* Two pairs of 128KB. */
+            maincpu: { size: 0x80000, parts: program },
+            /* The banks and the model table in the first pair, the palette
+             * at 0x180000; the colour, luma and material tables in the third. */
+            mainData: { size: 0x900000, parts: [VSTRIKER_SHARED.data0, VSTRIKER_SHARED.data4, data8] },
+            polygons: VSTRIKER_SHARED.polygons,
+            textures: VSTRIKER_SHARED.textures,
+        },
+        /* 1537 entries of {oba, tpa, tha, count} at data 0x180800 — Daytona's
+         * order, four words and no terminator — which 0xA940 copies to RAM
+         * 0x522910. Entry 0's tha is 0, the first texture header. The draw
+         * (0x8390) reads `0x522910[g0*16]`. */
+        modelTable: { offset: 0x180800, count: 1537, stride: 16, fields: { mesh: 0, uv: 4, mat: 8 }, matAtZero: true },
+        /* What the colour routine leaves in palette RAM 0x1802000: 1024
+         * colours from data 0x180000, all but the indices listed at data
+         * 0x82E440 scaled by 0.83871 a channel. */
+        palette: { layout: 'i960' },
+        /*
+         * 0x9E60 (Revision A) is Daytona's bank upload with the 2B board's
+         * sheets: 0x60000 halfwords to one, then the mip levels dealt between
+         * both from the run table at data 0x82E594 (0x100, 0x80 ... 1), the
+         * same runs as Daytona's. The boot calls it twice (0x10A0, 0x10B0):
+         * data 0x2400000 onto sheet 1 and 0x2500000 onto sheet 0. Nothing
+         * uploads another bank. Then 0x9F70 (0x10C4) halves a patch of sheet
+         * 1 into sheet 0, which is run as it is (js/texture.js
+         * runTextureRoutine).
+         */
+        texture: {
+            raw: { layout: 'daytona', banks: [0x2500000], bootBank: 0x2400000, run: [[texRoutine, 1]] },
+            sets: 1,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        colors: {
+            i960: { board: '2b', data: true, run: colors, settings: [[0x1d0001a, 1], [monitorRam, 2]] },
+            cabinets: VSTRIKER_MONITORS,
+            cabinet: 1,
+            solid: true,
+        },
+        patches: [],
+        paletteFixes: [],
+        stageTable: null,
+        objects: null,
+        area: null,
+        sky: null,
+        cells: null,
+        rig: null,
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+/*
+ * Revision A: 0x9210 dims the palette and calls 0x93F0, which builds
+ * colorxlat (ramp 0x7F10, which reads MONITOR at RAM 0x5D4210, then
+ * 0x93FC..0x97B0); 0x806C copies luma, `ld 0x282DC1C` bands of 128 from data
+ * 0x82DC20. Both are the boot's (0x842C, 0x1098).
+ */
+const vstriker = vstrikerBuild({
+    id: 'vstriker',
+    name: 'Virtua Striker (Revision A)',
+    program: [
+        [0x000000, 'epr-18068a.15', 0xafc69b54, 'epr-18069a.16', 0x0243250c],
+        [0x040000, 'epr-18066a.13', 0xe658b33a, 'epr-18067a.14', 0x49e94047],
+    ],
+    data8: [0x800000, 'epr-18070a.7', 0x1961e2fc, 'epr-18071a.8', 0xb2492dca],
+    colors: [0x9210, 0x806c],
+    monitorRam: 0x5d4210,
+    texRoutine: 0x9f70,
+});
+/* The first release: the same routines further up (0x93E0, 0x811C, 0xA160),
+ * and MONITOR at RAM 0x5D4020. Its own six chips; the rest are vstriker's. */
+const vstrikero = vstrikerBuild({
+    id: 'vstrikero',
+    name: 'Virtua Striker',
+    program: [
+        [0x000000, 'epr-18068.15', 0x74a47795, 'epr-18069.16', 0xf6c3fcbf],
+        [0x040000, 'epr-18066.13', 0xe774229e, 'epr-18067.14', 0x7dfd950c],
+    ],
+    data8: [0x800000, 'epr-18070.7', 0xf52e4db5, 'epr-18071.8', 0x1be63a7d],
+    colors: [0x93e0, 0x811c],
+    monitorRam: 0x5d4020,
+    texRoutine: 0xa160,
+});
+
 /* ---- Virtua Fighter 2 ----------------------------------------------------- */
 
 /*
@@ -6124,7 +6361,7 @@ const motoraid = {
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vcop2, vstrikero, vstriker, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
     pltkids, pltkidsa, motoraid];

@@ -15,6 +15,7 @@ import { t } from './lang.js';
 import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
 import { motoraidScene } from './motoraid.js';
+import { i960Palette } from './colors.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -418,6 +419,13 @@ export function facePalette(rom) {
     rom.facePalettes ??= new Map();
     if (rom.facePalettes.has(set)) return rom.facePalettes.get(set);
 
+    /* Virtua Striker's is what its own colour routine leaves in palette RAM
+     * (js/colors.js runColorRoutines). */
+    if (p?.layout === 'i960') {
+        const out = i960Palette(rom);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
     if (p?.layout === 'dynamcop') {
         const out = dynamcopPalette(rom, set);
         rom.facePalettes.set(set, out);

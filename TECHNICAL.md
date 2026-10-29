@@ -9652,6 +9652,97 @@ Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
 and 0x98's groups (see above).
 
+### Virtua Cop 2 (`js/games.js`, `js/colors.js`)
+
+Virtua Cop 2 (MAME's `vcop2`, Model 2A, 1995) runs Virtua Cop's library
+moved up the program ROM, so the profile is `daytonaBuild`'s with the
+addresses changed. The boot calls the routines in this order (0x1EDC..0x1F2C):
+
+| routine | what it does |
+|---|---|
+| 0x164A0 | 1024 colours from data 0x4C0000 to the face palette (0x1802000) |
+| 0x16250 | the material table, geometry function 6: header 0x163E0 (start 0, count 32), parameters from 0x163E8, coefficients (all 100.0) from 0x16360 |
+| 0x166B8 | luma: `ld 0x16bd8` (0x42) bands of 128 bytes from program 0x16BDC, one byte to each word of 0x12800000 |
+| 0x1657C | bank 0x2300000 onto sheet 1 (0x12600000) |
+| 0x16594 | bank `0x18d14[g0*4]` onto sheet 0 (0x12200000); g0 is 0 at boot, the stage 0x502010 later (0x5030, 0x8DE8) |
+| 0x164D0 | the ramp, Virtua Cop's deluxe constants (12, 0x300, 0x1160, 0x8B) |
+| 0x168B8 | `lift`: 0x168C4 with g1..g3 = 8: the low byte of each channel of rows 1..31, luma 1..63, plus g1/g2/g3, held at 0xFF |
+| 0x16950 | grey and dimmed copies of the face palette into RAM 0x5D4000/0x5D5000 (not drawn from here) |
+| 0x16758 | one band of 16 colours a row over luma 48..63 of all 32 rows, from program 0x18D2C |
+
+0x165AC is Daytona's bank upload (`daytonaRuns`): its run table at 0x18CEC
+is 0x200 >> k as Daytona's 0x1494. The bank table is
+0x2000000, 0x2100000, 0x2200000 and then 0x2000000 three times, so the
+picker has three sets. The band's blue takes bit 15 of the colour for its
+low bit (`band.blueBit`), where Virtua Cop's 0x4328 takes bit 14. Two
+scenes call 0x168C4 with other adds: (12, 4, 2) at 0x33A8 and (12, 6, 4)
+at 0x4FF8 (stage 3); the profile keeps the boot's.
+
+The model table is 0xBB2 entries at data 0x4C8004, after the last index
+(0xBB1) at 0x4C8000, in the 1995 order {tpa, tha, oba, count}: the draws
+(0x160E0, 0x16178, 0x1620C) check `g0 < 0xBB2` and read
+`0x24c8004[g0*16]` from the boot's copy at RAM 0x200000 (0x21D4). Entry
+0xBB2 is 0xFFFFFFFF fill.
+
+There is no world light in ROM. Function 0xA (0x15FC4) is sent from 22
+places with a scene's own vector, most of them worked out by the copro; the
+profile takes the constant (-0.14, -0.7, 0.7) that 0x5648 sends.
+
+**Checked against MAME.** `vcop2` in the attract, texture RAM (both sheets),
+the colour tables, luma and the face palette dumped at frames 300, 900 and
+1800: set 0 matches all of them byte for byte. The attract never loads
+banks 1 or 2.
+
+**Leads.** The stage number is 0x502010; 0x516C is a table by it the stage
+start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
+SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
+pair 18520/18521) is not read by anything here.
+
+### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
+
+Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
+keeps Daytona USA's table layouts. The model table is 1537 entries of 16
+bytes at data 0x180800 ({mesh, uv, material}). The material table is 31
+pairs at data 0x825E30, sent by the boot at 0x8448..0x8458 (via 0x3F68). The
+light (0, -0.867, -0.498) is fixed, and it goes out every frame at 0x42A4
+(function 0xA through the copro port 0x880000).
+
+The colour code is not Daytona's, so noclip does not port it. `colors.i960`
+runs the boot's own routines in `js/i960.js`, against the program, the data
+ROM, backup RAM 0x1D00000 and the 2B luma at 0x11400000. Its tables come out
+whole, palette included (`palette.layout: 'i960'`):
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x9210 | 0x93E0 | palettes 0x1800000/0x1801000, face palette 0x1802000, colorxlat 0x1810000 (called from 0x842C) |
+| 0x806C | 0x811C | luma 0x11400000 |
+| 0x9E60 | 0xA050 | bank 0x2500000 to sheet 1, then the mip runs from data 0x82E594 (Daytona's upload) |
+| 0x9F70 | 0xA160 | the texture builder that runs after the upload |
+| 0x5D4210 | 0x5D4020 | RAM copy of MONITOR |
+
+Backup byte 0x1D0001A is MONITOR (0 PROJECTER, 1 CRT; the menu is at 0x745A0
+and its strings at 0x283C7C8). The profile writes it and its RAM copy from
+the Cabinet select before the run. 0x1D0001B is COUNTRY (0 USA, 1 JPN, 2 EXP;
+1 on a fresh board). The boot passes it to 0x9F70 in g0: with 1, the routine
+averages a 32x64-texel patch of sheet 1 down to half size on sheet 0
+(sheet 0 0xC8130..). Any other value takes the 0xA104 path, which spreads
+sheet 0 out into sheet 1. `texture.raw.run` always calls it with g0 = 1, so
+noclip shows the JPN board.
+
+**Checked against MAME.** I dumped `vstriker` at frame 300 with a fresh NVRAM
+(CRT) and with MONITOR held at 0 (PROJECTER). Both sheets and their mirrors,
+colorxlat, luma and the face palette match their Cabinet setting byte for
+byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
+24576 entries. Without 0x9F70, 144 halfwords of sheet 0 differed.
+`vstrikero` (CRT) matches as well.
+
+**Leads.** At frames 900 and 1800, play has changed these:
+- The team kits: 0xA708 writes face palette entries 0..178.
+- The per-team texture rectangles: 0x9D10/0x9D58 write sheet 0 0x100000..0x13FFFF, and 0x9DF8/0x9E04 write 0x113C0000.. and 0x111E0200... They are called from 0x9C30, with the tables at data 0x82E560, 0x82E4A0 and 0x82E4B8.
+- A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
+
+There are no model names in ROM.
+
 ## Animation
 
 Motion playback is implemented, and checked against the board — see
