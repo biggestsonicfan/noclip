@@ -1200,6 +1200,12 @@ scene a model belongs to, so a course's part needs its set picked by hand.
 The sheets, luma and colour tables of set 1 match MAME's at attract frame 1800
 byte for byte, and the boot's colours match it at frame 600.
 
+The **Cells** tab has the game's 882 pictures, each with its own tiles and
+colours. They include the attract's tips in Japanese and English, the rider
+plates, the select screens, the skies, the course maps and the HUD. Every
+picture MAME's attract mode loads has the same characters there, byte for
+byte, and the same colours, except where the game was fading them.
+
 There is no Stages tab, no riders and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
 

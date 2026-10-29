@@ -7179,6 +7179,30 @@ palette, colorxlat and luma windows naming the routines.
   0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
   which 0x16E38 animates). The other scenes' tables are the same routines
   run with another n and were not held against MAME.
+- **Cells** (`pictures`, as Dead or Alive's and The House of the Dead's). The
+  2D is 882 pictures of 12 bytes, {tiles, colours, map}, at program 0x87860.
+  Entries 0..834 point into the data ROM, and 835..881 into XTRA
+  (0x6C00000.., data 0x1C00000). A tile list is chunks of {count, count
+  tiles}, until a zero count. The colours are 16 a chunk, and the map is
+  Virtua Cop's record. Many entries share one tile list with their own map:
+  33..71 are one CG's 39 maps.
+  - The loader 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) is called from
+    0x21BF50/0x21BFC0 with g0 a slot {first block, blocks, chunks, entry}.
+    0x21BB10 first finds enough free 128-tile blocks in 0x57ABC0. The loader
+    then copies each chunk to whole blocks.
+  - 0x21BC70 gives every block of a chunk that chunk's 16 colours, at once
+    (0x21BCF0) or through the queue at 0x57B030 (0x21BDA0), as 0x5194B4
+    says.
+  - The boot's 1bpp font (0x21B2F8 from 0x21AE70, data 0x8B49A0) goes to
+    characters 0..127, so the pictures start at block 1. The panel loads a
+    picture from block 0, and its map numbers the picture's own tiles.
+  - MAME, attract frames 600..2400: every picture found in character RAM
+    (4, 33, 99, 134, 499, 503, 504, 510, 578, 579, 580, 594, 853) has the
+    panel's tiles at its block, byte for byte. The colours match too, except
+    578, 579, 594 and a second copy of 33, which the game was fading when
+    dumped.
+  - Not followed: the draw that adds the first block to a map's entries. No
+    capture says which pictures share a screen.
 
 ### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
 

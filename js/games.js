@@ -6427,7 +6427,17 @@ const motoraid = {
         solid: true,
     },
     /* No course, rider or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /*
+     * The 2D is Dead or Alive's pictures (js/cells.js `pictures`): 882
+     * entries of {tiles, colours, map} in the program ROM at 0x87860, the
+     * first 835 pointing into the data ROM and the rest into XTRA. The loader
+     * 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) copies each chunk of tiles to
+     * whole 128-tile blocks from the first block 0x21BB10 found free, and
+     * 0x21BC70 gives every block of a chunk the chunk's 16 colours, straight
+     * or queued (0x21BCF0, 0x21BDA0, as 0x5194B4 says).
+     */
+    cells: { pictures: { table: 0x87860, count: 882 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
