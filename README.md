@@ -673,8 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids, Super GT 24h and Over Rev have the Cells tab
-but not the music.
+Bronx has both; Pilot Kids, Super GT 24h, Over Rev and Dynamite Baseball
+97 have the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1367,6 +1367,14 @@ piece on its stadium's with team 0 — and the rest on set 12, stadium 1 and
 team 0, the set MAME's attract opens on. Textures, colour tables, luma and
 face palette match MAME's in the attract mode byte for byte, but for 119
 halfwords of sheet 0 the game copies about at run time.
+
+The **Cells** tab has the game's 2349 tile-chip pictures: the title and its
+captions, the skies and the city at night, the scoreboard digits and
+lettering, the batting and pitching panels, the team and mode menus and the
+messages (CONTINUE?, INSERT COIN(S), the challenger's). The game loads a
+picture's tiles only when it draws it, wherever it finds room; the tab lays
+each set of tiles from the start, which shows the same picture. Those
+checked against MAME's attract are the same pixel for pixel.
 
 There is no Stages tab, no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).

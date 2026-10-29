@@ -6936,8 +6936,11 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
+    /* The tile chip's pictures: the record table at data 0xBB0000 and the
+     * program's byte per record at 0xAF680 (js/dynabbcells.js). */
+    cells: { slots: { table: 0x02bb0000, count: 0x938, kinds: 0xaf680 }, charBytes: 0x80000, colorxlat: true },
     /* No stage, player or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

@@ -7543,14 +7543,44 @@ answers with a float square root. Colorxlat, luma and the face palette
 Palette RAM below 0x1802000, which 0x82200's callers address, is not the
 face palette; its +0x10000 is colorxlat.
 
+**Cells** ([js/dynabbcells.js](js/dynabbcells.js), `slots` in the game's
+cells). Not Jaleco's files: the tile chip is paged by picture. The table at
+data 0xBB0000 has 0x938 records of 12 bytes, {tile chain, colours, pattern},
+of which the first 2349 are pictures (the last eleven point off the ROM). A
+byte per record in the program at 0xAF680 says whose tiles it is drawn with:
+kind 0 or 2 owns its chain, kind 1 or 3 takes the nearest owner's before it
+(0xAB680 walks back; the boot, 0xAB6E0, does the same for the resident list
+at 0xAB540, and stores the owner in slot +0xC, slots 16 bytes at 0x5CA5E0).
+299 records own a chain, so there are 299 CGs.
+
+0xABF60 loads an owner when a picture of it is first drawn: it counts the
+chain's 128-character blocks, takes that many free ones from the byte map at
+0x5DDE40 (127 blocks, the slot's +0 the first), and copies each link of the
+chain, {tile count, tiles}, from the start of the next block (0xAC0E0). The
+colours are a 16-colour group per link, given to each of the link's blocks
+as the group of the same number, through the buffers 0x5B1F30 and 0x5B58B0
+(0xAC1B0). A pattern is the width and the height (halfwords) and the
+entries; the draw (0xACD80, the tilemap writes at 0xACE50) adds the slot's
+first block `<< 7` and 0x8000 to each entry, rows 64 apart. Since the block
+moves the character and the group alike, the explorer lays each CG at block
+0 and draws the entries as they are.
+
+Checked against MAME in the attract (frames 400 to 2400): every owner
+loaded (3 at first, 27 by frame 1600) has its chain in character RAM and its
+colours in palette RAM at its slot's block byte for byte, 35 cells sit whole
+in MAME's tilemaps (entries plus the block), and the five compared with the
+screen (the batter panels 1860 and 1872, 1515, 1604 and 2179) match it pixel
+for pixel. Blocks 0 to 7 (characters below 0x400) are not the allocator's;
+0xAF0BC to 0xAF208 write characters there, and were not followed.
+
 **Not done, and leads.** No stadium is put together and no player
 assembled. If the game finds models by name (0xC2F40), the stadium's
 and players' lists are likely name lists: look for callers of 0xC2F40 and
 of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
-are test-menu colour tweaks. Motions, the tile chip's pictures and the
-sound program (`epr-19849.31`) were not looked at.
+are test-menu colour tweaks. Motions and the sound program
+(`epr-19849.31`) were not looked at.
 
 ### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
