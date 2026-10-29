@@ -317,12 +317,16 @@ function scanModelTable(rom) {
     const poly = rom.polygons;
     const pv = rom.polygonsView;
     const meshes = [];
-    for (let w = 0; w * 4 + MESH_RECORD <= poly.length;) {
-        if (pv.getUint32(w * 4, true) === 0xffffffff) break;
-        const m = meshWalk(poly, w);
-        if (!m) break;
-        meshes.push({ word: w, ...m });
-        w += 10 * m.n - 3;
+    /* Gunblade NY has a run in each pair of polygon chips (`scan.runs`, the
+     * polygon words they start at). */
+    for (const start of rom.game.modelTable.scan.runs ?? [0]) {
+        for (let w = start; w * 4 + MESH_RECORD <= poly.length;) {
+            if (pv.getUint32(w * 4, true) === 0xffffffff) break;
+            const m = meshWalk(poly, w);
+            if (!m) break;
+            meshes.push({ word: w, ...m });
+            w += 10 * m.n - 3;
+        }
     }
     const at = new Map(meshes.map((m, i) => [m.word, i]));
     const found = new Array(meshes.length).fill(null);

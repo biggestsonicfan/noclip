@@ -367,6 +367,81 @@ function buildPltkidsColorxlat(rom, colorSet) {
     return out;
 }
 
+/* ---- Gunblade NY ---- */
+
+/*
+ * Gunblade NY's colorxlat, all three channels alike. Luma 64..127 of row r
+ * hold (215r / 31) + 40, row 0 zero (the boot's 0x16020). Luma 0..63 of the
+ * even rows and row 31 are what 0x16800 lays over them at the attract's start
+ * in curve 7, the one it takes while the byte at 0x54C0EE is 0, as it is on
+ * fresh NVRAM (0x6BAA8): v = r * a / 31, a running from 64 by 6.4 - l / 10 a
+ * step (l the luma, the quotient truncated), single floats, at most 255.
+ *
+ * The odd rows 1..29 are the scene's, key-framed (0xC84E0, from 0xC88C0 with
+ * the scene's table number): `ld 0xC75C0[(table * 15 + (row - 1) / 2) * 4]`
+ * points at {count, then count keys of position, red, green, blue}, all
+ * single floats of 0..1. A key goes in slot trunc(position * 63 + 0.1) as
+ * trunc(c * 255 + 0.1) a channel; each slot up to a key is the line from the
+ * last key (slot 0's zeros before the first), slots past the last stay 0.
+ * A slot's value v writes sqrt(v / 255) * 255, row 3's (sqrt(v / 255) * 3 /
+ * 4 + 0.25) * 255. The texture profile's `raw.sets` gives the table each
+ * set's scene picks (`keys` is 0xC75C0).
+ * No entry differs from MAME's colorxlat in the attract's city (table 0), its
+ * stage film (6) and the title (8).
+ */
+function buildGunbladeColorxlat(rom, colorSet) {
+    const C = rom.game.colors.gunblade;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const f32 = Math.fround;
+    const all = (row, luma, v) => { for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v); };
+    for (let row = 0; row < 32; row++) {
+        const k = row ? Math.trunc((215 * row) / 31) + 40 : 0;
+        for (let luma = 64; luma < 128; luma++) all(row, luma, k);
+    }
+    for (let row = 0; row < 32; row += row === 30 ? 1 : 2) {
+        let a = 64;
+        for (let luma = 0; luma < 64; luma++) {
+            a = f32(a + f32(Math.trunc(-luma / 10) + f32(6.4)));
+            all(row, luma, row ? Math.min(Math.trunc(f32(f32(row * a) / 31)), 255) : 0);
+        }
+    }
+    const raw = rom.game.texture.raw;
+    const table = (raw.sets[colorSet] ?? raw.sets[raw.bootSet])[1];
+    for (let row = 1; row < 31; row += 2) {
+        let p = cv.getUint32(C.keys + (table * 15 + ((row - 1) >> 1)) * 4, true);
+        if (p + 4 > rom.maincpu.length) continue;
+        const keys = Math.trunc(cv.getFloat32(p, true));
+        const slots = Array.from({ length: 64 }, () => [0, 0, 0, 0]);
+        for (let i = 0; i < keys && p + 20 <= rom.maincpu.length; i++, p += 16) {
+            const at = Math.trunc(f32(cv.getFloat32(p + 4, true) * 63) + 0.1);
+            if (at < 0 || at > 63) continue;
+            slots[at] = [1, ...[8, 12, 16].map((o) => Math.trunc(f32(cv.getFloat32(p + o, true) * 255) + 0.1) & 0xffff)];
+        }
+        let last = 0;
+        for (let at = 0; at < 64; at++) {
+            if (!slots[at][0]) continue;
+            const d = at - last;
+            for (let j = 1; j <= d; j++) {
+                for (let c = 1; c < 4; c++) {
+                    const from = slots[last][c], to = slots[at][c];
+                    slots[last + j][c] = (from + Math.trunc(((to - from) * j) / d)) & 0xffff;
+                }
+            }
+            last = at;
+        }
+        for (let at = 0; at < 64; at++) {
+            for (let ch = 0; ch < 3; ch++) {
+                let x = f32(Math.sqrt(f32(slots[at][ch + 1] / 255)));
+                if (row === 3) x = f32(f32(f32(x * 3) / 4) + 0.25);
+                put(ch, row, at, Math.trunc(f32(x * 255)));
+            }
+        }
+    }
+    return out;
+}
+
 /**
  * A Dead or Alive fighter's load id, the byte at the rig's `loads` + 13 *
  * costume + char (0x70F40). The game loads everything of a fighter's by it,
@@ -632,6 +707,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
+    if (rom.game.colors.gunblade) return buildGunbladeColorxlat(rom, colorSet);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);

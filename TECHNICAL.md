@@ -7138,6 +7138,83 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
+
+Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`, Revision A) shares
+its library with Virtual-On, also AM3's, more than with Virtua Cop or House of
+the Dead. Everything below was checked against MAME: the shared build's RAM
+was dumped by a Lua script at attract frames 600 (the city), 1500 (the stage
+film) and 3000 (the title). The addresses are program ROM offsets; the program
+runs in place.
+
+**Models.** There is no model table. The boot and the game send an object as
+`st 0x101, 0x800010` followed by the texture word, the material word and
+`0x800000 | mesh word` to 0x804000, and those triples sit in the program and
+data ROMs, as on Virtual-On. So `modelTable.scan` walks the meshes end to end
+and takes each one's pointers from a triple naming it. Unlike Virtual-On, the
+meshes lie in four runs, one from the start of each pair of polygon chips
+(`scan.runs`: polygon words 0, 0x100000, 0x200000, 0x300000; each run ends at
+0xFFFFFFFF or at a word that is no mesh). That makes 5452 meshes. A write tap
+on 0x804000 after 0x101 caught 1529 objects in the attract's first 6000
+frames. 1528 were triples the scan has, on a mesh start; the other was mesh
+0xA with zero texture words.
+
+**Textures.** The banks are raw, not LZ: bank n is the megabyte at data
+n << 20. 0x5B100 sets a copy up and 0x5B168 does it a piece a frame, eight
+halfwords to a `stq`. The deal is the table at 0x5B040: six groups of eight
+words, each a repeat count and then run lengths in halfwords, ending at 0 or
+below. A run goes to the sheet being written, the same length is stepped
+over on the other, and then the two swap. A list that ends below 0 swaps
+them once more. The boot copies bank 0 with sheet 0 first (0x5AE48), and
+each scene's set-up copies its own bank with sheet 1 first
+(`mov 1, g1; call 0x5B100`; for example 0xDE780 and 0xEC544). Set s in the
+viewer is bank 0 then bank s + 1, and set 8 is bank 8 again. Both sheets
+match MAME's in the city (bank 1), the stage film (bank 7) and the title
+(bank 8).
+
+**Palette.** {count, colours} at 0xC57CC: 962 colours, which 0x155D0
+copies to the face palette. 0x15C30 then sets entries 18 to 53 by the flags
+at RAM 0x5039C0 to 0x5039CC, all 1 after the boot; these are
+`paletteFixes`. 0x159CC rewrites entries 8 to 28 every frame for the HUD,
+and 0x15598 and 0x155C8 write the tile chip's entries 0 to 31.
+
+**Luma.** Two grey ramps of 128, then 0x2080 bytes from 0xF2200 at entry
+0x800 (0x6A388), the layout Virtual-On uses.
+
+**Colour tables.** All three channels are alike.
+
+- Slots 64 to 127 of row r are 215r / 31 + 40, and 0 on row 0 (0x16020).
+- Slots 0 to 63 of the even rows and row 31 are what 0x16800 writes at the
+  attract's start in curve 7 (0x16ECC; the switch is at 0x1688C and the row
+  list at 0x167D0). The curve is 7 while byte 0x54C0EE is 0, which it is
+  on fresh NVRAM (callers 0x6BAA8, 0xC505C, 0xF1B8C). A runs from 64, gaining
+  6.4 - trunc(l / 10) a slot, and the slot is r * a / 31 in single floats,
+  at most 255.
+- Slots 0 to 63 of odd rows 1 to 29 are the scene's, from 0xC88C0 (table
+  0..8), which calls 0xC84E0 for each row. The word at 0xC75C0 +
+  (table * 15 + (row - 1) / 2) * 4 points at single floats: a count, then
+  that many keys of {position, red, green, blue}, each 0..1. A key goes in
+  slot trunc(position * 63 + 0.1), each channel trunc(c * 255 + 0.1). The
+  slots between keys are integer lines from the last key, starting from
+  zeros at slot 0, and the slots past the last key stay 0. A slot of value v
+  is written as sqrt(v / 255) * 255, and on row 3 as
+  (sqrt(v / 255) * 3 / 4 + 0.25) * 255.
+
+The boot's own pass (0xC83E0, 0xC9190, 0xC98D0) is written over entirely by
+these. The table a set uses is `texture.raw.sets[s][1]`: in MAME the city
+uses table 0, the stage film 6 and the title 8. With that, all three
+channels match MAME's in the three places. Later in the attract the game
+fades the tables (frame 3530 differs everywhere), and the viewer does not
+model the fade.
+
+**Leads.** The scene number is at RAM 0x508C94, and the switch on it at
+0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
+0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
+model to its set. The objects' records (which triple, where) are not found.
+Gunblade NY has no fighters or motions. Its enemies and vehicles move by
+script, and that script is not read. The tile chip (cells) and the music
+are not looked at.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

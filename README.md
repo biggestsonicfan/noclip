@@ -25,6 +25,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
+*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 
 Three views, and a fourth for the 2D art:
 
@@ -1171,6 +1172,25 @@ the boot fills it, so there is one CG.
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
 
+## Gunblade NY
+
+`gunblade.zip` carries Sega AM3's 1995 shooter (Revision A, Model 2B). The
+**Models** tab has 5452 models, one for each mesh in the polygon ROMs, with the
+textures, palette and colour tables the game loads for them. 1528 of the 1529
+objects MAME's attract draws in its first 6000 frames are among them: the
+helicopters, the city blocks, the Statue of Liberty and the rest. The one
+left over is a bare mesh with no texture.
+
+The texture picker's sets 0..8 are the game's scenes. Each scene's own bank sits
+over the common one, and each set comes with its colour tables. A model opens
+on set 8, the title's. Set 0 is the attract's city and set 6 its stage film.
+Nothing found yet says which scene a model belongs to, so a scene's part needs
+its set picked by hand. The texture RAM, luma and colour tables match MAME's
+byte for byte in the city, the stage film and the title.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1216,7 +1236,7 @@ So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
 and its USA build `lastbrnxu.zip`.
 
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
-beside it.
+beside it. `gunblade.zip` carries Gunblade NY.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

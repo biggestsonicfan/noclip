@@ -1254,6 +1254,59 @@ function buildVonTexram(rom, texSets) {
     return { sheet0: s0, sheet1: s1, pages };
 }
 
+/* ---- Gunblade NY ---- */
+
+/*
+ * Gunblade NY's banks are raw: a megabyte of the data ROM each, bank n at
+ * main_data n << 20, copied halfword for halfword (0x5B100 sets a bank up,
+ * 0x5B168 copies it a piece a frame, eight halfwords to a `stq`). The copy
+ * deals it over both sheets by the program's table at `raw.groups` (0x5B040):
+ * six groups of eight words, each a repeat count and a list of run lengths in
+ * halfwords that ends at 0 or below. A run goes to the sheet being written
+ * and the same length is stepped over on the other, then the two swap; a list
+ * ending below 0 swaps them once more. So the full-size pages land on the
+ * first sheet and the mip rectangles on both. The boot copies bank 0 with
+ * sheet 0 first and a scene its own bank with sheet 1 first (0x5AE48 and the
+ * scene set-ups, `mov 1,g1; call 0x5B100`), so a set is bank 0 then the
+ * scene's bank (`raw.sets`, [bank, colour table] by set). Byte for byte
+ * against MAME's texture RAM in the attract's city (bank 1), its stage film
+ * (bank 7) and the title (bank 8).
+ */
+function gunbladeBank(rom, tex, bank, sheet) {
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const raw = rom.game.texture.raw;
+    let src = bank << 20;
+    let a = sheet * SHEET_BYTES, b = (1 - sheet) * SHEET_BYTES;
+    for (let g = 0; g < 6; g++) {
+        const at = raw.groups + g * 32;
+        const repeat = cv.getInt32(at, true);
+        for (let n = 0; n < repeat; n++) {
+            for (let k = 1; k < 8; k++) {
+                const run = cv.getInt32(at + k * 4, true);
+                if (run <= 0) {
+                    if (run < 0) [a, b] = [b, a];
+                    break;
+                }
+                const bytes = run * 2;
+                if (src + bytes <= md.length && a + bytes <= tex.length) tex.set(md.subarray(src, src + bytes), a);
+                src += bytes;
+                [a, b] = [b + bytes, a + bytes];
+            }
+        }
+    }
+}
+
+function buildGunbladeTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    gunbladeBank(rom, tex, 0, 0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < raw.sets.length);
+    const set = sets.length ? sets[sets.length - 1] : raw.bootSet;
+    gunbladeBank(rom, tex, raw.sets[set][0], 1);
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
 /*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
@@ -1647,6 +1700,7 @@ function rallyCourseModels(rom) {
  * - Last Bronx: see lastbrnxModelSets.
  * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  * - Pilot Kids: an untextured model only; nothing yet ties a model to a scene.
+ * - Gunblade NY: the same; its triples are in the program, not in scene lists.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1668,7 +1722,7 @@ export function programTextureSets(rom, index, decoded) {
     if (T.raw?.layout === 'lastbrnx') return lastbrnxModelSets(rom, index, decoded);
     /* Pilot Kids: nothing read yet says which scene a model is drawn in, so
      * only an untextured one is answered; the rest open on the title's set. */
-    if (T.raw?.layout === 'pltkids') {
+    if (T.raw?.layout === 'pltkids' || T.raw?.layout === 'gunblade') {
         return decoded && !sampledTiles(decoded).length ? { sets: [], how: 'untextured' } : null;
     }
     if (T.raw?.layout === 'copy') {
@@ -1734,6 +1788,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
+        if (layout === 'gunblade') return buildGunbladeTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {
             const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);

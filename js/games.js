@@ -6034,6 +6034,93 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
+/*
+ * Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`). Its library
+ * is Virtual-On's: no model table, the object triples sit in the program and
+ * data ROMs, the luma is the same two ramps plus a block, and the boot draws
+ * with `st 0x101, 0x800010` and the triple to 0x804000. Its texture banks are
+ * raw rather than LZ and its colour tables key-framed, so js/texture.js and
+ * js/colors.js each have a section for it.
+ */
+const gunblade = {
+    id: 'gunblade',
+    name: 'Gunblade NY (Revision A)',
+    identify: ['epr-18988a.15', 'epr-18989a.16', 'mpr-18974.11', 'mpr-18980.17'],
+    identifyCrc: [0xf63f1ad2, 0xc1c84d65],
+    regions: {
+        maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18988a.15', 0xf63f1ad2, 'epr-18989a.16', 0xc1c84d65]] },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18974.11', 0xe29ecaff, 'mpr-18975.12', 0xd8187582],
+                [0x800000, 'mpr-18976.9', 0xc95c15eb, 'mpr-18977.10', 0xdb8f5b6f],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18980.17', 0x22345534, 'mpr-18981.21', 0x2544a33d],
+                [0x800000, 'mpr-18982.18', 0xd0a92b2a, 'mpr-18983.22', 0x1b4af982],
+            ],
+        },
+        textures: { size: 0x800000, parts: [[0x000000, 'mpr-18985.27', 0xad6166e3, 'mpr-18984.25', 0x756f6f37]] },
+    },
+    /*
+     * Virtual-On's scan (js/romset.js scanModelTable), but the meshes lie end
+     * to end in four runs, one from the start of each pair of polygon chips
+     * (polygon words 0, 0x100000, 0x200000, 0x300000). 1528 of the 1529
+     * objects the attract draws in its first 6000 frames are triples the scan
+     * finds on a mesh start; the other is a bare mesh 0xA with no texture.
+     */
+    modelTable: {
+        scan: {
+            runs: [0, 0x100000, 0x200000, 0x300000],
+            sources: [['maincpu', 0, 0x100000], ['mainData', 0, 0x1000000]],
+        },
+        count: 5452,
+    },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /*
+     * {count, colours}: 962 colours at 0xC57CE, which 0x155D0 copies to the
+     * face palette (0x1802000). Then 0x15C30 sets entries 18..53 by the
+     * cabinet flags at 0x5039C0..0x5039CC, all 1 after the boot; those are
+     * the `paletteFixes`. 0x159CC rewrites 8..28 every frame for the HUD.
+     */
+    paletteProgram: 0xc57cc,
+    paletteOffset: null,
+    paletteFixes: [
+        [18, 0x83ff], [19, 0x83e0], [20, 0xfc00], [21, 0xfc1f], [22, 0xffe0], [23, 0x821f], [24, 0x801f],
+        [25, 0xc210], [26, 0xa94a], [27, 0x9990], [28, 0x83ff], [29, 0x99da], [30, 0x8014], [31, 0xc084],
+        [32, 0x8254], [34, 0x899f], [35, 0x834e], [37, 0x801f], [38, 0x83e0], [39, 0xfc00], [41, 0xd210],
+        [42, 0xfe10], [43, 0xd292], [44, 0xc84e], [45, 0xbad4], [46, 0x8256], [48, 0xaa1e], [49, 0x8c63],
+        [50, 0xa25f], [51, 0xa908], [52, 0x8256], [53, 0xaa5e],
+    ],
+    /*
+     * js/texture.js's Gunblade section. A set is bank 0 then a scene's bank
+     * (`sets`: [bank, colour table]); 8 is the title's, the one the game
+     * opens on, 0 the attract's city and 6 the stage film.
+     */
+    texture: {
+        raw: {
+            layout: 'gunblade', groups: 0x5b040, bootSet: 8,
+            sets: [[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5], [7, 6], [8, 7], [8, 8]],
+        },
+        sets: 9,
+        residentSet: null,
+        defaultSet: 8,
+    },
+    /* Luma: two grey ramps of 128, then 0x2080 bytes from 0xF2200 at entry
+     * 0x800 (0x6A388). Colorxlat: js/colors.js's Gunblade section. Both match
+     * MAME's after the city, the stage film and the title. */
+    colors: {
+        luma: { source: 'maincpu', data: 0xf2200, bytes: 0x2080, at: 0x800, ramps: 2 },
+        gunblade: { keys: 0xc75c0 },
+        solid: true,
+    },
+    /* No stage or object record is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6041,7 +6128,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa];
+    pltkids, pltkidsa, gunblade];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
