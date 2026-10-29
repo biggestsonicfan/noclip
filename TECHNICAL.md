@@ -7192,13 +7192,43 @@ program's table at 0xED8B0 (0x3F4C0: data 0x100000, 0x200000, 0x300000,
 0..4. Set 0 matches MAME's texture RAM at frames 300 to 2700, no halfword
 different.
 
+**Over Rev.** `overrev` (Model 2C, Revision A) and `overrevb` (Model 2B,
+Revision B) share every ROM but the program, so one table: 1893 entries at
+data 0x80CEC0, up to 0x814510. The two programs run the same boot at the
+same addresses (0x11F64 on): 0x12760, 0x12850 and 0x12950 for colorxlat and
+luma (luma from the 0x8000 bytes at 0x37F09), then 0x120F0 for sheet 0 (data
+0x0) and 0x122B0 for sheet 1 (data 0x100000), blit 0x12470. They differ in
+where the palette is, {count, colours} at 0x2A7A4 in the 2B build and
+0x32A44 in the 2C, 769 colours, copied by 0x177F0.
+
+Before the loads, 0x12080 copies the data ROM's first 0x100000 halfwords to
+0x11000000 a halfword every four bytes, through all four MB of the sheets
+and their mirrors; the loads go over most of it, and js/jaleco.js does the
+same (`fill`). The 2C's texture RAM is two 2 MB shares with no mirror, so
+there the blit's extra quad does not wrap within a sheet (`window`).
+
+A course loads sheet 1 from its record in the program's table at 0xCD8B0
+(0x1C bytes: texture source, then the course's name): Tsukuba data 0x200000,
+Shibuya 0x400000, Touge 0x600000, Futou 0x500000, and the other versions of
+Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
+
+Checked against MAME on both boards: colorxlat and luma at the title (frame
+400) no byte different. Colorxlat does not change in the attract race; luma
+bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
+keeps the boot's. Texture RAM matches at the title and in the attract race
+(Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
+sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
+
 **Not done, and leads.** No course is put together: the course's model
 lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
 read the model table besides the draw routines, and the pointer list at
 data 0x818060 is the place to start. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
-open. 0x3DD14 changes palette entries per frame. The tile chip's pictures
-and the sound program were not looked at.
+open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
+read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
+copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
+found in. The tile chip's pictures and the sound programs were not looked
+at.
 
 ### Polygon decoding (`js/model.js`)
 

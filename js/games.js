@@ -6034,11 +6034,11 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
-/* ---- Super GT 24h (Jaleco) ------------------------------------------------ */
+/* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */
 
 /*
- * Jaleco's racers share one framework (js/jaleco.js has the texture
- * loader): the model table is 16-byte entries in the data ROM,
+ * Jaleco's two racers share one framework (js/jaleco.js has the texture
+ * loader both run): the model table is 16-byte entries in the data ROM,
  * texture word, material word, mesh pointer and polygon count, sent to the
  * geometry engine four words at a time (`st 0x101, 0x800010`, `ldq`, `stq` to
  * 0x804000); the face palette is {count, colours} in the program ROM, copied
@@ -6128,6 +6128,94 @@ const sgt24h = jalecoBuild({
     colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
 });
 
+/*
+ * Over Rev (MAME's `overrev`, Model 2C CRX, Revision A, 1997) and its Model
+ * 2B build (`overrevb`, Revision B: its zip holds the program alone, and the
+ * rest is read from overrev.zip beside it). One data ROM, so one table: 1893
+ * entries at data 0x80CEC0, up to 0x814510.
+ *
+ * The two programs run the same boot at the same addresses (0x11F64 on):
+ * 0x12760, 0x12850 and 0x12950 for colorxlat and luma (luma the 0x8000
+ * bytes at 0x37F09), 0x12080 for the fill and 0x120F0 for sheet 0 (data 0x0),
+ * then sheet 1 (0x122B0, data 0x100000). They differ in where the palette
+ * table is: {count, colours} at 0x2A7A4 in the 2B build, 0x32A44 in the 2C,
+ * 769 colours, copied by 0x177F0 (0x17800).
+ *
+ * A course loads sheet 1 from its record in the program's table at 0xCD8B0,
+ * {texture source, ...} and the course's name, 0x1C bytes each: Tsukuba
+ * (data 0x200000), Shibuya (0x400000), Touge (0x600000), Futou (0x500000),
+ * Shibuya and Touge's other versions (0x300000, 0x700000). Set 0 is the
+ * boot's data 0x100000, then the six in data order.
+ *
+ * Checked against MAME on both boards: colorxlat and luma at the title
+ * (frame 400) no byte different. Colorxlat does not change in the attract
+ * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
+ * and these are the boot's.
+ */
+const OVERREV_DATA = {
+    mainData: {
+        size: 0x1000000,
+        parts: [
+            [0x000000, 'mpr-19996.11', 0x21928a00, 'mpr-19997.12', 0x2a169cab],
+            [0x800000, 'mpr-19994.9', 0xe691fbd5, 'mpr-19995.10', 0x82a7828e],
+        ],
+    },
+    polygons: {
+        size: 0x400000,
+        parts: [[0x000000, 'mpr-19998.17', 0x6a834574, 'mpr-19999.21', 0xff590a2d]],
+    },
+    textures: {
+        size: 0x400000,
+        parts: [[0x000000, 'mpr-20001.27', 0x6ca236aa, 'mpr-20000.25', 0x894d8ded]],
+    },
+};
+const overRevTexture = (window) => ({
+    raw: {
+        layout: 'jaleco',
+        sheet0: 0x02000000,
+        sets: [0x02100000, 0x02200000, 0x02300000, 0x02400000, 0x02500000, 0x02600000, 0x02700000],
+        fill: true,
+        /* The 2C's texture RAM is two 2 MB shares with no mirror. */
+        window,
+    },
+    sets: 7,
+    residentSet: null,
+    defaultSet: 0,
+});
+const overrev = jalecoBuild({
+    id: 'overrev',
+    name: 'Over Rev (Model 2C, Revision A)',
+    identify: ['epr-20124a.15', 'epr-20125a.16', 'mpr-19996.11', 'mpr-19998.17'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-20124a.15', 0x74beb8d7, 'epr-20125a.16', 0xdef64456]],
+        },
+        ...OVERREV_DATA,
+    },
+    table: [0x80cec0, 1893],
+    palette: 0x32a44,
+    texture: overRevTexture(0x200000),
+    colors: [0x12760, 0x12850, 0x12950],
+});
+/* Known by its program alone, so that overrev.zip missing is said as such. */
+const overrevb = jalecoBuild({
+    id: 'overrevb',
+    name: 'Over Rev (Model 2B, Revision B)',
+    identify: ['epr-19992b.15', 'epr-19993b.16'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19992b.15', 0x6d3e78d5, 'epr-19993b.16', 0x765dc9ce]],
+        },
+        ...OVERREV_DATA,
+    },
+    table: [0x80cec0, 1893],
+    palette: 0x2a7a4,
+    texture: overRevTexture(0x100000),
+    colors: [0x12760, 0x12850, 0x12950],
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6135,7 +6223,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, sgt24h];
+    pltkids, pltkidsa, sgt24h, overrev, overrevb];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

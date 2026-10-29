@@ -25,7 +25,8 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
-Jaleco's *Super GT 24h* has its models — see [Super GT 24h](#super-gt-24h).
+Jaleco's *Super GT 24h* and *Over Rev* have their models — see
+[Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev).
 
 Three views, and a fourth for the 2D art:
 
@@ -1192,6 +1193,26 @@ shows one.
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
+## Over Rev
+
+`overrev.zip` is the Model 2C CRX build, Revision A (Jaleco, 1997);
+`overrevb.zip` beside it is the Model 2B CRX build, Revision B, offered as a
+variant (its zip holds only the program, so it wants `overrev.zip` with it).
+The **Models** tab has all 1893 entries of the model table, the same in both
+builds: the cars, the course pieces and the scenery, with the game's
+textures, face palette and colour tables.
+
+The texture picker's sets 0..6 are what sheet 1 holds: set 0 is the boot's,
+and sets 1..6 the six courses' in data order (Tsukuba, Shibuya's other
+version, Shibuya, Futou, Touge, Touge's other version). Sheet 0 is the same
+in every set. A course piece needs its course's set picked by hand. Colour
+tables and luma match MAME's at the title on both boards byte for byte, and
+the textures in the attract race but for sixteen bytes something later
+writes. Some luma bands change during a race; the viewer shows the boot's.
+
+There is no Stages tab, no cars put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1240,6 +1261,9 @@ and its USA build `lastbrnxu.zip`.
 beside it.
 
 `sgt24h.zip` carries Super GT 24h.
+
+`overrev.zip` carries Over Rev; its Model 2B build wants `overrevb.zip`
+beside it.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version
