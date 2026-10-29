@@ -7956,6 +7956,34 @@ run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
+**Cells.** Power Sled's scripts (`scripts`, read by runScript with Last
+Bronx's settings: no bias, last opcode 0x8D, wide moves), drawn by 0xA88E0
+(g0 the tilemap, g1 the script, g2 the bits ORed into each entry: 0, 0x8000
+or 3 << 14). The data ROM has four banks, 0x2400000 to 0x2700000; each opens
+with a Last Bronx CG directory, which the loader 0xA9420(dir) reads. The boot
+(0xA96A4) loads 0x2400000; the other callers load 0x2500000, 0x2600000 with
+0x2600000 + 0xA3980, and 0x2700000. The bank's scripts follow its tiles, end
+to end with zero bytes between them (`scriptPad`), so a bank is a run of
+cells and a CG (`scriptDirs`): 142, 52, 152 and 14 cells, 360 in all. A run
+ends where a script first names a character its CG does not load (0x2471B60,
+0x2558E10, 0x265AEC0, 0x271AC20); every script address the program loads
+(25, 7, 30 and 1, from `lda X, g0` + `lda Y(g0), g1` pairs, so X + Y) is in
+its run. The compiler folds the pair, so a search for the plain address
+misses most of them.
+
+**Checked.** With MAME's tile RAM at attract frames 1200, 3000 and 4500:
+cells 41, 328, 332 to 337, 339, 341, 343, 345 and 347 match pixel for pixel
+with their bank's CG. Cells 259 and 262 (run 2) are found with an entry
+delta of 0x2600 and match pixel for pixel with CG 3 (0x2700000), not their
+own. Cell 359 (21 x 48, delta 0x2D00) matches best with CG 0: 57456 pixels
+of 64512; no CG or pair of CGs does better.
+
+**Leads.** The entry deltas say the draw that puts 259, 262 and 359 up adds
+a character base, so a CG is loaded higher than its directory's first
+characters there; find the caller of 0xA88E0 that passes them. The bytes
+after each run's end look like more scripts with characters from another
+bank.
+
 ### Behind Enemy Lines (`js/bel.js`)
 
 Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own

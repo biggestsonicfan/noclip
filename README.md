@@ -38,7 +38,7 @@ Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and its cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models — see [Top Skater](#top-skater).
+*Top Skater* has its models and its cells — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
@@ -1505,7 +1505,14 @@ arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
 tables, luma and palette match MAME's RAM in the attract byte for byte, but
 for three colour rows and three palette entries the attract animates.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 360 2D pictures (the title, the menus, the
+HUD, the results) and the four CGs the game loads its tile chip from. A
+picture opens with the CG of the bank it is stored in. Most of the attract's
+match MAME's tile RAM pixel for pixel with that CG; two (259 and 262) are
+drawn with the last CG instead, so pick CG 3 (0x2700000) for them in the
+second picker.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Behind Enemy Lines

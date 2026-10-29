@@ -7500,7 +7500,19 @@ const topskatr = {
         topskatr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* Last Bronx's scripts, drawn by 0xA88E0, one run a data ROM bank,
+     * after its CG directory (loaded by 0xA9420); a run ends where a script
+     * names a character its CG does not load. See TECHNICAL.md. */
+    cells: {
+        scripts: [[0x246c804, 0x2471b60], [0x2553b64, 0x2558e10], [0x2654884, 0x265aec0], [0x2719594, 0x271ac20]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        scriptDirs: [[0x2400000], [0x2500000], [0x2600000, 0xa3980], [0x2700000]],
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
