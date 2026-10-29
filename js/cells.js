@@ -376,10 +376,35 @@ function readCgm(u8, o, base) {
 }
 
 /** A cell's name, where the game gives it one: a Sega Rally pattern's own,
- * or what a Virtual On map shows. */
+ * what a Virtual On map shows, or a script's in the game's own table. */
 export function cellName(rom, cell) {
     const C = rom.game.cells;
+    if (C?.scriptNames) return scriptNames(rom).get(cellRecords(rom)[cell]) ?? '';
     return C?.cgm || C?.maps ? listedCells(rom)[cell]?.name ?? '' : '';
+}
+
+/* Top Skater and Gunblade NY keep a table of {script, name} pairs for a
+ * debug viewer (`scriptNames`), to a zero script; each name is "SMAP_"
+ * and the file the script was made from. The CG directories are in it too
+ * ("SMAP_scr0"), as are a few program addresses; only scripts are cells. */
+const nameCache = new WeakMap();
+function scriptNames(rom) {
+    let out = nameCache.get(rom);
+    if (out) return out;
+    out = new Map();
+    const v = rom.mainCpuView;
+    const text = (p) => {
+        let s = '';
+        for (let c; p < v.byteLength && (c = v.getUint8(p)); p++) s += String.fromCharCode(c);
+        return s;
+    };
+    for (let e = rom.game.cells.scriptNames; ; e += 8) {
+        const at = word(rom, e), name = word(rom, e + 4);
+        if (!at || name >= v.byteLength) break;
+        out.set(at, text(name).replace(/^SMAP_/, ''));
+    }
+    nameCache.set(rom, out);
+    return out;
 }
 
 /* Virtua Cop's zero halfwords between records. */

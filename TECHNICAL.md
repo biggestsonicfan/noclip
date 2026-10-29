@@ -7974,7 +7974,9 @@ scripts lie in two runs, [0x2A601A0, 0x2A64C52) and [0x2B4CAF0,
 with a dictionary byte, so `scriptPad` skips them. Every script is named,
 by an `lda` (some as `lda 0x1A6xxxx(g0)` after `lda 0x10xxxxx, g0`) or by
 the table of {count, script} at 0x17A20. 561 cells; none is named by
-nothing.
+nothing. A debug viewer's table at 0xCF810 gives each script its name,
+{script, name} pairs to a zero script (`scriptNames`; "SMAP_" dropped), so
+the Cells tab names all 561.
 
 **CGs.** The boot, `0xD20E0`, loads the directory at data 0x2A00000 with
 Last Bronx's loader (`0xD2470`: 8-byte entries {offset, first char}, each a
@@ -7987,8 +7989,11 @@ destination, halfwords, times] (`applyCopies` in `js/stackcells.js`):
 
 - the warning screen (`0xF44A0` calls `0xD2260`): group 0 from 0xD21D0 and
   the font at 0xD09C0 in both halves;
-- the switch at `0xD2550`, cases 1 to 6: the six stages, groups 0x68 on
-  and characters 0x3400 on;
+- the switch at `0xD2550`, cases 1 to 6: the caption fonts (the jimaku),
+  groups 0x68 on and characters 0x3400 on. 0xDE1C8 and 0xDE258 call it
+  with the language byte (RAM 0x54C0E6: 0 Japanese, 1 English, 2 Spanish,
+  3 Italian, 4 Chinese, 5 Korean) + 1, so case n is language n - 1, not a
+  stage;
 - `0xF1C8C` (case 7);
 - the attract, `0xDC44` and `0x2264C` (case 8);
 - `0xF1DA8` (case 9), loaded over case 8.
@@ -7999,19 +8004,28 @@ destination, halfwords, times] (`applyCopies` in `js/stackcells.js`):
 RAM and palette dumped every 600 frames from 600 to 6000. The warning
 screen's CG matches both byte for byte at frame 600. Case 8 matches both at
 1200 to 3600. Case 9 matches both at 4200 to 6000, except pen 0 of group 0,
-which the Cells tab shows as transparent. The stages and case 7 were not
-loaded in the attract.
+which the Cells tab shows as transparent. Case 7 was not loaded in the
+attract. Coined up (coin twice, start every 150 frames, the trigger every
+37), frames 900 to 9200: the caption 411 (`jimaku_jp_start`) matches case 1
+in characters and colours, and every cell found in the tile RAM in play
+(the hearts, `etc_damaged`, the area and continue pieces, the ranking's
+letters) matches the first CG it opens on, all on case 8.
+
+**Captions.** The names say which language a caption is (`jimaku_jp_*` to
+`jimaku_hg_*`, cells 396 to 411 and 430 to 501), so each opens on its
+language's case (`screens`): drawn with another language's font they are
+garbage, since all six fill the same characters. The command messages are a
+table at 0xD5550, {position, script}, 10 a language, 80 bytes apart; 0xD5730
+draws message g0.
 
 **Leads.** At frame 4800 `0xD2DB4`/`0xD2DC4` fade a few groups (0xB9,
 0xD5 to 0xD7, 0xDB); the fade is not modelled. `0xD21F0` is the same as
 0xD2260 with group 0 from 0xD21B0 and the 0xD0E20 font (called at 0xEE634
 and 0xF42D0). `0xEF44C` calls the expander with 16 characters from
-0xEE3D0. No table ties a script to the scene that draws it. Every scene
-holds the boot's characters and fills the same range from 0x3400, so a
-scene's cell is covered by all nine scenes alike; the ranking (`rankCGs`
-goes the shared way when `dirs` is set) picks among them by seams, and some
-of the stage briefings in five languages open on another stage's scene.
-Cells 418 and 419 are covered by no CG in full.
+0xEE3D0. Outside the captions no table ties a script to its scene; the
+ranking (`rankCGs` goes the shared way when `dirs` is set) picks among the
+scenes by seams. Cells 418 and 419 are `logo_t6` and `logo_t7`, one-byte
+scripts that draw nothing: blank frames of the logo's flipbook.
 
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 
@@ -8664,18 +8678,27 @@ ends where a script first names a character its CG does not load (0x2471B60,
 its run. The compiler folds the pair, so a search for the plain address
 misses most of them.
 
+**Names.** A debug viewer (0xAA588) steps a table at 0xA6F20, {script,
+name} pairs to a zero script, 0x173 of them with markers (`SMAP_scr0` to
+`scr3`, `scrNend`); `scriptNames` gives the Cells tab all 360 names.
+
 **Checked.** With MAME's tile RAM at attract frames 1200, 3000 and 4500:
 cells 41, 328, 332 to 337, 339, 341, 343, 345 and 347 match pixel for pixel
-with their bank's CG. Cells 259 and 262 (run 2) are found with an entry
-delta of 0x2600 and match pixel for pixel with CG 3 (0x2700000), not their
-own. Cell 359 (21 x 48, delta 0x2D00) matches best with CG 0: 57456 pixels
-of 64512; no CG or pair of CGs does better.
+with their bank's CG. Coined up (coin, start every 150 frames, jump every
+31), frames 1200 to 9200, two runs and the select between: every cell found
+in the tile RAM (the timer digits, the music and grade pieces, the faces,
+the select's bars and plates) matches its run's CG in characters and
+colours. 0xA88E0 adds no character base: g2 is masked with 0x3FFF and ORed
+in. 259 (`sel_sel_sel_tagea`) and 262 (`sel_sel_tagnew`) are flat plates
+that CG 2, their run's, covers whole; 359 (`staff_staff_sr_back`) is one
+character, 0x1300, the staff roll's black. The old "delta 0x2600 with CG 3"
+was a flat fill matching a flat fill; none of the three was on screen.
+262 is drawn at 0xAEDA0, the name entry after a run; the staff table at
+0xABB20 is {tilemap, script} pairs.
 
-**Leads.** The entry deltas say the draw that puts 259, 262 and 359 up adds
-a character base, so a CG is loaded higher than its directory's first
-characters there; find the caller of 0xA88E0 that passes them. The bytes
-after each run's end look like more scripts with characters from another
-bank.
+**Leads.** The name entry and the staff roll were not reached in MAME. The
+bytes after each run's end look like more scripts with characters from
+another bank.
 
 ### Behind Enemy Lines (`js/bel.js`)
 
@@ -8746,8 +8769,23 @@ indexed by the scene. Graded against MAME's tile and palette RAM at frames
 1200, 3000 and 4500: the backdrops 4, 5, 6, 7, 9, 23, 338, 340 and 376, the
 map pieces 156 and 167, the menu text 79, 96 and 98, and dozens of HUD pieces
 (2 x 2 and 3 x 3), all pixel for pixel with their CG. Many CGs write every
-character a picture uses, so the first CG is not always the screen's: cell 7
-needs CG 4, cell 376 CG 47.
+character a picture uses, so the first CG is not always the screen's. The
+code pairs them: a screen's routine calls 0x645F0 and then 0x76FC0 on its
+records, or sets a task handler that does (cell 7 is drawn in 0x13BD0, which
+0x14170 sets after `lda 0x2100010` loads CG 4; 376 is drawn at 0x131E0 after
+0x2C0009C, table 2's pair 39, CG 47). Scanning every routine that both loads
+a pair and draws a record (the handlers it sets count as its own) gives
+`screens`: 1 to 3 on CG 6 (the EPA "Recycle it" screen; 1 was on CG 3), 4
+to 9 on CG 4, 23 and 24 on CG 3, 100 on 7, 345 on 16 (the green grid map; it
+was on CG 0), 346 on 17, 376 on 47. 156 and 167 are drawn after both CG 4
+and CG 47, and neither holds them whole; they stay on CG 0, which MAME
+shows. Draws through the record tables have no pair in reach.
+
+Coined up (coin, start, the trigger every 40 frames), frames 900 to 9000:
+the briefing (4, 8 on CG 4), a mission's HUD (81, 102, 110, 123, 129, 157,
+167, 170) and 23 on CG 3 all match the chip in characters and colours. Cell
+342, a mission's panel, matched CG 0 there, not the CG 12 the seams picked,
+so it is in `screens` too.
 
 **Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
 sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
