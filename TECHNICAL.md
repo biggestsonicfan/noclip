@@ -7138,6 +7138,54 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Ski Super G (`js/skisuprg.js`)
+
+Sega's 1996 ski game on Model 2C (MAME's `skisuprg`). Each table was found
+from the code that uses it, and checked against MAME's texture, colour,
+luma and palette RAM dumped in the attract (frame 3000).
+
+**Model table.** The program ROM at 0x195900, 16 bytes an entry (the usual
+texture word, material word, mesh pointer, count), 5519 entries to 0x1AB1F0.
+The draw at 0x47900 and 29 more name it, all `lda 0x195900[g0*16]`, then
+`ldq` and `stq` to 0x804000 after `st 0x101, 0x800010`. Mesh pointers are
+main-data addresses from 0x2000010. All 5519 decode (222,547 faces, 178,850
+textured).
+
+**Textures.** The boot (0x43454) puts bank 0x2000000 on sheet 0 with 0x436C0
+and bank 0x2400000 on sheet 1 with 0x43830. Both are House of the Dead's
+upload, the first half of the bank straight onto its sheet and the mip
+levels of the second half dealt between the sheets by 0x43AF0
+(`uploadRawBank` in `js/texture.js`). Only 0x11660 writes sheet 0 again (bank
+0x2500000, when 0x5111AC is set; not seen in the attract).
+
+**Scenes.** Every scene calls 0x43830 (bank onto sheet 1), 0x460D0 (a
+{count, colours} block onto the face palette from entry 500, 0x18023E8) and
+0x44260 (a colour table) in a row. The menus name theirs in the code
+(0x22398, 0x25E80, 0x3615C, 0x60E54: 0x2300000, 0x48108, 0x9EE60; 0x278E8
+and 0x28D60 the same with 0x9EF20); the boot's is 0x2400000, 0x47EEA,
+0x9EDE0. A course takes its three from its 40-byte record at
+0xA4700 + course * 40, words +0x18, +0x1C and +0x20, read at 0x3DEA4 with the
+course in work RAM 0x51A190. Words +0x00 to +0x14 are floats, +0x24 a pointer
+(0xB7F40 for course 1); neither is read here.
+
+**Palette.** 0x11900 lays the {count, colours} block at 0x47DA8 from entry
+0; the scene's block goes from entry 500.
+
+**Colour tables.** Run with `js/i960.js`, as the boot does: 0x43DF0 works the
+ramps out (floating point, a square root) into a shadow at work RAM
+0x5121B0 and writes entries 64..255 of each row to colorxlat; 0x44260 lays
+the scene's table of 64 {r, g, b} a row over the shadow's odd rows. The
+vblank copies the shadow's 64 entries a row to colorxlat, even rows and row
+31 one frame (0x13AD0), odd rows 1..29 the next (0x13BD0): channel c, row r
+is 0x80 bytes at 0x5121B0 + c * 0x1000 + r * 0x80.
+
+**Luma.** A straight copy of the program's 0x7F80 bytes at 0x3970 to the
+start of luma RAM; the rest stays 0.
+
+**Leads.** Which models a scene draws, so that a model could open on its own
+set, is not found. A course's record (+0x24 and on) and the course loader
+0x3DEA4 are where a Stages tab would start. Lighting is not done.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

@@ -25,6 +25,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
+Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 
 Three views, and a fourth for the 2D art:
 
@@ -1170,6 +1171,25 @@ the boot fills it, so there is one CG.
 
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
+
+## Ski Super G
+
+`skisuprg.zip` carries Sega Ski Super G (Model 2C). The **Models** tab has
+all 5519 entries of the program's model table, every one with a mesh, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game sets up, each a texture
+bank, a palette block and a colour table: 0 and 1 the menus (two colour
+tables), 2 the attract's in-between screens, which a model opens on, and 3
+to 6 the four courses. Nothing found yet says which scene a model belongs
+to, so a model needs its set picked by hand: the course miniatures of the
+course select look right under set 0, the snow, trees and banners under set
+2. Set 2's texture sheets, colour tables, luma and palette match MAME's RAM
+in the attract byte for byte; the courses' sets are read from their records
+and were not reached in MAME.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
 
 ## Running it
 

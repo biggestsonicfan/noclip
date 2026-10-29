@@ -6034,6 +6034,91 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
+/* ---- Ski Super G ---------------------------------------------------------- */
+
+/*
+ * Sega's 1996 skiing game on Model 2C (MAME `skisuprg`). Its program is the
+ * same generation as Sega Rally's: the model table is Rally's 16-byte one,
+ * and the sheets are raw banks in the data ROM, uploaded as The House of the
+ * Dead uploads them. js/skisuprg.js has the scenes, the sheets, the face
+ * palette and colorxlat; README's Ski Super G section and TECHNICAL.md say
+ * how each was found.
+ */
+const skisuprg = {
+    id: 'skisuprg',
+    name: 'Sega Ski Super G',
+    identify: ['epr-19489.15', 'epr-19490.16', 'mpr-19494.11'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19489.15', 0x1df948a7, 'epr-19490.16', 0xe6fc24d3],
+                [0x100000, 'epr-19551.13', 0x3ee8f0d5, 'epr-19552.14', 0xbaa2e49a],
+            ],
+        },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19494.11', 0xf19cdb5c, 'mpr-19495.12', 0xd42e5ef2],
+                [0x800000, 'mpr-19492.9', 0x4805318f, 'mpr-19493.10', 0x39daa909],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19496.17', 0x0e9aef4e, 'mpr-19497.21', 0x5397efe9],
+                [0x800000, 'mpr-19498.18', 0x32e5ae60, 'mpr-19499.22', 0x2b9f5b48],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19501.27', 0x66d7b02e, 'mpr-19500.25', 0x905f5798]],
+        },
+    },
+    /*
+     * 5519 entries of 16 bytes in the program ROM at 0x195900: tpa, tha,
+     * 0x800000 | polygon word, polygon count, as Sega Rally's. The draws
+     * (0x47900 and 29 more sites) set function 0x101 at 0x800010 and send an
+     * entry whole, `lda 0x195900[g0*16]`, `ldq` and `stq` to 0x804000. The
+     * table ends at 0x1AB1F0, where 0xFFFFFFFF fill starts. Program 0x180000 has an older copy, the same for its first 4871
+     * entries, and data 0xE45460 another; no code reads either.
+     */
+    modelTable: { offset: 0x195900, count: 5519, stride: 16, source: 'maincpu' },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* The face palette by scene (skisuprgPalette): the boot's block at
+     * 0x47DA8 from 0, the scene's from 500. */
+    palette: { layout: 'skisuprg', base: 0x47da8, first: 500 },
+    paletteOffset: null,
+    /*
+     * A set is a scene (skisuprgScenes): the menus' two, the attract's
+     * in-between screens (0x43454's bank 0x2400000, the default), then the
+     * four courses' records.
+     */
+    skisuprg: {
+        bootBank: 0x02000000,
+        scenes: [
+            { name: 'menus', bank: 0x02300000, palette: 0x48108, colors: 0x9ee60 },
+            { name: 'menus, second colours', bank: 0x02300000, palette: 0x48108, colors: 0x9ef20 },
+            { name: 'attract', bank: 0x02400000, palette: 0x47eea, colors: 0x9ede0 },
+        ],
+        courses: { at: 0xa4700, stride: 40, count: 4 },
+    },
+    texture: {
+        raw: { layout: 'skisuprg' },
+        sets: 7,
+        residentSet: null,
+        defaultSet: 2,
+    },
+    /* Luma: 0x44580 copies the 0x7F80 bytes at 0x3970, one a halfword.
+     * Colorxlat: the ramps (0x43DF0) and the scene's table (0x44260), run. */
+    colors: {
+        luma: { source: 'maincpu', data: 0x3970, bytes: 0x7f80 },
+        skisuprg: { ramps: 0x43df0, table: 0x44260 },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6041,7 +6126,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa];
+    pltkids, pltkidsa, skisuprg];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

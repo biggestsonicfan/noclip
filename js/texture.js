@@ -32,6 +32,7 @@ import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
+import { buildSkisuprgTexram } from './skisuprg.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -688,7 +689,7 @@ function copyRect(src, srcBase, dst, dstBase, x0, y0, x1, y1) {
     }
 }
 
-function uploadRawBank(md, base, tex, toSheet1) {
+export function uploadRawBank(md, base, tex, toSheet1) {
     const near = toSheet1 ? SHEET1 : SHEET0;
     const far = toSheet1 ? SHEET0 : SHEET1;
     copyRect(md, base, tex, near, 0, 0, 0x1ff, 0x1ff);
@@ -1733,6 +1734,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'lastbrnx') return buildLastbrnxTexram(rom, texSets, fighters);
         if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
+        if (layout === 'skisuprg') return buildSkisuprgTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {
