@@ -493,6 +493,7 @@
         <label class="check" id="char-travel-field" hidden><input type="checkbox" id="char-travel"> <span data-i18n="char.travel">root travel</span></label>
         <label class="check" id="char-mirror-field" hidden title="The motions played the other way round: VF2's and Sonic the Fighters' player +0 bit 6, Air Walkers' player +0xF4, a Virtua Cop enemy's +0x8A0"><input type="checkbox" id="char-mirror"> <span data-i18n="char.mirror">mirrored</span></label>
         <label class="check" id="char-backward-field" hidden title="The motion played backward, last frame first: Air Walkers' player +0xEC" data-i18n-title="char.backward.title"><input type="checkbox" id="char-backward"> <span data-i18n="char.backward">backward</span></label>
+        <label class="check" id="char-far-field" hidden title="The models the game draws 18 or more away, the rows not blended: Behind Enemy Lines' actor +0x64" data-i18n-title="char.far.title"><input type="checkbox" id="char-far"> <span data-i18n="char.far">far models</span></label>
         <label class="check" id="char-rival-field" hidden><input type="checkbox" id="char-rival"> <span data-i18n="char.rival">opponent</span></label>
         <label class="check" id="char-behind-field" hidden><input type="checkbox" id="char-behind"> <span data-i18n="char.behind">behind</span></label>
         <label class="check" id="char-rival-p2-field" hidden><input type="checkbox" id="char-rival-p2"> <span data-i18n="char.rivalp2">opponent P2</span></label>
@@ -565,6 +566,10 @@
         <label data-i18n="f.held">Held</label>
         <select id="held-select" title="What the hands hold: the right hand's model (+0x1CC), the left's (+0x1D0). An enemy's own is the one its spawn records give it" data-i18n-title="held.title"></select>
         <div class="meta" id="held-note"></div>
+      </div>
+      <div class="field" id="role-field" hidden>
+        <label data-i18n="f.role">Role</label>
+        <select id="role-select" title="The part list the player is drawn with (0xCDCD0, +0x428): the head's cap, helmet or mask and the hands" data-i18n-title="role.title"></select>
       </div>
       <div class="field" id="string-field" hidden>
         <label data-i18n="f.string">String &mdash; moves one after another</label>
@@ -735,6 +740,64 @@
         moves by the speed in the record (0x80 to 0x4C0, 0x100 a frame)
         times the player's <em>pace</em> (<code>+0x16</code>), easing
         between frames as the game does.
+      </div>
+      <div class="note" id="anim-note-dynabb" data-i18n="note.dynabb" hidden>
+        Every player has the same seventeen-joint skeleton, from the bone
+        table the boot copies to <code>0x5DB430</code>, and the explorer
+        runs the game's own routines: <code>0xCDBE0</code> dresses a player
+        (team, kit and roster place, face and hands), <code>0x857E0</code>
+        builds the joints and <code>0xCF7D0</code> draws them. A team has 36
+        players in each kit (<code>0x1A1670</code>); the last two bodies are
+        the umpire and the mascot. A motion is the joints' angles for every
+        frame and the hips' path, from the tables at data
+        <code>0x1D52CA0</code> (frame counts), <code>0x1D54A50</code> (path)
+        and <code>0x1D56800</code> (frames); the game has no names for them.
+        <em>Role</em> swaps the parts as <code>0xCDCD0</code> does: the
+        batter's, pitcher's and catcher's hands and heads. The skin the game
+        stretches between joints (copro <code>0x7A</code>) isn't drawn.
+      </div>
+      <div class="note" id="anim-note-bel" data-i18n="note.bel" hidden>
+        A soldier is an actor record (136 of them at data
+        <code>0x2BDDF10</code>): sixteen parts, hips, chest, head, arms,
+        weapon and legs, each a near and a far model, every part hung off
+        the actor itself rather than a parent. The bodies are the 58 sets of
+        models the actors are drawn with. A motion is every part's turns
+        and place for each row, 83 of them; every motion fits every
+        soldier, and the lead ones are those its own actors play. The game
+        has no names for them. The explorer runs the game's draw
+        (<code>0x51C20</code>), so it blends between rows as the game does;
+        a motion at rate 0x20 moves half a row a frame, at 0x40 a row.
+        <em>Far models</em> are the ones drawn 18 or more away, the rows
+        not blended. The hips carry the walk; <em>root travel</em> shows it.
+      </div>
+      <div class="note" id="anim-note-gunblade" data-i18n="note.gunblade" hidden>
+        The soldiers, gangsters and hostages are figure types (the table at
+        <code>0x9D670</code>: each type's meshes and its skeleton), fifteen
+        parts in a fixed tree. Every type plays the one motion table at
+        <code>0x95E80</code>: a motion is a list of key poses (the root's
+        turn and place and each part's three turns), each held for a count
+        of frames the game moves to it in straight lines (<code>0x96D40</code>).
+        A motion with flag 1 plays once; the rest loop, and start here from
+        their last key, as they look the second time round. The motions the
+        attract plays on a type lead; the game has no names for them. The
+        explorer runs the game's draw (<code>0x9DC70</code>, types 32 and 33
+        <code>0xA3140</code>). The shadow, muzzle flash, wounds, the head
+        turned to the player and the far models are left out; 18 motions
+        whose keys the game builds in RAM are not listed.
+      </div>
+      <div class="note" id="anim-note-topskatr" data-i18n="note.topskatr" hidden>
+        The eight skaters share one skeleton of bone lengths and offsets
+        (<code>0x99E80</code>, 0xA0 bytes a skater) and one table of 718
+        motions (<code>0xC0038</code>), each a set of key streams, held,
+        straight or curved, with a time a key. The explorer runs the
+        game's own motion viewer's steps: the load (<code>0x339D0</code>),
+        the animator (<code>0x343D0</code>), the skeleton
+        (<code>0x52DD0</code>, its limbs bent to aim points or turned joint
+        by joint), the slots (<code>0x537B0</code>) and the draw
+        (<code>0x565D0</code>). A frame is 1/60 s. The board hangs from
+        nothing. The spring the attract adds on some channels
+        (<code>0x6F8C0</code>) and the motion's heading are left out, and
+        the game has no names for the motions.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of
