@@ -26,7 +26,8 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
-[Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev).
+[Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
+Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 
 Three views, and a fourth for the 2D art:
 
@@ -1213,6 +1214,28 @@ writes. Some luma bands change during a race; the viewer shows the boot's.
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
+## Dynamite Baseball 97
+
+`dynabb.zip` as the container has it is MAME's `dynabb97` (Sega, 1997,
+Model 2B CRX, Revision A). The **Models** tab has all 7890 entries of the
+model table with the game's own names: the twelve teams' players in home
+and visitor kits, joint by joint, the three stadiums' pieces, the ball, the
+bats and the menus, with the textures, face palette and colour tables the
+game builds for a stadium and a team.
+
+The texture picker's sets 0..35 are stadium × 12 + team, both sides of the
+field the team's. The stadiums are 0..2 (their pieces are named `Q1_` to
+`Q3_`), the teams 0..11 Swallows, Carp, Giants, BayStars, Dragons, Tigers,
+BlueWave, Marines, Lions, Fighters, Hawks and Buffaloes. A model opens on
+the set its name points at — a player on his team's at stadium 1, a stadium
+piece on its stadium's with team 0 — and the rest on set 12, stadium 1 and
+team 0, the set MAME's attract opens on. Textures, colour tables, luma and
+face palette match MAME's in the attract mode byte for byte, but for 119
+halfwords of sheet 0 the game copies about at run time.
+
+There is no Stages tab, no players put together and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1264,6 +1287,10 @@ beside it.
 
 `overrev.zip` carries Over Rev; its Model 2B build wants `overrevb.zip`
 beside it.
+
+`dynabb.zip` carries Dynamite Baseball 97 when it holds MAME's `dynabb97`
+chips (`epr-19833a.15` and the rest); the 1996 Dynamite Baseball is not
+read yet.
 
 Daytona USA is easiest as one merged `daytona.zip`, which carries the parent and
 all seven clones and loads as any of them. Split sets work too: the 1993 version

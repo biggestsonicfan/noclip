@@ -33,6 +33,7 @@ import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
 import { buildJalecoTexram } from './jaleco.js';
+import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -1649,6 +1650,7 @@ function rallyCourseModels(rom) {
  * - Power Sled: there is one texture RAM, so a model that samples any is on it.
  * - Pilot Kids: an untextured model only; nothing yet ties a model to a scene.
  * - Super GT 24h, Over Rev: a model on sheet 0 alone is on the boot's pages.
+ * - Dynamite Baseball 97: by the team or stadium its name begins with.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1685,6 +1687,9 @@ export function programTextureSets(rom, index, decoded) {
             if (decoded.tiles[i + 2] && decoded.tiles[i + 1] >= SHEET_H) sheet1 = true;
         }
         return sheet1 ? null : { sets: [], how: 'boot' };
+    }
+    if (T.raw?.layout === 'dynabb') {
+        return dynabbModelSets(rom, index, decoded, decoded && sampledTiles(decoded).length > 0);
     }
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
@@ -1749,6 +1754,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'copy') return buildCopyTexram(rom);
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'jaleco') return buildJalecoTexram(rom, texSets);
+        if (layout === 'dynabb') return buildDynabbTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {

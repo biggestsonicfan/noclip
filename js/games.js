@@ -6216,6 +6216,83 @@ const overrevb = jalecoBuild({
     colors: [0x12760, 0x12850, 0x12950],
 });
 
+/* ---- Dynamite Baseball 97 ------------------------------------------------- */
+
+/*
+ * Dynamite Baseball 97 (MAME's `dynabb97`, Sega, Model 2B CRX, Revision A,
+ * 1997; the container's dynabb.zip carries it). The framework is the Jaleco
+ * racers' again, a version on: the same 16-byte model table entries sent the
+ * same way (the draw 0xA5280, `lda 0x2AFFD00[g0*16]`), 7890 of them at data
+ * 0xAFFD00, and the same texture loader grown into a dispatcher that copies
+ * packed rectangles (js/dynabb.js). The names are a table of its own:
+ * {model, name pointer} pairs at data 0xB5C400 (7887 of them, to a pointer of
+ * 0xFFFFFFFF), each name 32 bytes padded with spaces (read by 0xC2F40);
+ * models 0 to 2 have none.
+ *
+ * A set is one of the three stadiums and one of the twelve teams, set
+ * stadium * 12 + team, both sides of the field the team's: texture RAM, the
+ * colorxlat rows and the face palette are each the stadium's and the two
+ * sides' (js/dynabb.js runs the routines that load them). Set 12, stadium 1
+ * and team 0, is the one MAME's attract opens on.
+ */
+const DYNABB_TEAMS = Array.from({ length: 12 }, (_, t) => [0x02000000 + t * 0xaaa00, 0x02055500 + t * 0xaaa00]);
+const dynabb97 = {
+    id: 'dynabb97',
+    name: 'Dynamite Baseball 97 (Revision A)',
+    identify: ['epr-19833a.15', 'epr-19834a.16', 'mpr-19841.11', 'mpr-19843.17'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-19833a.15', 0xd99ed1b2, 'epr-19834a.16', 0x24192bb1],
+                [0x100000, 'epr-19831a.13', 0x0527ea40, 'epr-19832a.14', 0x2f380a40],
+            ],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19841.11', 0x989309af, 'mpr-19842.12', 0xeec54070],
+                [0x0800000, 'mpr-19839.9', 0xd5a74cf4, 'mpr-19840.10', 0x45704e95],
+                [0x1000000, 'mpr-19837.7', 0xc02187d9, 'mpr-19838.8', 0x546b61cd],
+                [0x1800000, 'mpr-19835.5', 0xa3b0a37c, 'mpr-19836.6', 0xd70a32aa],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19843.17', 0x019bc583, 'mpr-19845.21', 0x2d23e73a],
+                [0x800000, 'mpr-19844.18', 0x150198d6, 'mpr-19846.22', 0xfe53cd17],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-19848.27', 0x4c0526b7, 'mpr-19847.25', 0xfe55edbd]],
+        },
+    },
+    modelTable: { offset: 0xaffd00, count: 7890, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    modelNames: { pairs: 0xb5c400 },
+    palette: { layout: 'dynabb' },
+    paletteOffset: null,
+    texture: {
+        raw: {
+            layout: 'dynabb',
+            /* 0x809A0, layout 32 on sheet 0. */
+            stadiums: [0x028fff00, 0x029aa900, 0x02a55300],
+            /* 0x80920 (layout 48) and 0x80960 (layout 50), on sheet 1. */
+            teams: DYNABB_TEAMS,
+            /* The boot's other two: [source, sheet, layout]. */
+            fixed: [[0x02855500, 0, 33], [0x02800000, 1, 49]],
+        },
+        sets: 36,
+        residentSet: null,
+        defaultSet: 12,
+    },
+    colors: { dynabb: true, solid: true },
+    /* No stage, player or motion data is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6223,7 +6300,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, sgt24h, overrev, overrevb];
+    pltkids, pltkidsa, sgt24h, overrev, overrevb, dynabb97];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -32,6 +32,7 @@
 import { MAIN_DATA_BASE } from './romset.js';
 import { dynamcopScene } from './dynamcop.js';
 import { I960 } from './i960.js';
+import { dynabbColors } from './dynabb.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -154,6 +155,8 @@ export function buildLumaram(rom) {
         return luma;
     }
     if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
+    /* Dynamite Baseball 97's is the boot's, whichever set (js/dynabb.js). */
+    if (rom.game.colors.dynabb) return dynabbColors(rom, rom.game.texture.defaultSet).luma.slice();
     /* Last Bronx works its out too (0x1A50): band b of divisor d takes
      * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
     const bands = rom.game.colors.luma?.bands;
@@ -649,6 +652,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.i960) return runColorRoutines(rom).cxlat.slice();
+    if (rom.game.colors.dynabb) return dynabbColors(rom, colorSet).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);
