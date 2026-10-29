@@ -32,12 +32,13 @@ import { MAIN_DATA_BASE, xtraResolve } from './romset.js';
 import { courseNamedModels } from './daytona.js';
 import { doaLoadId, lastbrnxScene } from './colors.js';
 import { buildDynamcopTexram } from './dynamcop.js';
-import { buildJalecoTexram } from './jaleco.js';
+import { buildJalecoTexram, jalecoCourseSets } from './jaleco.js';
 import { buildDynabbTexram, dynabbModelSets } from './dynabb.js';
 import { buildSkisuprgTexram } from './skisuprg.js';
-import { buildWaverunrTexram } from './waverunr.js';
+import { buildWaverunrTexram, waverunrModelSets } from './waverunr.js';
 import { buildTopskatrTexram } from './topskatr.js';
 import { buildBelTexram } from './bel.js';
+import { racerCourseModels } from './racers.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 import { I960 } from './i960.js';
 
@@ -1910,6 +1911,7 @@ function rallyCourseModels(rom) {
  * - Super GT 24h, Over Rev: a model on sheet 0 alone is on the boot's pages.
  * - Dynamite Baseball 97: by the team or stadium its name begins with.
  * - Gunblade NY: the same; its triples are in the program, not in scene lists.
+ * - Wave Runner, Sega Water Ski: see waverunrModelSets.
  *
  * @returns {{sets:number[], how:string}|null} null where nothing says
  */
@@ -1936,7 +1938,8 @@ export function programTextureSets(rom, index, decoded) {
     }
     /* Super GT 24h and Over Rev: sheet 0's full-size pages are the boot's and
      * no course replaces them; a model on them alone is drawn the same on
-     * every course. The rest are left to the picker. */
+     * every course. A model a course's grids or trackside name takes that
+     * course's set (js/jaleco.js); the rest are left to the picker. */
     if (T.raw?.layout === 'jaleco') {
         if (!decoded) return null;
         const want = sampledTiles(decoded);
@@ -1945,7 +1948,9 @@ export function programTextureSets(rom, index, decoded) {
         for (let i = 0; i < decoded.tiles.length; i += 4) {
             if (decoded.tiles[i + 2] && decoded.tiles[i + 1] >= SHEET_H) sheet1 = true;
         }
-        return sheet1 ? null : { sets: [], how: 'boot' };
+        if (!sheet1) return { sets: [], how: 'boot' };
+        const course = jalecoCourseSets(rom).get(index);
+        return course != null ? { sets: [course], how: 'course' } : null;
     }
     if (T.raw?.layout === 'dynabb') {
         return dynabbModelSets(rom, index, decoded, decoded && sampledTiles(decoded).length > 0);
@@ -1953,6 +1958,12 @@ export function programTextureSets(rom, index, decoded) {
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
         return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
+    }
+    /* Manx TT, STCC and INDY 500: a model in a course's lists takes that
+     * course's set (js/racers.js). */
+    if (rom.game.stageTable?.racer) {
+        const course = racerCourseModels(rom).get(index);
+        if (course != null) return { sets: [course], how: 'course' };
     }
     /* Sega Rally the other way round: the boot bank's full size is on sheet 0
      * and a course's on sheet 1. A sheet-1 model in one of the course lists
@@ -1970,6 +1981,8 @@ export function programTextureSets(rom, index, decoded) {
         const course = rallyCourseModels(rom).get(index);
         return course != null ? { sets: [course], how: 'course' } : null;
     }
+    /* Wave Runner and Water Ski: see waverunrModelSets. */
+    if (T.raw?.layout === 'waverunr') return waverunrModelSets(rom, index, decoded);
     if (T.raw || T.bankSets) return null;
     if (!decoded) return null;
     const want = sampledTiles(decoded);
