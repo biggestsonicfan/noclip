@@ -35,6 +35,7 @@ import { buildDynamcopTexram } from './dynamcop.js';
 import { buildSkisuprgTexram } from './skisuprg.js';
 import { buildWaverunrTexram } from './waverunr.js';
 import { buildTopskatrTexram } from './topskatr.js';
+import { buildBelTexram } from './bel.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 
 export { SHEET_BYTES };
@@ -1739,6 +1740,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'skisuprg') return buildSkisuprgTexram(rom, texSets);
         if (layout === 'waverunr') return buildWaverunrTexram(rom, texSets);
         if (layout === 'topskatr') return buildTopskatrTexram(rom, texSets);
+        if (layout === 'bel') return buildBelTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'dynamcop') {

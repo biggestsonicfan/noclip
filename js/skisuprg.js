@@ -102,8 +102,9 @@ const SHADOW = 0x5121b0;
 
 /*
  * Run program routines over a bus of the program ROM, work RAM 0x500000 and
- * the palette/colorxlat RAM at 0x1800000; js/waverunr.js runs its colour
- * routines through this too. Returns the work RAM and the palette RAM.
+ * the palette/colorxlat RAM at 0x1800000 (and the data ROM, read only by
+ * the callers' routines); js/waverunr.js runs its colour routines through
+ * this too. Returns the work RAM and the palette RAM.
  */
 export function runRoutines(rom, calls, what) {
     const prog = rom.maincpu;
@@ -113,6 +114,8 @@ export function runRoutines(rom, calls, what) {
         if (a < prog.length) return [prog, a];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + pal.length) return [pal, a - COLOR_RAM];
+        /* Behind Enemy Lines' routines read their tables from the data ROM. */
+        if (a >= MAIN_DATA_BASE && a < MAIN_DATA_BASE + rom.mainData.length) return [rom.mainData, a - MAIN_DATA_BASE];
         throw new Error(`${what} colour routine at 0x${a.toString(16)}`);
     };
     const read = (a, n) => {

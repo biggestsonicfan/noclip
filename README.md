@@ -28,6 +28,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1247,6 +1248,29 @@ for three colour rows and three palette entries the attract animates.
 
 There is no Stages tab, no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
+
+## Behind Enemy Lines
+
+`bel.zip` carries Behind Enemy Lines (Sega / EPL Productions, Model 2C; MAME
+calls it not working, but its attract runs). The **Models** tab has the
+data ROM's model table, 3183 entries, named from the game's own object
+directory (`o_c130`, `o_intro_hummer`, `o_fuelc_1_100`; a piece after an
+object's first is shown as `name +k`), with the textures, palette and colour
+tables the game loads.
+
+The texture picker's nine sets are the game's three scenes with the three
+banks each one can put on sheet 0. A model opens on set 6 (scene 2, the
+one the boot and the attract use, with its first bank). Nothing found yet
+says which set a model belongs to, so a model that comes out with the wrong
+picture may need another set. In the attract the game streams pieces of
+another bank into part of the sheets as it goes; the viewer shows the scene's
+sheets as they are first set up.
+
+Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
+byte at attract frame 1500.
+
+There is no Stages tab, no cells, no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Running it
 

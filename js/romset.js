@@ -16,6 +16,7 @@ import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
 import { skisuprgPalette } from './skisuprg.js';
 import { waverunrPalette } from './waverunr.js';
+import { belModelName } from './bel.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -391,6 +392,8 @@ export function addModelTriples(rom, triples) {
 export function readModelName(rom, index) {
     const n = rom.game.modelNames;
     if (!n || index < 0) return null;
+    /* Behind Enemy Lines names objects, not table entries (js/bel.js). */
+    if (n.directory) return belModelName(rom, index);
     const dv = rom.mainDataView;
     const at = n.ptrs + (n.skip + (index % n.count)) * 4;
     if (at + 4 > rom.mainData.length) return null;

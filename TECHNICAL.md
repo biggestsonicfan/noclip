@@ -7307,6 +7307,68 @@ run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
+### Behind Enemy Lines (`js/bel.js`)
+
+Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own
+engine: not a Sega AM program, with C-style named objects, its own model
+table and whole-bank sheets with dealt mip levels. Each table was found from
+the code that uses it, and checked against MAME's texture, colour, luma and
+palette RAM in the attract (frames 600, 1500 and 3000). Addresses below
+0x80000 are the program ROM's; 0x2xxxxxx is the data ROM.
+
+**Model table.** Data 0x28B7C78, 20 bytes a record: {object, tpa, tha,
+count, pointer into 0x28Cxxxx}. The draw (0x11FD8 to 0x120B0: the matrix,
+then the object) loads the first three words and sends them to the geometry
+FIFO as they stand, with the count + 1 (0x120A4 to 0x120B0). The meshes are
+the usual 40-byte records. 3183 records decode (164,637 faces, 156,480
+textured); after them the table goes on with 2D pieces whose object words
+point into polygon RAM (0x8C7524 on).
+
+**Names.** The object directory at data 0x2973748, 538 {name, first record}
+pairs; the name is a 32-byte string. An object runs on to the next one's
+first record (`belModelName`).
+
+**Textures.** 0x72190(sheet, entry) copies a megabyte bank onto a sheet:
+the bank is 0x2064780[scene * 8 + entry * 4] for sheet 1 or
+0x20647A0[scene * 12 + entry * 4] for sheet 0, the scene the byte at work
+RAM 0x5A17C0 (2 from the boot, 0x10AC). The first 0x60000 halfwords go
+straight onto the sheet; the rest are eight mip levels of 0x80 down to 1
+rows, dealt between the sheets in runs from the table at data 0x298F8F0
+(0x200 >> k, the first run 0x100, run k doubled while k is past the level),
+as Daytona's 0x1388 deals them. MAME's texture RAM has every mip row on the
+other sheet from the one the routine addresses, as Daytona's does. The boot
+(0x1168, 0x1174) loads entry 0 onto both sheets; a scene's set-up (0x727D0)
+puts entry +0xCC of its record onto sheet 0, and entry 1 onto sheet 1 for
+scene 2, entry 0 for the others (0x72818). A texture set is one {scene,
+sheet-0 entry}: set = scene * 3 + entry.
+
+**Palette.** 0x71D60 copies the 906 colours at data 0x28CDB78 from entry 0.
+
+**Colour tables.** Run with `js/i960.js`, as the boot does (0x1008,
+0x1010): 0x62A70 works out the grey ramps of rows 0 to 31 (48 entries rising
+with the row, then 64 at the row's level), and 0x62DD0(2) lays 16 entries a
+row from entry 48 on, rows 0 to 27, from 0x60-byte rows of {r, g, b} at data
+0x21F0000 + 2 * 0x1000 (b - 0x74 + 0x40, times 0xA1 >> 7, held to 0..0xFF).
+
+**Luma.** 0x719C0 writes the 128 signed bytes at data 0x2064320 into all
+256 bands, then the 384 at 0x2064420 over bands 0 to 2.
+
+**Checked.** At frame 1500 sheet 0, sheet 1, colorxlat, luma and palette
+match MAME byte for byte. At frames 600 and 3000 colorxlat, luma and
+palette match; the sheets differ in rows 0x100 on, x 320 to 511, which hold
+pieces of bank 0x2600000 (entry 1) streamed in by the slot loader below.
+MAME's own pictures of the attract (the mission briefing, the C.A.T. title)
+show the same objects the viewer draws.
+
+**Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
+sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
+slots' banks, +0x4C the queue bytes, slot in bits 0-5 and bank above). Scenes:
+the byte at 0x5A17C0, bank tables 0x2064780 and 0x20647A0, per-scene data
+pointers 0x2986F60[scene] (read at 0x10CC). A record's +0x10 points at byte
+strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
+0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
+0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

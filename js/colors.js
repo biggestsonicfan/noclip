@@ -35,6 +35,7 @@ import { I960 } from './i960.js';
 import { buildSkisuprgColorxlat } from './skisuprg.js';
 import { buildWaverunrColorxlat } from './waverunr.js';
 import { buildTopskatrColorxlat } from './topskatr.js';
+import { buildBelColorxlat, buildBelLuma } from './bel.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
  * interchangeable. colorxlat (0x01810000) is three 0x4000-byte channels of
@@ -157,6 +158,8 @@ export function buildLumaram(rom) {
         return luma;
     }
     if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
+    /* Behind Enemy Lines repeats one band (js/bel.js). */
+    if (rom.game.colors.luma?.bel) return buildBelLuma(rom, LUMA_BYTES);
     /* Last Bronx works its out too (0x1A50): band b of divisor d takes
      * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
     const bands = rom.game.colors.luma?.bands;
@@ -638,6 +641,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.skisuprg) return buildSkisuprgColorxlat(rom, colorSet);
     if (rom.game.colors.waverunr) return buildWaverunrColorxlat(rom, colorSet);
     if (rom.game.colors.topskatr) return buildTopskatrColorxlat(rom, colorSet);
+    if (rom.game.colors.bel) return buildBelColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
