@@ -26,6 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
+Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 
 Three views, and a fourth for the 2D art:
 
@@ -1189,6 +1190,24 @@ is not known yet, so a course model may need its set picked by hand.
 
 There is no Stages tab, no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
+
+## INDY 500
+
+`indy500.zip` is MAME's `indy500to`, the Twin cabinet's Revision A; the Deluxe
+(`indy500d.zip`) opens with that zip beside it. The **Models** tab has all 3571
+entries of the model table, 3570 with a mesh: the cars, the race queen, the
+three courses in segments, the leaderboards and the scenery, with the textures,
+palette, luma and colour tables the game makes. All of them match MAME's byte
+for byte, in the attract mode on course 0 and in a race on course 1; the colour
+tables come from running the game's own routines.
+
+The texture picker's sets 0..2 are the three courses, each its own pair of
+texture banks and its own colour table; set 3 is the pair the game loads for
+its other screens. The cars are on every course's banks; a course model needs
+its course picked, and the race queen is on set 1's.
+
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Running it
 

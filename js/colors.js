@@ -190,6 +190,13 @@ export function buildLumaram(rom) {
      * 0..127, and copies the ROM's from entry `at` on. */
     for (let i = 0; i < ramps * LUMA_BAND; i++) luma[i * 2] = ((i % LUMA_BAND) + 1) >> 1;
     for (let i = 0; i < n; i++) luma[(at + i) * 2] = md[data + i];
+    /* INDY 500 copies its table and then a second over the start of it
+     * (0x2E010: 0x180 bytes from XTRA 0x64B0850, the Deluxe's 0x3442C from
+     * its program ROM). */
+    for (const o of rom.game.colors.luma.over ?? []) {
+        const from = o.source === 'maincpu' ? rom.maincpu : rom.mainData;
+        for (let i = 0; i < o.bytes; i++) luma[i * 2] = from[o.data + i];
+    }
     return luma;
 }
 
@@ -505,13 +512,21 @@ function buildVonColorxlat(rom, field, robots) {
  * came out byte for byte as m2-hle2's board holds them in the attract mode,
  * and neither changes from course to course. The routines take about 220,000
  * instructions between them, once per ROM set.
+ *
+ * INDY 500's change with the course: an entry may be [entry, ...args], an
+ * argument of 'set' standing for the colour set asked for (0x2DE70's g0, the
+ * course; see js/games.js indy500), and its routines read the data ROM at
+ * 0x2000000, which the bus maps read-only. The tables are kept per set.
  */
 const COLOR_RAM = 0x01800000;
 const COLOR_RAM_BYTES = 0x20000;
 const LUMA_RAM = 0x12800000;
-function runColorRoutines(rom) {
-    if (rom.i960Colors) return rom.i960Colors;
+const DATA_ROM = 0x02000000;
+function runColorRoutines(rom, colorSet = 0) {
     const C = rom.game.colors.i960;
+    const set = C.sets ? Math.min(Math.max(colorSet | 0, 0), C.sets - 1) : 0;
+    rom.i960Colors ??= new Map();
+    if (rom.i960Colors.has(set)) return rom.i960Colors.get(set);
     const prog = rom.maincpu;
     /* Manx TT runs its colour routines straight out of the ROM: no `copy`. */
     const ram = new Uint8Array(0x100000);
@@ -527,6 +542,7 @@ function runColorRoutines(rom) {
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + COLOR_RAM_BYTES) return [pal, a - COLOR_RAM];
+        if (a >= DATA_ROM && a < DATA_ROM + rom.mainData.length) return [rom.mainData, a - DATA_ROM];
         throw new Error(`colour routine read 0x${a.toString(16)}`);
     };
     const read = (a, n) => {
@@ -543,17 +559,22 @@ function runColorRoutines(rom) {
             return;
         }
         const [b, o] = where(a);
+        if (b === prog || b === rom.mainData) throw new Error(`colour routine wrote ROM 0x${a.toString(16)}`);
         for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
     };
     const cpu = new I960({
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
-    for (const entry of C.run) {
-        if (!cpu.call(entry, [], { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
+    for (const step of C.run) {
+        const [entry, ...args] = [].concat(step);
+        const g = args.map((v) => (v === 'set' ? set : v));
+        if (!cpu.call(entry, g, { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
     }
     const cxlat = pal.slice(0x10000, 0x10000 + CXLAT_BYTES);
-    return (rom.i960Colors = { cxlat, luma });
+    const out = { cxlat, luma };
+    rom.i960Colors.set(set, out);
+    return out;
 }
 
 /*
@@ -643,7 +664,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
-    if (rom.game.colors.i960) return runColorRoutines(rom).cxlat.slice();
+    if (rom.game.colors.i960) return runColorRoutines(rom, colorSet).cxlat.slice();
     const dv = rom.mainDataView;
     const C = rom.game.colors;
     const out = new Uint8Array(CXLAT_BYTES);

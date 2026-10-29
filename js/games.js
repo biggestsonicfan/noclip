@@ -6129,14 +6129,127 @@ const manxtt = {
     features: { stages: false, characters: false, motions: false, cells: false },
 };
 
+/*
+ * INDY 500 (Revision A; MAME indy500to, the Twin, and indy500d, the Deluxe),
+ * a Model 2B AM5 game. Nothing of Sega Rally's survives but the board: a
+ * 20-byte model table in the data ROM, texture banks dealt by a rectangle
+ * table, and colour tables the program builds per course. The Deluxe is the
+ * Twin's data with its program moved about; the addresses it changes are
+ * `program`'s.
+ */
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun }) {
+    const prog = [program[1], program[3]];
+    return {
+        id, name,
+        identify: prog,
+        identifyCrc: [program[2], program[4]],
+        regions: {
+            maincpu: { size: 0x100000, parts: [program] },
+            /* Two 8 MB pairs of banks, luma, the palette and the model table,
+             * then a 1 MB pair seen through XTRA 0x6400000. */
+            mainData: {
+                size: 0x1100000,
+                parts: [
+                    [0x000000, 'mpr-18237.11', 0x37e4255a, 'mpr-18238.12', 0xbf837bac],
+                    [0x800000, 'mpr-18239.9', 0x9a2db86e, 'mpr-18240.10', 0xab46a35f],
+                    data,
+                ],
+            },
+            polygons: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-18233.17', 0x48a024d3, 'mpr-18234.21', 0x1178bfc8],
+                    [0x800000, 'mpr-18235.18', 0xe7d70d59, 'mpr-18236.22', 0x6ca29e0e],
+                ],
+            },
+            /* One 8 MB pair, which the model table's tpa and tha also reach
+             * with bit 22 set: the board mirrors it. */
+            textures: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-18232.27', 0xf962347d, 'mpr-18231.25', 0x673d5338],
+                    [0x800000, 'mpr-18232.27', 0xf962347d, 'mpr-18231.25', 0x673d5338],
+                ],
+            },
+            copro: {
+                size: 0x100000,
+                optional: true,
+                parts: [[0x000000, 'epr-18249.29', 0xa399f023, 'epr-18250.30', 0x7479ad52]],
+            },
+        },
+        /*
+         * 3571 entries of 20 bytes in the data ROM at 0xC00460: tpa, tha, oba,
+         * a polygon count and an info pointer. Entry 0 is empty. An oba is a
+         * word index with bit 23 set, which `subtract` takes off.
+         */
+        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 } },
+        meshPtr: { subtract: 0x02000000, add: 0 },
+        /* {count, colours} at data 0xC11B5C, 961 of them, to 0x1802000
+         * (0x2F0D0), and 0x2DFB0's table of 19 laid down from entry 1023:
+         * table 0x53C40C & 7 of the eight at 0x6CBF0, which is 0 in the
+         * attract mode and the races MAME was run to. */
+        paletteOffset: 0xc11b5e,
+        paletteCount: 961,
+        paletteTop: top,
+        /*
+         * A set is a course: the record at 0x6A5B0 + 24 * course names its two
+         * banks at +0x10 and +0x14 (0x16F50), (4, 5) for course 0, (0, 1) for
+         * 1 and (2, 3) for 2. The boot deals (0, 1) and the attract mode the
+         * course it shows; 0x36B9C and 0x63D44 deal (6, 7), and 0x56320 the
+         * colour table 3 that goes with it.
+         */
+        texture: {
+            raw: { layout: 'indy500', rects, rectCount: 37, pairs: [[4, 5], [0, 1], [2, 3], [6, 7]] },
+            sets: 4,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        /*
+         * colorxlat by the program's own 0x2DD80 (the base ramp) and 0x2DE70
+         * (g0 = k, the rows of the table data[0xC3CE5C + 4k] points at), k the
+         * course (0x16F78). Luma is 0x2E010's copy, data 0xC122E0..+0x4000,
+         * and then 0x180 bytes over the start of it.
+         */
+        colors: {
+            i960: { run: colorRun, sets: 4 },
+            luma: { data: 0xc122e0, bytes: 0x4000, over: [lumaOver] },
+            solid: true,
+        },
+        depth: { recede: 0, nearMin: 0.02, layers: true },
+        features: { stages: false, characters: false, motions: false, cells: false },
+    };
+}
+
+const indy500 = indy500Build({
+    id: 'indy500', name: 'INDY 500 Twin (Revision A)',
+    program: [0x000000, 'epr-18254a.15', 0xad0f1fc5, 'epr-18255a.16', 0x784daab8],
+    data: [0x1000000, 'epr-18389.7', 0xd22ea019, 'epr-18390.8', 0x38e796e5],
+    rects: 0x6c860,
+    lumaOver: { data: 0x10b0850, bytes: 0x180 },
+    top: { at: 0x1048de0 },
+    colorRun: [0x2dd80, [0x2de70, 'set']],
+});
+/* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
+ * epr-18345/18346. The CRCs find either. */
+const indy500d = indy500Build({
+    id: 'indy500d', name: 'INDY 500 Deluxe (Revision A)',
+    program: [0x000000, 'epr-18251a.15', 0xfdabb40b, 'epr-18252a.16', 0x4935832a],
+    data: [0x1000000, 'epr-18345.7', 0x854b1037, 'epr-18346.8', 0x1a68acdc],
+    rects: 0xb1fd0,
+    lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
+    top: { source: 'maincpu', at: 0x1b3a4 },
+    colorRun: [0x34230, [0x34320, 'set']],
+});
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
- * show, and the 2A builds, which have no fighters yet. */
+ * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
+ * goes ahead of the Twin, since its zip opens with the Twin's beside it. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, manxtt];
+    pltkids, pltkidsa, manxtt, indy500d, indy500];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -900,6 +900,41 @@ function buildSrallycTexram(rom, texSets) {
 const MAIN_DATA_BANKS = 0x200000;
 
 /*
+ * Texture RAM for INDY 500: two 1 MB banks of the data ROM, laid out as the
+ * sheets already are, one a slot. 0x2DAD0 (g0 the bank, g1 the slot) queues
+ * a bank and 0x2D8E0 deals it a rectangle a frame through 0x2D860 from the
+ * table at `rects` (0x6C860 in the Twin, 0xB1FD0 in the Deluxe): records 1..37
+ * of {swap, half, x0, y0, x1, y1}, the sheet the slot XOR swap, half adding
+ * 512 rows to both ends. A rectangle is rows y0..y1 of x0..x1 rounded up to
+ * eight texels (ldq/stq), at the same place in the bank and on the sheet, so
+ * the rectangles with swap set trade the two banks' corners. A set is a
+ * course record's pair (0x16F50: record +0x10 and +0x14), `pairs[set]`.
+ */
+function buildIndyTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const md = rom.mainData;
+    const cv = rom.mainCpuView;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const deal = (src, slot) => {
+        for (let r = 1; r <= raw.rectCount; r++) {
+            const [swap, half, x0, y0, x1, y1] = [0, 4, 8, 12, 16, 20]
+                .map((k) => cv.getInt32(raw.rects + r * 24 + k, true));
+            const sheet = ((slot ^ swap) & 1) * SHEET_BYTES;
+            const bytes = Math.ceil((x1 - x0) / 8) * 16;
+            for (let y = y0; y <= y1; y++) {
+                const o = half * (SHEET_BYTES / 2) + y * 0x400 + x0 * 2;
+                if (src + o + bytes > md.length) return;
+                tex.set(md.subarray(src + o, src + o + bytes), sheet + o);
+            }
+        }
+    };
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const pair = raw.pairs[sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet];
+    pair.forEach((bank, slot) => deal(bank * SHEET_BYTES, slot));
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
  * Texture RAM for Dead or Alive. The program copies 128-row strips out of
  * 0xC0000-byte slabs in the data ROMs (0x7CBA0): a slab's first and last
  * quarters are a fighter's, two strips side by side, and its middle half is
@@ -1740,6 +1775,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'pltkids') return buildPltkidsTexram(rom, texSets);
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
+        if (layout === 'indy500') return buildIndyTexram(rom, texSets);
         if (layout === 'dynamcop') {
             const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
             return buildDynamcopTexram(rom, sets.length ? sets[sets.length - 1] : 0);

@@ -7188,6 +7188,59 @@ MAME on empty NVRAM stays on the DX cabinet's motion-slider check, so the
 attract never ran there; the bank-to-course mapping needs a run past it
 (the Twin cabinet's settings, or m2-hle2).
 
+### INDY 500 (`js/texture.js`, `js/colors.js`)
+
+Sega's 1995 racer on Model 2B (MAME's `indy500to`, the Twin, Revision A, and
+`indy500d`, the Deluxe) shares nothing with Sega Rally but the board. The
+addresses are the Twin's. The Deluxe has its own last data pair, but every
+table read here is the same in it; its program is moved about
+(`indy500Build` in js/games.js lists the five addresses that change).
+
+**Models.** 3571 entries of 20 bytes at data 0xC00460: tpa, tha, oba, a polygon
+count and a pointer to more about the model. An oba is a word index with bit 23
+set. tpa and tha reach the texture ROM's 8 MB with bit 22 set as well, so the
+region repeats it at 0x800000, as the board's mirror does.
+
+**Textures.** The data ROM's first 8 MB are eight 1 MB banks, each laid out as
+a sheet already is. 0x2DAD0 (g0 the bank's address, g1 a slot, 0 or 1) queues
+one, and 0x2D8E0 deals it a rectangle a frame through 0x2D860 out of the table
+at 0x6C860: records 1..37 of {swap, half, x0, y0, x1, y1}. The sheet is the slot
+XOR swap; half adds 512 rows at both ends; a rectangle is rows y0..y1 of
+x0..x1, rounded up to eight texels (ldq/stq), at the same offset in the bank and
+on the sheet. So most of a bank lands on its slot's sheet and the corners
+with swap set land on the other. The boot (0x2DC98) deals banks 0 and 1. A
+course's set-up, 0x16F50, deals the two its record names: the records are 24
+bytes at 0x6A5B0 (a second copy at 0x6A5F8), +0x10 and +0x14 the banks, (4, 5)
+for course 0, (0, 1) for course 1, (2, 3) for course 2. 0x36B9C and 0x63D44
+deal (6, 7), and 0x56320 deals bank 6 with colour table 3. The explorer's set
+is the course (`pairs`, set 3 = (6, 7)). MAME's texture RAM at attract frame
+1500 is set 0 and in a course-1 race at frame 6000 set 1, both sheets
+byte for byte.
+
+**Colours.** 0x2DD80 builds colorxlat's base ramp, and 0x2DE70 (g0 = k) lays
+rows over it from the table data[0xC3CE5C + 4k] points at; k is the course
+(0x16F78, through 0x53C340), 0 at boot. The explorer runs both on
+`js/i960.js` (`runColorRoutines`, an argument of `'set'` standing for the
+colour set), with the data ROM mapped at 0x2000000; MAME's colorxlat is k = 0 at
+frame 1500 and k = 1 at 6000, byte for byte. Luma is 0x2E010: data
+0xC122E0..+0x4000 to luma RAM 0x11400000, a byte a halfword, then 0x180 bytes
+from XTRA 0x64B0850 (data 0x10B0850) over its start (`luma.over`; the Deluxe
+reads them from its program at 0xA8D94). The face palette is {count, colours}
+at data 0xC11B5C, 961 colours, to 0x1802000 (0x2F0D0), then 0x2DFB0 lays
+{count, colours} from entry 1023 downward, table 0x53C40C & 7 of the eight
+pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
+table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
+palette; it is not ported. Luma and palette match MAME.
+
+**Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
+lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
+like the course's segments at two distances; +0x0C points at 16-byte records
+of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
+program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
+format, and its tiles were not looked for. The sound board is the 68000 and
+SCSP of the other Model 2 games (epr-18391.31); its command writes were not
+traced.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

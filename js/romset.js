@@ -445,6 +445,14 @@ export function facePalette(rom) {
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
+        /* {count, colours} laid from entry 1023 downward (INDY 500's 0x2DFB0),
+         * in the data ROM or the program ROM (`paletteTop.source`). */
+        const top = rom.game.paletteTop;
+        if (top) {
+            const tv = top.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+            const count = Math.min(tv.getUint16(top.at, true), 1024);
+            for (let i = 0; i < count; i++) out[1023 - i] = tv.getUint16(top.at + 2 + i * 2, true);
+        }
     } else if (p.blocks) {
         /* Air Walkers: a block is {first, count, colours} (0x16370), laid
          * over the boot's table, which is {count, colours} from 0 (0x16200). */
