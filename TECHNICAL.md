@@ -7205,6 +7205,30 @@ palette, colorxlat and luma windows naming the routines.
   picture as MAME's snapshot: the wooden track, the bridge over it, the rock
   walls and the water. The other six were looked at whole: each is one
   joined, textured course.
+- **Cells** (`pictures`, as Dead or Alive's and The House of the Dead's). The
+  2D is 882 pictures of 12 bytes, {tiles, colours, map}, at program 0x87860.
+  Entries 0..834 point into the data ROM, and 835..881 into XTRA
+  (0x6C00000.., data 0x1C00000). A tile list is chunks of {count, count
+  tiles}, until a zero count. The colours are 16 a chunk, and the map is
+  Virtua Cop's record. Many entries share one tile list with their own map:
+  33..71 are one CG's 39 maps.
+  - The loader 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) is called from
+    0x21BF50/0x21BFC0 with g0 a slot {first block, blocks, chunks, entry}.
+    0x21BB10 first finds enough free 128-tile blocks in 0x57ABC0. The loader
+    then copies each chunk to whole blocks.
+  - 0x21BC70 gives every block of a chunk that chunk's 16 colours, at once
+    (0x21BCF0) or through the queue at 0x57B030 (0x21BDA0), as 0x5194B4
+    says.
+  - The boot's 1bpp font (0x21B2F8 from 0x21AE70, data 0x8B49A0) goes to
+    characters 0..127, so the pictures start at block 1. The panel loads a
+    picture from block 0, and its map numbers the picture's own tiles.
+  - MAME, attract frames 600..2400: every picture found in character RAM
+    (4, 33, 99, 134, 499, 503, 504, 510, 578, 579, 580, 594, 853) has the
+    panel's tiles at its block, byte for byte. The colours match too, except
+    578, 579, 594 and a second copy of 33, which the game was fading when
+    dumped.
+  - Not followed: the draw that adds the first block to a map's entries. No
+    capture says which pictures share a screen.
 - **Missing.** The sky and the background (MAME's frame 3000 has an orange
   sky and clouds), the bikes and riders, and anything the race places
   besides the track. 0x2166A0 sorts draws into buckets at 0x5781D0 and
@@ -7280,11 +7304,49 @@ Course's (0x6BE0, 0x6A60), and the race lays 0x76B0(29, 0x6EE0) and (27,
 0x7060) over them for Laxey (0x1B590). Function 6 is 22 pairs from 0x4140
 (`mov 22,g1; lda 0x4140,g2; bal 0x40D8`, 0x4280).
 
-**Leads.** The pictures are AM3's "CGM 1.0" files, as Sega Rally's (js/cells.js
-`cgm`): one in the program at 0xB250 and 101 in the data ROM from 0x280000.
-The map of the island is model 1213 to 1216, the leaderboards 1628 and 1629.
-The attract is scripted from the tables at 0x19960 and 0x199F0 ({start, end,
-handler, arg1, arg2}), run by 0x1D940.
+**Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
+routines (js/cells.js `cgm`, see [Sega Rally's
+cells](#sega-rally-championships-cells-jscellsjs)) at ROM addresses. The
+loader 0xB260 compares a file's first eight bytes with the string at 0xB250
+(the scan's fifth match in the program, which is no file), loads block k
+into group g + k and its 128 characters, and files the patterns in the table
+at work RAM 0x532080 with g << 7; the draw 0xB0A0 adds it to each entry. g
+is work RAM 0x533080, which the reset 0xAF10 sets to 9, as Sega Rally's
+does; 0xAF50 sets it (up to 0x7F), 0xB490 unloads a file and gives its
+groups back, and 0xB600 keeps 24 groups aside once (its error string is
+"FBT Error !"). The 89 callers of the loader name the files directly (`lda
+0x2C15344, g2` at 0x19C9C). Four files are in the program past the code
+(0x76F40 on), 82 in the first data pair (0x280000 to 0x3A4678) and 19 in
+the last, 1 MB pair at 0xC00000, which noclip's region (and MAME's) does not
+repeat, so the whole data ROM is scanned. That is 105 files and 376
+patterns; 38 files, 85 patterns, are named by no aligned word and marked
+unused (danger_j, the select_* screens, z3696 and others). Colours go
+through colorxlat, as MAME's palette_w puts every tile colour.
+
+Checked against MAME, whose run stops at the DX cabinet's motion-slider
+check on empty NVRAM: the check's state machine (0x5F530) is skipped when
+work RAM byte 0x51405A is 1, and holding it at 1 from a Lua script lets the
+attract run (warning, the races, the title, the Isle of Man screen). On the
+check's DANGER screen (file 0x2BD330, the only picture on screen) MAME's
+character RAM from group 9 and its palette are the file's, byte for byte,
+and noclip's `danger` cell is MAME's snapshot pixel for pixel. In the
+attract at frames 1200 and 4000 every file MAME has loaded (13 of them, from
+groups 9 to 118) sits in its character RAM and palette as the file has it,
+and the tilemap's INSERT, CREDIT and sega patterns, rendered, are MAME's
+pixels exactly. The title's MANX TT lettering is polygons, not the `title`
+pattern (a dotted MANX T.T.), which the attract never drew.
+The Twin title (frame 6500) is the `rogo_x` cell
+(file 0x2D7784, groups 44 to 47) matched to MAME's snapshot except the
+black "Twin" script over it, which is in no CGM file (polygons too); the
+Isle of Man screen is `iom16` with the program file 0x77730's MHK over it,
+both exact.
+
+**Leads.** The map of the island is model 1213 to 1216, the leaderboards
+1628 and 1629. The attract is scripted from the tables at 0x19960 and 0x199F0
+({start, end, handler, arg1, arg2}), run by 0x1D940. MAME on empty NVRAM stays on the DX cabinet's motion-slider check; holding
+work RAM 0x51405A at 1 gets past it (see Cells). The shared MAME also wants the default NVRAM
+image `manxtt_dx_nvran`, which the zip lacks; 128 bytes of 0xFF in a second
+rompath folder stand in for it.
 
 ### INDY 500 (`js/texture.js`, `js/colors.js`)
 
@@ -7347,10 +7409,58 @@ Models tab. Not in the tab: the per-course extra draw 0x4E010, the object
 draw 0x17720 (table 0x176F0), the cars, a sky, and the light (Sega Rally's
 stands in). Function 6 is 31 pairs at 0x2D590 (Deluxe 0x33A40).
 
+**Cells** (`banks`, js/bankcells.js). There are no CGM pictures; the 2D is in
+two banks of three tables the program indexes by number:
+
+| bank | CGs {offset, tiles} | cell pointers | palettes | tile data |
+|---|---|---|---|---|
+| data | 0x2C39EB0, 61 | 0x2C89BF0, 441 | 0x2C8A2DC + 4n | 0x2800000 + offset |
+| XTRA (Twin) | 0x64B00C0, 13 | 0x64B83D0, 60 | 0x64B84BC + 4n | 0x6400000 + offset |
+| XTRA (Deluxe) | program 0x9B7B0, 7 | program 0xB34A0, 34 | entry 35 + n of the cell list | 0x6400000 + offset |
+
+A cell is Virtua Cop's record: the width and the height as halfwords, then the
+entries. CG 0 of each bank is empty.
+
+- **Loaders.** 0x53790 loads from the data bank and 0x53890 from XTRA's
+  (0x9EA40 and 0x9EB40 in the Deluxe). They take (count >> 7) + 1 128-tile
+  blocks of character RAM from a free list (0x5EE460, 0x5EE660) and copy the
+  tiles there straight (ldq; the writes are 0x53868 and 0x53968). They note
+  {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860; the Deluxe's
+  0x556130 and 0x556720).
+- **Palette.** 0x55F10/0x55F30 queue the CG's palette through 0x9260; the
+  queue (0x9440) writes a group a block, from the first block's group on.
+- **Draws.** 0x53E60, 0x548A0, 0x55320 and 0x55750 draw a data-bank cell (g0)
+  with a CG (g1). 0x54950 draws three cells. 0x54300 and 0x54550 draw an XTRA
+  cell. Each adds first block << 7 to every entry, so a cell numbers its CG's
+  tiles and groups from 0.
+- **The font.** 0x53278 expands a 1bpp font at char 0, from data 0x2C00000
+  (0x53080 at boot). The panel does not load it, and no cell needs it.
+
+The panel loads a CG from block 0. `screens` are the 48 call sites that name
+both a cell and a CG by constant; one more call gives CG 33 the palette
+0x2C39DF0 with g2 = 1, which the panel does not follow. The tables keep a CG's
+cells together and in CG order. So any other cell takes a CG of its own bank,
+between the CGs named for the nearest named cells before and after it, that
+holds every tile and group it names. Of those, the one whose tiles join up
+best wins (seamScore).
+
+**Checked against MAME.**
+- MAME `indy500to`, frames 300..3000, and `indy500d`, frames 1500 and 2100:
+  every loaded CG (data 1, 8, 9, 13..18, 45, 46, 49, 53, 54, 58; XTRA 1 and on)
+  has the panel's tiles at its first block, byte for byte.
+- The colours match too, except CGs 13 and 14, which MAME fills with flat
+  0xFA0C (a flash), and CG 53, which the game darkens from frame 2100 (a fade).
+- The snapshots' TOP 10 RANKING, NAME/TOTAL TIME, places, AT/MT, VIEW BUTTON
+  text and SEGA logo are the panel's cells.
+
+**What is missing.** The Twin's XTRA cell 59 is really CG 0's palette
+pointer. A few small cells (e.g. 34, a strip of HUD words) take a CG that
+garbles them, so they probably draw with two CGs loaded. The Deluxe's XTRA
+cells have no `screens`; they rank by fit and seams alone.
+
 **Leads.** A course record's +0x0C points at 16-byte records of {x, z float,
 a word, 0}, which look like the course line; +0x08 points at a program table
-(0x69F60) handed to 0xE40, not read yet. No CGM pictures: the 2D is not AM3's
-format, and its tiles were not looked for. The sound board is the 68000 and
+(0x69F60) handed to 0xE40, not read yet. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
 
@@ -7411,8 +7521,30 @@ Brickwall Town. Not in the tab: the +8 scenes, the cars, a sky (none found)
 and the light (Sega Rally's stands in). Function 6 is 32 pairs from 0x736B0
 (0x1BA4, 0x10FA4, 0x7C2B0, through 0x73648).
 
-**Leads.** The pictures are "CGM 1.0" files, as Sega Rally's
-(js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
+**Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
+routines (js/cells.js `cgm`, see [Sega Rally's
+cells](#sega-rally-championships-cells-jscellsjs)) at ROM addresses. The
+loader 0x74650 compares a file with the string at 0x74600 (the scan's first
+program match, no file), loads block k into group g + k, and files the
+patterns at work RAM 0x218C10; the draw 0x74450 adds g << 7. g is work RAM
+0x219C10, which the reset 0x742C0 sets to 9; 0x74300 sets it, 0x74A20 keeps
+24 groups aside. The loader's 116 callers name the files directly. Four
+files are in the program past the code (0xC0000 on), 93 in the first data
+pair (0x1FC4BC on) and 10 in the 1 MB pair at 0x800000, which the region
+repeats at 0xC00000. The program names the
+repeat's copies (`lda 0x2C4B210, g2` for the attract's URL line), so the
+scan reads 0..0x7FFFFF and 0xC00000.. and leaves 0x800000.. out
+(`cells.cgm.data`): 107 files, 924 patterns, 16 files and 173 patterns
+unused. Colours go through colorxlat.
+
+Checked against MAME's attract (stcca, with the drive board's epr-18261 a
+stub of zeros): at frames 1500, 3000, 4500 and 6000 every file in character
+RAM (six, seven by frame 6000, from group 9) has its tiles and colours there
+byte for byte, and the rendered stc_url, insert_coins and credit_ patterns are MAME's
+snapshot's pixels exactly where the game draws them, also in the green
+moment of frame 6000 (the tile layer does not take the tint).
+
+**Leads.** Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
 (epr-19275.2s, mpr-19262..19265); not traced.
 
 ### Super GT 24h and Over Rev (`js/jaleco.js`)
@@ -7540,6 +7672,66 @@ Checked in headless Chrome from MAME's attract-race camera (Super GT 24h
 frame 1200, Over Rev frame 1800, the eye from the course pieces' matrix):
 the pieces stand where MAME draws them, on the right textures.
 
+**Cells** ([js/jalecocells.js](js/jalecocells.js), `files` in the game's
+cells). The tile chip is filled from CG files, which the data ROM lists in a
+zero-ended directory of pointers: sgt24h data 0xE00000, 7 files. The boot
+loads the first (0x3CF8C, `ld 0x2E00000`), and a scene loads another by its
+address through the same loader, 0x3C7B0. A file is:
+
+- +0x00, the tile list: a halfword the loader skips, a halfword block count,
+  then the blocks, each a character RAM address, a tile count and the tiles
+  (32 bytes each), copied as they are;
+- +0x04, the palette list: a count of 16-colour groups, a palette RAM address
+  and the colours;
+- +0x08, the pattern count; +0x10, the patterns' pointers;
+- +0x0C, 0 or a palette variant record, which the loader hands to 0x3C0B0
+  with variant 0: a group count, a pointer to the groups' numbers
+  (halfwords), the variant count and the colours, 16 per group, variant v's
+  `count * 32` bytes on from the first.
+
+A pattern is the width and the height (halfwords), a word, and the entries
+row by row. 0x3D370 draws one: the column and row in g0/g1, the pattern in
+g2, the tilemap (0x1000000 or 0x1004000) in g3, and in g4 a halfword ORed
+into every entry; rows go 64 entries apart, clipped to the 64 by 64 map. Of
+its 272 callers 189 pass 0x8000 (the category bit), 31 pass 0, 13 pass 0x4000
+and 4 pass 0xC000. Bit 14 moves the entry's group up by 128: the select
+screens draw the choice not taken so (LONG COURSE and 3 LAPS on MAME's
+course select), and file 1's variant record holds exactly those groups, darker.
+The explorer draws every pattern with 0x8000.
+
+The boot's file (data 0xE2C3E8) fills characters 0 to 0x19FF and groups 0 to
+51 (176 patterns: fonts, digits, HUD captions); files 1 to 5 start at
+character 0x2000 and group 64 and load over it, leaving the boot's in place;
+file 6 (data 0xEFE5F4) fills characters from 0 again. Each block is one
+128-character group, whose entries name that group, so every cell's
+characters and colours come from its own file (plus the boot's for files 1
+to 5). The cells are the files' patterns in directory order, 521 in all; CG
+n is file n over the boot's.
+
+Checked against MAME: in the attract (frames 300 to 5000) the boot's file and
+file 2 (the race HUD) are in character and palette RAM byte for byte; coined
+up (frames 700 to 5200, the course select) the boot's and file 1, but for
+colour 15 of group 64, which code stores (the blinking frame round the
+current choice). 30 of file 1's patterns sit whole in MAME's tilemaps, and
+Course select, SHORT COURSE and the lap buttons render the same as MAME's
+screen pixel for pixel. Files 3 to 6 were not reached in MAME; the loader
+reads them the same way.
+
+Over Rev has the same files and the same routines, in the code the boot
+copies to RAM 0x200000 (ROM 0x60000 on): the directory at data 0xD00000
+holds 15 files, the boot loads the first at 0x200FDC through the loader at
+0x2007E0, which applies a variant record through 0x2000E0, and 0x2013C0 is
+the draw (49 callers; it reads a source window from 0x592E50 as well, which
+the explorer does not need for whole patterns). The boot's file (data
+0xD28A18, 91 patterns) fills characters 0 to 0x1FCB and groups 0 to 63; the
+other fourteen start at character 0x2000, group 64. Both builds read the
+same data ROM, so their 1283 cells are the same. Against MAME on both boards
+(frames 700 to 5200, coined: the Mode Select) the boot's file and file 12
+are in character and palette RAM byte for byte but for colours 0 and 1, which
+the code clears afterwards (the file stores 0x8000), and Mode Select, the
+mode captions and the controls hint render the same as MAME's screen pixel
+for pixel. The other files were not reached.
+
 **Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
 (0x47700, 0x4A450, 0x4A760, 0x4B5B0, 0x4B2E0, 0x4BAD0, 0x4B870, 0x4CDB0)
 place the animated trackside: tables at 0x476D0/0x476F0 by 0x510F60 and
@@ -7552,8 +7744,7 @@ not read: stages draw at full ambient. 0x2DEC, 0x4B324 and 0xCFE2C read the
 model table besides the draw routines. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
-read at 0x6000C and 0x7EBAC. The tile chip's pictures and the sound programs were not looked
-at.
+read at 0x6000C and 0x7EBAC. The sound programs were not looked at.
 
 ### Dynamite Baseball 97 (`js/dynabb.js`)
 
@@ -7639,16 +7830,46 @@ set is the stadium's with team 0 (stadium × 12). Checked headless against
 MAME's attract frames: the Q1 outfield wall (navy, the FUJIFILM and maxell
 boards, the crowd above) and the Q2 roof and stands, as the game draws them.
 
+**Cells** ([js/dynabbcells.js](js/dynabbcells.js), `slots` in the game's
+cells). Not Jaleco's files: the tile chip is paged by picture. The table at
+data 0xBB0000 has 0x938 records of 12 bytes, {tile chain, colours, pattern},
+of which the first 2349 are pictures (the last eleven point off the ROM). A
+byte per record in the program at 0xAF680 says whose tiles it is drawn with:
+kind 0 or 2 owns its chain, kind 1 or 3 takes the nearest owner's before it
+(0xAB680 walks back; the boot, 0xAB6E0, does the same for the resident list
+at 0xAB540, and stores the owner in slot +0xC, slots 16 bytes at 0x5CA5E0).
+299 records own a chain, so there are 299 CGs.
+
+0xABF60 loads an owner when a picture of it is first drawn: it counts the
+chain's 128-character blocks, takes that many free ones from the byte map at
+0x5DDE40 (127 blocks, the slot's +0 the first), and copies each link of the
+chain, {tile count, tiles}, from the start of the next block (0xAC0E0). The
+colours are a 16-colour group per link, given to each of the link's blocks
+as the group of the same number, through the buffers 0x5B1F30 and 0x5B58B0
+(0xAC1B0). A pattern is the width and the height (halfwords) and the
+entries; the draw (0xACD80, the tilemap writes at 0xACE50) adds the slot's
+first block `<< 7` and 0x8000 to each entry, rows 64 apart. Since the block
+moves the character and the group alike, the explorer lays each CG at block
+0 and draws the entries as they are.
+
+Checked against MAME in the attract (frames 400 to 2400): every owner
+loaded (3 at first, 27 by frame 1600) has its chain in character RAM and its
+colours in palette RAM at its slot's block byte for byte, 35 cells sit whole
+in MAME's tilemaps (entries plus the block), and the five compared with the
+screen (the batter panels 1860 and 1872, 1515, 1604 and 2179) match it pixel
+for pixel. Blocks 0 to 7 (characters below 0x400) are not the allocator's;
+0xAF0BC to 0xAF208 write characters there, and were not followed.
+
 **Not done, and leads.** No player is assembled. Who fills 0x5D4CD0's
 slots each frame (the crowd and flag clocks, the scoreboard by home team)
 was not followed, nor the special set-up of `Q1_SOTO`. If the game finds
 models by name (0xC2F40), the players' lists are likely name lists: look
-for callers of 0xC2F40 and of the draws above; the players are drawn with a
+for callers of 0xC2F40 and of the stadium draws 0xA5380 and 0xA5510; the players are drawn with a
 matrix by 0xA5300 (from 0xCFB84 on in the attract). The game's set-up of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
-are test-menu colour tweaks. Motions, the tile chip's pictures and the
-sound program (`epr-19849.31`) were not looked at.
+are test-menu colour tweaks. Motions and the sound program
+(`epr-19849.31`) were not looked at.
 
 ### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
@@ -7739,8 +7960,58 @@ on the scene set-up's uploads, or find the world data it walks. Task
 routines run from 0x318C0 (the list at RAM 0x50A03C) draw the enemies and
 vehicles, through the sender at 0x14C4.
 Gunblade NY has no fighters or motions. Its enemies and vehicles move by
-script, and that script is not read. The tile chip (cells) and the music
-are not looked at.
+script, and that script is not read. Cells: see [Gunblade NY's
+cells](#gunblade-nys-cells-jscellsjs-jsstackcellsjs). The music is not
+looked at.
+
+### Gunblade NY's cells (`js/cells.js`, `js/stackcells.js`)
+
+Gunblade NY's 2D pictures are Power Sled's tilemap scripts, run as Last
+Bronx runs them (`script: { bias: 0, last: 0x8D, wideMove: true }`). The
+draw is `0xD1A80` (g0 the tilemap address, g1 the script, g2 0x8000). The
+scripts lie in two runs, [0x2A601A0, 0x2A64C52) and [0x2B4CAF0,
+0x2B4FC50), with zero bytes between some of them. A script never starts
+with a dictionary byte, so `scriptPad` skips them. Every script is named,
+by an `lda` (some as `lda 0x1A6xxxx(g0)` after `lda 0x10xxxxx, g0`) or by
+the table of {count, script} at 0x17A20. 561 cells; none is named by
+nothing.
+
+**CGs.** The boot, `0xD20E0`, loads the directory at data 0x2A00000 with
+Last Bronx's loader (`0xD2470`: 8-byte entries {offset, first char}, each a
+chain of blocks), then the 1bpp font at 0xD0E20 twice, into characters 0 to
+0x7F and 0x80 to 0xFF (`0xD2A70`, pen 1), and colours 0x15530 and 0x15550
+into groups 0 and 1. Nothing clears the chip after that. Each scene copies
+its own colours and characters over it with plain loops, so `cells.dirs`
+gives the boot and a list of scenes, each a list of copies [source,
+destination, halfwords, times] (`applyCopies` in `js/stackcells.js`):
+
+- the warning screen (`0xF44A0` calls `0xD2260`): group 0 from 0xD21D0 and
+  the font at 0xD09C0 in both halves;
+- the switch at `0xD2550`, cases 1 to 6: the six stages, groups 0x68 on
+  and characters 0x3400 on;
+- `0xF1C8C` (case 7);
+- the attract, `0xDC44` and `0x2264C` (case 8);
+- `0xF1DA8` (case 9), loaded over case 8.
+
+11 CGs.
+
+**Checked against MAME.** `gunblade` attract, the shared build, character
+RAM and palette dumped every 600 frames from 600 to 6000. The warning
+screen's CG matches both byte for byte at frame 600. Case 8 matches both at
+1200 to 3600. Case 9 matches both at 4200 to 6000, except pen 0 of group 0,
+which the Cells tab shows as transparent. The stages and case 7 were not
+loaded in the attract.
+
+**Leads.** At frame 4800 `0xD2DB4`/`0xD2DC4` fade a few groups (0xB9,
+0xD5 to 0xD7, 0xDB); the fade is not modelled. `0xD21F0` is the same as
+0xD2260 with group 0 from 0xD21B0 and the 0xD0E20 font (called at 0xEE634
+and 0xF42D0). `0xEF44C` calls the expander with 16 characters from
+0xEE3D0. No table ties a script to the scene that draws it. Every scene
+holds the boot's characters and fills the same range from 0x3400, so a
+scene's cell is covered by all nine scenes alike; the ranking (`rankCGs`
+goes the shared way when `dirs` is set) picks among them by seams, and some
+of the stage briefings in five languages open on another stage's scene.
+Cells 418 and 419 are covered by no CG in full.
 
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 
@@ -7845,7 +8116,48 @@ river bend, sandy shore, huts and jungle as MAME's picture.
 
 - Stages: the scene's script after +0x28 places the boats, tanks and
   aircraft and moves the camera; it is not read.
-- The tile chip and the music are not looked at.
+- The music is not looked at. Cells: see [Zero Gunner's
+  cells](#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
+
+### Zero Gunner's cells (`js/cells.js`, `ZEROGUN_CELLS` in `js/games.js`)
+
+The tile chip is Pilot Kids' a year sooner, and its tables are in the data
+ROM, so the three builds share one configuration. Code addresses are
+`zerogun`'s program offsets (it runs from RAM 0x500000).
+
+**Cells.** Virtua Cop's sized records (width, height, then the entries),
+drawn by `0x55940` (`0x55960`: g1 the layer, 0x1000000, 0x1004000,
+0x1002000 or 0x1006000 for 0 to 3; g4 1 sets bit 15, and `0x55950` bit 14
+too). The check menu's viewer (`0x5C10`) steps through two zero-ended
+tables in the data ROM: 15 files at 0x22F49A8 and 220 records at 0x22F49E8,
+every one drawn by the attract's code among them. They are the explorer's
+cells, in that order; none is unnamed.
+
+**CGs.** The boot, `0x54D50`, draws 128 characters of 1bpp font from data
+0x20CAFC8 at character 0, pen 1 (`0x54F80`), fills character 1 with pen 15,
+and loads files 0 and 14 with `0x558F0`. A file is {first block, block
+count, colour pointers, characters}: the characters are copied straight to
+block first (128 characters a block), and the file is queued; at the next
+vblank `0x557F0`/`0x55840` give block k the 16 colours its pointer names,
+as group first + k (and a half-bright copy at 0x1801000). Files 0 and 14
+take blocks 4 to 40; every other file starts at block 41 or 43, over nothing
+of the boot's, so the boot is mode 0 and files 1 to 13 are modes 1 to 13
+(`boot.modes`), 14 CGs. Each file's records lie in the data ROM after its
+colour pointers, up to the next file, so `screens` opens each record on
+that file.
+
+**Checked against MAME.** The shared build's attract, character RAM and
+palette dumped at frames 600, 1500 and 3000 in `zerogun`, and at 600 and
+1500 in `zerogunj` and `zeroguna`. The boot's CG matches both byte for byte
+at every frame in all three. File 7 (the attract's first scene, record
+0x5786B0) matches both at 600 and 1500, file 8 (scene 0x5771FC) at 3000.
+The other files were not loaded in the attract.
+
+**Leads.** The file words also sit in the scene records at 0x574000 to
+0x57D300 (file 7 at +0x34 of 0x5786B0, files 8 to 10 at +0x30 of
+0x5771FC, 0x577668 and 0x577C20, file 12 at 0x57D28C, also loaded by
+`0x54CBC8` and `0x54D258`); the other offsets are not read. `0x54F50`
+animates colour 15 of group 0 (from frame 150); it is not modelled.
 
 ### Sky Target (`js/texture.js`, `js/colors.js`)
 
@@ -7976,6 +8288,38 @@ slots 0..63 are max((a * (l + 1)) >> 6, r) (0x37290; the byte table at
 
 They match MAME's entry for entry, at the boot and in the first stage.
 
+**Cells.** The tile chip's pictures are [Dead or Alive's](js/cells.js)
+(`pictures`), two years early: the program's table at 0xEBFB0 holds 573
+pictures of three pointers each, tiles, colours and map, in the data ROM
+and (from picture 530) its last megabyte through XTRA_DATA at 0x64xxxxx.
+The table ends where the next word is 0. A picture is loaded through a
+"scroll group", a little record whose +0 is its first block of 128
+characters (0x78B50, which stops with SCROLL GROUP ERROR when the group's
++0xC is not the picture's tiles):
+
+- 0x78A90, the tiles: chunks of a count and that many 32-byte tiles, until
+  a count of 0, each chunk from a block of its own, from character block *
+  128 (0x1080000 + block * 0x1000).
+- 0x789F0, the colours: a chunk's 16 colours to every block its tiles take,
+  in the RAM copy of the palette at 0x51B9F0 + block * 32, then 0x2CD40
+  copies them up. (0x2CF20 is the plain copy into the same RAM, for colours
+  the code sets itself.)
+- 0x78BB0, the draw (173 callers): the map's width and height as
+  halfwords, then halfword entries, each with block << 7 added (so the group
+  is the block, as on Dead or Alive) and the caller's category bit << 15
+  and bit 14, rows 0x80 bytes apart in the layer.
+
+So each picture is a cell with its own CG, loaded from block 0. In MAME's
+attract the title (frame 900: the logo, cell 45, layer 2, block 6; the SEGA
+mark, cell 427; INSERT COIN(S), cell 58; ©SEGA1995, cell 105) and the
+DAREDEVIL backdrop with the logo (frame 3000, cell 44, 2975 tiles) draw the
+same as the explorer's from the tile chip's own characters and colours,
+pixel for pixel, and the snapshots show the same picture with colorxlat.
+Pictures 2 to 5 are the boot's notices (the FBI's WINNERS DON'T USE
+DRUGS, the EPA's RECYCLE IT, the InVision sound credit); the rest are
+the how-to-play pages in Japanese and English, the wing select, the
+pilots' names and portraits, the story text and the ranking.
+
 **Leads.**
 
 - Stages: the planes, ships and tanks are tasks the stage's script
@@ -7984,8 +8328,6 @@ They match MAME's entry for entry, at the boot and in the first stage.
   (0x2CC28F0..0x2CD9740, and 0x6429950 for record 9) and is not read; it is
   likely their placements or the flight path.
 - Music: sound.c's code is round 0x7D760.
-- Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
-  0x2CF20, the tile RAM loader 0x78A90, and the scroll strings at 0x78900.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 
@@ -8036,6 +8378,18 @@ start of luma RAM; the rest stays 0.
 **Leads.** Which models a scene draws, so that a model could open on its own
 set, is not found. A course's record (+0x24 and on) and the course loader
 0x3DEA4 are where a Stages tab would start. Lighting is not done.
+
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format), with
+the same scroll-group library (its SCROLL GROUP ERROR string is at 0x58E30;
+the tile clear 0x58DB0, the loads at 0x58D98 and 0x58E78). The table is
+program 0xB05C0, 946 {tiles, colours, map} entries; 920 to 943 are in the
+second program chip (0x100000 on), 944 and 945 have their map in the first.
+Entry 946 has no tiles: what follows is another table. MAME's `skisuprg`
+stops on DRIVE BOARD TROUBLE (code FF) at every frame, with #1881's NVRAM
+too, so the grading is thin: its CREDIT pieces (cells 670, 673, 675) match
+the tile RAM pixel for pixel at frames 1200 to 6000. The trouble screen
+itself is not one of the pictures. Getting past it (the drive board's reply,
+not found) would let the attract grade the rest.
 
 ### Wave Runner and Sega Water Ski (`js/waverunr.js`)
 
@@ -8121,6 +8475,19 @@ light. Course names are not in the program's text.
 model on sheet 1 that a course's stage draws is on that course's set (the
 first such course).
 
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format): the
+table is program 0x8E1B0, 1059 {tiles, colours, map} entries to the zeros at
+0x91354; the last 215 point at data through XTRA_DATA (0x64xxxxx is data
+0x14xxxxx; the data region repeats its chip there). The scroll-group library
+is the same as Sky Target's: 0x8D650 loads (block allocator 0x2176D0, colours
+0x2177C0, tiles 0x217940), 0x8D720 draws, adding block << 7. The 0x21xxxx
+routines run from RAM: the boot copies 128 KB of program from 0xB0000 to
+0x200000 (0xB790), so 0x2176D0 is program 0xC76D0. A MAME write tap put the
+title's tiles from 0x2CD5B30 (count 0x175) through 0x217A08. Graded against
+MAME's tile and palette RAM at frames 1200, 3000, 4200 and 5400: 48 pictures
+found on the layers (the title, the backdrops 111/112/243/244, the course
+map pieces 925-1008, the menus 699/702), all pixel for pixel.
+
 **Leads.** The rider draws at 0x20D124 and 0x20D2B4 (models 207..416) and
 0x2123D8 (models 757..862) are where an Animation tab would start; the
 cloud task 0x6190 steps its models by a clock. The two named scenes are not
@@ -8164,6 +8531,15 @@ Checked: from MAME's camera at attract frame 2000, the fourth course's grid
 puts the grandstand and its boards where MAME draws them, and three buoys
 drawn there by 0x2C40 stand at the first course's list positions (their
 model steps by a clock, so the first frame's model differs).
+
+Water Ski's cells are Wave Runner's library (its SCROLL GROUP ERROR string
+at 0x6FA40, the table read at 0x6F9A8 and 0x6FAC0): table program 0x724F0,
+867 {tiles, colours, map} entries to the zeros at 0x74D94, every pointer
+through XTRA_DATA (0x64xxxxx, data 0x14xxxxx; `xtra` window 0x1000000).
+Graded against MAME's tile and palette RAM at frames 1100, 2500 and 4000:
+the backdrops 863 (62 x 48) and 251 (64 x 48) and the INSERT COIN and CREDIT
+pieces 47, 55, 65, 68 and 74 pixel for pixel. Cells 10 to 37 are the same
+tiles under another picture's colours, which is why they half match.
 
 ### Top Skater (`js/topskatr.js`)
 
@@ -8273,6 +8649,34 @@ the park and the arena come out textured and joined up.
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
+**Cells.** Power Sled's scripts (`scripts`, read by runScript with Last
+Bronx's settings: no bias, last opcode 0x8D, wide moves), drawn by 0xA88E0
+(g0 the tilemap, g1 the script, g2 the bits ORed into each entry: 0, 0x8000
+or 3 << 14). The data ROM has four banks, 0x2400000 to 0x2700000; each opens
+with a Last Bronx CG directory, which the loader 0xA9420(dir) reads. The boot
+(0xA96A4) loads 0x2400000; the other callers load 0x2500000, 0x2600000 with
+0x2600000 + 0xA3980, and 0x2700000. The bank's scripts follow its tiles, end
+to end with zero bytes between them (`scriptPad`), so a bank is a run of
+cells and a CG (`scriptDirs`): 142, 52, 152 and 14 cells, 360 in all. A run
+ends where a script first names a character its CG does not load (0x2471B60,
+0x2558E10, 0x265AEC0, 0x271AC20); every script address the program loads
+(25, 7, 30 and 1, from `lda X, g0` + `lda Y(g0), g1` pairs, so X + Y) is in
+its run. The compiler folds the pair, so a search for the plain address
+misses most of them.
+
+**Checked.** With MAME's tile RAM at attract frames 1200, 3000 and 4500:
+cells 41, 328, 332 to 337, 339, 341, 343, 345 and 347 match pixel for pixel
+with their bank's CG. Cells 259 and 262 (run 2) are found with an entry
+delta of 0x2600 and match pixel for pixel with CG 3 (0x2700000), not their
+own. Cell 359 (21 x 48, delta 0x2D00) matches best with CG 0: 57456 pixels
+of 64512; no CG or pair of CGs does better.
+
+**Leads.** The entry deltas say the draw that puts 259, 262 and 359 up adds
+a character base, so a CG is loaded higher than its directory's first
+characters there; find the caller of 0xA88E0 that passes them. The bytes
+after each run's end look like more scripts with characters from another
+bank.
+
 ### Behind Enemy Lines (`js/bel.js`)
 
 Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own
@@ -8325,6 +8729,25 @@ palette match; the sheets differ in rows 0x100 on, x 320 to 511, which hold
 pieces of bank 0x2600000 (entry 1) streamed in by the slot loader below.
 MAME's own pictures of the attract (the mission briefing, the C.A.T. title)
 show the same objects the viewer draws.
+
+**Cells.** Daytona's formats (`records`, `cgTables`), Sega's own library
+two years on. The draw 0x76FC0(record, tilemap) reads a halfword added to
+each entry, a halfword that is 0 for byte entries, the rows and the columns
+(words), then the entries, each row 0x80 bytes on in the tilemap; 50 callers.
+The records lie end to end in data 0x800180 to 0x862D50, 393 of them, and
+every record the code names, directly or through its tables (0x205C124,
+0x2061888, 0x2062A20, 0x2062B4C, 0x2062BE0, 0x2062C10, 0x2065690), is one.
+The loader 0x645F0(pair) takes a pointer to {CG list, palette list}: the CG
+list {chunk, character address} pairs to a zero, a chunk being {count, count
+x 32 bytes}; the palette list {address, halfword count, colours}. Its 25
+callers take the pair from two tables: 0x2100000, 8 pairs (0 the boot's,
+0x21000B8, which fills most of the character RAM), and 0x2C00000, 56 pairs,
+indexed by the scene. Graded against MAME's tile and palette RAM at frames
+1200, 3000 and 4500: the backdrops 4, 5, 6, 7, 9, 23, 338, 340 and 376, the
+map pieces 156 and 167, the menu text 79, 96 and 98, and dozens of HUD pieces
+(2 x 2 and 3 x 3), all pixel for pixel with their CG. Many CGs write every
+character a picture uses, so the first CG is not always the screen's: cell 7
+needs CG 4, cell 376 CG 47.
 
 **Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
 sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
@@ -8461,10 +8884,62 @@ sky, objects' damage models (the type's other five pointers) and the
 **Leads.** The mission byte 0x52106F is also read by 0x5CAC, 0x6130,
 0x68E0, 0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C.
 The copro data ROM (epr-16980/16981), which MAME calls collision and
-height-map data, is not read. Cells: the tile palette is laid by 0x3C8F4 at boot and faded
-by 0x3C790 and 0x3D59C. Music: the sound board is Daytona's Model 1 board
+height-map data, is not read. Cells: see [Desert Tank's cells](#desert-tanks-cells-jscellsjs-jsstackcellsjs). Music: the sound board is Daytona's Model 1 board
 (epr-16985, mpr-16986/16988/16989); the program writes its latch,
 0x1C00012, in 0x30534 to 0x30718.
+
+### Desert Tank's cells (`js/cells.js`, `js/stackcells.js`)
+
+Desert Tank's 2D pictures are Daytona USA's records, at Desert Tank's
+addresses (`DESERT_CELLS` in `js/games.js`). The draw, `0xD380`, takes the
+record's address: a halfword added to every entry, a halfword 0 for byte
+entries, the row count at +4, the column count at +8, then the entries onto
+0x80-byte tilemap rows. 160 records lie end to end from data 0x2800180 to the
+boot's pair at 0x281590C; the rest sit in six short runs among the tile data
+after it ([0x28181D4, 0x28185D0), [0x281A6D4, 0x281AEB2), [0x281C1B6,
+0x281C35A), [0x281C79E, 0x281C7F2), [0x281D63A, 0x281D9C2), [0x281EBA6,
+0x281EC5A)) and in the skies' strips below. Each is a run of `records`.
+They are named by `lda` or by pointer tables (the digits 0x43210 and
+0x43238, the mission's 0x2891E10, the HUD's 0x289CF00 and 0x2893AF4); the
+sky strip tables lie on halfword steps, so the unused search steps by 2
+(`cells.pointerStep`). 216 cells; 5 (141, 142, 157, 158 and 159) are named
+by nothing.
+
+**CGs.** The loader, `0x3C6F0`, is Daytona's pair of lists (a CG list and a
+palette list, `0x3C790` the palette copy), through a table of eight pairs at
+0x2100000 (`cgTables`). It also sets pen 0 of groups 0 to 63 to 0xFD02,
+which the Cells tab leaves transparent. The boot, `0x3C7F0`, loads pair 0,
+then the pair at 0x28159A0, then copies by hand: 0x289CD40 into group 3,
+0x289CD60 into groups 8 to 10, 0x289CD80 into 0x88 to 0x8A, and 0x60
+halfwords at 0x289CDA0 into characters at 0x108A920. It never clears the
+chip after, and pairs 1 to 7 all start at character 0x2F80 and group 0x5F,
+so each later CG lands over what the boot left: `cells.stacked` gives each CG
+the boot's lists and copies, then its own pair (`js/stackcells.js`).
+
+Six more pairs head the skies. 0x520C9C points at {CG list, palette list,
+then the sky's 36x32 strips}, which `0x3D4E0` loads (its palette copy
+`0x3D59C`) and draws: two strips in mission 0's, eight in the others. A
+mission's own is the first word of its bank (0x2200000, 0x2300000 or
+0x2380000 by the mission byte 0x52106F, through 0x43204, set at 0xA52C); the
+code sets three others itself (0x281EC5A at 0xCB3C, 0x282ADBE at 0xCB68,
+0x2838B0E at 0x9C04). They are CGs 8 to 13 (`cgPairs`, named by where they
+are set), 14 CGs in all, and their strips the last six runs of `records`.
+
+The game keeps its own table of {record, CG}, 172 entries at 0x2894400; it
+gives `screens`, so a cell opens on the CG the game draws it with. (The
+second table at 0x289CF90 is of objects, not cells.)
+
+**Checked against MAME.** `desert` attract, the shared build, character RAM
+and palette dumped every 600 frames from 600 to 4800. The boot's CG (0)
+matches character RAM byte for byte at every frame, and the palette at
+every colour it writes but pen 0, until a later CG is loaded over groups
+0x5F on. CG 3, the title, matches both at frames 3000 and 4800; CG 12,
+mission 1's sky, at 1800, 2400 and 4200. The other CGs were not loaded in
+the attract.
+
+**Leads.** `0x3CB00` writes group 0x12's colours by a condition (from
+0x289CE80 or 0x289CE60; called at 0xA4A4 and 0x27280); it is not modelled.
+`0x3D5B8` draws a sky's frame 0 through the mask table at 0x289CEA0.
 
 ### Polygon decoding (`js/model.js`)
 
@@ -11055,6 +11530,57 @@ SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
 pair 18520/18521) is not read by anything here. Objects (enemies, the
 characters' motions) start at 0x1D874 and the descriptors at 0x96B54.
 
+### Virtua Cop 2's cells (`js/cells.js`, `VCOP2_CELLS` in `js/games.js`)
+
+Virtua Cop 2 draws Virtua Cop's records (`sized`): the width and the height as
+halfwords, then halfword entries onto 0x80-byte tilemap rows. The draw is
+`0x7928` (`0x7970` skips zero entries): the record in g0, the tilemap in g9,
+and in g1 the bits it ORs into every entry, not adds (`cells.orBase`). Most
+callers pass 0x8000; 0x2B805F8, 0x2B80608 and 0x2B80390 get 0xC000, and
+0x2B89750, 0x2B8B644, 0x2B89C70, 0x2B8B6C0, 0x2B899E0, 0x2B8B746 and
+0x2B8C24A get 0 (`cells.bases`). The records lie end to end in data
+[0x2B80000, 0x2B8E67E) and in the two gaps between the three stage skies,
+[0x2B9047E, 0x2B90E78) and [0x2B92D78, 0x2B93266): 314 cells, 37 of them
+named by no aligned word in the program or data ROM. The skies themselves
+(`0x8228[stage]`) are streamed into layer 0x1006000 by `0x7EAC` and `0x80A8`
+as Virtua Cop's are, and are not cells.
+
+There are no CG lists: the boot, `0x7510`, fills the chip, and the game
+fills parts of it again (`cells.boot`):
+
+- characters, a halfword at a time with the bytes swapped (`0x7604`): the
+  font, 128 characters from 0x60AB4 into 0 (copied straight, by `0x7E10`, so
+  the list's fourth element `straight`); 0x2400000 into 0x80..0x67F
+  (`0x7554`); the middle fill into 0x680..0x327F, 0x240C000 for the game
+  (`0x8260`, called again after the title) or 0x2464000 for the title screens
+  (`0x82D8`); and the stage's (`0x8314`, `0x8394[0x502010]`) into
+  0x3280..0x3FFF, with one more list over 0x3B80 on for stage 2;
+- colours, a count and sixteen colours written count groups on (`0x767C`
+  to its end, `0x76C0` one run): 0x7E50's at 0x61AB4 into groups 0 and 0x80,
+  four colours at 0x6068C over 0x80, 0x2B95070 into 1..0xC and again into
+  0x81..0xFF, runs from the program over 0x82..0x88; the middle fill's
+  (0x2B951A2 into 0xD..0x64 and three runs over 0x41, 0xCD and 0xB4 for the
+  game; 0x2B95626 for the title); the stage's into 0x65..0x7F (and 0x2B95A44
+  into 0x77 on for stage 2). A count of 0 here repeats its group to the end
+  of the fill, or once in a one-run list (`boot.zeroFills`).
+
+So a CG is the boot with one of the two middle fills and one of the four
+stage fills (stages 0, 2, 4 and 5 share one; 1; 3 and 6; 2 adds its own
+list): eight CGs (`boot.modes`). The colours go through colorxlat.
+
+**Checked against MAME.** `vcop2` attract, the shared build, character RAM and
+palette dumped at frames 600 to 4800 (every 600) and spot frames up to 15000:
+CG 0 (the game's fill, stage 0's) matches character RAM byte for byte at every
+one, and the palette at every colour the profile writes but groups 9 and 0xB,
+whose colours the game turns while the attract runs (a gradient that moves
+from frame to frame). The title fill, `0x82D8`, is not entered in the attract
+(its callers are `0x2B6C`, when 0x502100 is 0, `0x4ED4` and `0x3D528`), so
+CGs 4 to 7 are checked only by drawing the cells they rank first for, which
+come out as whole pictures.
+
+**Leads.** Groups 9 and 0xB's turning colours; the stage fills of stages
+other than 0 were not met in MAME's attract.
+
 ### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`, `js/vstriker.js`)
 
 Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
@@ -11139,6 +11665,53 @@ the slot's +0x268..+0x278), and 0x648C8 is the generic draw by
 `0x522910[g0*16]` (the model table's RAM copy, made by 0xA940). The
 attract's opening flyover (city and stadium) is a separate scene list,
 0xB330 by step `0x282E5C0[0x52C9B0]`; its stadium draw is 0xB670.
+
+**Cells.** The tile chip is Virtua Cop's (`sized` + `boot` in
+`js/cells.js`, with Virtual On's `modes`). Every address is the same in
+both builds, whose data ROMs differ only from 0x282DE00 on. The routines
+below are Revision A's; the first release's are 0x80 further up.
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x31C0 | 0x3240 | draws a record at g1: u16 width, u16 height, halfword entries, g2 added (Virtua Cop's 0x55A0, byte for byte) |
+| 0x3230 | 0x32B0 | the same, with the record's bottom right corner at g1 |
+| 0x2960 | 0x29E0 | the fill, g0 the mode: 0x3F80 characters to 0x80.. from 0x2000000, 0x2080000 or 0x2100000, bytes swapped, then the mode's palette runs |
+| 0x2F10 | 0x2F90 | the 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1 (boot, 0x28D4) |
+
+Each mode's palette runs, {count, 16 colours}, fill groups 1 on until 0x7F
+groups are written: mode 0's from 0x2800170, mode 1's from 0x280A360, mode
+2's from 0x2812670. Mode 0 also copies 38 groups from 0x2825830 to group
+0xB4. The records lie end to end in three runs, each straight after its
+mode's palette list: 0x28008E0..0x280A360 (337 records, mode 0),
+0x280A73A..0x2812670 (258, mode 1) and 0x28129F0..0x28252B0 (168, mode 2).
+Every one of the 61 records a draw names by `lda`, and every one of the 18
+tables of records the draws index, lands on a record start. Almost every
+draw adds 0x8000; four records are drawn with 0 (0x2801650, 0x2801E60,
+0x280AF80) or 0xC000 (0x2824E40).
+
+Mode 2 is the boot's (0x13D4), mode 1 the team select's (0x106E0, 0x10D74),
+mode 0 the match's and the attract's. MAME's write taps over the attract
+see only the fill (0x2AA4) and the font (0x2F8C) writing characters.
+
+Two pictures bring their own characters, over 0x180 on:
+- 0x6C370 (the Japanese build only) copies 0x26C characters from 0x2891000
+  and the colours at 0x2825D90 to groups 3-5. Its record, 0x28252B0's
+  last, is cell 762, in its own CG 3.
+- 0x6C2E0 copies 0x80 characters from 0x2890000 (0x2D00, 0x2DE4) for cell
+  761, but its colours, group 0x83, come from a fade in RAM (0x514550,
+  built from the table at 0x2825DB0). noclip does not build it, so the cell
+  is black.
+
+**Checked against MAME.** `vstriker` was dumped at attract frames 300 to
+3000. Characters 0x80-0x3FFF and the palette match mode 0 at frames
+300-1200 and mode 2 at 1500-3000 byte for byte. Each cell of CGs 0 and 2,
+drawn from MAME's tile RAM with the cell's own record, is pixel-exact
+against `renderCell`. Mode 1 is not shown in the attract.
+
+**Leads.** 0x2BDC fades group 0x44 from 0x2825CF0 in RAM, and 0xA708 writes
+the face palette. 0x6A778 and its neighbours write tilemap 0x1004000
+through routines not followed. Draws whose record comes from a register
+(0x6A328, 0x6AD3C) were not mapped; the runs hold every record anyway.
 
 ## Animation
 

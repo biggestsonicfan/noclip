@@ -25,21 +25,21 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
-*Virtua Cop 2* has its models and its stages — see [Virtua Cop 2](#virtua-cop-2).
-*Virtua Striker* has its models and its stadium — see [Virtua Striker](#virtua-striker).
-AM3's *Manx TT Superbike* has its models and its courses — see [Manx TT Superbike](#manx-tt-superbike).
-Sega's *INDY 500* has its models and its courses — see [INDY 500](#indy-500).
-*Sega Touring Car Championship* has its models and its courses — see [Sega Touring Car Championship](#sega-touring-car-championship).
-Jaleco's *Super GT 24h* and *Over Rev* have their models and courses — see
+*Virtua Cop 2* has its models, its stages and its cells — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Striker* has its models, its stadium and its cells — see [Virtua Striker](#virtua-striker).
+AM3's *Manx TT Superbike* has its models, its courses and its cells — see [Manx TT Superbike](#manx-tt-superbike).
+Sega's *INDY 500* has its models, its courses and its cells — see [INDY 500](#indy-500).
+*Sega Touring Car Championship* has its models, its courses and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
+Jaleco's *Super GT 24h* and *Over Rev* have their models, courses and cells — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
-Baseball 97* has its models and ballparks — see [Dynamite Baseball 97](#dynamite-baseball-97).
-*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
-Psikyo's *Zero Gunner* has its models and stages — see [Zero Gunner](#zero-gunner).
-*Sky Target* has its models and stages — see [Sky Target](#sky-target).
-Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
-*Wave Runner* and *Sega Water Ski* have their models and courses — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models and its three courses — see [Top Skater](#top-skater).
-*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
+Baseball 97* has its models, ballparks and cells — see [Dynamite Baseball 97](#dynamite-baseball-97).
+*Gunblade NY* has its models and its cells — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models, stages and cells — see [Zero Gunner](#zero-gunner).
+*Sky Target* has its models, stages and cells — see [Sky Target](#sky-target).
+Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
+*Wave Runner* and *Sega Water Ski* have their models, courses and cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Top Skater* has its models, its three courses and its cells — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -673,7 +673,9 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids has the Cells tab but not the music.
+Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank, Gunblade NY, Zero
+Gunner, Super GT 24h, Over Rev and Dynamite Baseball 97 have the Cells tab
+but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1211,6 +1213,12 @@ tab describes them. From the board's own camera at attract frame 3000 (scene
 rock walls and water. The sky, the bikes and anything else the race places
 are not there.
 
+The **Cells** tab has the game's 882 pictures, each with its own tiles and
+colours. They include the attract's tips in Japanese and English, the rider
+plates, the select screens, the skies, the course maps and the HUD. Every
+picture MAME's attract mode loads has the same characters there, byte for
+byte, and the same colours, except where the game was fading them.
+
 There are no riders and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
 
@@ -1236,8 +1244,17 @@ seen from the rail camera where the game brings that segment up. A model that
 only one stage draws opens on that stage's set in the Models tab.
 
 The enemies, the cars and the props you can shoot, the sky behind the scenery
-and the stage's light are not there yet. There are no characters, motions,
-cells or music yet. See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs-jsvcop2js).
+and the stage's light are not there yet.
+
+The **Cells** tab has its 314 pictures: the title cards, the stage maps and
+briefings, the HUD, the rankings and the font. The game fills the tile chip
+at boot and again for the title screens and each stage, so there are eight
+CGs, one per fill; the game's fill with stage 0's matches MAME's tile chip in
+the attract.
+
+There are no characters, no motions and no music yet.
+See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs-jsvcop2js) and
+[Virtua Cop 2's cells](TECHNICAL.md#virtua-cop-2s-cells-jscellsjs-vcop2_cells-in-jsgamesjs).
 
 ## Virtua Striker
 
@@ -1261,8 +1278,24 @@ The **Stages** tab has the game's one ground, *The stadium*: the pitch,
 the four stands with their advertising boards and the two goals, placed
 the way the match draw places them. It opens on the attract match's
 camera. The flags in the crowd, the floodlight towers and the sky are not
-there (they aren't drawn from the model table). There are no motions,
-cells or music yet.
+there (they aren't drawn from the model table).
+
+The **Cells** tab has the game's 763 tile-chip pictures, in four CGs:
+
+- CG 0 is the match's and the attract's: the ranking, the HUD, the flags
+  and team bars, CHALLENGER COMES;
+- CG 1 is the team select's: the select screen, the tournament roster and
+  name entry;
+- CG 2 is the boot's: the title, the VIRTUA STRIKER logo, the FBI and 2002
+  screens, the credits and SPECIAL MATCH;
+- CG 3 is a picture only the Japanese build shows.
+
+The characters and colours of CGs 0 and 2 match MAME's byte for byte in
+the attract, and every cell of them is pixel-exact against the same cell
+drawn from MAME's tile RAM. One cell (761) takes its colours from a fade the
+game runs in RAM, and shows black.
+
+There are no motions and no music yet.
 
 ## Manx TT Superbike
 
@@ -1286,7 +1319,15 @@ the same lists on the same courses. The bikes, riders and trackside objects
 the race adds are not in it, and Laxey Coast keeps the T.T. Course's colour
 rows (the race lays its own over them).
 
-There is no Cells tab and no motions yet. See
+The **Cells** tab has the game's 2D art, 376 pictures in 105 files: the DX
+cabinet's DANGER motion-slider screen, the Isle of Man thanks, the course
+and transmission select, the rider pictures, the counters and the
+messages. They are AM3's "CGM 1.0" files, as Sega Rally's, each a CG and each
+picture a cell with its own name (danger, iom16, CREDIT...). 38 files, 85
+pictures, are named nowhere in the program and are marked unused. The DANGER
+screen and the attract's messages match MAME's pixel for pixel.
+
+There are no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
 
 ## INDY 500
@@ -1309,7 +1350,17 @@ Motor Speedway and Highland Raceway, each its full-detail segments from the
 course record, on the course's own textures and colours. Both cabinets' builds
 read the same lists. The cars and what the race adds are not in it, nor a sky.
 
-There is no Cells tab and no motions yet. See
+The **Cells** tab has the 2D: 501 cells and 74 CGs in the Twin (475 and 68
+in the Deluxe), out of two banks of tables, one in the data ROM and one in
+XTRA (in the Deluxe, in its program ROM). They include the title logo, the FBI
+screen, the select screens, the HUD, the rankings, the messages and the
+credits. Each CG is loaded as the game loads it, and its characters and
+colours match MAME's tile chip byte for byte in both sets, in the attract mode
+and the screens around it. A cell is drawn with the CG the program's calls
+name for it; any other cell takes the CG beside it in the tables whose tiles
+join up best, and a few small ones still come out wrong.
+
+There are no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Sega Touring Car Championship
@@ -1334,7 +1385,15 @@ record. The attract mode runs the first three, as MAME shows. The cars, the
 trackside scenes the race adds by segment and the sky are not in it.
 
 The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
-There is no Cells tab and no motions yet. See
+The **Cells** tab has the game's 2D art, 924 pictures in 107 files: ENTER
+YOUR NAME, the SEGA logo, the course and car select pieces, the round
+titles and course maps, the counters and the attract's messages. They are
+AM3's "CGM 1.0" files, as Sega Rally's, each a CG and each picture a cell
+with its own name (NE_PRE, SEGA_only, insert_coins...). 16 files, 173
+pictures, are named nowhere in the program and are marked unused. The
+attract's messages match MAME's pixel for pixel.
+
+There are no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
 ## Super GT 24h
@@ -1360,6 +1419,14 @@ on the texture set the game loads for it. From the attract race's camera
 the start straight looks as MAME draws it: grandstands, boards, signs, light
 towers and hills. The sky, the animated trackside (flags, moving pieces, the
 Check Point gantry), the cars and the material table are not there yet.
+
+The **Cells** tab has the game's 521 tile-chip pictures from its seven CG
+files: the fonts, the digits, the captions (INSERT COIN, GAME OVER, FINAL
+LAP, ROLLING START), the course, car and gear select screens with their
+buttons, the rev counters and the results. A CG is a file loaded over the
+boot's, as the game loads them, and each cell opens on its own file's.
+The pictures checked against MAME's screen (Course select, the lap and
+course buttons) are the same pixel for pixel.
 
 There are no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
@@ -1389,6 +1456,15 @@ course's grids of world-space pieces, on the texture set and luma the game
 loads for it. From the attract race's camera Tsukuba looks as MAME draws it:
 road, kerbs, barriers, boards and trees. The sky, the course's moving and
 extra objects, the cars and the material table are not there yet.
+
+The **Cells** tab has the game's 1283 tile-chip pictures from its fifteen
+CG files, the same in both builds: the fonts, the coin and start captions,
+the OverREV logo's pieces, the select screens' panels and buttons, the
+race HUD (digits, rev counter, turn arrows, the 3-2-1-GO countdown), the
+results' cartoon characters and full-screen backdrops. As on Super GT
+24h, a CG is a file loaded over the boot's and each cell opens on its own.
+The pictures checked against MAME's Mode Select screen on both boards are
+the same pixel for pixel.
 
 There are no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
@@ -1420,6 +1496,14 @@ Q2 a dome seen from inside, Q3 an open park with its clock tower and the
 city at night. Crowds, flags and scoreboards stand on their first frame,
 and the stands at their most detailed.
 
+The **Cells** tab has the game's 2349 tile-chip pictures: the title and its
+captions, the skies and the city at night, the scoreboard digits and
+lettering, the batting and pitching panels, the team and mode menus and the
+messages (CONTINUE?, INSERT COIN(S), the challenger's). The game loads a
+picture's tiles only when it draws it, wherever it finds room; the tab lays
+each set of tiles from the start, which shows the same picture. Those
+checked against MAME's attract are the same pixel for pixel.
+
 There are no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
 
@@ -1439,10 +1523,18 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. The
+The **Cells** tab has its 561 pictures (the fonts, the logos, the HUD, the
+results and rankings, the mission briefings in five languages, the staff
+roll) and 11 CGs: the boot's, and each
+scene's colours and characters copied over it. The warning screen, the
+attract and the scene after it match MAME's tile chip. Some briefings open
+on another stage's CG, as no table says which stage draws them.
+
+There is no Stages tab, no characters and no motions yet. The
 city is not sent as objects by the game's program: its coprocessor program
 draws it, which the explorer does not run for this game. See
-[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs) and
+[Gunblade NY's cells](TECHNICAL.md#gunblade-nys-cells-jscellsjs-jsstackcellsjs).
 
 ## Zero Gunner
 
@@ -1474,9 +1566,17 @@ stage was put beside MAME's attract at frame 3000: the river, the sandy
 shore, the huts and the jungle match. The light is an estimate that lights
 that stage as MAME does; how the game turns it is not worked out.
 
+The **Cells** tab has its 220 pictures, in all three builds: the title, the
+course select, the mission maps, the briefings, the HUD, the results and
+rankings, and the check menu's test patterns. A CG is the boot's or one of
+the thirteen files the game loads over it, and each picture opens on the
+file it was laid out with. The boot's and the two the attract loads match
+MAME's tile chip.
+
 Not there yet: the boats, tanks and aircraft the stage's script sends, the
-stage's own camera path, and cells, characters and motions. See
-[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+stage's own camera path, and characters and motions. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs) and
+[Zero Gunner's cells](TECHNICAL.md#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
 
 ## Sky Target
 
@@ -1507,9 +1607,16 @@ share a texture bank and palette, and differ in their colour tables.
 The textures, palette, luma and colour tables match MAME's byte for byte at
 the title and in the first stage.
 
+The **Cells** tab has the game's 573 tile-chip pictures, each with its own
+tiles and colours: the title logo, the SEGA mark, the boot's notices (the
+FBI's and the EPA's, the InVision sound credit), the how-to-play pages in
+Japanese and English, the wing select, the pilots, the story pages and the
+ranking. The title's and the DAREDEVIL backdrop's match MAME's tile chip
+pixel for pixel.
+
 Not there yet: the planes, ships and tanks the stage's script sends, the
-far ring of ground past 3072, the snowfall and lightning, and cells,
-characters and motions. See
+far ring of ground past 3072, the snowfall and lightning, and characters
+and motions. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
 
 ## Ski Super G
@@ -1528,7 +1635,12 @@ course select look right under set 0, the snow, trees and banners under set
 in the attract byte for byte; the courses' sets are read from their records
 and were not reached in MAME.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 946 2D pictures (the HUD, the course maps,
+the menus, the name entry), each with its own colours. MAME stops on DRIVE
+BOARD TROUBLE, where only the CREDIT pieces show; those match its tile RAM
+pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
 
 ## Wave Runner
@@ -1559,7 +1671,11 @@ lists of them, which nothing was seen to read), the riders, the live
 standings board, the sky. The light is not read; faces are at full
 ambient.
 
-There are no cells, no characters and no music yet. See
+The **Cells** tab has the game's 1059 2D pictures (the title, the HUD, the
+course maps, the menus), each with its own colours. The title screen's
+pictures match MAME's tile RAM pixel for pixel.
+
+There are no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Sega Water Ski
@@ -1589,7 +1705,11 @@ boards and the shore stand where MAME draws them. Not there: the sky and
 clouds, the skiers and boats that move, the attract's own object lists. The
 light is not read; faces are at full ambient.
 
-There are no cells, no characters and no music yet. See
+The **Cells** tab has the game's 867 2D pictures, each with its own colours.
+The attract's backdrops and its INSERT COIN pieces match MAME's tile RAM
+pixel for pixel.
+
+There are no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Top Skater
@@ -1621,7 +1741,14 @@ course's light. Animated props show their first frame. The people, markers
 and other pieces the course spawns as the run goes on, and the skaters, are
 not in it.
 
-There are no cells, no characters and no music yet. See
+The **Cells** tab has the game's 360 2D pictures (the title, the menus, the
+HUD, the results) and the four CGs the game loads its tile chip from. A
+picture opens with the CG of the bank it is stored in. Most of the attract's
+match MAME's tile RAM pixel for pixel with that CG; two (259 and 262) are
+drawn with the last CG instead, so pick CG 3 (0x2700000) for them in the
+second picker.
+
+There are no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Behind Enemy Lines
@@ -1644,10 +1771,16 @@ sheets as they are first set up.
 Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frame 1500.
 
+The **Cells** tab has the game's 393 2D pictures (the briefings' maps and
+screens, the HUD, the menus) and the 64 CGs that load them. A picture often
+fits several CGs; pick the one the screen loads in the second picker. The
+attract's backdrops and HUD pieces match MAME's tile RAM pixel for pixel
+with their CG.
+
 There is no Stages tab yet: the attract draws its scenes as whole models
 (the jungle road is `o_intro_hummer`), and where a mission's scenery is
-placed is not found yet. There are no cells, no characters and no music
-yet. See [TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
+placed is not found yet. There are no characters and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Desert Tank
 
@@ -1685,8 +1818,16 @@ the same buildings, fences, pylons and cables, crates and rock walls. The
 tanks and other vehicles that move are not there: the object lists do not
 place them. The sky is not drawn either.
 
-There are no cells and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs-jsdesertjs).
+The **Cells** tab has its 216 pictures: the title, the mission briefings,
+the HUD, the rankings and the skies' strips. The game loads each
+picture's characters and colours over the boot's, so a CG here is the boot's
+with its own on top, and the cells the game's own table names open on the
+CG it gives them. The boot's, the title's and mission 1's sky match MAME's tile chip in the
+attract.
+
+There is no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs-jsdesertjs) and [Desert Tank's
+cells](TECHNICAL.md#desert-tanks-cells-jscellsjs-jsstackcellsjs).
 
 ## Running it
 
