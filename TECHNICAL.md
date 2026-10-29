@@ -35,6 +35,9 @@ js/
   sound/
     sound.js     the music switch: reads the sound ROMs, boots the board
     worklet.js   runs the board on the audio thread
+    dsb.js       the Digital Sound Boards' song tables
+    dsbworklet.js  plays their MPEG on the audio thread
+    mpeg.js      MPEG-1 Layer II, MAME's decoder ported
     board.wasm   m2-hle2's sound boards, Model 2 and Model 1, built by
                  tools/sound/build.sh
 tools/sound/
@@ -13226,3 +13229,47 @@ and plays nothing until a song is picked.
 Air Walkers has no music yet. Its sound program (`10-18_ic30_30f2.30`) is Data
 East's, not Sega's driver, and in m2-hle2's attract the i960 sent it only a
 reset (`FF`); its command set is not read.
+
+### The Digital Sound Boards: Touring Car and Top Skater
+
+Sega Touring Car Championship and Top Skater keep their music off the Model
+2 sound board. It is on a Digital Sound Board beside it, a CPU and an MPEG
+decoder playing MPEG-1 Layer II (128 kbit/s, 32 kHz, stereo) out of its own
+ROMs. The i960 sends it commands down the same UART. Its program does nothing
+with a song but look it up and tell the decoder which bytes to play and what
+comes next. So js/sound/dsb.js reads the same table, and
+js/sound/dsbworklet.js plays the bytes with MAME's decoder
+(src/devices/sound/mpeg_audio.cpp, Layer II only, ported as js/sound/mpeg.js).
+On Touring Car's first song it gives ffmpeg's samples to within rounding. The
+volume and pan are what MAME's `dsbz80` and `dsb2` apply. The board's own
+CPU is not run.
+
+- **Touring Car** (`dsbz80`, a Z80, epr-19275.2s; 8 MB of MPEG). The i960
+  sends `AF 01 50` at boot (the master volume) and `AF 6F nn` for song `nn`
+  (0 stops). The program copies ROM 0x1000..0x6FFF to RAM 0xA000, and the copy
+  starts with the songs' pointers (0xA006), the segments' table (0xA028, two
+  24-bit big-endian addresses each), the song count (18, so songs 1 to 17)
+  and the default master volume. A song is two zero bytes, a volume byte, a
+  pan, then segment numbers, ended by `F0` (stop after the last) or `F1` and
+  the RAM address to go back to. Routine 0x5CA scales the volume byte by the
+  master volume into the decoder's attenuation (port E8). Pan (E9) 1 plays the
+  left channel on both speakers and 2 the right: songs 3/4, 9/10 and 14/15
+  are pairs sharing one stream, a song a channel. Song 16 is nine segments,
+  five of them the same one; 17 (GameOver) plays once. The names are the i960's
+  debug list of sound commands, pointers at 0xFA80: ... Volume, FadeOut, Stop
+  (`AF 6F 00`), then SoHigh to GameOver, 17 of them, in the board's order. Which
+  course or music select plays which song is not read yet.
+- **Top Skater** (`dsb2`, a 68000, mpr-19760.2s word-swapped; 16 MB). The
+  i960 sends `AE 10 nn`. 0x8000 points at the songs' pointers and 0x800A is
+  one more than their count (12 songs). A song is a flags word (bit 15: it
+  loops), its start and end, a fade word, a volume a channel (all 0x80), and
+  if it loops, where from. The program starts the song, then 8 ms later
+  writes the loop start as the decoder's start address, which the decoder
+  goes back to at the end. The three EASY songs start one track at three
+  places and loop to its start, and the three HARD songs do the same with
+  another. The sound test names them through pointers at 0xB1300: OFFCODE,
+  then the board's songs in order. The attract sends song 4, ADV_BGM. MAME's
+  `dsb2` plays every song at full volume, and so does the page.
+
+Neither game has stages, so the music fields are on the Models tab, as Power
+Sled's are.

@@ -6929,6 +6929,24 @@ const stcc = {
      * from group 9 in its character RAM with their colours, byte for byte.
      */
     cells: { cgm: { data: [[0, 0x800000], [0xc00000, 0xd00000]] }, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    /*
+     * The music is on the Digital Sound Board, a Z80 and 8 MB of MPEG
+     * (js/sound/dsb.js), sent AF 6F and the song number. The i960's debug
+     * list of sound commands (pointers at 0xFA80) names them: Volume,
+     * FadeOut and Stop (AF 6F 00), then the board's 17 songs in its order,
+     * SoHigh to GameOver. Three pairs share a stream, one song a channel.
+     */
+    sound: {
+        board: 'dsbz80',
+        program: ['epr-19275.2s', 0xee809d3f],
+        samples: [['mpr-19262.57s', 0x922aed7a], ['mpr-19263.58s', 0xa256f4cd],
+            ['mpr-19264.59s', 0xb6c51d0f], ['mpr-19265.60s', 0x7d98700a]],
+        music: {
+            list: { songs: true, status: 0xaf, middle: 0x6f, count: 17, names: 0xfb28 },
+            own: 'none',
+            hint: 'The Digital Sound Board\'s songs, by the names the program\'s debug list of sound commands gives them',
+        },
+    },
     features: { stages: false, characters: false, motions: false },
 };
 
@@ -7878,6 +7896,25 @@ const topskatr = {
         charBytes: 0x80000,
         programAt0: true,
         colorxlat: true,
+    },
+    /*
+     * The music is on the Digital Sound Board 2, a 68000 and 16 MB of MPEG
+     * (js/sound/dsb.js), sent AE 10 and the song number; the attract plays
+     * song 4. The i960's sound test names them, its pointers at 0xB1300:
+     * OFFCODE (0), then the board's 12 songs in its order. The three EASY
+     * and three HARD songs are one track each, started a way in.
+     */
+    sound: {
+        board: 'dsb2',
+        program: ['mpr-19760.2s', 0x2e41ca15],
+        samples: [['mpr-19747.18s', 0x6e895aaa], ['mpr-19748.20s', 0xfcd74de3],
+            ['mpr-19749.22s', 0x842ca1eb], ['mpr-19750.24s', 0xcd95d0bf]],
+        sampleChip: 0x400000,
+        music: {
+            list: { songs: true, status: 0xae, middle: 0x10, count: 12, names: 0xb1304 },
+            own: 'none',
+            hint: 'The Digital Sound Board\'s songs, by the names the program\'s sound test gives them',
+        },
     },
     features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };

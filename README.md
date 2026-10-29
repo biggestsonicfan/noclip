@@ -29,7 +29,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Striker* has its models and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models and its cells — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models and its cells — see [INDY 500](#indy-500).
-*Sega Touring Car Championship* has its models and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
+*Sega Touring Car Championship* has its models, its cells and its music — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
@@ -38,7 +38,7 @@ Psikyo's *Zero Gunner* has its models and its cells — see [Zero Gunner](#zero-
 *Sky Target* has its models and its cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models and its cells — see [Top Skater](#top-skater).
+*Top Skater* has its models, its cells and its music — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
@@ -1345,6 +1345,12 @@ with its own name (NE_PRE, SEGA_only, insert_coins...). 16 files, 173
 pictures, are named nowhere in the program and are marked unused. The
 attract's messages match MAME's pixel for pixel.
 
+**music**, on the Models tab, plays the game's 17 songs, by the names the
+program's debug list gives them (SoHigh, DontDropMe, SegaBGM1...). They are
+MPEG audio on the game's Digital Sound Board, and the page plays them the way
+that board's program does. See [The Digital Sound
+Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
+
 There is no Stages tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
@@ -1610,7 +1616,12 @@ match MAME's tile RAM pixel for pixel with that CG; two (259 and 262) are
 drawn with the last CG instead, so pick CG 3 (0x2700000) for them in the
 second picker.
 
-There is no Stages tab, no characters and no music yet. See
+**music**, on the Models tab, plays the game's 12 songs, by the names its
+sound test gives them (EASY_BGM_A, ADV_BGM, HIDE_BGM...), from its Digital
+Sound Board's MPEG ROMs. See [The Digital Sound
+Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
+
+There is no Stages tab and no characters yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Behind Enemy Lines
