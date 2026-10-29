@@ -201,6 +201,11 @@ export function buildLumaram(rom) {
         const from = o.source === 'maincpu' ? rom.maincpu : rom.mainData;
         for (let i = 0; i < o.bytes; i++) luma[i * 2] = from[o.data + i];
     }
+    /* Sky Target's texture copier runs past the last sheet into the first
+     * entries (js/texture.js), after the table is in: the low bytes of the
+     * halfwords at data `spill.data`. */
+    const spill = rom.game.colors.luma.spill;
+    for (let i = 0; spill && i < spill.entries; i++) luma[i * 2] = rom.mainData[spill.data + i * 2];
     return luma;
 }
 
@@ -380,6 +385,166 @@ function buildPltkidsColorxlat(rom, colorSet) {
     table(0, 1);
     const scene = P.scenes[colorSet];
     if (scene) table(scene, 11);
+    return out;
+}
+
+/* ---- Zero Gunner ---- */
+
+/*
+ * Zero Gunner's colorxlat, the same in every scene: Pilot Kids' scheme with
+ * another ramp (0x489E0). Row r of all three channels is, for slot l of
+ * 0..63, ((6r + r / 6 + 64) * (l + 1)) >> 6, row 0 zero, floored at r (the
+ * byte table at 0x489C0); slots 64 on keep slot 63's. Then 0x48AD0 lays the
+ * program's table over the first 64 slots of odd rows 1, 3, ...: `count`
+ * (0x1A10) rows of 64 {r, g, b} bytes from `table` (0x1050). MAME's matches
+ * it entry for entry, from the boot (frame 51) to the attract's end.
+ */
+function buildZerogunColorxlat(rom) {
+    const Z = rom.game.colors.zerogun;
+    const md = rom.maincpu;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = Math.max((a * (Math.min(luma, 63) + 1)) >> 6, row);
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    let at = Z.table;
+    for (let k = 0; k < md[Z.count] && 2 * k + 1 < 32; k++) {
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 2 * k + 1, luma, md[at++]);
+        }
+    }
+    return out;
+}
+
+/* ---- Sky Target ---- */
+
+/*
+ * Sky Target's colorxlat, all three channels from one RAM staging (0x51FA10,
+ * 0x520A10, 0x521A10; 0x2D350 copies it up every frame). Row r is
+ * a = 6r + r / 6 + 64 (row 0 zero) in slots 64 on (0x37120), and in slots
+ * 0..63 max((a * (l + 1)) >> 6, r) (0x37290, the byte table at 0x37100).
+ * Then 0x37390 lays 14 tables of 64 {r, g, b} bytes over odd rows 1..27,
+ * from the list a stage record's +4 points at (`records`, 24 bytes each), or
+ * the boot's list (`bootList`) for the boot set. Each byte is scaled by the
+ * single float at 0xE6AE8 the brightness setting picks (1.1 on fresh NVRAM,
+ * `gain`), truncated and held at 255; stages 5 and 8 take 1.0 (`flat`).
+ * A stage's 0x374D0 lays a row 21 from the list at record +0xC, and 0x37590
+ * then the four rows of 0xC0 bytes at `fixed` (0x640F85C) over rows 19, 21,
+ * 23 and 25, so record +0xC never shows. The 0x64 addresses are the data
+ * ROM's last megabyte through the XTRA_DATA mirror. MAME's matches entry for
+ * entry at the title and in the first stage.
+ */
+function buildSkytargtColorxlat(rom, colorSet) {
+    const S = rom.game.colors.skytargt;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const cv = rom.mainCpuView;
+    const md = rom.mainData;
+    const at = (a) => (a >= 0x6000000 ? 0x1000000 + (a & 0xfffff) : a - 0x2000000);
+    const u32 = (a) => md[a] | (md[a + 1] << 8) | (md[a + 2] << 16) | (md[a + 3] * 0x1000000);
+    for (let row = 0; row < 32; row++) {
+        const a = row ? 6 * row + Math.trunc(row / 6) + 64 : 0;
+        for (let luma = 0; luma < CXLAT_ROW / 2; luma++) {
+            const v = luma < 64 ? Math.max((a * (luma + 1)) >> 6, row) : a;
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v);
+        }
+    }
+    const boot = colorSet < 0 || colorSet >= S.stages;
+    const rec = S.records + (boot ? 0 : colorSet) * S.stride;
+    const gain = !boot && S.flat.includes(colorSet) ? 1 : S.gain;
+    const list = at(boot ? S.bootList : cv.getUint32(rec + 4, true));
+    for (let k = 0; k < 14; k++) {
+        const t = at(u32(list + k * 4));
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 1 + 2 * k, luma, Math.min(Math.trunc(md[t + luma * 3 + ch] * gain), 255));
+        }
+    }
+    if (boot) return out;
+    for (let k = 0; k < 4; k++) {
+        const t = at(S.fixed) + k * 0xc0;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, 19 + 2 * k, luma, md[t + luma * 3 + ch]);
+        }
+    }
+    return out;
+}
+
+/* ---- Gunblade NY ---- */
+
+/*
+ * Gunblade NY's colorxlat, all three channels alike. Luma 64..127 of row r
+ * hold (215r / 31) + 40, row 0 zero (the boot's 0x16020). Luma 0..63 of the
+ * even rows and row 31 are what 0x16800 lays over them at the attract's start
+ * in curve 7, the one it takes while the byte at 0x54C0EE is 0, as it is on
+ * fresh NVRAM (0x6BAA8): v = r * a / 31, a running from 64 by 6.4 - l / 10 a
+ * step (l the luma, the quotient truncated), single floats, at most 255.
+ *
+ * The odd rows 1..29 are the scene's, key-framed (0xC84E0, from 0xC88C0 with
+ * the scene's table number): `ld 0xC75C0[(table * 15 + (row - 1) / 2) * 4]`
+ * points at {count, then count keys of position, red, green, blue}, all
+ * single floats of 0..1. A key goes in slot trunc(position * 63 + 0.1) as
+ * trunc(c * 255 + 0.1) a channel; each slot up to a key is the line from the
+ * last key (slot 0's zeros before the first), slots past the last stay 0.
+ * A slot's value v writes sqrt(v / 255) * 255, row 3's (sqrt(v / 255) * 3 /
+ * 4 + 0.25) * 255. The texture profile's `raw.sets` gives the table each
+ * set's scene picks (`keys` is 0xC75C0).
+ * No entry differs from MAME's colorxlat in the attract's city (table 0), its
+ * stage film (6) and the title (8).
+ */
+function buildGunbladeColorxlat(rom, colorSet) {
+    const C = rom.game.colors.gunblade;
+    const cv = rom.mainCpuView;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+    const f32 = Math.fround;
+    const all = (row, luma, v) => { for (let ch = 0; ch < 3; ch++) put(ch, row, luma, v); };
+    for (let row = 0; row < 32; row++) {
+        const k = row ? Math.trunc((215 * row) / 31) + 40 : 0;
+        for (let luma = 64; luma < 128; luma++) all(row, luma, k);
+    }
+    for (let row = 0; row < 32; row += row === 30 ? 1 : 2) {
+        let a = 64;
+        for (let luma = 0; luma < 64; luma++) {
+            a = f32(a + f32(Math.trunc(-luma / 10) + f32(6.4)));
+            all(row, luma, row ? Math.min(Math.trunc(f32(f32(row * a) / 31)), 255) : 0);
+        }
+    }
+    const raw = rom.game.texture.raw;
+    const table = (raw.sets[colorSet] ?? raw.sets[raw.bootSet])[1];
+    for (let row = 1; row < 31; row += 2) {
+        let p = cv.getUint32(C.keys + (table * 15 + ((row - 1) >> 1)) * 4, true);
+        if (p + 4 > rom.maincpu.length) continue;
+        const keys = Math.trunc(cv.getFloat32(p, true));
+        const slots = Array.from({ length: 64 }, () => [0, 0, 0, 0]);
+        for (let i = 0; i < keys && p + 20 <= rom.maincpu.length; i++, p += 16) {
+            const at = Math.trunc(f32(cv.getFloat32(p + 4, true) * 63) + 0.1);
+            if (at < 0 || at > 63) continue;
+            slots[at] = [1, ...[8, 12, 16].map((o) => Math.trunc(f32(cv.getFloat32(p + o, true) * 255) + 0.1) & 0xffff)];
+        }
+        let last = 0;
+        for (let at = 0; at < 64; at++) {
+            if (!slots[at][0]) continue;
+            const d = at - last;
+            for (let j = 1; j <= d; j++) {
+                for (let c = 1; c < 4; c++) {
+                    const from = slots[last][c], to = slots[at][c];
+                    slots[last + j][c] = (from + Math.trunc(((to - from) * j) / d)) & 0xffff;
+                }
+            }
+            last = at;
+        }
+        for (let at = 0; at < 64; at++) {
+            for (let ch = 0; ch < 3; ch++) {
+                let x = f32(Math.sqrt(f32(slots[at][ch + 1] / 255)));
+                if (row === 3) x = f32(f32(f32(x * 3) / 4) + 0.25);
+                put(ch, row, at, Math.trunc(f32(x * 255)));
+            }
+        }
+    }
     return out;
 }
 
@@ -723,6 +888,9 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
     /* Motor Raid: its boot and scene routines, run (js/motoraid.js). */
     if (rom.game.colors.motoraid) return motoraidScene(rom, colorSet).cxlat.slice();
+    if (rom.game.colors.gunblade) return buildGunbladeColorxlat(rom, colorSet);
+    if (rom.game.colors.zerogun) return buildZerogunColorxlat(rom);
+    if (rom.game.colors.skytargt) return buildSkytargtColorxlat(rom, colorSet);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);

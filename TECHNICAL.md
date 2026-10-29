@@ -7493,6 +7493,236 @@ teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions, the tile chip's pictures and the
 sound program (`epr-19849.31`) were not looked at.
 
+### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
+
+Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`, Revision A) shares
+its library with Virtual-On, also AM3's, more than with Virtua Cop or House of
+the Dead. Everything below was checked against MAME: the shared build's RAM
+was dumped by a Lua script at attract frames 600 (the city), 1500 (the stage
+film) and 3000 (the title). The addresses are program ROM offsets; the program
+runs in place.
+
+**Models.** There is no model table. The boot and the game send an object as
+`st 0x101, 0x800010` followed by the texture word, the material word and
+`0x800000 | mesh word` to 0x804000, and those triples sit in the program and
+data ROMs, as on Virtual-On. So `modelTable.scan` walks the meshes end to end
+and takes each one's pointers from a triple naming it. Unlike Virtual-On, the
+meshes lie in four runs, one from the start of each pair of polygon chips
+(`scan.runs`: polygon words 0, 0x100000, 0x200000, 0x300000; each run ends at
+0xFFFFFFFF or at a word that is no mesh). That makes 5452 meshes. A write tap
+on 0x804000 after 0x101 caught 1529 objects in the attract's first 6000
+frames. 1528 were triples the scan has, on a mesh start; the other was mesh
+0xA with zero texture words.
+
+**Textures.** The banks are raw, not LZ: bank n is the megabyte at data
+n << 20. 0x5B100 sets a copy up and 0x5B168 does it a piece a frame, eight
+halfwords to a `stq`. The deal is the table at 0x5B040: six groups of eight
+words, each a repeat count and then run lengths in halfwords, ending at 0 or
+below. A run goes to the sheet being written, the same length is stepped
+over on the other, and then the two swap. A list that ends below 0 swaps
+them once more. The boot copies bank 0 with sheet 0 first (0x5AE48), and
+each scene's set-up copies its own bank with sheet 1 first
+(`mov 1, g1; call 0x5B100`; for example 0xDE780 and 0xEC544). Set s in the
+viewer is bank 0 then bank s + 1, and set 8 is bank 8 again. Both sheets
+match MAME's in the city (bank 1), the stage film (bank 7) and the title
+(bank 8).
+
+**Palette.** {count, colours} at 0xC57CC: 962 colours, which 0x155D0
+copies to the face palette. 0x15C30 then sets entries 18 to 53 by the flags
+at RAM 0x5039C0 to 0x5039CC, all 1 after the boot; these are
+`paletteFixes`. 0x159CC rewrites entries 8 to 28 every frame for the HUD,
+and 0x15598 and 0x155C8 write the tile chip's entries 0 to 31.
+
+**Luma.** Two grey ramps of 128, then 0x2080 bytes from 0xF2200 at entry
+0x800 (0x6A388), the layout Virtual-On uses.
+
+**Colour tables.** All three channels are alike.
+
+- Slots 64 to 127 of row r are 215r / 31 + 40, and 0 on row 0 (0x16020).
+- Slots 0 to 63 of the even rows and row 31 are what 0x16800 writes at the
+  attract's start in curve 7 (0x16ECC; the switch is at 0x1688C and the row
+  list at 0x167D0). The curve is 7 while byte 0x54C0EE is 0, which it is
+  on fresh NVRAM (callers 0x6BAA8, 0xC505C, 0xF1B8C). A runs from 64, gaining
+  6.4 - trunc(l / 10) a slot, and the slot is r * a / 31 in single floats,
+  at most 255.
+- Slots 0 to 63 of odd rows 1 to 29 are the scene's, from 0xC88C0 (table
+  0..8), which calls 0xC84E0 for each row. The word at 0xC75C0 +
+  (table * 15 + (row - 1) / 2) * 4 points at single floats: a count, then
+  that many keys of {position, red, green, blue}, each 0..1. A key goes in
+  slot trunc(position * 63 + 0.1), each channel trunc(c * 255 + 0.1). The
+  slots between keys are integer lines from the last key, starting from
+  zeros at slot 0, and the slots past the last key stay 0. A slot of value v
+  is written as sqrt(v / 255) * 255, and on row 3 as
+  (sqrt(v / 255) * 3 / 4 + 0.25) * 255.
+
+The boot's own pass (0xC83E0, 0xC9190, 0xC98D0) is written over entirely by
+these. The table a set uses is `texture.raw.sets[s][1]`: in MAME the city
+uses table 0, the stage film 6 and the title 8. With that, all three
+channels match MAME's in the three places. Later in the attract the game
+fades the tables (frame 3530 differs everywhere), and the viewer does not
+model the fade.
+
+**Leads.** The scene number is at RAM 0x508C94, and the switch on it at
+0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
+0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
+model to its set. The objects' records (which triple, where) are not found.
+Gunblade NY has no fighters or motions. Its enemies and vehicles move by
+script, and that script is not read. The tile chip (cells) and the music
+are not looked at.
+
+### Zero Gunner (`js/texture.js`, `js/colors.js`)
+
+Psikyo's 1997 shooter runs on Pilot Kids' engine, a year older. The builds
+are the export one on Model 2B CRX (MAME's `zerogun`), the Japanese one
+(`zerogunj`) and the export one on Model 2A (`zeroguna`). The three programs
+keep every table at the same offset, except the texture load list: 0x48080,
+0x480D0 and 0x47FA0. Their code moves by up to 0x180. The addresses below
+are `zerogun`'s. As in Pilot Kids, the program runs from a copy at RAM
+0x500000.
+
+Everything was checked against MAME. The shared build's RAM was dumped at
+attract frames 600, 1500 and 3000 in `zerogun`, and at frame 600 in the two
+clones. Its write taps named the routines below.
+
+**Model table.** The data ROM at 0x7FF80 holds 32 bytes an entry: texture
+word, material word, mesh pointer, polygon count, then two more texture
+words. It runs 7712 entries; {4, -1, 0, 0} follows. The draws (0x4D3A0 to
+0x4DB48) send words 0 to 3 after `st 0x101, 0x800010`, the same as Pilot
+Kids'. In the attract's first 3000 frames the game sent 294 distinct objects:
+
+- 207 are entries as they are;
+- 18 more are entries with word 4 or 5 for word 1;
+- 47 use mesh 0x22, a quad, with texture words worked out at run time
+  (sprites);
+- 18 have no mesh;
+- a few use meshes at 0x14F... that no entry names.
+
+**Textures.** The 315-5881 on the board is used, at 0x6C510, only to
+decrypt short constants for the game's checks. The pages are dealt by Pilot
+Kids' loader (0x48440, the RLE blit at 0x48760). The load list holds 25
+{source, kind}. Load 0 is kind 0, the common load. A scene adds one load of
+kind 1 and one of kind 2. Kind 2 (0x486B0) is a list of rectangles that
+Pilot Kids has in its program but never uses: a page 512 rows high in sheet
+0's second half, with its mips. A scene's record has its two load numbers at
++0x24 and +0x26, with -1 meaning none; they are read at 0x62F6C. The records
+are listed by stage: RAM 0x56EE28 holds one list for each stage, and each
+list points at the records. The pairs are:
+
+- (20, 21), the attract at frame 600;
+- (22, 23), at frame 1500;
+- (19, none);
+- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
+  8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the second stage;
+- (5, 6, 14, 15 or 7, with 18), the third stage.
+
+Both sheets match MAME's byte for byte at all three frames.
+
+**Palette.** The palette is {count, colours} at 0x87F4, 615 colours, which
+0x4DFA8 copies to the face palette. Entry 26 is later animated (0x538B8).
+
+**Luma.** 0x48B60 copies the 0x600 bytes at 0x1A20. 0x48C10 can lay a band
+of 128 from the same table over band 0. The attract's fade does that by
+frame 3000.
+
+**Colour tables.** 0x489E0 writes every row: slot l of 0..63 on row r is
+((6r + r / 6 + 64) * (l + 1)) >> 6, floored at r (the byte table at
+0x489C0), and row 0 is 0. Slots 64 to 255 keep slot 63's value. Then 0x48AD0
+lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
+on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
+tables after the boot (frame 51), and they match MAME's entry for entry.
+
+**Leads.**
+
+- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
+  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
+  0x502512 and 0x502510.
+- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
+  a model to its set.
+- The tile chip and the music are not looked at.
+
+### Sky Target (`js/texture.js`, `js/colors.js`)
+
+Sega's 1995 flight shooter on Model 2A CRX (MAME's `skytargt`). It shares
+no code with the AM2 games or with Psikyo's; only the board's draw is the
+same: `st 0x101, 0x800010`, then an entry's first three words to 0x804000.
+The data ROM's last megabyte (epr-18404/18405, data 0x1000000) is mirrored
+through XTRA_DATA every megabyte, so the program reads its colour, luma and
+palette tables at 0x64xxxxx; that is data 0x1000000 + (address & 0xFFFFF).
+
+Everything was checked against MAME's shared build: texture RAM, palette,
+colorxlat and luma were dumped at attract frames 600 (the title, after the
+boot), 1500 and 3000 (the first stage), and debugger watchpoints
+(`wpset` with `curpc`) named the routines below. The program's writes to
+main RAM do not reach a Lua write tap; watchpoints do.
+
+**Stages.** A stage is a 24-byte record at 0xF6578; the stage index is RAM
+0x5290C0, and 0xD1C90 sets a stage up from its record:
+
+- +0 the texture bank (0x36B50);
+- +4 the colour row list (0x37390);
+- +8 the palette table (0x39060);
+- +0xC a list of row-21 tables, taken by an argument (0x374D0);
+- +0x10 a data pointer, not read yet; +0x14 is 0.
+
+There are twelve records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
+0x2200000, 3 and 11 0x2300000, 4 0x2400000, 5 and 8 0x2500000, 6 0x2600000
+and 7 0x2700000.
+
+**Model table.** The data ROM at 0xDE3D00 holds 16 bytes an entry: texture
+word, material word, mesh pointer, polygon count. It runs 24204 entries. All
+217 distinct objects the attract sends in its first 3000 frames are entries
+of it.
+
+**Textures.** Banks are raw, a megabyte each, and dealt out in The House of
+the Dead's rectangles (RAW_MIP_RECTS). The boot's 0x369E0 (from 0x36758)
+loads bank 0x2000000 with its full size on sheet 0 and its mips on sheet 0's
+and sheet 1's second halves. A stage's 0x36B50 loads its record's bank the
+other way round: full size on sheet 1. Both copy through 0x36E10 (g0
+source, g1 destination, g2..g5 x0, y0, x1, y1; a halfword (x, y) is at
+((y << 9) + x) * 2 in both). It copies ((x1 - x0 + 1) / 8 + 1) * 8
+halfwords a row, eight more than the rectangle, linearly, so each row spills
+into the next one. The boot bank's last rectangle spills past sheet 1 into
+luma entries 0..7. Both sheets match MAME's byte for byte at all three
+frames, the spill included.
+
+**Palette.** 0x232D0 copies {count, colours} at 0x640FB5C to entry 0, and
+0x39060 the record's +8 table to entry 500 (0x18023E8). The boot's is
+0x640FD82, record 0's. MAME's matches in every stage it showed (0, 1 and 9).
+The palette below 0x1802000 is the tile chip's (the table at 0xEBFB0, the
+loaders 0x789F0 and 0x2CF20).
+
+**Luma.** 0x376E0 copies 0x4000 bytes from 0x6400000. The texture spill
+then writes entries 0..7, with zeros (data 0x100000 is zero).
+
+**Colour tables.** The game builds them in RAM (r, g, b at 0x51FA10,
+0x520A10 and 0x521A10, 32 rows of 0x80 bytes), and 0x2D350 and 0x2D450 copy
+them up every frame, through the fade factors at 0x51CA10 (0x2B55C and the
+like). Row r is a = 6r + r / 6 + 64 (row 0: 0) in slots 64..255 (0x37120);
+slots 0..63 are max((a * (l + 1)) >> 6, r) (0x37290; the byte table at
+0x37100). Then:
+
+- 0x37390 lays 14 tables of 64 {r, g, b} bytes over odd rows 1..27, from
+  the list at record +4 (the boot's list is 0x6410580). Each byte is scaled
+  by the single float at 0xE6AE8 + 4 * (byte 0x517D3A & 1), 1.1 on fresh
+  NVRAM, truncated, and held at 255. Stages 5 and 8 take 1.0.
+- A stage's 0x374D0 lays row 21 from record +0xC.
+- 0x37590 lays the four rows of 0xC0 bytes at 0x640F85C over rows 19, 21,
+  23 and 25, so record +0xC's row never shows in the dumps.
+
+They match MAME's entry for entry, at the boot and in the first stage.
+
+**Leads.**
+
+- Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
+  set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
+  0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
+  or path data and is not read.
+- Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
+  0x2CF20, and the tile RAM loader 0x78A90.
+- Fades: 0x2B55C and the factors at RAM 0x51CA10.
+- The music is not looked at.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

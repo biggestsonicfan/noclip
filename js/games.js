@@ -6932,6 +6932,252 @@ const dynabb97 = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`). Its library
+ * is Virtual-On's: no model table, the object triples sit in the program and
+ * data ROMs, the luma is the same two ramps plus a block, and the boot draws
+ * with `st 0x101, 0x800010` and the triple to 0x804000. Its texture banks are
+ * raw rather than LZ and its colour tables key-framed, so js/texture.js and
+ * js/colors.js each have a section for it.
+ */
+const gunblade = {
+    id: 'gunblade',
+    name: 'Gunblade NY (Revision A)',
+    identify: ['epr-18988a.15', 'epr-18989a.16', 'mpr-18974.11', 'mpr-18980.17'],
+    identifyCrc: [0xf63f1ad2, 0xc1c84d65],
+    regions: {
+        maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18988a.15', 0xf63f1ad2, 'epr-18989a.16', 0xc1c84d65]] },
+        mainData: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18974.11', 0xe29ecaff, 'mpr-18975.12', 0xd8187582],
+                [0x800000, 'mpr-18976.9', 0xc95c15eb, 'mpr-18977.10', 0xdb8f5b6f],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18980.17', 0x22345534, 'mpr-18981.21', 0x2544a33d],
+                [0x800000, 'mpr-18982.18', 0xd0a92b2a, 'mpr-18983.22', 0x1b4af982],
+            ],
+        },
+        textures: { size: 0x800000, parts: [[0x000000, 'mpr-18985.27', 0xad6166e3, 'mpr-18984.25', 0x756f6f37]] },
+    },
+    /*
+     * Virtual-On's scan (js/romset.js scanModelTable), but the meshes lie end
+     * to end in four runs, one from the start of each pair of polygon chips
+     * (polygon words 0, 0x100000, 0x200000, 0x300000). 1528 of the 1529
+     * objects the attract draws in its first 6000 frames are triples the scan
+     * finds on a mesh start; the other is a bare mesh 0xA with no texture.
+     */
+    modelTable: {
+        scan: {
+            runs: [0, 0x100000, 0x200000, 0x300000],
+            sources: [['maincpu', 0, 0x100000], ['mainData', 0, 0x1000000]],
+        },
+        count: 5452,
+    },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /*
+     * {count, colours}: 962 colours at 0xC57CE, which 0x155D0 copies to the
+     * face palette (0x1802000). Then 0x15C30 sets entries 18..53 by the
+     * cabinet flags at 0x5039C0..0x5039CC, all 1 after the boot; those are
+     * the `paletteFixes`. 0x159CC rewrites 8..28 every frame for the HUD.
+     */
+    paletteProgram: 0xc57cc,
+    paletteOffset: null,
+    paletteFixes: [
+        [18, 0x83ff], [19, 0x83e0], [20, 0xfc00], [21, 0xfc1f], [22, 0xffe0], [23, 0x821f], [24, 0x801f],
+        [25, 0xc210], [26, 0xa94a], [27, 0x9990], [28, 0x83ff], [29, 0x99da], [30, 0x8014], [31, 0xc084],
+        [32, 0x8254], [34, 0x899f], [35, 0x834e], [37, 0x801f], [38, 0x83e0], [39, 0xfc00], [41, 0xd210],
+        [42, 0xfe10], [43, 0xd292], [44, 0xc84e], [45, 0xbad4], [46, 0x8256], [48, 0xaa1e], [49, 0x8c63],
+        [50, 0xa25f], [51, 0xa908], [52, 0x8256], [53, 0xaa5e],
+    ],
+    /*
+     * js/texture.js's Gunblade section. A set is bank 0 then a scene's bank
+     * (`sets`: [bank, colour table]); 8 is the title's, the one the game
+     * opens on, 0 the attract's city and 6 the stage film.
+     */
+    texture: {
+        raw: {
+            layout: 'gunblade', groups: 0x5b040, bootSet: 8,
+            sets: [[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5], [7, 6], [8, 7], [8, 8]],
+        },
+        sets: 9,
+        residentSet: null,
+        defaultSet: 8,
+    },
+    /* Luma: two grey ramps of 128, then 0x2080 bytes from 0xF2200 at entry
+     * 0x800 (0x6A388). Colorxlat: js/colors.js's Gunblade section. Both match
+     * MAME's after the city, the stage film and the title. */
+    colors: {
+        luma: { source: 'maincpu', data: 0xf2200, bytes: 0x2080, at: 0x800, ramps: 2 },
+        gunblade: { keys: 0xc75c0 },
+        solid: true,
+    },
+    /* No stage or object record is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
+/*
+ * Psikyo's 1997 shooter: Zero Gunner on Model 2B CRX, the export build
+ * (`zerogun`, MAME's parent) and the Japanese one (`zerogunj`), and the
+ * export build on Model 2A (`zeroguna`). The clones' zips hold only their
+ * programs (and the 2A board's own chips); the data, polygon and texture
+ * chips are read from zerogun.zip beside them. It is Pilot Kids' engine a
+ * year sooner: the same model table, the same texture loader and colour
+ * scheme, so js/texture.js's Pilot Kids section reads it and js/colors.js has
+ * a short section of its own. The three programs keep every table at the
+ * same offset but the texture load list (`loads`).
+ */
+function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
+    return {
+        id,
+        name,
+        identify: [program[1], program[3], ...extra],
+        identifyCrc: [program[2], program[4]],
+        regions: {
+            maincpu: { size: 0x100000, parts: [program] },
+            mainData: {
+                size: 0x1000000,
+                parts: [
+                    [0x000000, 'mpr-20296.11', 0x072d8a5e, 'mpr-20297.12', 0xba6a825b],
+                    [0x800000, 'mpr-20294.9', 0xa0bd1474, 'mpr-20295.10', 0xc548cced],
+                ],
+            },
+            polygons: { size: 0x800000, parts: [[0x000000, 'mpr-20298.17', 0x8ab782fc, 'mpr-20299.21', 0x90e20cdb]] },
+            textures: { size: 0x400000, parts: [[0x000000, 'mpr-20301.27', 0x52010fb2, 'mpr-20300.25', 0x6f042792]] },
+        },
+        /*
+         * 7712 entries of 32 bytes in the data ROM at 0x7FF80, up to the
+         * {4, -1, 0, 0} after them: texture word, material word, mesh pointer,
+         * polygon count, two more texture words. The program's draws (0x4D3A0
+         * to 0x4DB48 in `zerogun`) send words 0 to 3 of an entry after
+         * `st 0x101, 0x800010`, as Pilot Kids' do.
+         */
+        modelTable: { offset: 0x7ff80, count: 7712, stride: 32 },
+        meshPtr: { subtract: 0x02000000, add: 0 },
+        /* {count, colours}: 615 colours at 0x87F6, which 0x4DFA8 copies to
+         * the face palette. MAME's matches; entry 26 is animated later. */
+        paletteProgram: 0x87f4,
+        paletteOffset: null,
+        /*
+         * js/texture.js's Pilot Kids section. Load 0 is the common one, and a
+         * scene puts in a load of kind 1 and one of kind 2 over it, by the
+         * two numbers at +0x24 of its record (0x62F6C). The records are listed
+         * at 0x6EE28 by stage. `sets` are the pairs they name: 0 is what
+         * MAME's attract has in at frame 600, 1 at frame 1500, 2 a load on its
+         * own; 3-7 are the first stage's five areas (the attract's frame
+         * 3000 is set 3), 8-12 the second's and 13-17 the third's.
+         */
+        texture: {
+            raw: {
+                layout: 'pltkids', loads,
+                sets: [[20, 21], [22, 23], [19], [8, 16], [3, 16], [10, 16], [4, 16], [1, 16],
+                    [2, 17], [9, 17], [11, 17], [12, 17], [13, 17], [5, 18], [6, 18], [14, 18], [15, 18], [7, 18]],
+            },
+            sets: 18,
+            residentSet: null,
+            defaultSet: 0,
+        },
+        /* Luma: 0x48B60 copies the 0x600 bytes at 0x1A20 (0x48C10 can lay
+         * another band over band 0; the attract's fade does). Colorxlat:
+         * js/colors.js's Zero Gunner section, the same in every scene. */
+        colors: {
+            luma: { source: 'maincpu', data: 0x1a20, bytes: 0x600 },
+            zerogun: { table: 0x1050, count: 0x1a10 },
+            solid: true,
+        },
+        /* No stage, cell or motion data is read yet. */
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    };
+}
+
+const zerogun = zeroGunnerBuild({
+    id: 'zerogun', name: 'Zero Gunner (Export, Model 2B)',
+    program: [0x000000, 'epr-20439.15', 0x10125381, 'epr-20440.16', 0xce872747],
+    extra: ['mpr-20296.11', 'mpr-20298.17'],
+    loads: 0x48080,
+});
+/* The clones are known by their programs alone, so that zerogun.zip missing
+ * is said as such. */
+const zerogunj = zeroGunnerBuild({
+    id: 'zerogunj', name: 'Zero Gunner (Japan, Model 2B)',
+    program: [0x000000, 'epr-20290.15', 0x9ce3ad21, 'epr-20291.16', 0x7267a03d],
+    loads: 0x480d0,
+});
+const zeroguna = zeroGunnerBuild({
+    id: 'zeroguna', name: 'Zero Gunner (Export, Model 2A)',
+    program: [0x000000, 'epr-20437.12', 0xfad30cc0, 'epr-20438.13', 0xca364408],
+    loads: 0x47fa0,
+});
+
+/*
+ * Sega's 1995 flight shooter on Model 2A CRX. Its own engine, nothing shared
+ * with the AM2 games beyond the board's draw: `st 0x101, 0x800010` and the
+ * table entry's first three words to 0x804000. Its data ROM's last megabyte
+ * (epr-18404/18405) is what the program reads through the XTRA_DATA mirror at
+ * 0x6400000 for its colour, luma and palette tables. A stage is a 24-byte
+ * record at 0xF6578 (the index in RAM at 0x5290C0; set up by 0xD1C90):
+ * +0 texture bank, +4 colour row list, +8 palette table, +0xC row-21 list,
+ * +0x10 a data pointer not yet read. The sets here are its twelve records
+ * and the boot (12), which is what the title shows.
+ */
+const skytargt = {
+    id: 'skytargt',
+    name: 'Sky Target',
+    identify: ['epr-18406.12', 'epr-18407.13', 'mpr-18415.10', 'mpr-18413.16'],
+    identifyCrc: [0xfde9c00a, 0x35f8b529],
+    regions: {
+        maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18406.12', 0xfde9c00a, 'epr-18407.13', 0x35f8b529]] },
+        mainData: {
+            size: 0x1100000,
+            parts: [
+                [0x0000000, 'mpr-18415.10', 0xd7a1bbd7, 'mpr-18416.11', 0xb77c9243],
+                [0x0800000, 'mpr-18417.8', 0xa0d03f63, 'mpr-18418.9', 0xc7a6f97f],
+                [0x1000000, 'epr-18404.6', 0xf1407ec4, 'epr-18405.7', 0x00b40f9e],
+            ],
+        },
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-18413.16', 0x1c4d416c, 'mpr-18409.20', 0x666037ef],
+                [0x800000, 'mpr-18414.17', 0x858885ba, 'mpr-18410.21', 0xb821a695],
+            ],
+        },
+        textures: { size: 0x800000, parts: [[0x000000, 'mpr-18412.25', 0x4db52f8b, 'mpr-18411.24', 0x9c2dc40c]] },
+    },
+    /*
+     * 24204 entries of 16 bytes in the data ROM at 0xDE3D00: texture word,
+     * material word, mesh pointer, polygon count. All 217 distinct objects
+     * MAME's attract draws in its first 3000 frames are entries of it.
+     */
+    modelTable: { offset: 0xde3d00, count: 24204, stride: 16 },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /* js/romset.js's `records` layout: {count, colours} at 0x640FB5C from
+     * entry 0 (0x232D0), then the stage record's +8 table from entry 500
+     * (0x39060). MAME's matches for every stage it showed. */
+    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 12 },
+    /* js/texture.js's Sky Target section: the boot bank, then the record's. */
+    texture: {
+        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 12 },
+        sets: 13,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /* Luma: 0x376E0 copies 0x4000 bytes from 0x6400000; the texture copy's
+     * spill then zeroes entries 0..7. Colorxlat: js/colors.js's section. */
+    colors: {
+        luma: { source: 'mainData', data: 0x1000000, bytes: 0x4000, spill: { data: 0x100000, entries: 8 } },
+        skytargt: {
+            records: 0xf6578, stride: 24, stages: 12, bootList: 0x6410580,
+            gain: Math.fround(1.1), flat: [5, 8], fixed: 0x640f85c,
+        },
+        solid: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
@@ -6940,7 +7186,8 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vcop2, vstrikero, vstriker, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc, sgt24h, overrev, overrevb, dynabb97];
+    pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc, sgt24h, overrev, overrevb, dynabb97,
+    gunblade, zerogun, zerogunj, zeroguna, skytargt];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

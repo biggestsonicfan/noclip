@@ -33,6 +33,9 @@ Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
+*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
+Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
+*Sky Target* has its models — see [Sky Target](#sky-target).
 
 Three views, and a fourth for the 2D art:
 
@@ -1346,6 +1349,67 @@ halfwords of sheet 0 the game copies about at run time.
 There is no Stages tab, no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
 
+## Gunblade NY
+
+`gunblade.zip` carries Sega AM3's 1995 shooter (Revision A, Model 2B). The
+**Models** tab has 5452 models, one for each mesh in the polygon ROMs, with the
+textures, palette and colour tables the game loads for them. 1528 of the 1529
+objects MAME's attract draws in its first 6000 frames are among them: the
+helicopters, the city blocks, the Statue of Liberty and the rest. The one
+left over is a bare mesh with no texture.
+
+The texture picker's sets 0..8 are the game's scenes. Each scene's own bank sits
+over the common one, and each set comes with its colour tables. A model opens
+on set 8, the title's. Set 0 is the attract's city and set 6 its stage film.
+Nothing found yet says which scene a model belongs to, so a scene's part needs
+its set picked by hand. The texture RAM, luma and colour tables match MAME's
+byte for byte in the city, the stage film and the title.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+
+## Zero Gunner
+
+`zerogun.zip` on its own is the export build on Model 2B. With
+`zerogunj.zip` beside it the Japanese build is offered as a variant, and
+with `zeroguna.zip` the Model 2A build is. Those two zips hold only their
+programs. The **Models** tab has all 7712 entries of the model table, with
+the textures, palette and colour tables the game loads for them.
+
+The texture picker's sets are the scenes the game loads:
+
+- sets 0 and 1 are the two the attract opens with;
+- set 2 is a load on its own;
+- sets 3 to 7 are the first stage's five areas;
+- sets 8 to 12 are the second stage's areas;
+- sets 13 to 17 are the third stage's areas.
+
+Nothing found yet says which scene a model belongs to, so a scene's part
+needs its set picked by hand. The colour tables are the same in every scene.
+The textures, palette, luma and colour tables match MAME's byte for byte in
+the attract, in all three builds.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
+
+## Sky Target
+
+`skytargt.zip` carries Sega's 1995 flight shooter on Model 2A. The
+**Models** tab has all 24204 entries of the model table, with the textures,
+palette and colour tables the game loads for them.
+
+The texture picker's sets are the game's twelve stage records, 0 to 11, and
+set 12 is what the boot loads, which the title shows. Records 0, 1 and 9
+share a texture bank and palette, and differ in their colour tables (9 is
+another list). Nothing found yet says which stage a model belongs to, so a
+stage's part needs its set picked by hand.
+
+The textures, palette, luma and colour tables match MAME's byte for byte at
+the title and in the first stage.
+
+There is no Stages tab, no cells, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
@@ -1391,7 +1455,9 @@ So is `airwlkrs.zip` for Air Walkers, `powsled.zip` for Power Sled and
 and its USA build `lastbrnxu.zip`.
 
 `pltkids.zip` carries Pilot Kids; its Model 2A build wants `pltkidsa.zip`
-beside it.
+beside it. `gunblade.zip` carries Gunblade NY. `zerogun.zip` carries Zero
+Gunner; its Japanese build wants `zerogunj.zip` beside it, and its Model 2A
+build `zeroguna.zip`. `skytargt.zip` carries Sky Target.
 
 `vcop2.zip` carries Virtua Cop 2.
 
