@@ -7202,8 +7202,8 @@ the flag 1. Banks 0..3 (data 0x400000..0x7FFFFF) are the only ones dealt:
 scripts call from their tables at 0x19960 and 0x199F0 (entries {start, end,
 handler, arg1, arg2}), 3, 2 and 1. The explorer's sets are banks 1, 2 and 3
 over bank 0. Set 0 matches MAME's texture RAM after the boot, every byte of
-both sheets. Which course or scene uses which of banks 2 and 3 has not been
-worked out, so a sheet-1 model gets its set from the picker. A second routine,
+both sheets. Laxey Coast uses bank 3 and the T.T. Course bank 1 (Stages,
+below); what uses bank 2 has not been worked out. A second routine,
 0x3CB0/0x3D00, copies a bank straight to sheet 1 (0x12400000), 0xFFF
 halfwords a call; nothing here uses it.
 
@@ -7218,17 +7218,37 @@ colours} from 0x7A404, 738 colours, to 0x1802000 (`paletteProgram`), which
 matches MAME's palette RAM. Luma is 0x3828: main_data bytes 0..0x407F to luma
 RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
 0x3880 to the TGP's registers at 0x800000; what they are has not been worked
-out, so there is no `lighting` block and the lone model gets the placeholder
-light.
+out, so the `lighting` block's light is a stand-in.
+
+**Stages** (`js/racers.js`). The course records are 20 bytes at 0x401E0,
+picked by 0x40258 (g0 the record) into 0x579640: +0 the segment list, +4 and
++8 the first and last segment a walk may start from, +0xC the sky model,
++0x10 the list's length. The draw, 0x40280, walks out from the car's segment
+(0x3AA08) both ways while its polygon budget lasts, each segment with no
+matrix (`st 0x101, 0x800010`), so a segment is in world space where it lies;
+0x40520 draws the sky (`ld 0x401EC[k*20]`). A race's course is 0x513FF0: 0
+is record 1, Laxey Coast, 1 is record 2, the T.T. Course (0x1B56C, the
+attract's 0x274FC); record 3 is record 2 again, record 4 record 1 under sky
+2125. The tab draws every segment of records 1 and 2 (159 and 180) under sky
+2127. Laxey Coast deals bank 3 (set 2), the T.T. Course bank 1 (set 0), and a
+segment opens on that set in the Models tab. MAME's attract (past the
+motion-slider check by entering and leaving the test menu) was tapped for
+model-table reads: under 0x579640 = 1 it reads 64 of record 1's list and none
+of record 2's, under 2 88 of record 2's and none of record 1's; its pictures
+are the sea coast and the T.T. Course's leaderboard. Not in the tab: models
+the race draws outside the lists (1316..1375, 1499..1558 and 1622.. on both,
+1438..1497 and 1560..1619 on the T.T. Course; the bikes, riders and trackside
+objects), the light (Sega Rally's stands in; the boot's (0, -0.707, 0.707)
+is at 0x4338) and Laxey Coast's colour rows: 0x6830's 0x7840 lays the T.T.
+Course's (0x6BE0, 0x6A60), and the race lays 0x76B0(29, 0x6EE0) and (27,
+0x7060) over them for Laxey (0x1B590). Function 6 is 22 pairs from 0x4140
+(`mov 22,g1; lda 0x4140,g2; bal 0x40D8`, 0x4280).
 
 **Leads.** The pictures are AM3's "CGM 1.0" files, as Sega Rally's (js/cells.js
 `cgm`): one in the program at 0xB250 and 101 in the data ROM from 0x280000.
 The map of the island is model 1213 to 1216, the leaderboards 1628 and 1629.
-The course is built from segments around 2099..2350, drawn by the race
-code that reads the model table; its course records were not looked for.
-MAME on empty NVRAM stays on the DX cabinet's motion-slider check, so the
-attract never ran there; the bank-to-course mapping needs a run past it
-(the Twin cabinet's settings, or m2-hle2).
+The attract is scripted from the tables at 0x19960 and 0x199F0 ({start, end,
+handler, arg1, arg2}), run by 0x1D940.
 
 ### INDY 500 (`js/texture.js`, `js/colors.js`)
 
@@ -7274,11 +7294,26 @@ pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
 table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
 palette; it is not ported. Luma and palette match MAME.
 
-**Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
-lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
-like the course's segments at two distances; +0x0C points at 16-byte records
-of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
-program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
+**Stages** (`js/racers.js`). A course record (0x6A5B0 + 24k, through
+0x5447AC; the Deluxe's at 0xAFE90) points at two {count, list} pairs in the
+data ROM: +4 the full-detail segments, +0 the low-detail ones. The draw,
+0x4DD10, asks the TGP (command 0x4D) for the car's segment and draws it and
+the two beside it from +4's list and the rest from +0's, each with no matrix
+(0x101), so in world space. The tab draws +4's list whole: 34 segments for
+course 0, 44 for course 1, 29 for course 2. Model numbers index the RAM copy
+of the table at 0x200000 (0x3BC20), entry for entry; the copy takes 0x200000
+off a tpa or tha with bit 22 set (`texBit22`), which course 0's segments have
+and which left them untextured until it was read. Course 0 is Bayside Street
+(MAME's attract race there shows the "BAY SIDE STREET" leaderboard), course
+1 the Indianapolis Motor Speedway (the oval) and course 2 Highland Raceway.
+Set k is course k's banks and colour table, which a segment opens on in the
+Models tab. Not in the tab: the per-course extra draw 0x4E010, the object
+draw 0x17720 (table 0x176F0), the cars, a sky, and the light (Sega Rally's
+stands in). Function 6 is 31 pairs at 0x2D590 (Deluxe 0x33A40).
+
+**Leads.** A course record's +0x0C points at 16-byte records of {x, z float,
+a word, 0}, which look like the course line; +0x08 points at a program table
+(0x69F60) handed to 0xE40, not read yet. No CGM pictures: the 2D is not AM3's
 format, and its tiles were not looked for. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
@@ -7322,10 +7357,25 @@ to 0x1802000 by 0x1C8C0 from the frame hook (0x696C0). 0x1C950, 0x1C9F0 and
 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or 0xFC00 for a moment of the
 attract mode (MAME's frame 6000 is in one of them); not ported.
 
-**Leads.** A course record's +0x08 points at a program table (0xBB60 for
-record 0) and +0x0C on is a run of consecutive model numbers (0x399.. for
-record 0, 0x48F.. for 2, 0x678.. for 3, 0xA09.. for 7), which look like the
-course's segments. The pictures are "CGM 1.0" files, as Sega Rally's
+**Stages** (`js/racers.js`). 0xAA10 sets a course up from its record
+(0x3F4 bytes at 0xBEB0) into 0x202630 (the number) and 0x202634: +0 and +4
+the texture pair, +8 a table of 20-byte {first, last, routine, ?, argument}
+entries the draw calls by segment range, +0xC the sixty segments, +0x100
+their low-detail copies (drawn now and then when +0xFC is set), +0x1F4 a
+second model per segment, drawn with it when +0x1F0 is set. The draw is
+0xAEA0 (`remi 60`), each segment with no matrix, so in world space. The
+course menu's labels at 0x15B80 (pointers at 0x15C10) and the table at
+0x57460 ({record, ?, list} by choice) give NOVICE, INTERMEDIATE, EXPERT
+(records 1, 2, 3), the three as SS (4, 5, 6: the same courses on copies of
+the models, 921.., 1411.., 1838..) and OMAKE (7); record 0 is record 4
+again. The tab has records 1..7, every segment and second model, on the
+record's set. MAME's attract runs 0x202630 = 1, 2, 3 in turn: the grandstand
+circuit, the alpine one and the town, Country Circuit, Grunwald Circuit and
+Brickwall Town. Not in the tab: the +8 scenes, the cars, a sky (none found)
+and the light (Sega Rally's stands in). Function 6 is 32 pairs from 0x736B0
+(0x1BA4, 0x10FA4, 0x7C2B0, through 0x73648).
+
+**Leads.** The pictures are "CGM 1.0" files, as Sega Rally's
 (js/cells.js), at program 0x74600 and data 0x1FC4BC. Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
 (epr-19275.2s, mpr-19262..19265); not traced.
 

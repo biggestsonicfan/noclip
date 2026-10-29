@@ -6451,7 +6451,28 @@ const manxtt = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /*
+     * The materials go up with the TGP's function 6 as Sega Rally's do:
+     * `mov 22, g1; lda 0x4140, g2; bal 0x40D8` (0x4280). The light is a
+     * stand-in, Sega Rally's world light; the race's own was not read.
+     */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x4140, count: 22, stride: 8 },
+    },
+    /* The two courses (js/racers.js), the race's records 1 and 2. */
+    stageTable: {
+        racer: {
+            kind: 'manxtt',
+            records: 0x401e0,
+            courses: [
+                { record: 1, set: 2, name: 'Laxey Coast' },
+                { record: 2, set: 0, name: 'T.T. Course' },
+            ],
+        },
+        flat: true,
+    },
+    features: { stages: true, characters: false, motions: false, cells: false },
 };
 
 /*
@@ -6462,7 +6483,7 @@ const manxtt = {
  * Twin's data with its program moved about; the addresses it changes are
  * `program`'s.
  */
-function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun }) {
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, courses, materials }) {
     const prog = [program[1], program[3]];
     return {
         id, name,
@@ -6487,8 +6508,7 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun 
                     [0x800000, 'mpr-18235.18', 0xe7d70d59, 'mpr-18236.22', 0x6ca29e0e],
                 ],
             },
-            /* One 8 MB pair, which the model table's tpa and tha also reach
-             * with bit 22 set: the board mirrors it. */
+            /* One 8 MB pair, repeated as the board's mirror has it. */
             textures: {
                 size: 0x1000000,
                 parts: [
@@ -6505,9 +6525,11 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun 
         /*
          * 3571 entries of 20 bytes in the data ROM at 0xC00460: tpa, tha, oba,
          * a polygon count and an info pointer. Entry 0 is empty. An oba is a
-         * word index with bit 23 set, which `subtract` takes off.
+         * word index with bit 23 set, which `subtract` takes off. The boot's
+         * copy to RAM 0x200000 (0x3BC20) takes 0x200000 off a tpa or tha
+         * with bit 22 set (`texBit22`): the course-0 models' pointers.
          */
-        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 } },
+        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 }, texBit22: true },
         meshPtr: { subtract: 0x02000000, add: 0 },
         /* {count, colours} at data 0xC11B5C, 961 of them, to 0x1802000
          * (0x2F0D0), and 0x2DFB0's table of 19 laid down from entry 1023:
@@ -6541,7 +6563,24 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun 
             solid: true,
         },
         depth: { recede: 0, nearMin: 0.02, layers: true },
-        features: { stages: false, characters: false, motions: false, cells: false },
+        /* Function 6, 31 pairs (Twin: 0x2D728 through 0x2E3D0). The light is
+         * a stand-in, Sega Rally's. */
+        lighting: {
+            light: [-0.707, -0.707, -0.707],
+            materials: { source: 'maincpu', at: materials, count: 31, stride: 8 },
+        },
+        /* The course records (js/racers.js); set k is course k. The attract's
+         * course 0 race is under its "BAY SIDE STREET" leaderboard. */
+        stageTable: {
+            racer: {
+                kind: 'indy500',
+                records: courses,
+                courses: ['Bayside Street', 'Indianapolis Motor Speedway', 'Highland Raceway']
+                    .map((name, record) => ({ record, set: record, name })),
+            },
+            flat: true,
+        },
+        features: { stages: true, characters: false, motions: false, cells: false },
     };
 }
 
@@ -6553,6 +6592,8 @@ const indy500 = indy500Build({
     lumaOver: { data: 0x10b0850, bytes: 0x180 },
     top: { at: 0x1048de0 },
     colorRun: [0x2dd80, [0x2de70, 'set']],
+    courses: 0x6a5b0,
+    materials: 0x2d590,
 });
 /* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
  * epr-18345/18346. The CRCs find either. */
@@ -6564,6 +6605,8 @@ const indy500d = indy500Build({
     lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
     top: { source: 'maincpu', at: 0x1b3a4 },
     colorRun: [0x34230, [0x34320, 'set']],
+    courses: 0xafe90,
+    materials: 0x33a40,
 });
 
 /*
@@ -6672,7 +6715,38 @@ const stcc = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /* Function 6 from 0x736B0, 32 pairs (0x1BA4, 0x10FA4, 0x7C2B0, through
+     * 0x73648). The light is a stand-in, Sega Rally's. */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x736b0, count: 32, stride: 8 },
+    },
+    /*
+     * The course records (js/racers.js), in the order of the course menu's
+     * labels at 0x15B80 (0x15C10 points at them) and of the course table at
+     * 0x57460, {record, ?, list} by choice: NOVICE, INTERMEDIATE, EXPERT,
+     * the three again as SS (records 4 to 6, the same courses on copies of
+     * their models) and OMAKE, the bonus course (record 7). Record 0 is
+     * record 4 again. The attract runs records 1, 2, 3 in turn (0x202630).
+     */
+    stageTable: {
+        racer: {
+            kind: 'stcc',
+            records: 0xbeb0,
+            stride: 0x3f4,
+            courses: [
+                { record: 1, set: 0, name: 'Country Circuit (Novice)' },
+                { record: 2, set: 1, name: 'Grunwald Circuit (Intermediate)' },
+                { record: 3, set: 2, name: 'Brickwall Town (Expert)' },
+                { record: 4, set: 0, name: 'Country Circuit (Novice SS)' },
+                { record: 5, set: 1, name: 'Grunwald Circuit (Intermediate SS)' },
+                { record: 6, set: 2, name: 'Brickwall Town (Expert SS)' },
+                { record: 7, set: 3, name: 'Omake (the bonus course)' },
+            ],
+        },
+        flat: true,
+    },
+    features: { stages: true, characters: false, motions: false, cells: false },
 };
 
 /* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */

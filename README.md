@@ -27,9 +27,9 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models and its stages — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models and its stadium — see [Virtua Striker](#virtua-striker).
-AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
-Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
-*Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
+AM3's *Manx TT Superbike* has its models and its courses — see [Manx TT Superbike](#manx-tt-superbike).
+Sega's *INDY 500* has its models and its courses — see [INDY 500](#indy-500).
+*Sega Touring Car Championship* has its models and its courses — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
@@ -1265,10 +1265,17 @@ match MAME's byte for byte; the colour tables come from running the game's
 own routine.
 
 The texture picker's sets 0..2 are the three banks the game deals over its
-boot bank; set 0 is the one the boot leaves in. Which course uses which bank
-is not known yet, so a course model may need its set picked by hand.
+boot bank; set 0 is the one the boot leaves in. A course segment opens on its
+course's set; other sheet-1 models need theirs picked by hand.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Stages** tab has the two courses, Laxey Coast and the T.T. Course, each
+its whole list of segments read from the game's course record, under the sky
+the record names, on the course's own texture set. MAME's attract mode draws
+the same lists on the same courses. The bikes, riders and trackside objects
+the race adds are not in it, and Laxey Coast keeps the T.T. Course's colour
+rows (the race lays its own over them).
+
+There is no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
 
 ## INDY 500
@@ -1283,10 +1290,15 @@ tables come from running the game's own routines.
 
 The texture picker's sets 0..2 are the three courses, each its own pair of
 texture banks and its own colour table; set 3 is the pair the game loads for
-its other screens. The cars are on every course's banks; a course model needs
-its course picked, and the race queen is on set 1's.
+its other screens. The cars are on every course's banks; a course segment
+opens on its course's set, and the race queen is on set 1's.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Stages** tab has the three courses: Bayside Street, the Indianapolis
+Motor Speedway and Highland Raceway, each its full-detail segments from the
+course record, on the course's own textures and colours. Both cabinets' builds
+read the same lists. The cars and what the race adds are not in it, nor a sky.
+
+There is no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Sega Touring Car Championship
@@ -1300,11 +1312,18 @@ too, both sheets, in the attract mode's first race; on the next two courses
 three bytes differ, which the first course's patches left behind on the board.
 
 The texture picker's sets 0..3 are the course records' texture pairs, and
-set 4 is the title's. The cars are on every set; a course model needs its
-course's set picked.
+set 4 is the title's. The cars are on every set; a course segment opens on
+its course's set.
+
+The **Stages** tab has the seven courses of the game's course menu: Country
+Circuit, Grunwald Circuit and Brickwall Town, the same three again as the
+menu's "SS" entries (on copies of their models), and the bonus course
+("OMAKE"), each its sixty segments and their second models from the course
+record. The attract mode runs the first three, as MAME shows. The cars, the
+trackside scenes the race adds by segment and the sky are not in it.
 
 The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
-There is no Stages tab, no Cells tab and no motions yet. See
+There is no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
 ## Super GT 24h
