@@ -8003,6 +8003,23 @@ strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
 0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
 0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
 
+**Stages: not done.** Every model the i960 draws goes through 0x11EE0
+(g0 = a model record): it sends the record's object to the coprocessor,
+reads the matrix back from copro command 0x11 (0x11FAC..0x1202C) and writes
+command 0x0B (matrix) and 0x01 (object: tpa, tha, oba, count + 1) to the
+geometry FIFO. There are 298 calls to it, so there is no one scenery list to
+read. In the attract, the jungle road at frame 3000 is drawn whole: the
+display list in buffer RAM that frame holds just 7 objects (model 2686
+`o_intro_hummer`, 796 polygons, which is the road and the jungle round it,
+model 1094 four times, and models 2760 and 2761), the same 7 the FIFO tap on
+0x804000..0x807FFF sees, so the attract has no placed scenery to read. The
+coprocessor writes nothing to buffer RAM itself (a tap on its external space
+saw no writes). The "scene pointers" at 0x2986F60 are floats, not pointers
+(-50.0, 27.75, 63.75 for scenes 0..2; 0x10CC stores the scene's at 0x5FFDB4
+and 0x5FA114). A play-through in MAME (coin, start) is needed to see a
+mission's scenery being drawn; on this machine it did not reach a snapshot
+in ten minutes, so the missions' scenery is still to be found.
+
 ### Desert Tank (`js/games.js`)
 
 Sega and Martin Marietta's 1994 game on the original Model 2 (MAME's

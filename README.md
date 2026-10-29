@@ -1519,8 +1519,10 @@ sheets as they are first set up.
 Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frame 1500.
 
-There is no Stages tab, no cells, no characters and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
+There is no Stages tab yet: the attract draws its scenes as whole models
+(the jungle road is `o_intro_hummer`), and where a mission's scenery is
+placed is not found yet. There are no cells, no characters and no music
+yet. See [TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Desert Tank
 
