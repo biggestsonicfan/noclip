@@ -8003,10 +8003,62 @@ draw recognisably, textured and coloured as in MAME's pictures.
 0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C among
 others. The copro data ROM (epr-16980/16981), which MAME calls collision
 and height-map data, is not read. Lighting: the material table and light are
-not read yet. Cells: the tile palette is laid by 0x3C8F4 at boot and faded
-by 0x3C790 and 0x3D59C. Music: the sound board is Daytona's Model 1 board
+not read yet. Cells: see [Desert Tank's cells](#desert-tanks-cells-jscellsjs-jsstackcellsjs). Music: the sound board is Daytona's Model 1 board
 (epr-16985, mpr-16986/16988/16989); the program writes its latch,
 0x1C00012, in 0x30534 to 0x30718.
+
+### Desert Tank's cells (`js/cells.js`, `js/stackcells.js`)
+
+Desert Tank's 2D pictures are Daytona USA's records, at Desert Tank's
+addresses (`DESERT_CELLS` in `js/games.js`). The draw, `0xD380`, takes the
+record's address: a halfword added to every entry, a halfword 0 for byte
+entries, the row count at +4, the column count at +8, then the entries onto
+0x80-byte tilemap rows. 160 records lie end to end from data 0x2800180 to the
+boot's pair at 0x281590C; the rest sit in six short runs among the tile data
+after it ([0x28181D4, 0x28185D0), [0x281A6D4, 0x281AEB2), [0x281C1B6,
+0x281C35A), [0x281C79E, 0x281C7F2), [0x281D63A, 0x281D9C2), [0x281EBA6,
+0x281EC5A)) and in the skies' strips below. Each is a run of `records`.
+They are named by `lda` or by pointer tables (the digits 0x43210 and
+0x43238, the mission's 0x2891E10, the HUD's 0x289CF00 and 0x2893AF4); the
+sky strip tables lie on halfword steps, so the unused search steps by 2
+(`cells.pointerStep`). 216 cells; 5 (141, 142, 157, 158 and 159) are named
+by nothing.
+
+**CGs.** The loader, `0x3C6F0`, is Daytona's pair of lists (a CG list and a
+palette list, `0x3C790` the palette copy), through a table of eight pairs at
+0x2100000 (`cgTables`). It also sets pen 0 of groups 0 to 63 to 0xFD02,
+which the Cells tab leaves transparent. The boot, `0x3C7F0`, loads pair 0,
+then the pair at 0x28159A0, then copies by hand: 0x289CD40 into group 3,
+0x289CD60 into groups 8 to 10, 0x289CD80 into 0x88 to 0x8A, and 0x60
+halfwords at 0x289CDA0 into characters at 0x108A920. It never clears the
+chip after, and pairs 1 to 7 all start at character 0x2F80 and group 0x5F,
+so each later CG lands over what the boot left: `cells.stacked` gives each CG
+the boot's lists and copies, then its own pair (`js/stackcells.js`).
+
+Six more pairs head the skies. 0x520C9C points at {CG list, palette list,
+then the sky's 36x32 strips}, which `0x3D4E0` loads (its palette copy
+`0x3D59C`) and draws: two strips in mission 0's, eight in the others. A
+mission's own is the first word of its bank (0x2200000, 0x2300000 or
+0x2380000 by the mission byte 0x52106F, through 0x43204, set at 0xA52C); the
+code sets three others itself (0x281EC5A at 0xCB3C, 0x282ADBE at 0xCB68,
+0x2838B0E at 0x9C04). They are CGs 8 to 13 (`cgPairs`, named by where they
+are set), 14 CGs in all, and their strips the last six runs of `records`.
+
+The game keeps its own table of {record, CG}, 172 entries at 0x2894400; it
+gives `screens`, so a cell opens on the CG the game draws it with. (The
+second table at 0x289CF90 is of objects, not cells.)
+
+**Checked against MAME.** `desert` attract, the shared build, character RAM
+and palette dumped every 600 frames from 600 to 4800. The boot's CG (0)
+matches character RAM byte for byte at every frame, and the palette at
+every colour it writes but pen 0, until a later CG is loaded over groups
+0x5F on. CG 3, the title, matches both at frames 3000 and 4800; CG 12,
+mission 1's sky, at 1800, 2400 and 4200. The other CGs were not loaded in
+the attract.
+
+**Leads.** `0x3CB00` writes group 0x12's colours by a condition (from
+0x289CE80 or 0x289CE60; called at 0xA4A4 and 0x27280); it is not modelled.
+`0x3D5B8` draws a sky's frame 0 through the mask table at 0x289CEA0.
 
 ### Polygon decoding (`js/model.js`)
 

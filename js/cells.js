@@ -133,11 +133,17 @@
  * a `chars` entry), and a run count of 0 fills to the end (`zeroFills`). The
  * game refills the middle and the end of the chip for the title and for each
  * stage, so its CGs are `modes`. See js/games.js VCOP2_CELLS.
+ *
+ * Desert Tank draws Daytona's records (`records`) and loads Daytona's pairs
+ * of lists, but never clears the chip between them: every CG lands on what
+ * the boot left (`stacked`, js/stackcells.js). Its pointer tables lie on
+ * halfword steps (`pointerStep`). See js/games.js DESERT_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
+import { stackCGs, loadStacked } from './stackcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -390,8 +396,10 @@ export function unusedCells(rom) {
         const records = cellRecords(rom);
         const index = new Map(records.map((a, i) => [a, i]));
         const named = new Set();
+        /* Desert Tank keeps pointer tables on halfword steps (`pointerStep`). */
+        const step = rom.game.cells.pointerStep ?? 4;
         for (const v of [rom.mainCpuView, rom.mainDataView]) {
-            for (let o = 0; o + 4 <= v.byteLength; o += 4) {
+            for (let o = 0; o + 4 <= v.byteLength; o += step) {
                 const i = index.get(v.getUint32(o, true));
                 if (i !== undefined) named.add(i);
             }
@@ -466,7 +474,7 @@ function cgListsAll(rom) {
         return all;
     }
     const pairAt = (pair, name, extra) => ({
-        tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name,
+        tiles: [extra, word(rom, pair)].filter(Boolean), pal: word(rom, pair + 4), name, pair,
     });
     if (C.cgTables || C.cgPairs || C.cgLists) {
         for (const [table, count] of C.cgTables ?? []) {
@@ -481,6 +489,7 @@ function cgListsAll(rom) {
         }
         for (const [pair, name] of C.cgPairs ?? []) all.push(pairAt(pair, name));
         for (const [tiles, pal, name] of C.cgLists ?? []) all.push({ tiles: [tiles], pal, name });
+        if (C.stacked) stackCGs(rom, all);
     } else {
         for (let cg = 0; cg < (C.cgEntries ?? CG_ENTRIES) / 2; cg++) {
             const tiles = word(rom, C.cgTable + cg * 8);
@@ -674,6 +683,7 @@ function loadTiles(rom, L) {
     if (L.picture) return loadPicture(rom, L, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
+    if (L.stack) return loadStacked(rom, L, charBytes);
     if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));

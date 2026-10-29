@@ -7648,6 +7648,75 @@ const bel = {
 };
 
 /*
+ * Desert Tank's 2D pictures, for the Cells tab: the title, the mission
+ * briefings, the HUD, the rankings. The draw (0xD380) is Daytona USA's
+ * record: a halfword added to every entry, a halfword 0 for byte entries, the
+ * row count, the column count, then the entries onto 0x80-byte tilemap rows.
+ * 160 records lie end to end from 0x2800180 to the boot's pair at 0x281590C,
+ * and the rest in short runs among the tile data after it, each a run of its
+ * own here (`records`). Every one is named by an `lda` or a pointer table:
+ * the digits 0x43210 and 0x43238, the mission's 0x2891E10, the HUD's
+ * 0x289CF00 and 0x2893AF4.
+ *
+ * The CGs (the loader 0x3C6F0) are Daytona's pairs of lists through a table
+ * of eight pairs at 0x2100000 (`cgTables`). The boot (0x3C7F0) loads pair 0,
+ * then the pair at 0x28159A0, then copies group 3's colours, groups 8-10's,
+ * 0x88-0x8A's and six characters at 0x549 out of 0x289CD40..0x289CE00 by
+ * hand. It never clears the chip after that, so each later CG is loaded over
+ * what the boot left (`stacked`, js/stackcells.js). Pairs 1-7 all start at
+ * character 0x2F80 and group 0x5F. The game's own table of {record, CG}
+ * at 0x2894400, 172 entries, names each record's CG (`screens`).
+ *
+ * Six more pairs head the skies: 0x520C9C points at {CG list, palette list,
+ * then the sky's 36x32 strips} (two in mission 0's, eight in the others),
+ * which 0x3D4E0 loads and draws. A mission's own is the first word of its
+ * bank (0x2200000, 0x2300000, 0x2380000 by the mission byte 0x52106F,
+ * through 0x43204; set at 0xA52C); the code puts three more there itself
+ * (0x281EC5A at 0xCB3C, 0x282ADBE at 0xCB68, 0x2838B0E at 0x9C04). They are
+ * CGs 8 to 13 (`cgPairs`), and their strips the last runs of `records`. The
+ * tables of strips lie on halfword steps (`pointerStep`).
+ */
+const DESERT_CELLS = {
+    records: [
+        [0x02800180, 0x0281590c], [0x028181d4, 0x028185d0], [0x0281a6d4, 0x0281aeb2],
+        [0x0281c1b6, 0x0281c35a], [0x0281c79e, 0x0281c7f2], [0x0281d63a, 0x0281d9c2],
+        [0x0281eba6, 0x0281ec5a],
+        [0x0282655e, 0x0282adbe], [0x028342ae, 0x02838b0e], [0x0284d13e, 0x0285199e],
+        [0x02220cb8, 0x022215d0], [0x0231e5b0, 0x02322e10], [0x023a4544, 0x023a8da4],
+    ],
+    cgTables: [[0x02100000, 8]],
+    cgNames: ['boot'],
+    cgPairs: [
+        [0x0281ec5a, 'sky 0xCB3C'], [0x0282adbe, 'sky 0xCB68'], [0x02838b0e, 'sky 0x9C04'],
+        [0x02220c84, 'mission 0 sky'], [0x0231e564, 'mission 1 sky'], [0x023a4508, 'mission 2 sky'],
+    ],
+    stacked: {
+        base: 0,
+        after: { 0: [0x028159a0] },
+        copies: [
+            [0x0289cd40, 0x01800060, 16],
+            [0x0289cd60, 0x01800100, 16], [0x0289cd60, 0x01800120, 16], [0x0289cd60, 0x01800140, 16],
+            [0x0289cd80, 0x01801100, 16], [0x0289cd80, 0x01801120, 16], [0x0289cd80, 0x01801140, 16],
+            [0x0289cda0, 0x0108a920, 0x60],
+        ],
+    },
+    screens: [
+        { cg: 1, cells: [2] }, { cg: 5, cells: [3] }, { cg: 6, cells: [1] },
+        { cg: 3, cells: [14, 15, 16, 17] }, { cg: 4, cells: [24, 25, 26] },
+        { cg: 2, cells: Array.from({ length: 33 }, (_, i) => 38 + i) },
+        { cg: 8, cells: Array.from({ length: 8 }, (_, i) => 174 + i) },
+        { cg: 9, cells: Array.from({ length: 8 }, (_, i) => 182 + i) },
+        { cg: 10, cells: Array.from({ length: 8 }, (_, i) => 190 + i) },
+        { cg: 11, cells: [198, 199] },
+        { cg: 12, cells: Array.from({ length: 8 }, (_, i) => 200 + i) },
+        { cg: 13, cells: Array.from({ length: 8 }, (_, i) => 208 + i) },
+    ],
+    pointerStep: 2,
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
+/*
  * Desert Tank (MAME's `desert`), Sega and Martin Marietta's 1994 tank game on
  * the original Model 2. MAME calls it not working, but it boots and runs its
  * attract mode, the textures and colours in. The program is built on
@@ -7728,8 +7797,9 @@ const desert = {
         ramp: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8, top: 0x100 },
         solid: true,
     },
+    cells: DESERT_CELLS,
     /* No mission, tank or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,

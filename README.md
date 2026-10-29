@@ -673,8 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids and Virtua Cop 2 have the Cells tab but not the
-music.
+Bronx has both; Pilot Kids, Virtua Cop 2 and Desert Tank have the Cells tab
+but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1538,8 +1538,16 @@ sheet 0 may need another set.
 Set 1's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frames 600 and 1200.
 
-There is no Stages tab, no cells and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs).
+The **Cells** tab has its 216 pictures: the title, the mission briefings,
+the HUD, the rankings and the skies' strips. The game loads each
+picture's characters and colours over the boot's, so a CG here is the boot's
+with its own on top, and the cells the game's own table names open on the
+CG it gives them. The boot's, the title's and mission 1's sky match MAME's tile chip in the
+attract.
+
+There is no Stages tab and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs) and [Desert Tank's
+cells](TECHNICAL.md#desert-tanks-cells-jscellsjs-jsstackcellsjs).
 
 ## Running it
 
