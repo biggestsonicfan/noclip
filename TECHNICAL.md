@@ -7179,6 +7179,42 @@ palette, colorxlat and luma windows naming the routines.
   0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
   which 0x16E38 animates). The other scenes' tables are the same routines
   run with another n and were not held against MAME.
+- **Courses (the Stages tab).** A scene's course is the record `ld
+  0x2990840[n*4]` (data ROM), read by the course tasks 0x9B660, 0x9B690 and
+  0x9B6C0 (installed at 0x9B5D0 and 0x9B610): a count, then a pointer to
+  that many model numbers, one a segment of the course's ring. Scenes 0 to 6
+  have one (69, 38, 60, 54, 79, 19 and 108 segments, models 2312 on, 2963
+  on, 3106 on, 3545 on, 4092 on, 5327 on and 7332 on); scene 7 has none.
+  0x216A70 draws the course: copro 0x11 gives the camera's matrix, sent to
+  the geometrizer as function 0x0B (0x8000B0); then the segments round the
+  bike's (index mod the count, ahead and behind) go as bare models, function
+  1 (0x800010) and the model's 16-byte entry at 0x4F500, with no matrix of
+  their own. So a segment is already in the world, and js/motoraid.js reads
+  the list as it stands, each on its scene's texture set. 0x2990860[n] is a
+  second record of the same shape (the same for scenes 0 to 4, none for
+  5 to 7) that the course tasks pass as g1 and 0x216A70 does not use.
+- **Lighting.** 0x305B0 sends the 32 materials at program 0x2F010 (8-byte
+  {material word, coefficient} records, function 6 through 0x30510). The
+  light is made by 0x3BED4: (0, 0, 1) turned 0x2000 about Y and -0x2000
+  about X (copro 0x15, 0x14, 0x1A), then into the camera's frame (copro
+  0x0C), and sent as function 0x0A. Taken back through the camera matrix at
+  attract frame 3000 it is (-0.5, -0.7071, 0.5) in the world.
+- **Checked (courses).** A write tap on the geometrizer and copro windows at
+  attract frame 3000 (scene 2) showed 0x216A70's draws and the camera matrix
+  it sends; the explorer put at that camera's eye and heading shows the same
+  picture as MAME's snapshot: the wooden track, the bridge over it, the rock
+  walls and the water. The other six were looked at whole: each is one
+  joined, textured course.
+- **Missing.** The sky and the background (MAME's frame 3000 has an orange
+  sky and clouds), the bikes and riders, and anything the race places
+  besides the track. 0x2166A0 sorts draws into buckets at 0x5781D0 and
+  0x578290 (an object pass not read). The course names are pictures; no
+  text names them.
+- **Leads.** Animation: the bike and rider draw at 0x207940-0x207AD0 sends
+  15 parts a bike from 48-byte matrices; the scene number is 0x517AE0 and
+  0x21C930 sets a scene up. Cells: 0x19050/0x191BC animate the luma tables
+  and 0x16E38 the colours; the program has a debug text "CourseNo : %d"
+  (unread). Music: not looked at.
 
 ### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
 

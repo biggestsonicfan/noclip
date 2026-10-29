@@ -24,6 +24,7 @@ import {
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
 import { readDesertStages } from './desert.js';
+import { readMotoraidStages } from './motoraid.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
@@ -6739,6 +6740,7 @@ function loadGameContent() {
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
         else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
         else if (T.desert) state.stages = readDesertStages(state.rom);
+        else if (T.motoraid) state.stages = readMotoraidStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

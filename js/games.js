@@ -6353,8 +6353,23 @@ const motoraid = {
         },
         solid: true,
     },
-    /* No course, rider or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /*
+     * The geometry's lighting: 0x305B0 sends the 32 material words at program
+     * 0x2F010 (geometrizer function 6 through 0x30510, each with its
+     * coefficient), and 0x3BED4 makes the light by turning (0, 0, 1) by
+     * 0x2000 about Y and -0x2000 about X (copro 0x15, 0x14, 0x1A), then into
+     * the camera's frame (copro 0x0C), and sends it as function 0x0A. Taken
+     * back through the camera at attract frame 3000 it is (-0.5, -0.7071,
+     * 0.5) in the world. Z negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.5, -0.7071, -0.5],
+        materials: { at: 0x2f010, count: 32 },
+    },
+    /* The courses (js/motoraid.js): each scene's ring of segments. No rider or
+     * motion data is read yet. */
+    stageTable: { motoraid: true, flat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /*
