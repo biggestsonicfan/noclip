@@ -7557,6 +7557,91 @@ const bel = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/*
+ * Desert Tank (MAME's `desert`), Sega and Martin Marietta's 1994 tank game on
+ * the original Model 2. MAME calls it not working, but it boots and runs its
+ * attract mode, the textures and colours in. The program is built on
+ * Daytona USA's library: the same texture upload, luma copy and colour ramp,
+ * at other addresses.
+ */
+const desert = {
+    id: 'desert',
+    name: 'Desert Tank',
+    identify: ['epr-16976.12', 'epr-16977.13', 'mpr-16968.16'],
+    regions: {
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x00000, 'epr-16976.12', 0xd036dff0, 'epr-16977.13', 0xe91194bd],
+                [0x40000, 'epr-16970.14', 0x4ea12d1f, 'epr-16971.15', 0xd630b220],
+            ],
+        },
+        /* MAME's region is 32MB; the chips end at 9MB. */
+        mainData: {
+            size: 0x900000,
+            parts: [
+                [0x000000, 'mpr-16974.10', 0x2ab491c5, 'mpr-16975.11', 0xe24fe7d3],
+                [0x400000, 'mpr-16972.8', 0x23e53748, 'mpr-16973.9', 0x77d6f509],
+                [0x800000, 'epr-16978.6', 0x38b3e574, 'epr-16979.7', 0xc314eb8b],
+            ],
+        },
+        /* MAME's names; dumps label 16964 and 16965 with each other's
+         * socket (.21 and .20), so the CRCs find them. */
+        polygons: {
+            size: 0x800000,
+            parts: [
+                [0x000000, 'mpr-16968.16', 0x4a16f465, 'mpr-16964.20', 0xd4a769b6],
+                [0x400000, 'mpr-16969.17', 0x887380ac, 'mpr-16965.21', 0x9ba7645f],
+            ],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-16967.25', 0xb8b84c9d, 'mpr-16966.24', 0x7484efe9]],
+        },
+    },
+    /*
+     * Daytona's records: oba, tpa, tha, polygon count and the zero that ends
+     * the one-entry list. 2092 of them at data 0x88357C, up to the palette;
+     * the program names records by address (`lda 0x2883914` at 0x136E8,
+     * 0x2883BE4 at 0x1DAA8), every one on a 20-byte step from there.
+     */
+    modelTable: { offset: 0x88357c, count: 2092, stride: 20, fields: { mesh: 0, uv: 4, mat: 8 } },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* 0x375C0 copies data 0x288D8EC..0x288DEB2, 739 colours, to the face
+     * palette at 0x1802000. */
+    paletteOffset: 0x88d8ec,
+    paletteCount: 739,
+    /*
+     * Daytona's upload, instruction for instruction (0x1544, its run table
+     * 0x1650): the boot (0x152C) puts bank 0x2400000 on sheet 1, and a
+     * mission's set-up (0x1510, called at 0x6A4C, 0x8108, 0x8260 and 0x2FEB0)
+     * the bank `ld 0x1678[n*4]` on sheet 0, n the byte at 0x52106F. The
+     * table is 0x2500000, 0x2600000, 0x2700000 and 0x2500000 again, so three
+     * sets. The attract runs with n = 1.
+     */
+    texture: {
+        raw: { layout: 'daytona', bankTable: 0x1678, bootBank: 0x2400000 },
+        sets: 3,
+        residentSet: null,
+        defaultSet: 1,
+    },
+    /*
+     * Luma: 0x14D0 copies `ld 0x3A44` bands of 128 bytes from 0x3A48 in the
+     * program ROM. Colorxlat: 0x37150 works the 32 rows out of fixed numbers,
+     * Daytona's ramp with the 1993 upright's constants (step 9, bias
+     * 0xE8 << 5, flat 0xE8), but a value of exactly 0x100 is kept
+     * (`cmpible`), where Daytona's routine as ported here cuts it to 0xFFFF.
+     * No cabinet setting reaches it.
+     */
+    colors: {
+        luma: { source: 'maincpu', count: 0x3a44, data: 0x3a48 },
+        ramp: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8, top: 0x100 },
+        solid: true,
+    },
+    /* No mission, tank or motion data is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
@@ -7567,7 +7652,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
     pltkids, pltkidsa, motoraid, manxtt, indy500d, indy500, stcc, sgt24h, overrev, overrevb, dynabb97,
     gunblade, zerogun, zerogunj, zeroguna, skytargt,
-    skisuprg, waverunr, segawski, topskatr, bel];
+    skisuprg, waverunr, segawski, topskatr, bel, desert];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

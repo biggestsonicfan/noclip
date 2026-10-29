@@ -7954,6 +7954,60 @@ strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
 0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
 0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
 
+### Desert Tank (`js/games.js`)
+
+Sega and Martin Marietta's 1994 game on the original Model 2 (MAME's
+`desert`, flagged not working; it boots and runs its attract, texture RAM,
+palette and colour tables all in). The program is built on Daytona USA's
+library, so the profile is Daytona's tables at Desert Tank's addresses and
+needs no module of its own. MAME's write taps on the texture, palette,
+colorxlat and luma windows named the routines. Addresses below 0x80000 are
+the program ROM's; 0x2xxxxxx is the data ROM.
+
+**Model table.** Data 0x288357C, Daytona's 20-byte records {oba, tpa, tha,
+count, 0}, 2092 of them up to the palette at 0x288D8EC. The program names
+records directly (`lda 0x2883914` at 0x136E8, 0x2883BE4 at 0x1DAA8, ...),
+each on a 20-byte step from 0x288357C. Records 0 to 1323 point into the
+second polygon ROM pair, 1324 on into the first; 579 have no polygons.
+
+**Textures.** 0x1544 is Daytona's 0x1388, instruction for instruction (its
+run table at 0x1650): 0x60000 halfwords onto one sheet, the nine mip levels
+dealt between the two. The boot (0x152C) uploads bank 0x2400000 onto sheet 1
+(texture RAM 1, 0x12600000); a mission's set-up (0x1510, called at 0x6A4C,
+0x8108, 0x8260 and 0x2FEB0) uploads `ld 0x1678[n*4]` onto sheet 0, n the
+byte at work RAM 0x52106F. The table is 0x2500000, 0x2600000, 0x2700000 and
+0x2500000 again: three sets. The attract runs with n = 1.
+
+**Palette.** 0x375C0 copies data 0x288D8EC..0x288DEB2, 739 colours, to
+0x1802000. The boot fills 0x1800000 on with 0xFC00 and 0x1801200 on with
+0x8FE0 first (0x37560).
+
+**Colour tables.** 0x37150 works out colorxlat as Daytona does, from fixed
+numbers: step 9, bias 0xE8 << 5, flat 0xE8, Daytona's 1993 upright numbers,
+with no cabinet setting. A ramp value of exactly 0x100 (row 27, luma 37) is
+kept (`cmpible g4, 0x100`), not cut to 0xFFFF as the Daytona port here does
+it; that is the ramp's `top`.
+
+**Luma.** 0x14D0 copies `ld 0x3A44` (0x42) bands of 128 bytes from 0x3A48 in
+the program ROM.
+
+**Checked.** At attract frames 600 and 1200 (n = 1) sheet 0, sheet 1,
+colorxlat, luma and the face palette match MAME byte for byte. Sets 0 and 2
+are the same routine with another bank and were not held against MAME. The
+models MAME's attract reads out of the table (read taps at frames 2390-2400,
+the high-score tank, and 3590-3600, the training yard: the truck 996, the
+crates 107, the barrel 216, the hut 873, the ground 1053-1145 and 1718-1751)
+draw recognisably, textured and coloured as in MAME's pictures.
+
+**Leads.** Missions: the byte at 0x52106F, read by 0x5CAC, 0x6130, 0x68E0,
+0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C among
+others. The copro data ROM (epr-16980/16981), which MAME calls collision
+and height-map data, is not read. Lighting: the material table and light are
+not read yet. Cells: the tile palette is laid by 0x3C8F4 at boot and faded
+by 0x3C790 and 0x3D59C. Music: the sound board is Daytona's Model 1 board
+(epr-16985, mpr-16986/16988/16989); the program writes its latch,
+0x1C00012, in 0x30534 to 0x30718.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

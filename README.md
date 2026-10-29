@@ -1511,6 +1511,28 @@ byte at attract frame 1500.
 There is no Stages tab, no cells, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
+## Desert Tank
+
+`desert.zip` is Desert Tank (Sega / Martin Marietta, 1994, the original
+Model 2; MAME calls it not working, but it boots and its attract runs, with
+its textures and colours). The **Models** tab has the 2092 entries of the
+data ROM's model table (1513 with a polygon count), with the textures, face palette
+and colour tables the game builds: the tanks, trucks, crates, barrels,
+huts and the desert itself.
+
+The program is built on Daytona USA's: the same texture upload, luma copy
+and colour ramp, at other addresses. The texture picker's sets 0..2 are the
+three banks a mission's set-up can put on sheet 0, over the boot's bank on
+sheet 1; set 1 is the attract's, and a model opens on it. Nothing read yet
+says which mission a model belongs to, so a model with the wrong picture on
+sheet 0 may need another set.
+
+Set 1's sheets, colour tables, luma and palette match MAME's RAM byte for
+byte at attract frames 600 and 1200.
+
+There is no Stages tab, no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with
