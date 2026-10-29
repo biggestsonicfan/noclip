@@ -38,6 +38,7 @@ import { buildSkisuprgTexram } from './skisuprg.js';
 import { buildWaverunrTexram } from './waverunr.js';
 import { buildTopskatrTexram } from './topskatr.js';
 import { buildBelTexram } from './bel.js';
+import { racerCourseModels } from './racers.js';
 import { SHEET_BYTES, SHEET_H, texelByte, levelOrigin } from './atlas.js';
 import { I960 } from './i960.js';
 
@@ -1953,6 +1954,12 @@ export function programTextureSets(rom, index, decoded) {
     if (T.raw?.layout === 'copy') {
         if (!decoded) return null;
         return { sets: sampledTiles(decoded).length ? [0] : [], how: sampledTiles(decoded).length ? 'only' : 'untextured' };
+    }
+    /* Manx TT, STCC and INDY 500: a model in a course's lists takes that
+     * course's set (js/racers.js). */
+    if (rom.game.stageTable?.racer) {
+        const course = racerCourseModels(rom).get(index);
+        if (course != null) return { sets: [course], how: 'course' };
     }
     /* Sega Rally the other way round: the boot bank's full size is on sheet 0
      * and a course's on sheet 1. A sheet-1 model in one of the course lists

@@ -1249,10 +1249,17 @@ match MAME's byte for byte; the colour tables come from running the game's
 own routine.
 
 The texture picker's sets 0..2 are the three banks the game deals over its
-boot bank; set 0 is the one the boot leaves in. Which course uses which bank
-is not known yet, so a course model may need its set picked by hand.
+boot bank; set 0 is the one the boot leaves in. A course segment opens on its
+course's set; other sheet-1 models need theirs picked by hand.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Stages** tab has the two courses, Laxey Coast and the T.T. Course, each
+its whole list of segments read from the game's course record, under the sky
+the record names, on the course's own texture set. MAME's attract mode draws
+the same lists on the same courses. The bikes, riders and trackside objects
+the race adds are not in it, and Laxey Coast keeps the T.T. Course's colour
+rows (the race lays its own over them).
+
+There is no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
 
 ## INDY 500

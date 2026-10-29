@@ -15,6 +15,7 @@ import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readLastbrnxStages, lastbrnxPaletteCycles } from './lastbrnx.js';
+import { readRacerStages } from './racers.js';
 import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readDaytonaCars, readDaytonaRuns, daytonaRunList, poseDaytonaCar } from './daytonacar.js';
@@ -6737,6 +6738,7 @@ function loadGameContent() {
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
         else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
+        else if (T.racer) state.stages = readRacerStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

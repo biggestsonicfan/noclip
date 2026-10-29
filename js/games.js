@@ -6449,7 +6449,28 @@ const manxtt = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /*
+     * The materials go up with the TGP's function 6 as Sega Rally's do:
+     * `mov 22, g1; lda 0x4140, g2; bal 0x40D8` (0x4280). The light is a
+     * stand-in, Sega Rally's world light; the race's own was not read.
+     */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x4140, count: 22, stride: 8 },
+    },
+    /* The two courses (js/racers.js), the race's records 1 and 2. */
+    stageTable: {
+        racer: {
+            kind: 'manxtt',
+            records: 0x401e0,
+            courses: [
+                { record: 1, set: 2, name: 'Laxey Coast' },
+                { record: 2, set: 0, name: 'T.T. Course' },
+            ],
+        },
+        flat: true,
+    },
+    features: { stages: true, characters: false, motions: false, cells: false },
 };
 
 /*
