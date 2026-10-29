@@ -273,9 +273,12 @@ export function readModelEntry(rom, index) {
     const off = base + index * t.stride;
     /* Last Bronx keeps its table in the program ROM (`source`). */
     const dv = t.source === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
+    /* INDY 500's boot takes 0x200000 off a texture pointer with bit 22 set
+     * as it copies the table to RAM (0x3BC20): `texBit22`. */
+    const tex = (p) => (t.texBit22 && (p & 0x400000) ? p - 0x200000 : p);
     return {
-        uvPtr: dv.getUint32(off + f.uv, true),
-        matPtr: dv.getUint32(off + f.mat, true),
+        uvPtr: tex(dv.getUint32(off + f.uv, true)),
+        matPtr: tex(dv.getUint32(off + f.mat, true)),
         meshPtr: dv.getUint32(off + f.mesh, true),
     };
 }
