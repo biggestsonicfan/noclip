@@ -10597,7 +10597,7 @@ SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
 pair 18520/18521) is not read by anything here. Objects (enemies, the
 characters' motions) start at 0x1D874 and the descriptors at 0x96B54.
 
-### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
+### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`, `js/vstriker.js`)
 
 Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
 keeps Daytona USA's table layouts. The model table is 1537 entries of 16
@@ -10641,6 +10641,46 @@ byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
 - A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
 
 There are no model names in ROM.
+
+**The stadium** (`js/vstriker.js`, `readVstrikerStages`). The match draw
+places the ground in code, not from a table. Rev A's 0x64D00 calls 0x64D10
+and 0x65070 every frame:
+- 0x64D10 reads the camera matrix back from the copro (0x80AC, function
+  0x11, then the geometrizer's 0xB0B) and draws the pitch 0x148 and 0x151
+  under it, then the backdrop 0x5F6 in its own window (0x303).
+- 0x65070 draws the stands one side at a time. The copro turns the
+  camera's matrix by the side's quarter turn (function 0x15), and the jump
+  table at 0x65C00 picks the side's models: 0x5FB, 0x5FC and 0x162 on one
+  long side, 0x5FD and 0x5FE on the other, 0x5F4 and 0x5F5 behind each goal.
+- 0x65D00 draws the goals at ±52.38: the frame 0x14F, its other half 0x29B
+  (mirrored at one end), the net 0x150 and 0x164.
+- Flags 0x52CD88..0x52CD8D say which sides the camera can see; the hidden
+  ones are skipped. 0x160 is drawn four times with matrices kept at RAM
+  0x52CD90..0x52CE4F, but the attract never sets its flags.
+
+The explorer doesn't run the copro program (js/doa.js's Copro speaks Model
+2A's), so the turns and places in the module were measured. I dumped every
+geometrizer write in MAME over frames 2600..3800 of the attract match, 25
+frames 50 apart. Each draw's matrix was taken back to the pitch's frame
+through the camera matrix 0x148 is drawn under. Every stadium piece came
+out as a quarter turn or a mirror at 0 or ±52.38, at the same place in
+every frame that drew it.
+
+Checked by eye against MAME's pictures at frames 3000 (looking into a corner
+between two stands) and 3600 (along the touchline), with the explorer
+rendered from the camera at those frames. The stands, the corner gaps,
+the boards and the goals are where MAME has them. MAME's field of view is
+narrower, so the framing differs. `vstrikero` loads the same stadium.
+
+Missing: the flags waving in the crowd, the floodlight towers and the sky.
+None of them comes from the model table: the frames hold 34 draws whose
+pointers aren't in the table, which look like meshes built in RAM. The
+players are also missing. For Animation, 0x63E68..0x63FD8 draws a player
+(the shadow 0x15A, 0x143, ten calls of 0x649A0 for the body parts from
+the slot's +0x268..+0x278), and 0x648C8 is the generic draw by
+`0x522910[g0*16]` (the model table's RAM copy, made by 0xA940). The
+attract's opening flyover (city and stadium) is a separate scene list,
+0xB330 by step `0x282E5C0[0x52C9B0]`; its stadium draw is 0xB670.
 
 ## Animation
 

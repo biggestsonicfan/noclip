@@ -26,7 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models and its stages — see [Virtua Cop 2](#virtua-cop-2).
-*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
+*Virtua Striker* has its models and its stadium — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
@@ -1243,9 +1243,15 @@ PROJECTER or CRT, which is the default on a fresh board. The two settings
 build different colour tables. With either setting, the sheets, the palette,
 luma and the colour tables match MAME's at boot byte for byte.
 
-The kits, the per-team textures and the stadium are set up in play, from
-the team tables, so the models show the boot's look. There is no Stages
-tab, no motions, no cells and no music yet.
+The kits and the per-team textures are set up in play, from the team
+tables, so the models show the boot's look.
+
+The **Stages** tab has the game's one ground, *The stadium*: the pitch,
+the four stands with their advertising boards and the two goals, placed
+the way the match draw places them. It opens on the attract match's
+camera. The flags in the crowd, the floodlight towers and the sky are not
+there (they aren't drawn from the model table). There are no motions,
+cells or music yet.
 
 ## Manx TT Superbike
 

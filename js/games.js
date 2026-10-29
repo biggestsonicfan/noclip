@@ -3750,13 +3750,14 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
         },
         patches: [],
         paletteFixes: [],
-        stageTable: null,
+        /* The match draw's stadium, 0x64D10 and 0x65070 (js/vstriker.js). */
+        stageTable: { flat: true, vstriker: true },
         objects: null,
         area: null,
         sky: null,
         cells: null,
         rig: null,
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
