@@ -1523,15 +1523,32 @@ huts and the desert itself.
 The program is built on Daytona USA's: the same texture upload, luma copy
 and colour ramp, at other addresses. The texture picker's sets 0..2 are the
 three banks a mission's set-up can put on sheet 0, over the boot's bank on
-sheet 1; set 1 is the attract's, and a model opens on it. Nothing read yet
-says which mission a model belongs to, so a model with the wrong picture on
-sheet 0 may need another set.
+sheet 1; set 1 is the attract's, and a model opens on it. A model a mission
+draws opens on that mission's set; for the rest, one with the wrong picture
+on sheet 0 may need another set.
 
 Set 1's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frames 600 and 1200.
 
-There is no Stages tab, no cells and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs).
+The **Stages** tab has the three missions: the Desert Mission (mission 1,
+the training yard and the attract's first run), the Canyon Mission (mission
+2) and mission 0, a third map with ground but no objects that the attract
+never reaches. Each is the mission's 16x16 grid of ground blocks and the
+objects its lists place (huts, crates, barrels, pylons, fences, towers,
+parked vehicles), on the mission's texture set. The program's own object
+code places the objects, run in the explorer. The view picker's second
+choice, the blocks the board draws round the camera, shows only the blocks
+the game's own look-up lists for the camera's block and heading, and the
+objects on them.
+
+From the board's own camera at attract frames 1500 and 4000 (the desert)
+and 5000 and 5300 (the canyon), the explorer's picture matches MAME's:
+the same buildings, fences, pylons and cables, crates and rock walls. The
+tanks and other vehicles that move are not there: the object lists do not
+place them. The sky is not drawn either.
+
+There are no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#desert-tank-jsgamesjs-jsdesertjs).
 
 ## Running it
 
