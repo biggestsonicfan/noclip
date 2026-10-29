@@ -73,6 +73,23 @@
  * drawn over another's tiles. See js/games.js doab.cells and js/scroll.js
  * buildDoaSky, which reads the same table.
  *
+ * Sky Target (1995) has the same pictures two years early, in its program
+ * ROM (`programAt0`, table 0xEBFB0): the loaders 0x78A90 (tiles) and 0x789F0
+ * (colours) put a picture from a block its "scroll group" names, and the draw
+ * (0x78BB0) adds block << 7 to the entries. See js/games.js skytargt.cells.
+ * Wave Runner (waverunr), Sega Water Ski (segawski) and Ski Super G (skisuprg)
+ * have the same library (tables 0x8E1B0, 0x724F0, 0xB05C0).
+ *
+ * Behind Enemy Lines (bel) draws Daytona's records (0x76FC0) from one run
+ * and loads Daytona's CG pairs (0x645F0) from two tables. See js/games.js
+ * bel.cells.
+ *
+ * Top Skater (topskatr) draws Last Bronx's scripts (0xA88E0) from four data
+ * ROM banks; each bank is a Last Bronx CG directory (0xA9420) and then its
+ * scripts with zero bytes between them (`scriptPad`). A bank is a run of
+ * `scripts` and its CG (`scriptDirs`), and a cell is drawn with its run's.
+ * See js/games.js topskatr.cells.
+ *
  * The House of the Dead (hotdo) has the same pictures a year early, in its
  * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free
  * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its
@@ -167,12 +184,15 @@ function cellRecords(rom) {
     } else if (C.groups) {
         out = groupCells(rom).map((c) => c.at);
     } else if (C.scripts) {
-        const [first, end] = C.scripts;
-        for (let a = first; a < end && out.length < MAX_CELLS;) {
-            const next = runScript(rom, a)?.end;
-            if (!next) break;
-            out.push(a);
-            a = next;
+        for (const [first, end] of scriptRuns(C)) {
+            for (let a = first; a < end && out.length < MAX_CELLS;) {
+                if (C.scriptPad) a = pastZeros(rom, a, end);
+                if (a >= end) break;
+                const next = runScript(rom, a)?.end;
+                if (!next) break;
+                out.push(a);
+                a = next;
+            }
         }
     } else if (C.records) {
         for (const [first, end] of C.records) {
@@ -194,6 +214,16 @@ function cellRecords(rom) {
     }
     recordCache.set(rom, out);
     return out;
+}
+
+/* Power Sled's one run of scripts, or Top Skater's runs, one a CG
+ * (`scriptDirs`), with zero bytes between the scripts (`scriptPad`). */
+function scriptRuns(C) {
+    return Array.isArray(C.scripts[0]) ? C.scripts : [C.scripts];
+}
+function pastZeros(rom, a, end) {
+    while (a < end && scrollAt(rom, a).u8[scrollAt(rom, a).off] === 0) a++;
+    return a;
 }
 
 /* The cells whose size is not in a record header: Sega Rally's patterns and
@@ -452,6 +482,12 @@ function cgListsAll(rom) {
             const dirs = group ? [C.groups.boot, dir] : [dir];
             all.push({ dirs, name: group ? `data ${hex(dir)} over the boot's` : `the boot's, data ${hex(dir)}` });
         }
+        cgCache.set(rom, all);
+        return all;
+    }
+    if (C.scriptDirs) {
+        const hex = (a) => `0x${a.toString(16).toUpperCase()}`;
+        for (const dirs of C.scriptDirs) all.push({ dirs, name: dirs.map(hex).join(' + ') });
         cgCache.set(rom, all);
         return all;
     }
@@ -1023,6 +1059,12 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.pictures) return [{ cg: cell, cover: 1 }];
     /* A Sega Rally pattern is drawn with its own file. */
     if (rom.game.cells.cgm) return [{ cg: listedCells(rom)[cell].file, cover: 1 }];
+    /* Top Skater's script is drawn with its run's CG. */
+    if (rom.game.cells.scriptDirs) {
+        const p = cellRecords(rom)[cell];
+        const run = scriptRuns(rom.game.cells).findIndex(([a, b]) => p >= a && p < b);
+        return [{ cg: run, cover: 1 }];
+    }
     /* Power Sled's one CG, the boot's, holds every character and colour. */
     if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
     /* A Last Bronx cell is drawn with the CG its list goes with. */

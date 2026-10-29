@@ -7297,6 +7297,7 @@ const skytargt = {
     name: 'Sky Target',
     identify: ['epr-18406.12', 'epr-18407.13', 'mpr-18415.10', 'mpr-18413.16'],
     identifyCrc: [0xfde9c00a, 0x35f8b529],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18406.12', 0xfde9c00a, 'epr-18407.13', 0x35f8b529]] },
         mainData: {
@@ -7344,7 +7345,13 @@ const skytargt = {
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures (js/cells.js `pictures`): the program's table at
+     * 0xEBFB0, 573 of {tiles, colours, map}, Dead or Alive's format; the last
+     * 43 are in the data ROM's last megabyte, through XTRA_DATA (`xtra`). The
+     * loaders 0x78A90 and 0x789F0 put a picture from its scroll group's block,
+     * and the draw 0x78BB0 adds block << 7 to each entry. */
+    cells: { pictures: { table: 0xebfb0, count: 573 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Ski Super G ---------------------------------------------------------- */
@@ -7429,7 +7436,10 @@ const skisuprg = {
         skisuprg: { ramps: 0x43df0, table: 0x44260 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0xB05C0, 946 entries (920-945 in the second program chip). */
+    cells: { pictures: { table: 0xb05c0, count: 946 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7443,6 +7453,7 @@ const waverunr = {
     id: 'waverunr',
     name: 'Wave Runner',
     identify: ['epr-19282a.15', 'epr-19283a.16', 'mpr-19291.11'],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7509,7 +7520,11 @@ const waverunr = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0x8E1B0, 1059 entries; the last 215 through XTRA_DATA (`xtra`). Load
+     * 0x8D650, draw 0x8D720 (adds block << 7). */
+    cells: { pictures: { table: 0x8e1b0, count: 1059 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7522,6 +7537,7 @@ const segawski = {
     id: 'segawski',
     name: 'Sega Water Ski',
     identify: ['epr-19963a.15', 'epr-19964a.16', 'mpr-19980.11'],
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7587,7 +7603,10 @@ const segawski = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Wave Runner's library (js/cells.js `pictures`). Table
+     * 0x724F0, 867 entries, all in the data ROM's second half (`xtra`). */
+    cells: { pictures: { table: 0x724f0, count: 867 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7650,7 +7669,19 @@ const topskatr = {
         topskatr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* Last Bronx's scripts, drawn by 0xA88E0, one run a data ROM bank,
+     * after its CG directory (loaded by 0xA9420); a run ends where a script
+     * names a character its CG does not load. See TECHNICAL.md. */
+    cells: {
+        scripts: [[0x246c804, 0x2471b60], [0x2553b64, 0x2558e10], [0x2654884, 0x265aec0], [0x2719594, 0x271ac20]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        scriptDirs: [[0x2400000], [0x2500000], [0x2600000, 0xa3980], [0x2700000]],
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7723,7 +7754,10 @@ const bel = {
         bel: { ramps: 0x62a70, table: 0x62dd0, scene: 2 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Daytona's records (draw 0x76FC0), 393 end to end, and
+     * its CG pairs (loader 0x645F0) in two tables, the boot's first. */
+    cells: { records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

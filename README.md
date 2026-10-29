@@ -35,11 +35,11 @@ Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
-*Sky Target* has its models — see [Sky Target](#sky-target).
-Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
-*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models — see [Top Skater](#top-skater).
-*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
+*Sky Target* has its models and its cells — see [Sky Target](#sky-target).
+Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
+*Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Top Skater* has its models and its cells — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1459,7 +1459,14 @@ stage's part needs its set picked by hand.
 The textures, palette, luma and colour tables match MAME's byte for byte at
 the title and in the first stage.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+The **Cells** tab has the game's 573 tile-chip pictures, each with its own
+tiles and colours: the title logo, the SEGA mark, the boot's notices (the
+FBI's and the EPA's, the InVision sound credit), the how-to-play pages in
+Japanese and English, the wing select, the pilots, the story pages and the
+ranking. The title's and the DAREDEVIL backdrop's match MAME's tile chip
+pixel for pixel.
+
+There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
 
 ## Ski Super G
@@ -1478,7 +1485,12 @@ course select look right under set 0, the snow, trees and banners under set
 in the attract byte for byte; the courses' sets are read from their records
 and were not reached in MAME.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 946 2D pictures (the HUD, the course maps,
+the menus, the name entry), each with its own colours. MAME stops on DRIVE
+BOARD TROUBLE, where only the CREDIT pieces show; those match its tile RAM
+pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#ski-super-g-jsskisuprgjs).
 
 ## Wave Runner
@@ -1495,7 +1507,11 @@ which course a model belongs to: the beach of model 2826, for one, wants set
 1. Set 0's texture sheets, colour tables, luma and palette match MAME's RAM
 in the attract byte for byte.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 1059 2D pictures (the title, the HUD, the
+course maps, the menus), each with its own colours. The title screen's
+pictures match MAME's tile RAM pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Sega Water Ski
@@ -1512,7 +1528,11 @@ match MAME's RAM in the attract byte for byte. Three colour rows of every
 course come from a table picked by a value in work RAM (0 in the attract,
 which is the one used here; it may be the player's choice of skier).
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 867 2D pictures, each with its own colours.
+The attract's backdrops and its INSERT COIN pieces match MAME's tile RAM
+pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Top Skater
@@ -1533,7 +1553,14 @@ arena of model 1900 comes out dark on set 1. Set 1's texture sheets, colour
 tables, luma and palette match MAME's RAM in the attract byte for byte, but
 for three colour rows and three palette entries the attract animates.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 360 2D pictures (the title, the menus, the
+HUD, the results) and the four CGs the game loads its tile chip from. A
+picture opens with the CG of the bank it is stored in. Most of the attract's
+match MAME's tile RAM pixel for pixel with that CG; two (259 and 262) are
+drawn with the last CG instead, so pick CG 3 (0x2700000) for them in the
+second picker.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
 
 ## Behind Enemy Lines
@@ -1556,7 +1583,13 @@ sheets as they are first set up.
 Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frame 1500.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 393 2D pictures (the briefings' maps and
+screens, the HUD, the menus) and the 64 CGs that load them. A picture often
+fits several CGs; pick the one the screen loads in the second picker. The
+attract's backdrops and HUD pieces match MAME's tile RAM pixel for pixel
+with their CG.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Desert Tank

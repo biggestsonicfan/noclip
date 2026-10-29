@@ -7843,14 +7843,44 @@ slots 0..63 are max((a * (l + 1)) >> 6, r) (0x37290; the byte table at
 
 They match MAME's entry for entry, at the boot and in the first stage.
 
+**Cells.** The tile chip's pictures are [Dead or Alive's](js/cells.js)
+(`pictures`), two years early: the program's table at 0xEBFB0 holds 573
+pictures of three pointers each, tiles, colours and map, in the data ROM
+and (from picture 530) its last megabyte through XTRA_DATA at 0x64xxxxx.
+The table ends where the next word is 0. A picture is loaded through a
+"scroll group", a little record whose +0 is its first block of 128
+characters (0x78B50, which stops with SCROLL GROUP ERROR when the group's
++0xC is not the picture's tiles):
+
+- 0x78A90, the tiles: chunks of a count and that many 32-byte tiles, until
+  a count of 0, each chunk from a block of its own, from character block *
+  128 (0x1080000 + block * 0x1000).
+- 0x789F0, the colours: a chunk's 16 colours to every block its tiles take,
+  in the RAM copy of the palette at 0x51B9F0 + block * 32, then 0x2CD40
+  copies them up. (0x2CF20 is the plain copy into the same RAM, for colours
+  the code sets itself.)
+- 0x78BB0, the draw (173 callers): the map's width and height as
+  halfwords, then halfword entries, each with block << 7 added (so the group
+  is the block, as on Dead or Alive) and the caller's category bit << 15
+  and bit 14, rows 0x80 bytes apart in the layer.
+
+So each picture is a cell with its own CG, loaded from block 0. In MAME's
+attract the title (frame 900: the logo, cell 45, layer 2, block 6; the SEGA
+mark, cell 427; INSERT COIN(S), cell 58; ©SEGA1995, cell 105) and the
+DAREDEVIL backdrop with the logo (frame 3000, cell 44, 2975 tiles) draw the
+same as the explorer's from the tile chip's own characters and colours,
+pixel for pixel, and the snapshots show the same picture with colorxlat.
+Pictures 2 to 5 are the boot's notices (the FBI's WINNERS DON'T USE
+DRUGS, the EPA's RECYCLE IT, the InVision sound credit); the rest are
+the how-to-play pages in Japanese and English, the wing select, the
+pilots' names and portraits, the story text and the ranking.
+
 **Leads.**
 
 - Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
   set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
   0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
   or path data and is not read.
-- Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
-  0x2CF20, and the tile RAM loader 0x78A90.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 
@@ -7902,6 +7932,18 @@ start of luma RAM; the rest stays 0.
 set, is not found. A course's record (+0x24 and on) and the course loader
 0x3DEA4 are where a Stages tab would start. Lighting is not done.
 
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format), with
+the same scroll-group library (its SCROLL GROUP ERROR string is at 0x58E30;
+the tile clear 0x58DB0, the loads at 0x58D98 and 0x58E78). The table is
+program 0xB05C0, 946 {tiles, colours, map} entries; 920 to 943 are in the
+second program chip (0x100000 on), 944 and 945 have their map in the first.
+Entry 946 has no tiles: what follows is another table. MAME's `skisuprg`
+stops on DRIVE BOARD TROUBLE (code FF) at every frame, with #1881's NVRAM
+too, so the grading is thin: its CREDIT pieces (cells 670, 673, 675) match
+the tile RAM pixel for pixel at frames 1200 to 6000. The trouble screen
+itself is not one of the pictures. Getting past it (the drive board's reply,
+not found) would let the attract grade the rest.
+
 ### Wave Runner and Sega Water Ski (`js/waverunr.js`)
 
 Sega's 1996 jet-ski game on Model 2C (MAME's `waverunr`, Revision A). Its
@@ -7941,6 +7983,19 @@ It is off in the attract and is not followed here.
 **Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
 0x85C408 to the entries from 0x3200.
 
+**Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format): the
+table is program 0x8E1B0, 1059 {tiles, colours, map} entries to the zeros at
+0x91354; the last 215 point at data through XTRA_DATA (0x64xxxxx is data
+0x14xxxxx; the data region repeats its chip there). The scroll-group library
+is the same as Sky Target's: 0x8D650 loads (block allocator 0x2176D0, colours
+0x2177C0, tiles 0x217940), 0x8D720 draws, adding block << 7. The 0x21xxxx
+routines run from RAM: the boot copies 128 KB of program from 0xB0000 to
+0x200000 (0xB790), so 0x2176D0 is program 0xC76D0. A MAME write tap put the
+title's tiles from 0x2CD5B30 (count 0x175) through 0x217A08. Graded against
+MAME's tile and palette RAM at frames 1200, 3000, 4200 and 5400: 48 pictures
+found on the layers (the title, the backdrops 111/112/243/244, the course
+map pieces 925-1008, the menus 699/702), all pixel for pixel.
+
 **Leads.** Which models a course draws, so that a model could open on its
 own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
 calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
@@ -7963,6 +8018,15 @@ called. The colour-table writer 0x90A90 takes the rows with four, three and
 two rows left from the pointer table 0xA1ED0, three to each value of work
 RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
 2500: sheets, colorxlat, luma and palette the same.
+
+Water Ski's cells are Wave Runner's library (its SCROLL GROUP ERROR string
+at 0x6FA40, the table read at 0x6F9A8 and 0x6FAC0): table program 0x724F0,
+867 {tiles, colours, map} entries to the zeros at 0x74D94, every pointer
+through XTRA_DATA (0x64xxxxx, data 0x14xxxxx; `xtra` window 0x1000000).
+Graded against MAME's tile and palette RAM at frames 1100, 2500 and 4000:
+the backdrops 863 (62 x 48) and 251 (64 x 48) and the INSERT COIN and CREDIT
+pieces 47, 55, 65, 68 and 74 pixel for pixel. Cells 10 to 37 are the same
+tiles under another picture's colours, which is why they half match.
 
 ### Top Skater (`js/topskatr.js`)
 
@@ -8023,6 +8087,34 @@ run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
+**Cells.** Power Sled's scripts (`scripts`, read by runScript with Last
+Bronx's settings: no bias, last opcode 0x8D, wide moves), drawn by 0xA88E0
+(g0 the tilemap, g1 the script, g2 the bits ORed into each entry: 0, 0x8000
+or 3 << 14). The data ROM has four banks, 0x2400000 to 0x2700000; each opens
+with a Last Bronx CG directory, which the loader 0xA9420(dir) reads. The boot
+(0xA96A4) loads 0x2400000; the other callers load 0x2500000, 0x2600000 with
+0x2600000 + 0xA3980, and 0x2700000. The bank's scripts follow its tiles, end
+to end with zero bytes between them (`scriptPad`), so a bank is a run of
+cells and a CG (`scriptDirs`): 142, 52, 152 and 14 cells, 360 in all. A run
+ends where a script first names a character its CG does not load (0x2471B60,
+0x2558E10, 0x265AEC0, 0x271AC20); every script address the program loads
+(25, 7, 30 and 1, from `lda X, g0` + `lda Y(g0), g1` pairs, so X + Y) is in
+its run. The compiler folds the pair, so a search for the plain address
+misses most of them.
+
+**Checked.** With MAME's tile RAM at attract frames 1200, 3000 and 4500:
+cells 41, 328, 332 to 337, 339, 341, 343, 345 and 347 match pixel for pixel
+with their bank's CG. Cells 259 and 262 (run 2) are found with an entry
+delta of 0x2600 and match pixel for pixel with CG 3 (0x2700000), not their
+own. Cell 359 (21 x 48, delta 0x2D00) matches best with CG 0: 57456 pixels
+of 64512; no CG or pair of CGs does better.
+
+**Leads.** The entry deltas say the draw that puts 259, 262 and 359 up adds
+a character base, so a CG is loaded higher than its directory's first
+characters there; find the caller of 0xA88E0 that passes them. The bytes
+after each run's end look like more scripts with characters from another
+bank.
+
 ### Behind Enemy Lines (`js/bel.js`)
 
 Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own
@@ -8075,6 +8167,25 @@ palette match; the sheets differ in rows 0x100 on, x 320 to 511, which hold
 pieces of bank 0x2600000 (entry 1) streamed in by the slot loader below.
 MAME's own pictures of the attract (the mission briefing, the C.A.T. title)
 show the same objects the viewer draws.
+
+**Cells.** Daytona's formats (`records`, `cgTables`), Sega's own library
+two years on. The draw 0x76FC0(record, tilemap) reads a halfword added to
+each entry, a halfword that is 0 for byte entries, the rows and the columns
+(words), then the entries, each row 0x80 bytes on in the tilemap; 50 callers.
+The records lie end to end in data 0x800180 to 0x862D50, 393 of them, and
+every record the code names, directly or through its tables (0x205C124,
+0x2061888, 0x2062A20, 0x2062B4C, 0x2062BE0, 0x2062C10, 0x2065690), is one.
+The loader 0x645F0(pair) takes a pointer to {CG list, palette list}: the CG
+list {chunk, character address} pairs to a zero, a chunk being {count, count
+x 32 bytes}; the palette list {address, halfword count, colours}. Its 25
+callers take the pair from two tables: 0x2100000, 8 pairs (0 the boot's,
+0x21000B8, which fills most of the character RAM), and 0x2C00000, 56 pairs,
+indexed by the scene. Graded against MAME's tile and palette RAM at frames
+1200, 3000 and 4500: the backdrops 4, 5, 6, 7, 9, 23, 338, 340 and 376, the
+map pieces 156 and 167, the menu text 79, 96 and 98, and dozens of HUD pieces
+(2 x 2 and 3 x 3), all pixel for pixel with their CG. Many CGs write every
+character a picture uses, so the first CG is not always the screen's: cell 7
+needs CG 4, cell 376 CG 47.
 
 **Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
 sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
