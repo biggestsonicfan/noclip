@@ -126,6 +126,13 @@
  * files of whole
  * 128-character blocks, each block taking its own group's colours from a
  * table of pointers. See js/games.js PLTKIDS_CELLS.
+ *
+ * Virtua Cop 2 keeps Virtua Cop's records and boot, moved: its draw (0x7928)
+ * ORs the caller's bits into each entry rather than adding them (`orBase`),
+ * its font is copied straight where the rest is swapped (a fourth element of
+ * a `chars` entry), and a run count of 0 fills to the end (`zeroFills`). The
+ * game refills the middle and the end of the chip for the title and for each
+ * stage, so its CGs are `modes`. See js/games.js VCOP2_CELLS.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
@@ -526,7 +533,7 @@ export function readCell(rom, cell) {
     const entries = new Uint16Array(rows * cols);
     for (let i = 0; i < entries.length; i++) {
         const v = wide ? R.view.getUint16(R.off + head + i * 2, true) : R.u8[R.off + head + i];
-        entries[i] = (v + base) & 0xffff;
+        entries[i] = (rom.game.cells.orBase ? v | base : v + base) & 0xffff;
     }
     return { cols, rows, entries };
 }
@@ -768,9 +775,12 @@ const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) <<
 
 /* What Virtua Cop's boot leaves in the tile chip, and a stage's group over
  * it (js/games.js VCOP_CELLS). The characters are copied a halfword at a
- * time with the bytes swapped, unless `straight`. The palette steps, in the
+ * time with the bytes swapped, unless `straight` (for all of them, or as a
+ * fourth element for one list, Virtua Cop 2's font). The palette steps, in the
  * boot's order: `runs`, a count and sixteen colours, that group repeated
- * count times, until `until` groups are written or for `lists` such entries;
+ * count times, until `until` groups are written or for `lists` such entries
+ * (with `zeroFills`, Virtua Cop 2's, a count of 0 repeats its group to the
+ * end, or once in a single entry);
  * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
  * colours copied as they are; `copy`, groups copied to others; `shuffled`,
  * Virtual On's lists of [colours, groups], one group after another;
@@ -789,10 +799,10 @@ function loadBoot(rom, L, charBytes) {
     const pal = new Uint16Array(0x8000);
     const charRuns = [], palRuns = [];
     if (B.font) bootFont(rom, B.font, chars, charRuns);
-    for (const [src, first, count] of [...(M.chars ?? []), ...B.chars]) {
+    for (const [src, first, count, straight] of [...(M.chars ?? []), ...B.chars]) {
         const S = scrollAt(rom, src);
         const n = Math.min(count * TILE_BYTES, S.u8.length - S.off, charBytes - first * TILE_BYTES) & ~1;
-        const swap = B.straight ? 0 : 1;
+        const swap = B.straight || straight ? 0 : 1;
         for (let i = 0; i < n; i += 2) {
             chars[first * TILE_BYTES + i] = S.u8[S.off + i + swap];
             chars[first * TILE_BYTES + i + 1] = S.u8[S.off + i + 1 - swap];
@@ -828,7 +838,8 @@ function loadBoot(rom, L, charBytes) {
             let src = op.runs, group = op.group;
             for (let k = 0; k < 0x100 && (op.lists ? k < op.lists : group - op.group < op.until); k++) {
                 const S = scrollAt(rom, src);
-                const count = S.view.getUint16(S.off, true);
+                let count = S.view.getUint16(S.off, true);
+                if (!count && B.zeroFills) count = op.lists ? 1 : op.until - (group - op.group);
                 put(group, src + 2, count);
                 group += count;
                 src += 34;

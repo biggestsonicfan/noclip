@@ -3563,6 +3563,96 @@ const vcop = {
  * called in the same order at boot (0x1EDC..0x1F2C). What differs is listed
  * on the fields below.
  */
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot, moved and
+ * grown. The draw is 0x7928 (0x7970 the same but for skipping zero
+ * entries): the record's address in g0, the tilemap's in g9 and in g1 the
+ * bits it ORs into every entry (`orBase`), 0x8000 from most calls, 0xC000
+ * (bit 14, the group moved on by 0x80) from some and 0 from a few. The
+ * record is Virtua Cop's, the width and the height as halfwords then
+ * halfword entries; they lie end to end in data 0x2B80000..0x2B8E67E and in
+ * the two gaps between the three stage skies (0x8228[stage], which 0x7EAC
+ * and 0x80A8 stream into layer 0x1006000 as Virtua Cop does its own).
+ *
+ * The boot (0x7510) fills the tile chip, and the game fills parts of it
+ * again. The characters, each list a halfword at a time with its bytes
+ * swapped (0x7604), but for the font:
+ *   0x7E10  the font, a list at 0x60AA4: 128 characters from 0x60AB4 into 0
+ *   0x7554  0x2400000 into 0x80..0x67F
+ *   0x8260  0x240C000 into 0x680..0x327F, the game's (called again after
+ *           0x82D8's screens); 0x82D8 has 0x2464000 there instead
+ *   0x8314  the stage's, 0x8394[0x502010]: three lists into 0x3280..0x3FFF,
+ *           and stage 2 one more over 0x3B80 on
+ * and the colours, a count and sixteen colours repeated count groups (0x767C
+ * until its end, 0x76C0 one such run): 0x7E50's list at 0x61AB4 (groups 0
+ * and 0x80), four colours at 0x6068C over 0x80, 0x2B95070 into groups 1..0xC
+ * and again into 0x81..0xFF, runs from the program over 0x82..0x88; 0x8260
+ * 0x2B951A2 into 0xD..0x64 and three runs over 0x41, 0xCD and 0xB4 (0x82D8,
+ * 0x2B95626); the stage's into 0x65..0x7F (and 0x2B95A44 into 0x77.. for
+ * stage 2). So a CG is the boot with one of the two middle fills and one of
+ * the stage fills (`modes`).
+ */
+const VCOP2_STAGE_FILLS = [
+    { name: 'stages 0, 2, 4, 5', chars: 0x02bc0000, pal: 0x02b95978 },
+    { name: 'stage 1', chars: 0x024aa000, pal: 0x02b959de },
+    { name: 'stages 3, 6', chars: 0x02ba0000, pal: 0x02b95a88 },
+    { name: 'stage 2', chars: 0x02bc0000, pal: 0x02b95978, more: [0x02bd6000, 0x02b95a44] },
+];
+const VCOP2_MIDDLE = [
+    {
+        name: 'game (0x8260)', chars: 0x0240c000,
+        palette: [
+            { runs: 0x02b951a2, group: 0xd, until: 0x58 },
+            { runs: 0x0006094e, group: 0x41, lists: 1 },
+            { runs: 0x0006092c, group: 0xcd, lists: 1 },
+            { runs: 0x000608e8, group: 0xb4, lists: 1 },
+        ],
+    },
+    { name: 'title (0x82D8)', chars: 0x02464000, palette: [{ runs: 0x02b95626, group: 0xd, until: 0x58 }] },
+];
+const VCOP2_CELLS = {
+    sized: true,
+    orBase: true,
+    records: [[0x02b80000, 0x02b8e67e], [0x02b9047e, 0x02b90e78], [0x02b92d78, 0x02b93266]],
+    base: 0x8000,
+    bases: {
+        [0x02b805f8]: 0xc000, [0x02b80608]: 0xc000, [0x02b80390]: 0xc000,
+        [0x02b89750]: 0, [0x02b8b644]: 0, [0x02b89c70]: 0, [0x02b8b6c0]: 0,
+        [0x02b899e0]: 0, [0x02b8b746]: 0, [0x02b8c24a]: 0,
+    },
+    boot: {
+        chars: [],
+        palette: [],
+        zeroFills: true,
+        modes: VCOP2_MIDDLE.flatMap((M) => VCOP2_STAGE_FILLS.map((S) => ({
+            name: `${M.name}, ${S.name}`,
+            chars: [
+                [0x00060ab4, 0, 0x80, true],
+                [0x02400000, 0x80, 0x600],
+                [M.chars, 0x680, 0x2c00],
+                [S.chars, 0x3280, 0xd80],
+                ...(S.more ? [[S.more[0], 0x3b80, 0x480]] : []),
+            ],
+            palette: [
+                { set: [[0, 0xb60a], [1, 0xffff], ...Array.from({ length: 14 }, (_, i) => [2 + i, 0])] },
+                { set: [[0x800, 0xfed6], [0x801, 0x83e0], [0x802, 0x8000], [0x803, 0x8000],
+                    ...Array.from({ length: 12 }, (_, i) => [0x804 + i, 0])] },
+                { runs: 0x02b95070, group: 1, until: 0xc },
+                { runs: 0x02b95070, group: 0x81, until: 0x7f },
+                { runs: 0x000608a4, group: 0x82, lists: 1 },
+                { runs: 0x000608c6, group: 0x87, lists: 1 },
+                { runs: 0x0006090a, group: 0x83, lists: 1 },
+                ...M.palette,
+                { runs: S.pal, group: 0x65, until: 0x1b },
+                ...(S.more ? [{ runs: S.more[1], group: 0x77, until: 9 }] : []),
+            ],
+        }))),
+    },
+    programAt0: true,
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
 const vcop2 = {
     ...daytonaBuild({
         id: 'vcop2',
@@ -3646,9 +3736,9 @@ const vcop2 = {
     objects: null,
     area: null,
     sky: null,
-    cells: null,
+    cells: VCOP2_CELLS,
     rig: null,
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Virtua Striker ------------------------------------------------------- */

@@ -10526,6 +10526,57 @@ start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
 SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
 pair 18520/18521) is not read by anything here.
 
+### Virtua Cop 2's cells (`js/cells.js`, `VCOP2_CELLS` in `js/games.js`)
+
+Virtua Cop 2 draws Virtua Cop's records (`sized`): the width and the height as
+halfwords, then halfword entries onto 0x80-byte tilemap rows. The draw is
+`0x7928` (`0x7970` skips zero entries): the record in g0, the tilemap in g9,
+and in g1 the bits it ORs into every entry, not adds (`cells.orBase`). Most
+callers pass 0x8000; 0x2B805F8, 0x2B80608 and 0x2B80390 get 0xC000, and
+0x2B89750, 0x2B8B644, 0x2B89C70, 0x2B8B6C0, 0x2B899E0, 0x2B8B746 and
+0x2B8C24A get 0 (`cells.bases`). The records lie end to end in data
+[0x2B80000, 0x2B8E67E) and in the two gaps between the three stage skies,
+[0x2B9047E, 0x2B90E78) and [0x2B92D78, 0x2B93266): 314 cells, 37 of them
+named by no aligned word in the program or data ROM. The skies themselves
+(`0x8228[stage]`) are streamed into layer 0x1006000 by `0x7EAC` and `0x80A8`
+as Virtua Cop's are, and are not cells.
+
+There are no CG lists: the boot, `0x7510`, fills the chip, and the game
+fills parts of it again (`cells.boot`):
+
+- characters, a halfword at a time with the bytes swapped (`0x7604`): the
+  font, 128 characters from 0x60AB4 into 0 (copied straight, by `0x7E10`, so
+  the list's fourth element `straight`); 0x2400000 into 0x80..0x67F
+  (`0x7554`); the middle fill into 0x680..0x327F, 0x240C000 for the game
+  (`0x8260`, called again after the title) or 0x2464000 for the title screens
+  (`0x82D8`); and the stage's (`0x8314`, `0x8394[0x502010]`) into
+  0x3280..0x3FFF, with one more list over 0x3B80 on for stage 2;
+- colours, a count and sixteen colours written count groups on (`0x767C`
+  to its end, `0x76C0` one run): 0x7E50's at 0x61AB4 into groups 0 and 0x80,
+  four colours at 0x6068C over 0x80, 0x2B95070 into 1..0xC and again into
+  0x81..0xFF, runs from the program over 0x82..0x88; the middle fill's
+  (0x2B951A2 into 0xD..0x64 and three runs over 0x41, 0xCD and 0xB4 for the
+  game; 0x2B95626 for the title); the stage's into 0x65..0x7F (and 0x2B95A44
+  into 0x77 on for stage 2). A count of 0 here repeats its group to the end
+  of the fill, or once in a one-run list (`boot.zeroFills`).
+
+So a CG is the boot with one of the two middle fills and one of the four
+stage fills (stages 0, 2, 4 and 5 share one; 1; 3 and 6; 2 adds its own
+list): eight CGs (`boot.modes`). The colours go through colorxlat.
+
+**Checked against MAME.** `vcop2` attract, the shared build, character RAM and
+palette dumped at frames 600 to 4800 (every 600) and spot frames up to 15000:
+CG 0 (the game's fill, stage 0's) matches character RAM byte for byte at every
+one, and the palette at every colour the profile writes but groups 9 and 0xB,
+whose colours the game turns while the attract runs (a gradient that moves
+from frame to frame). The title fill, `0x82D8`, is not entered in the attract
+(its callers are `0x2B6C`, when 0x502100 is 0, `0x4ED4` and `0x3D528`), so
+CGs 4 to 7 are checked only by drawing the cells they rank first for, which
+come out as whole pictures.
+
+**Leads.** Groups 9 and 0xB's turning colours; the stage fills of stages
+other than 0 were not met in MAME's attract.
+
 ### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
 
 Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)

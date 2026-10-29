@@ -25,7 +25,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
-*Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Cop 2* has its models and its cells — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
@@ -673,7 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids has the Cells tab but not the music.
+Bronx has both; Pilot Kids and Virtua Cop 2 have the Cells tab but not the
+music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1215,8 +1216,15 @@ over the bank the boot puts on sheet 1. With set 0, the sheets, the palette,
 luma and the colour tables match MAME's in the attract byte for byte. Sets 1
 and 2 were not reached in MAME.
 
-There is no Stages tab, no characters, no motions, no cells and no music yet.
-See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+The **Cells** tab has its 314 pictures: the title cards, the stage maps and
+briefings, the HUD, the rankings and the font. The game fills the tile chip
+at boot and again for the title screens and each stage, so there are eight
+CGs, one per fill; the game's fill with stage 0's matches MAME's tile chip in
+the attract.
+
+There is no Stages tab, no characters, no motions and no music yet.
+See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs) and
+[Virtua Cop 2's cells](TECHNICAL.md#virtua-cop-2s-cells-jscellsjs-vcop2_cells-in-jsgamesjs).
 
 ## Virtua Striker
 
