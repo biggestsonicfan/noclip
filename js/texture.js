@@ -874,16 +874,21 @@ function uploadSrallycBank(rom, base, tex, flag) {
 /*
  * Texture RAM for Sega Rally: the boot bank, then the set's course bank. A set
  * is a course variant, an index into the bank table.
+ *
+ * Manx TT Superbike is the same routine at 0x3A20 with its own run table
+ * (0x3960) and its banks from main_data 0x400000 (`bankBase`); it names no
+ * bank table, so a set is a bank of `banks` (see js/games.js manxtt).
  */
 function buildSrallycTexram(rom, texSets) {
     const raw = rom.game.texture.raw;
     const tex = new Uint8Array(SHEET_BYTES * 2);
-    const bank = (n) => MAIN_DATA_BANKS + n * SHEET_BYTES;
+    const bank = (n) => (raw.bankBase ?? MAIN_DATA_BANKS) + n * SHEET_BYTES;
     uploadSrallycBank(rom, bank(raw.bootBank), tex, 0);
     const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
     let pages = 1;
     if (sets.length) {
-        const n = rom.mainCpuView.getUint32(raw.bankTable + sets[sets.length - 1] * 4, true);
+        const set = sets[sets.length - 1];
+        const n = raw.banks ? raw.banks[set] : rom.mainCpuView.getUint32(raw.bankTable + set * 4, true);
         if (bank(n) + SHEET_BYTES <= rom.mainData.length) {
             uploadSrallycBank(rom, bank(n), tex, 1);
             pages++;

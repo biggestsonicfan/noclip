@@ -153,7 +153,9 @@ export function buildLumaram(rom) {
         for (let i = 0; i < 256; i++) luma[i * 2] = ((i & 127) + 1) >> 1;
         return luma;
     }
-    if (rom.game.colors.i960) return runColorRoutines(rom).luma.slice();
+    /* A game that names its luma table copies it rather than working it out,
+     * whatever it runs for colorxlat (Manx TT's 0x3828). */
+    if (rom.game.colors.i960 && !rom.game.colors.luma) return runColorRoutines(rom).luma.slice();
     /* Last Bronx works its out too (0x1A50): band b of divisor d takes
      * ((k + 1) & 0x7E) * 64 / d for k of 0..d, and 0x40 past it. */
     const bands = rom.game.colors.luma?.bands;
@@ -511,9 +513,12 @@ function runColorRoutines(rom) {
     if (rom.i960Colors) return rom.i960Colors;
     const C = rom.game.colors.i960;
     const prog = rom.maincpu;
-    const [from, to, at] = C.copy;
+    /* Manx TT runs its colour routines straight out of the ROM: no `copy`. */
     const ram = new Uint8Array(0x100000);
-    ram.set(prog.subarray(from, to), at - 0x500000);
+    if (C.copy) {
+        const [from, to, at] = C.copy;
+        ram.set(prog.subarray(from, to), at - 0x500000);
+    }
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);

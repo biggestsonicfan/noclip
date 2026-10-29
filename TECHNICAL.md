@@ -7138,6 +7138,56 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
+
+AM3's 1995 bike game on Model 2A (MAME's `manxtt`, Revision D, the DX
+cabinet's program) is Sega Rally's engine, and most of what the explorer does
+for it is Sega Rally's code with Manx TT's addresses. The program runs straight
+from its ROM: there is no copy to RAM, so the addresses below are the ROM's.
+
+**Models.** 3532 entries of 16 bytes at program 0xBB00, tpa, tha, oba and a
+polygon count, as Sega Rally's; the draws read them 105 times as `lda
+0xBB00[gN*16]`. Mesh pointers cover all 12 MB of polygon ROM, texture pointers
+its first 4 MB.
+
+**Textures.** 0x3A20 is Sega Rally's 0x3940 (`uploadSrallycBank`): g0 the
+bank, g1 the flag, the same two cursors and the same six-entry run table, at
+0x3960 here. A bank is main_data 0x400000 + bank * 1 MB (`shlo 20` then `lda
+0x2400000(g0)`), and g0 = -1 goes on with the upload in progress, a slice a
+frame. The boot (0x3720, 0x3750) deals bank 0 with the flag 0 and bank 1 with
+the flag 1. Banks 0..3 (data 0x400000..0x7FFFFF) are the only ones dealt:
+0x8480 deals 2, 0x274F4 1, 0x6532C cycles 0..3, and 0x1D8E0, which the attract
+scripts call from their tables at 0x19960 and 0x199F0 (entries {start, end,
+handler, arg1, arg2}), 3, 2 and 1. The explorer's sets are banks 1, 2 and 3
+over bank 0. Set 0 matches MAME's texture RAM after the boot, every byte of
+both sheets. Which course or scene uses which of banks 2 and 3 has not been
+worked out, so a sheet-1 model gets its set from the picker. A second routine,
+0x3CB0/0x3D00, copies a bank straight to sheet 1 (0x12400000), 0xFFF
+halfwords a call; nothing here uses it.
+
+**Colours.** The boot's 0x36F0 calls 0x6830, then `bal 0x3828` and `bal
+0x38B8`. 0x6830 builds colorxlat: 0x68B0's ramp is float arithmetic (a gamma,
+with constants at 0x68A0 and 0x68A4) over 32 rows of the three channels at
+0x1810000, 0x1814000 and 0x1818000, and 0x76B0 and 0x7754 lay rows over it.
+The explorer runs 0x6830 on `js/i960.js` straight out of the ROM
+(`runColorRoutines` without `copy`), and the result is MAME's colorxlat byte
+for byte. 0x6830 also writes the face palette: 0x6770 copies {count,
+colours} from 0x7A404, 738 colours, to 0x1802000 (`paletteProgram`), which
+matches MAME's palette RAM. Luma is 0x3828: main_data bytes 0..0x407F to luma
+RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
+0x3880 to the TGP's registers at 0x800000; what they are has not been worked
+out, so there is no `lighting` block and the lone model gets the placeholder
+light.
+
+**Leads.** The pictures are AM3's "CGM 1.0" files, as Sega Rally's (js/cells.js
+`cgm`): one in the program at 0xB250 and 101 in the data ROM from 0x280000.
+The map of the island is model 1213 to 1216, the leaderboards 1628 and 1629.
+The course is built from segments around 2099..2350, drawn by the race
+code that reads the model table; its course records were not looked for.
+MAME on empty NVRAM stays on the DX cabinet's motion-slider check, so the
+attract never ran there; the bank-to-course mapping needs a run past it
+(the Twin cabinet's settings, or m2-hle2).
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

@@ -6034,6 +6034,101 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
+/*
+ * Manx TT Superbike (Revision D, the DX cabinet's program; MAME manxtt), a
+ * Model 2A AM3 game on Sega Rally's engine: the same 16-byte model table, the
+ * same texture deal and colour code the program runs itself, and the same
+ * "CGM 1.0" pictures. What moves is where each table is.
+ */
+const manxtt = {
+    id: 'manxtt',
+    name: 'Manx TT Superbike (Revision D)',
+    identify: ['epr-18822d.12', 'epr-18823d.13', 'epr-18824d.14', 'epr-18825d.15'],
+    identifyCrc: [0x4f435990, 0xb8eddb5c, 0xaca9f61f, 0x5a1d7799],
+    regions: {
+        /* Two pairs of 128 KB chips; MAME mirrors them to 0x200000, which
+         * nothing here reads. */
+        maincpu: {
+            size: 0x80000,
+            parts: [
+                [0x000000, 'epr-18822d.12', 0x4f435990, 'epr-18823d.13', 0xb8eddb5c],
+                [0x040000, 'epr-18824d.14', 0xaca9f61f, 'epr-18825d.15', 0x5a1d7799],
+            ],
+        },
+        /* Luma and the pictures in the first pair, the texture banks in the
+         * second, a third that is not textures, and a 1 MB pair of pictures
+         * at 0xC00000. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-18751.10', 0x773ad43d, 'mpr-18752.11', 0x4da3719e],
+                [0x400000, 'mpr-18749.8', 0xc3fe0eea, 'mpr-18750.9', 0x40b55494],
+                [0x800000, 'mpr-18747.6', 0xa65ec1e8, 'mpr-18748.7', 0x375e3748],
+                [0xc00000, 'epr-18862.4', 0x9adc3a30, 'epr-18863.5', 0x603742e9],
+            ],
+        },
+        polygons: {
+            size: 0xc00000,
+            parts: [
+                [0x000000, 'mpr-18753.16', 0x33ddaa0d, 'mpr-18756.20', 0x28713617],
+                [0x400000, 'mpr-18754.17', 0x09aabde5, 'mpr-18757.21', 0x25fc92e9],
+                [0x800000, 'mpr-18755.18', 0xbf094d9e, 'mpr-18758.22', 0x1b5473d0],
+            ],
+        },
+        /* The UV and material streams; the sheets are raw in the data ROM. */
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18760.25', 0x4e3a4a89, 'mpr-18759.24', 0x278d8742]],
+        },
+        copro: {
+            size: 0x400000,
+            optional: true,
+            parts: [[0x000000, 'mpr-18761.28', 0x4e39ec05, 'mpr-18762.29', 0x4ab165d8]],
+        },
+    },
+    /*
+     * 3532 entries of 16 bytes in the program ROM at 0xBB00, tpa, tha, oba
+     * and a polygon count, up to 0x197B0. The draws read it 105 times as
+     * `lda 0xBB00[gN*16]` and send the four words to the TGP's FIFO.
+     */
+    modelTable: { source: 'maincpu', offset: 0xbb00, count: 3532, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* {count, colours} at 0x7A404, copied to the face palette (0x1802000) by
+     * 0x6770 in the boot's 0x6830. Verified against MAME's palette RAM. */
+    paletteProgram: 0x7a404,
+    paletteOffset: null,
+    /*
+     * Sega Rally's deal (uploadSrallycBank in js/texture.js) at 0x3A20 (g0
+     * the bank, g1 the flag; g0 = -1 goes on with the upload in progress,
+     * a slice a frame), with its run table at 0x3960 and its banks from
+     * main_data 0x400000 (`shlo 20; lda 0x2400000(g0)`). The boot (0x3720,
+     * 0x3750) deals bank 0 with the flag 0, then bank 1 with the flag 1;
+     * 0x8480 deals bank 2, 0x274F4 bank 1, 0x6532C cycles 0..3, and the
+     * attract scripts (0x19960, 0x199F0, through 0x1D8E0) deal 3, 2 and 1.
+     * A set is the bank laid over bank 0. Set 0, bank 1, is MAME's texture
+     * RAM after the boot halfword for halfword.
+     */
+    texture: {
+        raw: { layout: 'srallyc', runTable: 0x3960, bankBase: 0x400000, banks: [1, 2, 3], bootBank: 0 },
+        sets: 3,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * colorxlat by the boot's own 0x6830 (0x68B0's gamma ramp and the rows
+     * 0x76B0 and 0x7754 lay over it), run out of the ROM, which matches
+     * MAME's byte for byte. Luma is 0x3828's copy: main_data bytes 0..0x407F
+     * to luma RAM 0x12800000.
+     */
+    colors: {
+        i960: { run: [0x6830] },
+        luma: { data: 0, bytes: 0x4080 },
+        solid: true,
+    },
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    features: { stages: false, characters: false, motions: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6041,7 +6136,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa];
+    pltkids, pltkidsa, manxtt];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with
