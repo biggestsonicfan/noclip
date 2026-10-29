@@ -7565,7 +7565,22 @@ model the fade.
 **Leads.** The scene number is at RAM 0x508C94, and the switch on it at
 0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
 0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
-model to its set. The objects' records (which triple, where) are not found.
+model to its set.
+
+The city is not the program's objects. In MAME's attract at frame 1200
+(Times Square, "2005 JULY 12") the program sends six objects and 137 words
+to 0x804000 in the frame, all from 0x9960: the caption's frame and the
+title strip, under `st 0x303, 0x800030` windows. The frame's draw calls
+the scene's routine at RAM 0x501E1C (0xDAA4), then sends the coprocessor
+(0x884000) function 5, 0x2B with the five words at RAM 0x501E50 to
+0x501E60, and 0x39 with the geometrizer's list address (the word read from
+0x802008, which plus 0x34 goes to 0x801008, the geometrizer's write start),
+calls the overlay's routine at 0x501E20 and ends with function 6. So the scenery is
+written into the list by the SHARC program itself, out of what the scene
+set-up gave it. A Stages tab would have to run that program (js/sharc.js)
+on the scene set-up's uploads, or find the world data it walks. Task
+routines run from 0x318C0 (the list at RAM 0x50A03C) draw the enemies and
+vehicles, through the sender at 0x14C4.
 Gunblade NY has no fighters or motions. Its enemies and vehicles move by
 script, and that script is not read. The tile chip (cells) and the music
 are not looked at.

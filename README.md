@@ -1369,7 +1369,9 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+There is no Stages tab, no cells, no characters and no motions yet. The
+city is not sent as objects by the game's program: its coprocessor program
+draws it, which the explorer does not run for this game. See
 [TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
 
 ## Zero Gunner
