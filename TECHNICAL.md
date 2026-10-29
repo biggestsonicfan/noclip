@@ -7491,20 +7491,68 @@ Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
 
 Checked against MAME on both boards: colorxlat and luma at the title (frame
 400) no byte different. Colorxlat does not change in the attract race; luma
-bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
-keeps the boot's. Texture RAM matches at the title and in the attract race
+bands 129 to 196 do. The course set-up (RAM 0x54D960) passes the record's
++8, v, to 0x564EF0 (ROM 0xE4EF0, the 2B build's 0xE4E40), which copies the
+luma table's v-th 0x4000 bytes (0x37F09 + 0x4000v) over entries 0x4000 on.
+The viewer runs it as colour set v after the boot's three (`colorSets`), and
+a course's stage asks for its v (Tsukuba 2, Shibuya 4, Touge 6, Futou 5):
+Tsukuba's matches MAME's luma at frame 1800, no byte different. Without it
+the road and grass read zero bands and draw black. Texture RAM matches at the title and in the attract race
 (Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
 sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
 
-**Not done, and leads.** No course is put together: the course's model
-lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
-read the model table besides the draw routines, and the pointer list at
-data 0x818060 is the place to start. The car is single models; which parts
+**Courses (Stages tab).** Both games draw a course the same way. A course
+is a few grid records, {cell width, cell depth (floats: 50 in Super GT 24h,
+75 in Over Rev), columns, rows, first and last column, first and last row,
+grid pointer at +0x20}, and the grid is a word a cell: the model there, or
+0. The camera's cell picks a list of 6-byte records {column, row, kind},
+ended by 0xFF, and each draws the model in that cell of each grid record of
+that kind under the camera matrix alone. The models are in world space, as
+Daytona USA's blocks are, so `readJalecoStages` draws every non-empty cell
+of the near (kind 0) records at the origin.
+
+Super GT 24h: 0x46B4 calls one of the fourteen band routines at 0xEC6A0
+(0x2450 in the attract), and they draw through 0x72C90 out of
+`(0x517B20[course])[kind]`, `0x517AF0[course][kind]` records; 0x2FC0 points
+those at the lists at 0xEC66C (12 bytes a course) and counts at 0xEC630
+(16). The course is 0x5305F8; the test menu's histogram pages (0xBF670) name
+them: bit 0 the long course, 2 and 3 reversed. Each course has one 128 by
+128 grid (0x282A360, 0x284A3C0, 0x286A420, 0x288A480), and 0x3F4C0 loads
+sheet 1 from 0xED8B0[course], sets 0..3. Trackside: 0x4AC10 draws the 16
+{model, course} pairs at 0xEFE60 (gated by cell bits at 0xEDF60/0xEDDC8)
+and 0x4CDE0 the model `0xF0120[course]` every frame; both are in.
+
+Over Rev runs its race code from RAM (ROM 0x80000 at 0x500000, ROM 0x60000
+at 0x200000). 0x54D660 (ROM 0xCD660), called from 0x54DB4C, draws through
+0x200060 out of `0x5A16B0[course]`, which 0x54C6D0 (ROM 0xCC6D0) points at
+the lists at 0xEDF90, 0xEDFA0, 0xEDFC0 and 0xEDFD8, counts at 0xEDF50 (16
+bytes a course). Kind 0 names two or three records (Tsukuba 0x28166E0 and
+0x2816940; Shibuya 0x2817760, 0x2817050 and 0x2818120; Touge 0x2818EC0 and
+0x2819F70; Futou 0x281AAD0); kinds 1 and 2 are the far cells' with less in
+them. The six stages are the records at 0xCD8B0 {texture source, course,
+luma variant, name}: 0x54D960 takes record 4 or 5 instead of course 1 or 2
+when 0x590DD0 is set. The 2B build has the code at 0xCC6A0 and its tables
+0xB0 back (records 0xCD880, lists 0xEDEE0..., counts 0xEDEA0). The Models
+tab opens a model on the set of the first course whose grid or trackside
+names it (`jalecoCourseSets`).
+
+Checked in headless Chrome from MAME's attract-race camera (Super GT 24h
+frame 1200, Over Rev frame 1800, the eye from the course pieces' matrix):
+the pieces stand where MAME draws them, on the right textures.
+
+**Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
+(0x47700, 0x4A450, 0x4A760, 0x4B5B0, 0x4B2E0, 0x4BAD0, 0x4B870, 0x4CDB0)
+place the animated trackside: tables at 0x476D0/0x476F0 by 0x510F60 and
+course >> 1 (0x5307E0), rows of 0x4DA from 0x49BA0, the moving 0x4CC..0x4CE
+from 0x4599C, and the Check Point gantry (0x4DB/0x4E3, likely 0x47A5C). The
+sky is 0x2AF0 (models 0x3F7..0x40C, tables 0x29B0, 0x2AB0, 0x2AC0). Over Rev
+draws objects 0x1B1, 0x283, 0x28A, 0x290, 0x125 and 0x159 from 0x55B778,
+0x56176C, 0x5618AC, 0x561B70, 0x556BC0 and 0x557194. The material table is
+not read: stages draw at full ambient. 0x2DEC, 0x4B324 and 0xCFE2C read the
+model table besides the draw routines. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
-read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
-copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
-found in. The tile chip's pictures and the sound programs were not looked
+read at 0x6000C and 0x7EBAC. The tile chip's pictures and the sound programs were not looked
 at.
 
 ### Dynamite Baseball 97 (`js/dynabb.js`)
@@ -7570,10 +7618,33 @@ answers with a float square root. Colorxlat, luma and the face palette
 Palette RAM below 0x1802000, which 0x82200's callers address, is not the
 face palette; its +0x10000 is colorxlat.
 
-**Not done, and leads.** No stadium is put together and no player
-assembled. If the game finds models by name (0xC2F40), the stadium's
-and players' lists are likely name lists: look for callers of 0xC2F40 and
-of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
+**Ballparks (Stages tab, `readDynabbStages`).** The stadium draw is
+0x6BB80 (and its branch at 0x6BD44, taken when 0x5D4A48 is 5 or 6). It
+walks a list of halfword pairs {base model, variant slot}, ended by a 0,
+and draws model base + 0x5D4CD0[slot] through 0xA5380 or 0xA5510: culled
+on the model table entry's sphere, no matrix, the pieces being in world
+space. Model 0x1ABD (`Q1_SOTO`) is preceded by a coprocessor set-up of its
+own (command 0x505 with 0x9001212, 0, 0, 430.0). The list is the one at
++0x5C of the view record, 0x5D4700 + 0x5D397C × 0x60, which a camera shot
+fills from its group in the table at 0x1A0C30 (the shot records from
+0x1B3C8C point at it): 54 groups of four words, the lists of stadiums 0, 1
+and 2 and a 0. A list holds what that shot sees, so the viewer's stadium is
+every piece its column names, 70, 93 and 86 pieces; `stageTable.dynabb` in
+the profile. The slots (frame 3000: slot 4 = 0x11, 9 = 1, 10 = 0x38, the
+rest 0) choose a level of detail (slot 9: `Q2_shita_b`, `_bb`, `_bbb`), a
+frame of the crowd's cheering (`Q3_oen_ey00` on), of a flag (1 to 3) or the
+home team's scoreboard (10, `Q3_sc_baffu00r`, `_baystar00r`, ...); the
+viewer draws slot 0's model, the most detailed and the first. The texture
+set is the stadium's with team 0 (stadium × 12). Checked headless against
+MAME's attract frames: the Q1 outfield wall (navy, the FUJIFILM and maxell
+boards, the crowd above) and the Q2 roof and stands, as the game draws them.
+
+**Not done, and leads.** No player is assembled. Who fills 0x5D4CD0's
+slots each frame (the crowd and flag clocks, the scoreboard by home team)
+was not followed, nor the special set-up of `Q1_SOTO`. If the game finds
+models by name (0xC2F40), the players' lists are likely name lists: look
+for callers of 0xC2F40 and of the draws above; the players are drawn with a
+matrix by 0xA5300 (from 0xCFB84 on in the attract). The game's set-up of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions, the tile chip's pictures and the

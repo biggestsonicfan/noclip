@@ -31,6 +31,8 @@ import { readDesertStages } from './desert.js';
 import { readMotoraidStages } from './motoraid.js';
 import { readSkytargtStages } from './skytargt.js';
 import { readZerogunStages } from './zerogun.js';
+import { readJalecoStages } from './jaleco.js';
+import { readDynabbStages } from './dynabb.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { readWaverunrStages } from './waverunr.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
@@ -729,7 +731,7 @@ function useRomColorLuts(stage, fighter = null) {
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
-    const luma = buildLumaram(state.rom);
+    const luma = buildLumaram(state.rom, stage.texSet[1]);
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,
@@ -6755,6 +6757,8 @@ function loadGameContent() {
         else if (T.motoraid) state.stages = readMotoraidStages(state.rom);
         else if (T.skytargt) state.stages = readSkytargtStages(state.rom);
         else if (T.zerogun) state.stages = readZerogunStages(state.rom);
+        else if (T.jaleco) state.stages = readJalecoStages(state.rom);
+        else if (T.dynabb) state.stages = readDynabbStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);

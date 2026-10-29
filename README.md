@@ -30,9 +30,9 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 AM3's *Manx TT Superbike* has its models and its courses — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models and its courses — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models and its courses — see [Sega Touring Car Championship](#sega-touring-car-championship).
-Jaleco's *Super GT 24h* and *Over Rev* have their models — see
+Jaleco's *Super GT 24h* and *Over Rev* have their models and courses — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
-Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
+Baseball 97* has its models and ballparks — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models and stages — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and stages — see [Sky Target](#sky-target).
@@ -1347,14 +1347,21 @@ colour tables as the boot and the race build them.
 The texture picker's sets 0..4 are what sheet 1 holds: sets 0..3 are the
 four the course table names (set 0 is also the boot's, the one MAME's attract
 race shows) and set 4 a bank one routine loads by itself. Sheet 0 is the same in every set.
-Nothing found yet says which course a model belongs to, so a course piece
-needs its set picked by hand. Textures, palette, luma and colour tables
+A course piece opens on its course's set. Textures, palette, luma and colour tables
 match MAME's at the title and in the attract race byte for byte. The colour
 tables are those of the hour the title and the attract use: the race has
 640 versions of two rows, one per stretch of its 24 hours, and the viewer
 shows one.
 
-There is no Stages tab, no cars put together and no motions yet. See
+The **Stages** tab has the four courses, named as the test menu names them:
+the short and the long course, and both reversed. Each is the course's grid
+of world-space pieces plus the trackside models the game places for it,
+on the texture set the game loads for it. From the attract race's camera
+the start straight looks as MAME draws it: grandstands, boards, signs, light
+towers and hills. The sky, the animated trackside (flags, moving pieces, the
+Check Point gantry), the cars and the material table are not there yet.
+
+There are no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
 ## Over Rev
@@ -1369,12 +1376,21 @@ textures, face palette and colour tables.
 The texture picker's sets 0..6 are what sheet 1 holds: set 0 is the boot's,
 and sets 1..6 the six courses' in data order (Tsukuba, Shibuya's other
 version, Shibuya, Futou, Touge, Touge's other version). Sheet 0 is the same
-in every set. A course piece needs its course's set picked by hand. Colour
+in every set. A course piece opens on its course's set. Colour
 tables and luma match MAME's at the title on both boards byte for byte, and
 the textures in the attract race but for sixteen bytes something later
-writes. Some luma bands change during a race; the viewer shows the boot's.
+writes. Each course copies luma bands of its own; a course in the Stages tab
+takes them, and they match MAME's in the attract race byte for byte.
 
-There is no Stages tab, no cars put together and no motions yet. See
+The **Stages** tab has the six courses under the game's own names: Tsukuba,
+Shibuya, Touge, Futou, and the other versions of Shibuya and Touge ("Shibuya
+e", "Touge e"), which are the same pieces on their own textures. Each is the
+course's grids of world-space pieces, on the texture set and luma the game
+loads for it. From the attract race's camera Tsukuba looks as MAME draws it:
+road, kerbs, barriers, boards and trees. The sky, the course's moving and
+extra objects, the cars and the material table are not there yet.
+
+There are no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
 ## Dynamite Baseball 97
@@ -1396,7 +1412,15 @@ team 0, the set MAME's attract opens on. Textures, colour tables, luma and
 face palette match MAME's in the attract mode byte for byte, but for 119
 halfwords of sheet 0 the game copies about at run time.
 
-There is no Stages tab, no players put together and no motions yet. See
+The **Stages** tab has the three ballparks, `Stadium Q1` to `Stadium Q3`
+(the game names them only by their pieces' prefixes): every piece the
+game's camera shots draw of that stadium, in place, on the stadium's
+texture set with team 0. Q1 is a dome by the sea with the town around it,
+Q2 a dome seen from inside, Q3 an open park with its clock tower and the
+city at night. Crowds, flags and scoreboards stand on their first frame,
+and the stands at their most detailed.
+
+There are no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
 
 ## Gunblade NY
