@@ -282,8 +282,11 @@ function buildRampColorxlat(rom, colorSet) {
     }
     const shift = C.shift?.[colorSet];
     if (shift) shiftRamp(out, shift);
+    if (C.lift) liftRamp(out, C.lift);
     const band = C.band?.tables[colorSet];
-    if (band !== undefined) writeBand(rom.mainData, band, set);
+    if (band !== undefined) {
+        writeBand(C.band.source === 'maincpu' ? rom.maincpu : rom.mainData, band, set, C.band.blueBit);
+    }
     return out;
 }
 
@@ -573,14 +576,31 @@ function shiftRamp(cxlat, { top, add }) {
     }
 }
 
-/* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170). */
-function writeBand(md, band, set) {
+/*
+ * Virtua Cop 2's 0x168B8, run on the fresh ramp before the band: rows 1..31,
+ * luma 1..63, the low byte of each channel gains add[ch], held at 0xFF. A
+ * 0xFFFF entry keeps its 0xFF.
+ */
+function liftRamp(cxlat, add) {
+    for (let row = 1; row < 32; row++) {
+        for (let luma = 1; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) {
+                const o = ch * CXLAT_CHANNEL + row * CXLAT_ROW + luma * 2;
+                cxlat[o] = Math.min(cxlat[o] + add[ch], 0xff);
+            }
+        }
+    }
+}
+
+/* Sixteen colours a row, 32 rows, over luma 48..63 (Virtua Cop's 0x4170).
+ * Blue's low bit is bit 14 there and bit 15 in Virtua Cop 2's (0x16758). */
+function writeBand(md, band, set, blueBit = 14) {
     for (let row = 0; row < 32; row++) {
         for (let i = 0; i < GROUP_COLORS; i++) {
             const o = band + (row * GROUP_COLORS + i) * 2;
             const c = md[o] | (md[o + 1] << 8);
             for (let ch = 0; ch < 3; ch++) {
-                const v = (((c >> (4 * ch)) & 0xf) << 1) | ((c >> (12 + ch)) & 1);
+                const v = (((c >> (4 * ch)) & 0xf) << 1) | ((c >> (ch === 2 ? blueBit : 12 + ch)) & 1);
                 set(ch, row, PALETTE_LUMA0 + i, v << 3);
             }
         }

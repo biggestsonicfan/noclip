@@ -9610,6 +9610,52 @@ Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
 and 0x98's groups (see above).
 
+### Virtua Cop 2 (`js/games.js`, `js/colors.js`)
+
+Virtua Cop 2 (MAME's `vcop2`, Model 2A, 1995) runs Virtua Cop's library
+moved up the program ROM, so the profile is `daytonaBuild`'s with the
+addresses changed. The boot calls the routines in this order (0x1EDC..0x1F2C):
+
+| routine | what it does |
+|---|---|
+| 0x164A0 | 1024 colours from data 0x4C0000 to the face palette (0x1802000) |
+| 0x16250 | the material table, geometry function 6: header 0x163E0 (start 0, count 32), parameters from 0x163E8, coefficients (all 100.0) from 0x16360 |
+| 0x166B8 | luma: `ld 0x16bd8` (0x42) bands of 128 bytes from program 0x16BDC, one byte to each word of 0x12800000 |
+| 0x1657C | bank 0x2300000 onto sheet 1 (0x12600000) |
+| 0x16594 | bank `0x18d14[g0*4]` onto sheet 0 (0x12200000); g0 is 0 at boot, the stage 0x502010 later (0x5030, 0x8DE8) |
+| 0x164D0 | the ramp, Virtua Cop's deluxe constants (12, 0x300, 0x1160, 0x8B) |
+| 0x168B8 | `lift`: 0x168C4 with g1..g3 = 8: the low byte of each channel of rows 1..31, luma 1..63, plus g1/g2/g3, held at 0xFF |
+| 0x16950 | grey and dimmed copies of the face palette into RAM 0x5D4000/0x5D5000 (not drawn from here) |
+| 0x16758 | one band of 16 colours a row over luma 48..63 of all 32 rows, from program 0x18D2C |
+
+0x165AC is Daytona's bank upload (`daytonaRuns`): its run table at 0x18CEC
+is 0x200 >> k as Daytona's 0x1494. The bank table is
+0x2000000, 0x2100000, 0x2200000 and then 0x2000000 three times, so the
+picker has three sets. The band's blue takes bit 15 of the colour for its
+low bit (`band.blueBit`), where Virtua Cop's 0x4328 takes bit 14. Two
+scenes call 0x168C4 with other adds: (12, 4, 2) at 0x33A8 and (12, 6, 4)
+at 0x4FF8 (stage 3); the profile keeps the boot's.
+
+The model table is 0xBB2 entries at data 0x4C8004, after the last index
+(0xBB1) at 0x4C8000, in the 1995 order {tpa, tha, oba, count}: the draws
+(0x160E0, 0x16178, 0x1620C) check `g0 < 0xBB2` and read
+`0x24c8004[g0*16]` from the boot's copy at RAM 0x200000 (0x21D4). Entry
+0xBB2 is 0xFFFFFFFF fill.
+
+There is no world light in ROM. Function 0xA (0x15FC4) is sent from 22
+places with a scene's own vector, most of them worked out by the copro; the
+profile takes the constant (-0.14, -0.7, 0.7) that 0x5648 sends.
+
+**Checked against MAME.** `vcop2` in the attract, texture RAM (both sheets),
+the colour tables, luma and the face palette dumped at frames 300, 900 and
+1800: set 0 matches all of them byte for byte. The attract never loads
+banks 1 or 2.
+
+**Leads.** The stage number is 0x502010; 0x516C is a table by it the stage
+start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
+SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
+pair 18520/18521) is not read by anything here.
+
 ## Animation
 
 Motion playback is implemented, and checked against the board — see

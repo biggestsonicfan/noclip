@@ -3555,6 +3555,102 @@ const vcop = {
     features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
+/* ---- Virtua Cop 2 --------------------------------------------------------- */
+
+/*
+ * Virtua Cop 2 (MAME's `vcop2`, Model 2A) runs Virtua Cop's library, moved up
+ * the program ROM to 0x16xxx: the same bank upload, ramp, band and luma copy,
+ * called in the same order at boot (0x1EDC..0x1F2C). What differs is listed
+ * on the fields below.
+ */
+const vcop2 = {
+    ...daytonaBuild({
+        id: 'vcop2',
+        name: 'Virtua Cop 2',
+        program: [0x000000, 'epr-18524.12', 0x1858988b, 'epr-18525.13', 0x0c13df3f],
+        data8: [0x800000, 'mpr-18522.6', 0x61d18536, 'mpr-18523.7', 0x61d08dc4],
+        modelTable: { offset: 0x4c8004, count: 0xbb2 },
+        /* 0x164A0: 1024 colours from data 0x4C0000 to the face palette. */
+        paletteOffset: 0x4c0000, paletteCount: 1024,
+        /* 0x165AC, Daytona's upload with the 2A board's sheets (0x12200000 and
+         * 0x12600000) and its run table at 0x18CEC. The boot (0x1657C) puts
+         * 0x2300000 on sheet 1; 0x16594 puts the scene's, `ld 0x18d14[g0*4]`,
+         * on sheet 0: 0x2000000, 0x2100000, 0x2200000, then 0x2000000 three
+         * times. g0 is the stage number 0x502010 (0x5028). */
+        bankTable: 0x18d14, bootBank: 0x2300000, texSets: 3,
+        luma: { source: 'maincpu', count: 0x16bd8, data: 0x16bdc },
+        cabinets: DAYTONA_CABINETS,
+        /* 0x16250 sends geometry function 6 from the header at 0x163E0 (start
+         * 0, count 32): parameters from 0x163E8, coefficients (all 100.0)
+         * from 0x16360. */
+        materials: { source: 'maincpu', at: 0x163e8, count: 32, stride: 4 },
+        /* No world light in ROM: every scene sends its own through function
+         * 0xA (0x15FC4), most of them worked out by the copro. This is the
+         * constant one 0x5648 sends, (-0.14, -0.7, 0.7), normalised; z negated
+         * for the explorer. */
+        light: [-0.140028, -0.700140, -0.700140],
+        courses: {},
+        sound: null,
+    }),
+    regions: {
+        /* Two pairs of 1MB. */
+        maincpu: {
+            size: 0x200000,
+            parts: [
+                [0x000000, 'epr-18524.12', 0x1858988b, 'epr-18525.13', 0x0c13df3f],
+                [0x100000, 'epr-18518.14', 0x7842951b, 'epr-18519.15', 0x31a30edc],
+            ],
+        },
+        /* The banks in the first pair, the model table and the palette in the
+         * second. The zip calls the last pair mpr-; MAME, epr-. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-18516.10', 0xa3928ff0, 'mpr-18517.11', 0x4bd73da4],
+                [0x400000, 'mpr-18514.8', 0x791283c5, 'mpr-18515.9', 0x6ba1ffec],
+                [0x800000, 'mpr-18522.6', 0x61d18536, 'mpr-18523.7', 0x61d08dc4],
+                [0xc00000, 'epr-18520.4', 0x1d4ec5e8, 'epr-18521.5', 0xb8b3781c],
+            ],
+        },
+        polygons: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18513.16', 0x777a3633, 'mpr-18510.20', 0xe83de997]],
+        },
+        textures: {
+            size: 0x400000,
+            parts: [[0x000000, 'mpr-18512.25', 0xd9bc7e71, 'mpr-18511.24', 0xcae77a4f]],
+        },
+    },
+    /* 0xBB2 entries at data 0x4C8004, after their count less one (0xBB1, at
+     * 0x4C8000), in the 1995 games' order: tpa, tha, oba, count. The draws
+     * (0x160E0, 0x16178, 0x1620C) read `0x24c8004[g0*16]` from the copy
+     * the boot makes at RAM 0x200000 (0x21D4). Model 0's headers start the
+     * texture ROM, so a tha of 0 is one. */
+    modelTable: { offset: 0x4c8004, count: 0xbb2, stride: 16, matAtZero: true },
+    /*
+     * The ramp is Virtua Cop's (0x164D0, the deluxe constants). Then 0x168B8
+     * lifts the low byte of every channel of rows 1..31, luma 1..63, by 8,
+     * held at 0xFF (`lift`; 0x168C4 is the same with the three adds in g1-g3,
+     * which two scenes call with (12, 4, 2) and (12, 6, 4)), and 0x16758 lays
+     * one band over luma 48..63 of every row from program 0x18D2C. Its blue
+     * takes bit 15 for its low bit, where Virtua Cop's takes bit 14.
+     */
+    colors: {
+        luma: { source: 'maincpu', count: 0x16bd8, data: 0x16bdc }, ramp: RAMP_DELUXE, solid: true,
+        lift: [8, 8, 8],
+        band: { source: 'maincpu', tables: [0x18d2c, 0x18d2c, 0x18d2c], blueBit: 15 },
+    },
+    patches: [],
+    paletteFixes: [],
+    stageTable: null,
+    objects: null,
+    area: null,
+    sky: null,
+    cells: null,
+    rig: null,
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* ---- Virtua Fighter 2 ----------------------------------------------------- */
 
 /*
@@ -6038,7 +6134,7 @@ const pltkidsa = pilotKidsBuild({
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vcop2, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
     pltkids, pltkidsa];
