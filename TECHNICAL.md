@@ -7567,8 +7567,58 @@ model the fade.
 0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
 model to its set. The objects' records (which triple, where) are not found.
 Gunblade NY has no fighters or motions. Its enemies and vehicles move by
-script, and that script is not read. The tile chip (cells) and the music
-are not looked at.
+script, and that script is not read. Cells: see [Gunblade NY's
+cells](#gunblade-nys-cells-jscellsjs-jsstackcellsjs). The music is not
+looked at.
+
+### Gunblade NY's cells (`js/cells.js`, `js/stackcells.js`)
+
+Gunblade NY's 2D pictures are Power Sled's tilemap scripts, run as Last
+Bronx runs them (`script: { bias: 0, last: 0x8D, wideMove: true }`). The
+draw is `0xD1A80` (g0 the tilemap address, g1 the script, g2 0x8000). The
+scripts lie in two runs, [0x2A601A0, 0x2A64C52) and [0x2B4CAF0,
+0x2B4FC50), with zero bytes between some of them. A script never starts
+with a dictionary byte, so `scriptPad` skips them. Every script is named,
+by an `lda` (some as `lda 0x1A6xxxx(g0)` after `lda 0x10xxxxx, g0`) or by
+the table of {count, script} at 0x17A20. 561 cells; none is named by
+nothing.
+
+**CGs.** The boot, `0xD20E0`, loads the directory at data 0x2A00000 with
+Last Bronx's loader (`0xD2470`: 8-byte entries {offset, first char}, each a
+chain of blocks), then the 1bpp font at 0xD0E20 twice, into characters 0 to
+0x7F and 0x80 to 0xFF (`0xD2A70`, pen 1), and colours 0x15530 and 0x15550
+into groups 0 and 1. Nothing clears the chip after that. Each scene copies
+its own colours and characters over it with plain loops, so `cells.dirs`
+gives the boot and a list of scenes, each a list of copies [source,
+destination, halfwords, times] (`applyCopies` in `js/stackcells.js`):
+
+- the warning screen (`0xF44A0` calls `0xD2260`): group 0 from 0xD21D0 and
+  the font at 0xD09C0 in both halves;
+- the switch at `0xD2550`, cases 1 to 6: the six stages, groups 0x68 on
+  and characters 0x3400 on;
+- `0xF1C8C` (case 7);
+- the attract, `0xDC44` and `0x2264C` (case 8);
+- `0xF1DA8` (case 9), loaded over case 8.
+
+11 CGs.
+
+**Checked against MAME.** `gunblade` attract, the shared build, character
+RAM and palette dumped every 600 frames from 600 to 6000. The warning
+screen's CG matches both byte for byte at frame 600. Case 8 matches both at
+1200 to 3600. Case 9 matches both at 4200 to 6000, except pen 0 of group 0,
+which the Cells tab shows as transparent. The stages and case 7 were not
+loaded in the attract.
+
+**Leads.** At frame 4800 `0xD2DB4`/`0xD2DC4` fade a few groups (0xB9,
+0xD5 to 0xD7, 0xDB); the fade is not modelled. `0xD21F0` is the same as
+0xD2260 with group 0 from 0xD21B0 and the 0xD0E20 font (called at 0xEE634
+and 0xF42D0). `0xEF44C` calls the expander with 16 characters from
+0xEE3D0. No table ties a script to the scene that draws it. Every scene
+holds the boot's characters and fills the same range from 0x3400, so a
+scene's cell is covered by all nine scenes alike; the ranking (`rankCGs`
+goes the shared way when `dirs` is set) picks among them by seams, and some
+of the stage briefings in five languages open on another stage's scene.
+Cells 418 and 419 are covered by no CG in full.
 
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 

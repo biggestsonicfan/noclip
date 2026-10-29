@@ -8,6 +8,10 @@
  * loaded after that lands on what the boot left. So a CG here is the boot's
  * lists, the boot's copies, then its own pair (`stacked.base`, `.after`,
  * `.copies`; see js/games.js DESERT_CELLS).
+ *
+ * Gunblade NY's scenes do the same over Last Bronx's directories: the boot
+ * loads one directory and a font, and each scene copies colours and
+ * characters over it by hand (js/cells.js `dirs`, `applyCopies`).
  */
 import { loadScrollCG, scrollAt, TILE_BYTES } from './scroll.js';
 
@@ -45,20 +49,28 @@ export function loadStacked(rom, L, charBytes) {
                 palRuns.push([first, n]);
             }
         }
-        /* [source, destination, halfwords], a palette or a character RAM
-         * address, copied as it lies. */
-        for (const [src, dest, count] of copies) {
-            const T = scrollAt(rom, src);
+        applyCopies(rom, { chars, pal, charRuns, palRuns }, copies);
+    }
+    return { chars, pal, charRuns, palRuns };
+}
+
+/* Copies made by hand into a loaded CG `out`: [source, destination,
+ * halfwords, times], a palette or a character RAM address, copied as it
+ * lies, `times` times end to end (1 if left out). */
+export function applyCopies(rom, out, copies) {
+    for (const [src, dest, count, times = 1] of copies) {
+        const T = scrollAt(rom, src);
+        for (let t = 0; t < times; t++) {
             if (dest >= PAL_BASE) {
-                const first = (dest - PAL_BASE) >> 1;
-                for (let i = 0; i < count; i++) pal[first + i] = T.view.getUint16(T.off + i * 2, true);
-                palRuns.push([first, count]);
+                const first = ((dest - PAL_BASE) >> 1) + t * count;
+                for (let i = 0; i < count && first + i < out.pal.length; i++) out.pal[first + i] = T.view.getUint16(T.off + i * 2, true);
+                out.palRuns.push([first, count]);
             } else {
-                const at = dest - CHAR_BASE;
-                chars.set(T.u8.subarray(T.off, T.off + count * 2), at);
-                charRuns.push([at / TILE_BYTES, count * 2 / TILE_BYTES]);
+                const at = dest - CHAR_BASE + t * count * 2;
+                const n = Math.min(count * 2, out.chars.length - at, T.u8.length - T.off);
+                out.chars.set(T.u8.subarray(T.off, T.off + n), at);
+                out.charRuns.push([Math.floor(at / TILE_BYTES), Math.ceil(n / TILE_BYTES)]);
             }
         }
     }
-    return { chars, pal, charRuns, palRuns };
 }

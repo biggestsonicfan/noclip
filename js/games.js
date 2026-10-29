@@ -7022,6 +7022,9 @@ const dynabb97 = {
     features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
 };
 
+/* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */
+const GUNBLADE_CASE_8 = [[0x02b37ff0, 0x01800d00, 0x10, 21], [0x02b38010, 0x010e8000, 0xa230], [0x02b4c490, 0x01800fa0, 0x10], [0x02b4c4b0, 0x010fd000, 0x310]];
+
 /*
  * Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`). Its library
  * is Virtual-On's: no model table, the object triples sit in the program and
@@ -7105,8 +7108,47 @@ const gunblade = {
         gunblade: { keys: 0xc75c0 },
         solid: true,
     },
+    /* The Cells tab (js/cells.js `scripts`, `dirs`): Power Sled's tilemap
+     * scripts as Last Bronx runs them, drawn by 0xD1A80 (g0 the tilemap
+     * address, g1 the script, g2 0x8000). The scripts lie in two runs, zero
+     * padding between some of them; every one is named, by `lda` or by the
+     * table of {count, script} at 0x17A20. The boot (0xD20E0) loads the
+     * directory at data 0xA00000 with Last Bronx's loader (0xD2470) and the
+     * 1bpp font at 0xD0E20 into characters 0-0xFF (0xD2A70, pen 1), and
+     * never unloads them. Each scene then copies colours and characters
+     * over them by hand: the switch at 0xD2550 (cases 1-6, the stages),
+     * 0xF1C8C, the attract's 0xDC44/0x2264C and 0xF1DA8 on top of it; the
+     * warning screen (0xF44A0) calls 0xD2260, which puts the font at 0xD09C0
+     * and group 0 from 0xD21D0 in. A scene is the boot plus its `copies`,
+     * [source, destination, halfwords, times]. */
+    cells: {
+        scripts: [[0x02a601a0, 0x02a64c52], [0x02b4caf0, 0x02b4fc50]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        dirs: {
+            boot: 0x02a00000,
+            name: "the boot's (0xD2550 case 0)",
+            fonts: [{ src: 0xd0e20, first: 0, count: 0x80, pen: 1 }, { src: 0xd0e20, first: 0x80, count: 0x80, pen: 1 }],
+            copies: [[0x15530, 0x01800000, 0x10], [0x15550, 0x01800020, 0x10]],
+            scenes: [
+            { name: 'the warning screen (0xF44A0, 0xD2260)', fonts: [{ src: 0xd09c0, first: 0, count: 0x80, pen: 1 }, { src: 0xd09c0, first: 0x80, count: 0x80, pen: 1 }], copies: [[0xd21d0, 0x01800000, 0x10]] },
+            { name: 'stage 1 (0xD2550 case 1)', copies: [[0x02a53f40, 0x01800d00, 0x10, 5], [0x02a53f60, 0x010e8000, 0x2710], [0x02a58da0, 0x01800da0, 0x10], [0x02a58dc0, 0x010ed000, 0x720], [0x02a59c20, 0x01800dc0, 0x10, 2], [0x02a59c40, 0x010ee000, 0xbf0]] },
+            { name: 'stage 2 (0xD2550 case 2)', copies: [[0x02b00270, 0x01800d00, 0x10, 8], [0x02b00290, 0x010e8000, 0x4002]] },
+            { name: 'stage 3 (0xD2550 case 3)', copies: [[0x02b073f0, 0x01800d00, 0x10, 13], [0x02b07410, 0x010e8000, 0x6802]] },
+            { name: 'stage 4 (0xD2550 case 4)', copies: [[0x02b14350, 0x01800d00, 0x10, 13], [0x02b14370, 0x010e8000, 0x6802]] },
+            { name: 'stage 5 (0xD2550 case 5)', copies: [[0x02b210d0, 0x01800d00, 0x10, 6], [0x02b210f0, 0x010e8000, 0x3002]] },
+            { name: 'stage 6 (0xD2550 case 6)', copies: [[0x02b26490, 0x01800d00, 0x10, 12], [0x02b264b0, 0x010e8000, 0x6002]] },
+            { name: 'case 7 (0xF1C8C)', copies: [[0x02b31990, 0x01800d00, 0x10, 7], [0x02b319b0, 0x010e8000, 0x3802]] },
+            { name: 'case 8 (0xDC44, 0x2264C), the attract', copies: GUNBLADE_CASE_8 },
+            { name: 'case 9 (0xF1DA8) over case 8', copies: [...GUNBLADE_CASE_8, [0x02a5b460, 0x01800e00, 0x10], [0x02a5b480, 0x010f0000, 0x200], [0x02a5b8a0, 0x01800e20, 0x10], [0x02a5b8c0, 0x010f1000, 0x1d0], [0x02a5bc80, 0x01800e40, 0x10], [0x02a5bca0, 0x010f2000, 0x170], [0x02a5bfa0, 0x01800e60, 0x10], [0x02a5bfc0, 0x010f3000, 0x1c0], [0x02a5c360, 0x01800e80, 0x10], [0x02a5c380, 0x010f4000, 0x1c0], [0x02a5c720, 0x01800ea0, 0x10], [0x02a5c740, 0x010f5000, 0x230], [0x02a5cbc0, 0x01800ec0, 0x10], [0x02a5cbe0, 0x010f6000, 0x480], [0x02a5d500, 0x01800ee0, 0x10], [0x02a5d520, 0x010f7000, 0x3e0], [0x02a5dd00, 0x01800f00, 0x10], [0x02a5dd20, 0x010f8000, 0x380], [0x02a5e440, 0x01800f20, 0x10], [0x02a5e460, 0x010f9000, 0x3d0], [0x02a5ec20, 0x01800f40, 0x10], [0x02a5ec40, 0x010fa000, 0x420], [0x02a5f4a0, 0x01800f60, 0x10], [0x02a5f4c0, 0x010fb000, 0x240], [0x02a5f960, 0x01800f80, 0x10], [0x02a5f980, 0x010fc000, 0xc0], [0x02a5fb20, 0x01800fa0, 0x10], [0x02a5fb40, 0x010fd000, 0xf0]] },
+            ],
+        },
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
     /* No stage or object record is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

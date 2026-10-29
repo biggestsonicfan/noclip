@@ -673,8 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids, Virtua Cop 2 and Desert Tank have the Cells tab
-but not the music.
+Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank and Gunblade NY have
+the Cells tab but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1377,8 +1377,16 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+The **Cells** tab has its 561 pictures (the fonts, the logos, the HUD, the
+results and rankings, the mission briefings in five languages, the staff
+roll) and 11 CGs: the boot's, and each
+scene's colours and characters copied over it. The warning screen, the
+attract and the scene after it match MAME's tile chip. Some briefings open
+on another stage's CG, as no table says which stage draws them.
+
+There is no Stages tab, no characters and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs) and
+[Gunblade NY's cells](TECHNICAL.md#gunblade-nys-cells-jscellsjs-jsstackcellsjs).
 
 ## Zero Gunner
 

@@ -138,12 +138,18 @@
  * of lists, but never clears the chip between them: every CG lands on what
  * the boot left (`stacked`, js/stackcells.js). Its pointer tables lie on
  * halfword steps (`pointerStep`). See js/games.js DESERT_CELLS.
+ *
+ * Gunblade NY runs Power Sled's scripts as Last Bronx does, from two runs
+ * with zero padding between scripts (`scriptPad`), and loads one Last Bronx
+ * directory at the boot with a font over it; each scene copies colours and
+ * characters over that by hand (`dirs`, js/stackcells.js applyCopies). See
+ * js/games.js, the gunblade entry.
  */
 
 import { loadScrollCG, scrollAt, scrollPtrOk, CHAR_MASK, TILE_BYTES } from './scroll.js';
 import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
-import { stackCGs, loadStacked } from './stackcells.js';
+import { stackCGs, loadStacked, applyCopies } from './stackcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -154,6 +160,7 @@ const MAX_PICTURE_SIDE = 128;   /* Dead or Alive's tallest picture is 69 rows */
 const DOA_BLOCK = 128;          /* tiles to a block of character RAM */
 
 const word = (rom, addr) => { const t = scrollAt(rom, addr); return t.view.getUint32(t.off, true); };
+const byteAt = (rom, addr) => { const t = scrollAt(rom, addr); return t.u8[t.off]; };
 
 /* Each cell's record address, worked out once per ROM set. */
 const recordCache = new WeakMap();
@@ -169,12 +176,20 @@ function cellRecords(rom) {
     } else if (C.groups) {
         out = groupCells(rom).map((c) => c.at);
     } else if (C.scripts) {
-        const [first, end] = C.scripts;
-        for (let a = first; a < end && out.length < MAX_CELLS;) {
-            const next = runScript(rom, a)?.end;
-            if (!next) break;
-            out.push(a);
-            a = next;
+        /* One run, or several (`[[first, end], ...]`, Gunblade NY's); with
+         * `scriptPad`, zero bytes between scripts are padding, since a
+         * script's dictionary is empty at its start. */
+        for (const [first, end] of Array.isArray(C.scripts[0]) ? C.scripts : [C.scripts]) {
+            for (let a = first; a < end && out.length < MAX_CELLS;) {
+                if (C.scriptPad) {
+                    while (a < end && byteAt(rom, a) === 0) a++;
+                    if (a >= end) break;
+                }
+                const next = runScript(rom, a)?.end;
+                if (!next) break;
+                out.push(a);
+                a = next;
+            }
         }
     } else if (C.records) {
         for (const [first, end] of C.records) {
@@ -441,6 +456,16 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.dirs) {
+        /* Gunblade NY's: the boot's directory (Last Bronx's format), its
+         * fonts and copies, then each scene's copies over that (`dirs`). */
+        const D = C.dirs;
+        const boot = { dirs: [D.boot], fonts: D.fonts ?? [], copies: D.copies ?? [] };
+        all.push({ ...boot, name: D.name });
+        for (const S of D.scenes ?? []) all.push({ ...boot, fonts: S.fonts ?? boot.fonts, copies: [...boot.copies, ...S.copies], name: S.name });
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -684,6 +709,12 @@ function loadTiles(rom, L) {
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.stack) return loadStacked(rom, L, charBytes);
+    if (L.dirs && (L.fonts || L.copies)) {
+        const out = loadDirs(rom, L.dirs, charBytes);
+        for (const F of L.fonts) bootFont(rom, F, out.chars, out.charRuns);
+        applyCopies(rom, out, L.copies);
+        return out;
+    }
     if (L.dirs) return loadDirs(rom, L.dirs, charBytes);
     if (L.tiles.length === 1) return loadScrollCG(rom, L.tiles[0], L.pal, charBytes);
     const parts = L.tiles.map((t, i) => loadScrollCG(rom, t, i === L.tiles.length - 1 ? L.pal : 0, charBytes));
@@ -1024,8 +1055,9 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.pictures) return [{ cg: cell, cover: 1 }];
     /* A Sega Rally pattern is drawn with its own file. */
     if (rom.game.cells.cgm) return [{ cg: listedCells(rom)[cell].file, cover: 1 }];
-    /* Power Sled's one CG, the boot's, holds every character and colour. */
-    if (rom.game.cells.scripts) return [{ cg: 0, cover: 1 }];
+    /* Power Sled's one CG, the boot's, holds every character and colour;
+     * Gunblade NY's scenes are ranked like any shared CGs. */
+    if (rom.game.cells.scripts && !rom.game.cells.dirs) return [{ cg: 0, cover: 1 }];
     /* A Last Bronx cell is drawn with the CG its list goes with. */
     if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
     return rankSharedCGs(rom, cell, c);
