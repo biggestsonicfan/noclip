@@ -257,7 +257,7 @@ export function stageLight(bright, vecterX, vecterY) {
  * count stay at zero, which is what the geometry engine holds for a slot nothing
  * has written. Null for a game without such a block.
  *
- * @returns {null|{light: number[], materials: {diffuse:number, ambient:number}[]}}
+ * @returns {null|{light: number[], materials: {diffuse:number, ambient:number}[], eyeLight: number[]|null}}
  */
 export function gameLighting(rom) {
     const L = rom.game.lighting;
@@ -292,8 +292,12 @@ export function gameLighting(rom) {
      * of 14 frames of the prototype and on all 4 of revision A's that draw
      * stage pieces. The signs this game kept before were both the other way,
      * so the light came from below. */
-    const light = L.light ?? stageLight(1, L.vecter[0], L.vecter[1]);
-    return { light, materials };
+    const light = L.light ?? (L.eyeLight ? [0, 0, -1] : stageLight(1, L.vecter[0], L.vecter[1]));
+    /* A game that sends the geometrizer one light in the camera's frame,
+     * whatever the camera does, gives it as `eyeLight` (the board's eye
+     * axes: x right, y up, z down the view); the stage turns it with the
+     * camera (stepEyeLight). */
+    return { light, materials, eyeLight: L.eyeLight ?? null };
 }
 
 /*

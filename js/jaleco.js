@@ -219,9 +219,10 @@ export function readJalecoStages(rom) {
             texSet: [c.set, c.luma ?? 0],
             tint: [1, 1, 1],
             bright: 1,
-            /* The material table is not read yet: every face at full
-             * ambient, as the Models tab draws them. */
+            /* Without a material table (Over Rev's is not read yet) every
+             * face is at full ambient, as the Models tab draws them. */
             light: lit?.light ?? [0, 1, 0],
+            eyeLight: lit?.eyeLight ?? null,
             materials: lit?.materials ?? Array.from({ length: 32 }, () => ({ diffuse: 0, ambient: 255 })),
             colorCycles: [],
             flags: 0,

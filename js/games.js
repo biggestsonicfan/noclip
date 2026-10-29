@@ -6641,10 +6641,14 @@ const manxtt = {
     /*
      * The materials go up with the TGP's function 6 as Sega Rally's do:
      * `mov 22, g1; lda 0x4140, g2; bal 0x40D8` (0x4280). The light is a
-     * stand-in, Sega Rally's world light; the race's own was not read.
+     * world vector 0x37224 picks by the course (0x513FF0 bit 0) and the
+     * camera turns into its frame: (0.19, -0.45, 0.88) on Laxey Coast,
+     * (-0.6, -0.2, -0.78) on the T.T. Course (each course's `light`, z
+     * negated for the explorer). This one is the T.T. Course's, for the
+     * Models tab.
      */
     lighting: {
-        light: [-0.707, -0.707, -0.707],
+        light: [-0.6, -0.2, 0.78],
         materials: { source: 'maincpu', at: 0x4140, count: 22, stride: 8 },
     },
     /* The two courses (js/racers.js), the race's records 1 and 2. */
@@ -6653,8 +6657,8 @@ const manxtt = {
             kind: 'manxtt',
             records: 0x401e0,
             courses: [
-                { record: 1, set: 2, name: 'Laxey Coast' },
-                { record: 2, set: 0, name: 'T.T. Course' },
+                { record: 1, set: 2, name: 'Laxey Coast', light: [0.19, -0.45, -0.88] },
+                { record: 2, set: 0, name: 'T.T. Course', light: [-0.6, -0.2, 0.78] },
             ],
         },
         flat: true,
@@ -6763,10 +6767,13 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
             solid: true,
         },
         depth: { recede: 0, nearMin: 0.02, layers: true },
-        /* Function 6, 31 pairs (Twin: 0x2D728 through 0x2E3D0). The light is
-         * a stand-in, Sega Rally's. */
+        /* Function 6, 31 pairs (Twin: 0x2D728 through 0x2E3D0). The light
+         * is (0, 0, 1) in the world, z negated here: the boot sends it as it
+         * stands (0x2E5B0), and every frame 0x31B54 sends it turned into
+         * the course camera's frame (MAME, the Twin's attract on Bayside
+         * Street and on the Speedway). */
         lighting: {
-            light: [-0.707, -0.707, -0.707],
+            light: [0, 0, -1],
             materials: { source: 'maincpu', at: materials, count: 31, stride: 8 },
         },
         /* The course records (js/racers.js); set k is course k. The attract's
@@ -6976,9 +6983,11 @@ const stcc = {
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
     /* Function 6 from 0x736B0, 32 pairs (0x1BA4, 0x10FA4, 0x7C2B0, through
-     * 0x73648). The light is a stand-in, Sega Rally's. */
+     * 0x73648). The light is (0, -0.707, 0.707) in the camera's frame:
+     * 0x1BD4 sends it every frame as it stands, and the course's matrix
+     * turns with the camera, so the light turns with the view. */
     lighting: {
-        light: [-0.707, -0.707, -0.707],
+        eyeLight: [0, -0.707, 0.707],
         materials: { source: 'maincpu', at: 0x736b0, count: 32, stride: 8 },
     },
     /*
@@ -7035,7 +7044,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses, cells }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses, cells, lighting }) {
     return {
         id,
         name,
@@ -7054,6 +7063,7 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         ...(courses ? { stageTable: { jaleco: courses, flat: true } } : {}),
         /* The tile chip's CG files (js/jalecocells.js). */
         cells,
+        ...(lighting ? { lighting } : {}),
         /* No fighter or motion data is read yet. */
         features: { stages: !!courses, characters: false, motions: false, bodies: false, cells: !!cells },
     };
@@ -7140,6 +7150,15 @@ const sgt24h = jalecoBuild({
     },
     /* The tile chip's CG files: the directory at data 0xE00000 (0x3CF8C). */
     cells: { files: { dir: 0x02e00000 }, charBytes: 0x80000, colorxlat: true },
+    /* Function 6 from 0x59F50, {parameters, coefficient} pairs: the program
+     * asks for 31, but only the first 16 are the table (a second upload sends
+     * those 16 again and then other data). The light is (0, 0, 1) in the
+     * camera's frame, a headlight, sent again through every frame of the
+     * attract (MAME's display lists). */
+    lighting: {
+        eyeLight: [0, 0, 1],
+        materials: { source: 'maincpu', at: 0x59f50, count: 16, stride: 8 },
+    },
 });
 
 /*
