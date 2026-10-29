@@ -204,7 +204,8 @@ liveries, the three courses' track sections, and the scenery along them.
 
 The courses have their music too: tick **music** on the Stages tab and each
 course plays the song its race starts with, on Daytona's own sound board — the
-68000 driver, two MultiPCMs and a YM3438, emulated in the page. The game lets
+driver, ported to C by m2-hle2, and the two MultiPCMs it drives, emulated in
+the page. The game lets
 the player pick the song by holding a VR button as the race starts, and a
 fourth song is only reachable that way; the **Song** list under the switch is
 the same choice. Every build has it; the 1993 one plays on its own sound
@@ -1593,10 +1594,8 @@ the two of them are checked against — the fill path in `model2rd.ipp` and the
 geometry lighting in `geo_parse_np_ns` are what the shader here reproduces, and
 [stf-tools](https://github.com/biggestsonicfan/stf-tools) drives MAME to capture
 texture RAM and to diff against a real machine.
-Daytona's sound board plays through two of MAME's sound cores, compiled into
-`js/sound/model1.wasm`: its MultiPCM (`gew.cpp`, `multipcm.cpp`, Miguel Angel
-Horna) and [ymfm](https://github.com/aaronsgiles/ymfm) (Aaron Giles), both
-BSD-3-Clause.
+Daytona's sound board plays MAME's MultiPCM (`gew.cpp`, `multipcm.cpp`, Miguel
+Angel Horna, BSD-3-Clause), by way of m2-hle2's port in `js/sound/board.wasm`.
 Rendering is [three.js](https://threejs.org), loaded at a pinned version with
 its hashes in the import map rather than kept in the tree — the library from
 cdnjs, OrbitControls from jsDelivr.

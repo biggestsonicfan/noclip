@@ -5,19 +5,19 @@
  * the game's own sound driver out of its program ROM, and the page runs an
  * emulation of that board, built to WebAssembly, on the audio thread
  * (worklet.js). It is told what to play the way the i960 tells it: commands
- * down its UART. There are two boards (`game.sound.board`):
+ * down its UART. There are two boards (`game.sound.board`), and m2-hle2
+ * emulates both and grades them against MAME's; board.wasm is that emulation
+ * (tools/sound/board.c):
  *
- * - 'model2', the Model 2 board: a 68000 and a Yamaha SCSP. m2-hle2 emulates
- *   it and grades it against MAME's, and board.wasm is that emulation
- *   (tools/sound/board.c). Where m2-hle2 knows the driver build — Sonic The
- *   Fighters, Fighting Vipers, Dead or Alive, Virtual-On, Dynamite Cop and
- *   The House of the Dead — the driver runs ported to C, in about half the
- *   68000's time; Virtua Fighter 2, Sega Rally, Power Sled and Last Bronx
- *   keep theirs on the 68000. The SCSP is the same chip either way.
+ * - 'model2', the Model 2 board: a 68000 and a Yamaha SCSP.
  * - 'model1', the board the original Model 2 kept from Model 1: a 68000, two
- *   MultiPCM sample chips and a YM3438. model1.wasm is MAME's own chips on
- *   m2-hle2's 68000 (tools/sound/model1.c). Daytona USA and
- *   Virtua Cop.
+ *   MultiPCM sample chips and a YM3438. Daytona USA and Virtua Cop.
+ *
+ * Where m2-hle2 knows the driver build — Sonic The Fighters, Virtua Fighter 2,
+ * Fighting Vipers, Sega Rally, Dead or Alive, Virtual-On, Dynamite Cop, The
+ * House of the Dead, Daytona and Virtua Cop — the driver runs ported to C, in
+ * about half the 68000's time; the rest keep theirs on the 68000. The chips
+ * are the same either way.
  *
  * A game whose driver names its own boot commands (Dead or Alive's) gives them
  * as `boot` and `stop` for the Model 2 board too, and `warmup`, the seconds
@@ -36,14 +36,13 @@
  * stage starts with all sound off again. A game on the Model 1 board names its
  * own, in games.js. */
 const MODEL2 = {
-    wasm: 'board.wasm',
     boot: [0xA0, 0x00, 0x01, 0xA0, 0x00, 0x03, 0xA0, 0x03, 0x60],
     stop: [0xA0, 0x00, 0x01],
 };
 
 function boardOf(spec) {
-    if (spec.board !== 'model1') return { ...MODEL2, boot: spec.boot ?? MODEL2.boot, stop: spec.stop ?? MODEL2.stop };
-    return { wasm: 'model1.wasm', boot: spec.boot, stop: spec.stop };
+    if (spec.board !== 'model1') return { model1: false, boot: spec.boot ?? MODEL2.boot, stop: spec.stop ?? MODEL2.stop };
+    return { model1: true, boot: spec.boot, stop: spec.stop };
 }
 
 /* A command as the i960 sends it: the status byte and two 7-bit data bytes. */
@@ -249,8 +248,8 @@ export class SoundBoard {
         this.ctx = ctx;
         const resumed = ctx.resume();
         const [wasm] = await Promise.all([
-            fetch(new URL(`./${this.kind.wasm}`, import.meta.url)).then((r) => {
-                if (!r.ok) throw new Error(`${this.kind.wasm}: ${r.status}`);
+            fetch(new URL('./board.wasm', import.meta.url)).then((r) => {
+                if (!r.ok) throw new Error(`board.wasm: ${r.status}`);
                 return r.arrayBuffer();
             }),
             ctx.audioWorklet.addModule(new URL('./worklet.js', import.meta.url)),
@@ -289,7 +288,9 @@ export class SoundBoard {
         });
         const prog = program.slice().buffer;
         if (spec.warmup) onProgress('starting the sound program');
-        node.port.postMessage({ type: 'init', wasm, program: prog, samples: samples.buffer, warmup: spec.warmup ?? 0 },
+        node.port.postMessage({
+            type: 'init', wasm, model1: this.kind.model1, program: prog, samples: samples.buffer, warmup: spec.warmup ?? 0,
+        },
             [wasm, prog, samples.buffer]);
         await ready;
         this.gain = new GainNode(ctx, { gain: this.volume ?? 2 });

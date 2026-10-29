@@ -35,13 +35,11 @@ js/
   sound/
     sound.js     the music switch: reads the sound ROMs, boots the board
     worklet.js   runs the board on the audio thread
-    board.wasm   m2-hle2's Model 2 sound board, built by tools/sound/build.sh
-    model1.wasm  the Model 1 sound board (Daytona), built by the same
+    board.wasm   m2-hle2's sound boards, Model 2 and Model 1, built by
+                 tools/sound/build.sh
 tools/sound/
   board.c        the wasm's surface over m2-hle2's src/board/sound.h
-  model1.c       the Model 1 board: m2-hle2's 68000, the memory map, the UART
-  model1_chips.cpp  MAME's MultiPCM and ymfm's YM3438 for it
-  build.sh       emcc build of both
+  build.sh       its emcc build
 ```
 
 The tools this document keeps citing are not in the tree. They live in
@@ -11083,15 +11081,16 @@ routine with the driver's own RAM layout, writing the same SCSP registers and
 sound RAM the 68000 would; since m2-hle2 #1802 it is the board's default
 wherever the program ROM is a build it knows, picked by a hash of the driver's
 code. The page gets it with the rest of the board: Sonic the Fighters,
-Fighting Vipers, Dead or Alive, Virtual-On, Dynamite Cop and The House of the
-Dead (both builds) run the driver in C; Virtua Fighter 2, Sega Rally, Power
-Sled and Last Bronx have builds it does not know and run theirs on the 68000,
-as before. `snd_driver()` says which, and the console logs it when the board
+Virtua Fighter 2, Fighting Vipers, Sega Rally, Dead or Alive, Virtual-On,
+Dynamite Cop and The House of the Dead (both builds) run the driver in C, and
+so do Daytona and Virtua Cop on the Model 1 board (below); Power Sled, Last
+Bronx and Daytona's 1993 build have builds it does not know and run theirs on
+the 68000, as before. `snd_driver()` says which, and the console logs it when the board
 starts. The i960's side is the same either way (the same UART, clocked the
 same), so nothing in `sound.js` changes with the driver. Graded in Node
 against the 68000 wasm, first stage song, 12 s each: the per-second loudness
 matches to a few thousandths in every game, and the board's work drops from
-21–35 ms to 11–18 ms of a core per second of sound.
+21–35 ms to 10–18 ms of a core per second of sound.
 
 **What it sends.** The song is the one `stage_bgm_select` picks:
 `ld 0xDBFDC[r3*4], g0` at `0x3F6A8`, `r3` the `stage_num` byte masked to four
@@ -11126,12 +11125,15 @@ board.
 **Rebuilding.** `tools/sound/build.sh` with Emscripten on the path (or `EMCC`
 pointing at it) and m2-hle2 checked out beside this repository (or `M2HLE2`
 pointing at it). The wasm is committed because the site has no build step; a
-change to m2-hle2's `sound.h`, `scsp.h` or `m68k*.h` is picked up by rebuilding
+change to m2-hle2's `sound.h`, `sound_hle*.h`, `scsp.h`, `model1_sound.h` or
+`m68k*.h` is picked up by rebuilding
 it, and the commit should name the m2-hle2 commit it was built from. The first
 build is from `c4ed74f`, then `f797c4b`, which has the 68000 fix The House of
-the Dead's driver needs (below); the current one, and `model1.wasm`, are from
+the Dead's driver needs (below); then it, and `model1.wasm`, were from
 `cd73efd`, with the 68000's bit-op fix (`3d283a3f`) and, for the Model 1 board,
-#1006's. `board.wasm` is now from `f07cf01`, the driver in C as the default.
+#1006's. `board.wasm` was then from `f07cf01`, the driver in C as the default,
+and is now from `6a15509`, which adds Virtua Fighter 2's and Sega Rally's
+drivers and the Model 1 board with its drivers in C; `model1.wasm` is gone.
 The build stubs out
 `clock_gettime`: the board times its own work for m2-hle2's status display,
 which a page never reads, and libc's clock would have the module import WASI.
@@ -11263,18 +11265,29 @@ than the SCSP one: a 68000 at 10 MHz running the driver out of `epr-16720` and
 `epr-16721`, two MultiPCM sample chips (315-5560) with 4 MB of samples each
 (`mpr-16491`/`16492` and `mpr-16493`/`16494`, the upper megabyte of each
 banked by the 68000), and a YM3438. The i960 talks to it the same way, bytes
-down an 8251 at 31250 baud. m2-hle2 has no emulation of this board, so
-`model1.wasm` is put together here (`tools/sound/model1.c`): m2-hle2's 68000,
-MAME's memory map for the board (`segam1audio.cpp`), and the two chips as MAME
-runs them — its MultiPCM (`gew.cpp`, `multipcm.cpp`), carried over line for
-line, and ymfm, MAME's YM3438 core, used as it is. The mix is MAME's: the
-YM3438 at 0.30, each MultiPCM at 0.5. The driver keeps its tempo by polling the
-YM3438's timers; its only interrupt is the UART's, on level 2.
+down an 8251 at 31250 baud. Virtua Cop has the same board.
 
-It makes MultiPCM's own rate, 10 MHz / 224 = 44642.857 Hz, and says so through
-`snd_rate()`, which the worklet uses to step it across to the context's rate.
+It is m2-hle2's board (`src/board/model1_sound.h`), in the same `board.wasm`
+as the Model 2 one: `sound.js` says which (`snd_board(1)`) before the ROMs go
+in. Its MultiPCM is MAME's (`gew.cpp`, `multipcm.cpp`), by way of the port this
+page first carried; the YM3438 is only its timers, which the driver polls for
+its tempo — Daytona never keys an FM voice. It makes the board's 44.1 kHz,
+the MultiPCM's steps and rates scaled to match. Daytona's and Virtua Cop's
+drivers run in C (m2-hle2 `sound_hle_m1.h`, `sound_hle_vcop.h`), the 1993
+build's on the 68000.
 
-**Graded against MAME.** MAME (`daytona`, 0.289) was run through 70 s of
+The board's receiver drops a byte that arrives before the driver turns it on,
+and the next byte overwrites one the driver has not taken yet; on the board
+the i960 is still booting through all of that, but the page sends its first
+commands at once, so `board.c` holds them until the receiver is on and empty.
+
+Until this board went into m2-hle2 the page had its own, `model1.wasm`: the
+same 68000 and MultiPCM with ymfm's whole YM3438. Graded against it in Node,
+first song, 12 s: per-second loudness within a few per cent in Daytona, Virtua
+Cop and the 1993 build, the board's work down from 28 ms to 11 ms of a core
+per second of sound with the driver in C (22 ms on the 68000).
+
+**Graded against MAME** (the earlier `model1.wasm`). MAME (`daytona`, 0.289) was run through 70 s of
 attract with every byte the i960 wrote to the UART logged and the sound written
 to a WAV; the same bytes at the same times through `model1` natively gave a
 loudness envelope that follows MAME's at a correlation of 0.997 (quarter-second

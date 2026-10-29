@@ -1,18 +1,24 @@
 /*
- * board.c — the Model 2 sound board, for the browser.
+ * board.c — the Model 2 and Model 1 sound boards, for the browser.
  *
- * The board itself is m2-hle2's (src/board/sound.h): the game's sound
- * driver, the SCSP it drives, and the sample ROMs. Where m2-hle2 knows the
- * driver build (sound_hle.h: Sonic the Fighters', Fighting Vipers', Dead or
- * Alive's, CRX_drv for The House of the Dead and Dynamite Cop, ...) the driver
+ * The boards themselves are m2-hle2's (src/board/sound.h): the game's sound
+ * driver, the chips it drives, and the sample ROMs. That is the Model 2
+ * board's SCSP, or, for Daytona USA and Virtua Cop, the board the original
+ * Model 2 kept from Model 1: two MultiPCMs and a YM3438 (model1_sound.h).
+ * Where m2-hle2 knows the driver build (sound_hle.h: Sonic the Fighters',
+ * Virtua Fighter 2's, Sega Rally's, CRX_drv for The House of the Dead and
+ * Dynamite Cop, Daytona's and Virtua Cop's Model 1 drivers, ...) the driver
  * runs ported to C, in about half the 68000's time; any other program runs on
- * the 68000 as the board does. That board is graded against MAME's, note for
- * note, so nothing here models sound — this file only gives it a surface a
- * page can call:
+ * the 68000 as the board does. Both boards are graded against MAME's, note
+ * for note, so nothing here models sound — this file only gives them a
+ * surface a page can call:
  *
  *   snd_alloc(n)            memory for the ROMs, which the page copies in
- *   snd_init(p, np, s, ns)  the program ROM as the zip holds it, and the
- *                           sample ROMs laid end to end; boots the 68000
+ *   snd_board(model1)       which board: 1 the Model 1 one; before snd_init
+ *   snd_init(p, np, s, ns)  the program ROMs as the zip holds them, laid end
+ *                           to end, and the sample ROMs laid end to end (on
+ *                           the Model 1 board each MultiPCM's 4 MB, the
+ *                           first chip's then the second's); boots the board
  *   snd_send(b)             one byte down the i960's sound UART
  *   snd_render(n)           n samples at 44.1 kHz, as float stereo pairs at
  *                           snd_out(); n at most SND_BLOCK
@@ -63,18 +69,22 @@ int clock_gettime(clockid_t id, struct timespec *ts) {
 static float   s_out[SND_BLOCK * 2];
 static uint8_t s_queue[SND_QUEUE];
 static uint32_t s_qr, s_qw;
+static int     s_model1;
 
 #define EXPORT __attribute__((used, visibility("default")))
 
 EXPORT void *snd_alloc(uint32_t n) { return malloc(n); }
 EXPORT float *snd_out(void) { return s_out; }
+EXPORT void snd_board(int model1) { s_model1 = model1 != 0; }
 
 EXPORT int snd_init(const uint8_t *prog, uint32_t prog_size, const uint8_t *samples, uint32_t samples_size) {
-    /* MAME's ROM_LOAD16_WORD_SWAP (m2-hle2 profiles/sfight.h): the zip holds
-     * the program ROM a byte pair at a time the other way round. */
+    /* MAME's ROM_LOAD16_WORD_SWAP (m2-hle2 profiles/sfight.h, daytona.h):
+     * the zip holds the program ROM a byte pair at a time the other way
+     * round. */
     static uint8_t swapped[M68K_ROM_SIZE];
     uint32_t n = prog_size < M68K_ROM_SIZE ? prog_size : M68K_ROM_SIZE;
     for (uint32_t i = 0; i + 1 < n; i += 2) { swapped[i] = prog[i + 1]; swapped[i + 1] = prog[i]; }
+    sound_select_board(s_model1);
     sound_load_samples(samples, samples_size);
     sound_reset();
     sound_load_rom(swapped, n);
@@ -109,7 +119,17 @@ static void snd_run_into(uint32_t at, uint32_t run) {
  * of the block in one run. The SCSP makes its samples late, a voice at a time
  * over the whole run (m2-hle2 scsp.h, "The chip's own time"), and the samples
  * do not depend on where the runs are cut, so one long run is the same sound
- * for less work. */
+ * for less work.
+ *
+ * The Model 1 board's receiver drops what arrives before its driver turns it
+ * on, and keeps one byte, which the next overwrites, until the driver takes
+ * it, which it does not while it is still setting up after reset. The i960
+ * is still booting all that while; the page sends at once, so on that board
+ * a byte waits here until the receiver is on and has handed on the last. */
+static int snd_listening(void) {
+    return !g_sound.model1 || (g_sound.m1.rxe && !g_sound.m1.rxrdy && !g_sound.uart.count);
+}
+
 EXPORT uint32_t snd_render(uint32_t n) {
     if (n > SND_BLOCK) n = SND_BLOCK;
     uint32_t i = 0;
@@ -118,7 +138,7 @@ EXPORT uint32_t snd_render(uint32_t n) {
         if (s_qr != s_qw) {
             run = 1;
             sound_uart_service(&g_sound, g_sound.m68k.cpu.cycles);
-            if (sound_uart_txrdy(&g_sound))
+            if (snd_listening() && sound_uart_txrdy(&g_sound))
                 sound_uart_write(&g_sound, s_queue[s_qr++ % SND_QUEUE], g_sound.m68k.cpu.cycles);
         }
         snd_run_into(i, run);
@@ -138,6 +158,7 @@ static uint8_t *slurp(const char *p, uint32_t *n) {
 }
 int main(int argc, char **argv) {
     if (argc < 5) return 2;
+    snd_board(getenv("SND_M1") != NULL);    /* the Model 1 board */
     if (getenv("SND_68K")) g_sound_hle_want = 0;   /* the 68000, to compare */
     uint32_t np, ns;
     uint8_t *p = slurp(argv[1], &np), *s = slurp(argv[2], &ns);
