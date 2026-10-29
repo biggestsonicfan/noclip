@@ -80,6 +80,10 @@
  * Wave Runner (waverunr), Sega Water Ski (segawski) and Ski Super G (skisuprg)
  * have the same library (tables 0x8E1B0, 0x724F0, 0xB05C0).
  *
+ * Behind Enemy Lines (bel) draws Daytona's records (0x76FC0) from one run
+ * and loads Daytona's CG pairs (0x645F0) from two tables. See js/games.js
+ * bel.cells.
+ *
  * The House of the Dead (hotdo) has the same pictures a year early, in its
  * program ROM (`programAt0`): the draw (0x17D80) loads a picture into free
  * blocks the first time it is drawn (0x17B20, 0x17CB0, 0x17C10) and moves its

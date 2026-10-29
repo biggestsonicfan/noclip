@@ -7573,7 +7573,10 @@ const bel = {
         bel: { ramps: 0x62a70, table: 0x62dd0, scene: 2 },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Daytona's records (draw 0x76FC0), 393 end to end, and
+     * its CG pairs (loader 0x645F0) in two tables, the boot's first. */
+    cells: { records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

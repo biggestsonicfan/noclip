@@ -39,7 +39,7 @@ Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
-*Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
+*Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1528,7 +1528,13 @@ sheets as they are first set up.
 Set 6's sheets, colour tables, luma and palette match MAME's RAM byte for
 byte at attract frame 1500.
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 393 2D pictures (the briefings' maps and
+screens, the HUD, the menus) and the 64 CGs that load them. A picture often
+fits several CGs; pick the one the screen loads in the second picker. The
+attract's backdrops and HUD pieces match MAME's tile RAM pixel for pixel
+with their CG.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
 
 ## Desert Tank

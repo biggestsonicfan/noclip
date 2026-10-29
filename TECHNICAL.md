@@ -8009,6 +8009,25 @@ pieces of bank 0x2600000 (entry 1) streamed in by the slot loader below.
 MAME's own pictures of the attract (the mission briefing, the C.A.T. title)
 show the same objects the viewer draws.
 
+**Cells.** Daytona's formats (`records`, `cgTables`), Sega's own library
+two years on. The draw 0x76FC0(record, tilemap) reads a halfword added to
+each entry, a halfword that is 0 for byte entries, the rows and the columns
+(words), then the entries, each row 0x80 bytes on in the tilemap; 50 callers.
+The records lie end to end in data 0x800180 to 0x862D50, 393 of them, and
+every record the code names, directly or through its tables (0x205C124,
+0x2061888, 0x2062A20, 0x2062B4C, 0x2062BE0, 0x2062C10, 0x2065690), is one.
+The loader 0x645F0(pair) takes a pointer to {CG list, palette list}: the CG
+list {chunk, character address} pairs to a zero, a chunk being {count, count
+x 32 bytes}; the palette list {address, halfword count, colours}. Its 25
+callers take the pair from two tables: 0x2100000, 8 pairs (0 the boot's,
+0x21000B8, which fills most of the character RAM), and 0x2C00000, 56 pairs,
+indexed by the scene. Graded against MAME's tile and palette RAM at frames
+1200, 3000 and 4500: the backdrops 4, 5, 6, 7, 9, 23, 338, 340 and 376, the
+map pieces 156 and 167, the menu text 79, 96 and 98, and dozens of HUD pieces
+(2 x 2 and 3 x 3), all pixel for pixel with their CG. Many CGs write every
+character a picture uses, so the first CG is not always the screen's: cell 7
+needs CG 4, cell 376 CG 47.
+
 **Leads.** Texture slots: 0x72440 streams 64-wide pieces of a bank into
 sheet slots from a queue (0x72710; state at work RAM 0x5A024C, +0x1C the
 slots' banks, +0x4C the queue bytes, slot in bits 0-5 and bank above). Scenes:
