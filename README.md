@@ -1274,10 +1274,15 @@ tables come from running the game's own routines.
 
 The texture picker's sets 0..2 are the three courses, each its own pair of
 texture banks and its own colour table; set 3 is the pair the game loads for
-its other screens. The cars are on every course's banks; a course model needs
-its course picked, and the race queen is on set 1's.
+its other screens. The cars are on every course's banks; a course segment
+opens on its course's set, and the race queen is on set 1's.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Stages** tab has the three courses: Bayside Street, the Indianapolis
+Motor Speedway and Highland Raceway, each its full-detail segments from the
+course record, on the course's own textures and colours. Both cabinets' builds
+read the same lists. The cars and what the race adds are not in it, nor a sky.
+
+There is no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Sega Touring Car Championship

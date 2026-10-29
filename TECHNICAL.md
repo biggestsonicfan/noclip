@@ -7294,11 +7294,26 @@ pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
 table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
 palette; it is not ported. Luma and palette match MAME.
 
-**Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
-lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
-like the course's segments at two distances; +0x0C points at 16-byte records
-of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
-program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
+**Stages** (`js/racers.js`). A course record (0x6A5B0 + 24k, through
+0x5447AC; the Deluxe's at 0xAFE90) points at two {count, list} pairs in the
+data ROM: +4 the full-detail segments, +0 the low-detail ones. The draw,
+0x4DD10, asks the TGP (command 0x4D) for the car's segment and draws it and
+the two beside it from +4's list and the rest from +0's, each with no matrix
+(0x101), so in world space. The tab draws +4's list whole: 34 segments for
+course 0, 44 for course 1, 29 for course 2. Model numbers index the RAM copy
+of the table at 0x200000 (0x3BC20), entry for entry; the copy takes 0x200000
+off a tpa or tha with bit 22 set (`texBit22`), which course 0's segments have
+and which left them untextured until it was read. Course 0 is Bayside Street
+(MAME's attract race there shows the "BAY SIDE STREET" leaderboard), course
+1 the Indianapolis Motor Speedway (the oval) and course 2 Highland Raceway.
+Set k is course k's banks and colour table, which a segment opens on in the
+Models tab. Not in the tab: the per-course extra draw 0x4E010, the object
+draw 0x17720 (table 0x176F0), the cars, a sky, and the light (Sega Rally's
+stands in). Function 6 is 31 pairs at 0x2D590 (Deluxe 0x33A40).
+
+**Leads.** A course record's +0x0C points at 16-byte records of {x, z float,
+a word, 0}, which look like the course line; +0x08 points at a program table
+(0x69F60) handed to 0xE40, not read yet. No CGM pictures: the 2D is not AM3's
 format, and its tiles were not looked for. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
