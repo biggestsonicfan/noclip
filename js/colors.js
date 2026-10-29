@@ -537,6 +537,8 @@ function runColorRoutines(rom, colorSet = 0) {
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);
+    /* Model 2B/2C boards (STCC) keep luma RAM at 0x11400000, a byte every two. */
+    const [lumaRam, lumaShift] = C.lumaRam ?? [LUMA_RAM, 2];
     const where = (a) => {
         if (a < prog.length) return [prog, a];
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
@@ -554,8 +556,8 @@ function runColorRoutines(rom, colorSet = 0) {
     const write = (a, v, n) => {
         /* One byte lane of a 32-bit unit, stored here as the even byte of a
          * halfword the way a luma dump has it (buildLumaram). */
-        if (a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
-            luma[((a - LUMA_RAM) >> 2) * 2] = v & 0xff;
+        if (a >= lumaRam && a < lumaRam + (LUMA_BYTES << (lumaShift - 1))) {
+            luma[((a - lumaRam) >> lumaShift) * 2] = v & 0xff;
             return;
         }
         const [b, o] = where(a);

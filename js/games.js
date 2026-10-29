@@ -6241,6 +6241,115 @@ const indy500d = indy500Build({
     colorRun: [0x34230, [0x34320, 'set']],
 });
 
+/*
+ * Sega Touring Car Championship (Revision A; MAME stcca), a Model 2C AM
+ * Annex game. Sega Rally's board code under it: the model table in the program
+ * ROM, Sega Rally's texture deal with a run-length source (js/texture.js
+ * buildStccTexram), and colour tables the boot works out on the i960.
+ */
+const stcc = {
+    id: 'stcc',
+    name: 'Sega Touring Car Championship (Revision A)',
+    identify: ['epr-19272a.15', 'epr-19273a.16'],
+    identifyCrc: [0x20cedd05, 0x1b0ab4d6],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [[0x000000, 'epr-19272a.15', 0x20cedd05, 'epr-19273a.16', 0x1b0ab4d6]],
+        },
+        /* An 8 MB pair, then a 1 MB pair the board repeats to 0xFFFFFF; the
+         * boot's patch list is read at 0xC4BCEC, so the repeat at 0xC00000 is
+         * kept and the ones nothing reads are not. */
+        mainData: {
+            size: 0xd00000,
+            parts: [
+                [0x000000, 'mpr-19257.11', 0xac28ee24, 'mpr-19258.12', 0xf5ba7d78],
+                [0x800000, 'epr-19270.9', 0x7bd1d04e, 'epr-19271.10', 0xd2d74f85],
+                [0xc00000, 'epr-19270.9', 0x7bd1d04e, 'epr-19271.10', 0xd2d74f85],
+            ],
+        },
+        /* An 8 MB pair and a 1 MB pair repeated through 0x800000..0xFFFFFF,
+         * which the table's oba reaches all of. */
+        polygons: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19251.17', 0xe06ff7ba, 'mpr-19252.21', 0x68509993],
+                [0x800000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0x900000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xa00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xb00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xc00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xd00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xe00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+                [0xf00000, 'epr-19266.18', 0x41464ee2, 'epr-19267.22', 0x780f994d],
+            ],
+        },
+        /* A 4 MB pair at 0 and 0x400000, a 1 MB pair repeated from 0x800000. */
+        textures: {
+            size: 0x1000000,
+            parts: [
+                [0x000000, 'mpr-19254.27', 0x1ec49c02, 'mpr-19253.25', 0x41ba79fb],
+                [0x400000, 'mpr-19254.27', 0x1ec49c02, 'mpr-19253.25', 0x41ba79fb],
+                [0x800000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0x900000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xa00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xb00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xc00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xd00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xe00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+                [0xf00000, 'epr-19269.28', 0x01881121, 'epr-19268.26', 0xbc4e081c],
+            ],
+        },
+        copro: {
+            size: 0x400000,
+            optional: true,
+            parts: [[0x000000, 'mpr-19255.29', 0xd78bf030, 'mpr-19256.30', 0xcb2b2d9e]],
+        },
+    },
+    /*
+     * 2811 entries of 16 bytes in the program ROM at 0x32490 (tpa, tha, oba
+     * and a polygon count), read as `lda 0x32490[gN*16]` (0x6B80, 0xAE38,
+     * 0xB1E8 and on) and `ld 0x3249C[gN*16]` for the count.
+     */
+    modelTable: { source: 'maincpu', offset: 0x32490, count: 2811, stride: 16 },
+    meshPtr: { subtract: 0x02000000, add: 0 },
+    /* {count, colours} at 0x65660, 495 of them, copied to the face palette
+     * (0x1802000) by 0x1C8C0, which 0x696C0 runs from the frame's hook.
+     * 0x1C950, 0x1C9F0 and 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or
+     * 0xFC00 for a moment of the attract mode. */
+    paletteProgram: 0x65660,
+    paletteOffset: null,
+    /*
+     * A set is the pair a course record names (0xBEB0 + 0x3F4 * k: records
+     * 0, 1 and 4 share the first, 2 and 5 the second, 3 and 6 the third, 7
+     * has its own), then the title's. All are dealt over the boot's
+     * {0x400000, 0xC4BCEC}. Offsets in the data ROM.
+     */
+    texture: {
+        raw: {
+            layout: 'stcc',
+            runTable: 0x6a300,
+            boot: [0x400000, 0xc4bcec],
+            sets: [[0x4771ec, 0xc4c34c], [0x4fe190, 0], [0x5e1814, 0], [0x6bb5d8, 0xc4df40], [0x708d08, 0]],
+        },
+        sets: 5,
+        residentSet: null,
+        defaultSet: 0,
+    },
+    /*
+     * colorxlat by the boot's own routines (0x6A1F0): 0x6AC60 the gamma ramp
+     * in every row, then 0x6AE50 the odd rows from the ramp keys at 0x32120
+     * (0x1350). Luma is 0x730F0's, worked out, written to 0x11400000 a byte
+     * every two (the 2B/2C map). Both match MAME's byte for byte.
+     */
+    colors: {
+        i960: { run: [0x6ac60, [0x6ae50, 0x32120], 0x730f0], lumaRam: [0x11400000, 1] },
+        solid: true,
+    },
+    depth: { recede: 0, nearMin: 0.02, layers: true },
+    features: { stages: false, characters: false, motions: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. The INDY 500 Deluxe
@@ -6249,7 +6358,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa, manxtt, indy500d, indy500];
+    pltkids, pltkidsa, manxtt, indy500d, indy500, stcc];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -844,8 +844,7 @@ function buildDaytonaTexram(rom, texSets) {
  * texture upload of its own: both sheets, every halfword, on the desert, the
  * mountain and the forest.
  */
-function uploadSrallycBank(rom, base, tex, flag) {
-    const md = rom.mainData;
+function uploadSrallycBank(rom, base, tex, flag, md = rom.mainData) {
     const cv = rom.mainCpuView;
     const table = rom.game.texture.raw.runTable;
     const word = (i) => cv.getInt32(table + i * 4, true);
@@ -931,6 +930,72 @@ function buildIndyTexram(rom, texSets) {
     const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
     const pair = raw.pairs[sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet];
     pair.forEach((bank, slot) => deal(bank * SHEET_BYTES, slot));
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
+}
+
+/*
+ * Texture RAM for Sega Touring Car Championship: Sega Rally's deal
+ * (uploadSrallycBank, run table 0x6A300) at 0x6A930, fed from a run-length
+ * stream instead of a raw bank, then a list of patches. g0 is the flag (-1
+ * goes on with the deal in progress), g1 the stream, g2 the patches.
+ *
+ * - The stream (0x6A6D8) skips its first byte, then is records of {u32 value,
+ *   u8 count}, the value written count times; 0x6A770 decodes four words at a
+ *   time and stores them with stq, so the deal reads it 16 bytes at a time.
+ * - A patch (0x6A8A0, one a call) is {u32 coord, i32 count, count words},
+ *   coord 0 ending the list: each word goes to the sheet at byte coord, coord
+ *   stepping by 4. 0x6A7B0 picks the sheet from where coord lies in the mip
+ *   layout: y = coord >> 10, x = coord & 0x3FF, y past 0x1FF folded to the
+ *   right half; at level L (0..4) a point left of 0x800 - (0x400 >> L) or
+ *   above 0x200 - (0x100 >> L) is on the flag's sheet for an even level and
+ *   the other one for an odd level, and past level 4 on the other one.
+ *
+ * The boot (0x1310) deals {0x2400000, patches 0x2C4BCEC} with the flag 0; a
+ * course deals its record's pair with the flag 1 (0xAA10, records of 0x3F4
+ * bytes at 0xBEB0, stream at +0 and patches at +4) and the title and menus
+ * 0x2708D08 with no patches (0x39E8, 0x5738, 0x3FAA4). A set is the pair laid
+ * over the boot's, `sets[set]`, as data ROM offsets.
+ */
+function buildStccTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const md = rom.mainData;
+    const dv = rom.mainDataView;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const unpack = (at) => {
+        const out = new Uint8Array(SHEET_BYTES);
+        let i = at + 1;
+        for (let o = 0; o < out.length && i + 5 <= md.length; i += 5) {
+            const v = md.subarray(i, i + 4);
+            const n = md[i + 4] || (out.length - o) / 4;
+            for (let k = 0; k < n && o < out.length; k++, o += 4) out.set(v, o);
+        }
+        return out;
+    };
+    const sheetOf = (c, flag) => {
+        let y = c >> 10, x = c & 0x3ff;
+        if (y > 0x1ff) { y -= 0x200; x += 0x400; }
+        const mine = flag ? SHEET_BYTES : 0, other = SHEET_BYTES - mine;
+        for (let lv = 0, h = 0x100, w = 0x400; lv < 5; lv++, h >>= 1, w >>= 1) {
+            if (y < 0x200 - h || x < 0x800 - w) return lv & 1 ? other : mine;
+        }
+        return other;
+    };
+    const deal = ([stream, patches], flag) => {
+        uploadSrallycBank(rom, 0, tex, flag, unpack(stream));
+        for (let p = patches; p && p + 8 <= md.length;) {
+            let coord = dv.getUint32(p, true);
+            const count = dv.getInt32(p + 4, true);
+            p += 8;
+            if (!coord) break;
+            for (let k = 0; k < count && p + 4 <= md.length; k++, p += 4, coord += 4) {
+                const at = sheetOf(coord, flag) + coord;
+                if (at + 4 <= tex.length) tex.set(md.subarray(p, p + 4), at);
+            }
+        }
+    };
+    deal(raw.boot, 0);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    deal(raw.sets[sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet], 1);
     return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 2 };
 }
 
@@ -1776,6 +1841,7 @@ export function buildTexram(rom, texSets, fighters) {
         if (layout === 'von') return buildVonTexram(rom, texSets);
         if (layout === 'srallyc') return buildSrallycTexram(rom, texSets);
         if (layout === 'indy500') return buildIndyTexram(rom, texSets);
+        if (layout === 'stcc') return buildStccTexram(rom, texSets);
         if (layout === 'dynamcop') {
             const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
             return buildDynamcopTexram(rom, sets.length ? sets[sets.length - 1] : 0);

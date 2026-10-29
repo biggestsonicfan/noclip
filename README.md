@@ -27,6 +27,7 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
+*Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
 
 Three views, and a fourth for the 2D art:
 
@@ -1208,6 +1209,24 @@ its course picked, and the race queen is on set 1's.
 
 There is no Stages tab, no Cells tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
+
+## Sega Touring Car Championship
+
+`stcc.zip` is MAME's `stcca`, Revision A. The **Models** tab has all 2811
+entries of the model table: the cars, the courses in segments, the scenery and
+the title's lettering, with the textures, palette, luma and colour tables the
+game makes. The colour tables come from running the game's own routines, and
+they, the palette and luma match MAME's byte for byte. Texture RAM matches
+too, both sheets, in the attract mode's first race; on the next two courses
+three bytes differ, which the first course's patches left behind on the board.
+
+The texture picker's sets 0..3 are the course records' texture pairs, and
+set 4 is the title's. The cars are on every set; a course model needs its
+course's set picked.
+
+The other revisions (MAME `stcc`, `stccb`, `stcco`) are not recognised yet.
+There is no Stages tab, no Cells tab and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
 ## Running it
 
