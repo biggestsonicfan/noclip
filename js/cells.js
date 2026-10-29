@@ -426,7 +426,7 @@ function recordHeader(rom, p) {
     const R = scrollAt(rom, p);
     const C = rom.game.cells;
     if (C.pictures) return pictureHeader(R, 0);
-    if (C.sized) return pictureHeader(R, C.bases?.[p] ?? C.base);
+    if (C.sized) return pictureHeader(R, C.bases?.[p] ?? C.base, C.maxSide);
     if (R.off + 0x0c > R.u8.length) return null;
     const rows = R.view.getUint32(R.off + 4, true);
     const cols = R.view.getUint32(R.off + 8, true);
@@ -439,10 +439,10 @@ function recordHeader(rom, p) {
 
 /* A Dead or Alive map, or a Virtua Cop record: the width and the height,
  * then halfword entries. */
-function pictureHeader(R, base) {
+function pictureHeader(R, base, max = MAX_PICTURE_SIDE) {
     const cols = R.view.getUint16(R.off, true);
     const rows = R.view.getUint16(R.off + 2, true);
-    if (!rows || !cols || rows > MAX_PICTURE_SIDE || cols > MAX_PICTURE_SIDE) return null;
+    if (!rows || !cols || rows > max || cols > max) return null;
     const bytes = 4 + rows * cols * 2;
     if (R.off + bytes > R.u8.length) return null;
     return { R, base, wide: true, rows, cols, bytes, head: 4 };
@@ -918,7 +918,7 @@ const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) <<
  * (with `zeroFills`, Virtua Cop 2's, a count of 0 repeats its group to the
  * end, or once in a single entry);
  * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
- * colours copied as they are; `copy`, groups copied to others; `shuffled`,
+ * colours copied as they are (or `count` colours); `copy`, groups copied to others; `shuffled`,
  * Virtual On's lists of [colours, groups], one group after another;
  * `pointers`, a table of `groups` pointers, each to one group's colours
  * (Pilot Kids'); `set`, [palette entry, colour] pairs the code stores itself.
@@ -984,7 +984,7 @@ function loadBoot(rom, L, charBytes) {
             put(op.group, op.colours, op.groups);
         } else if (op.block) {
             const S = scrollAt(rom, op.block);
-            const n = Math.min(op.groups * 16, (S.u8.length - S.off) >> 1, pal.length - op.group * 16);
+            const n = Math.min(op.count ?? op.groups * 16, (S.u8.length - S.off) >> 1, pal.length - op.group * 16);
             for (let i = 0; i < n; i++) pal[op.group * 16 + i] = S.view.getUint16(S.off + i * 2, true);
             palRuns.push([op.group * 16, n]);
         } else if (op.copy) {
