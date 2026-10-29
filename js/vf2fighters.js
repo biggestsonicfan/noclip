@@ -671,6 +671,16 @@ export function fighterBodyBalls(rom) {
     return order && B ? readBodyBalls(rom, order, B, dataAt) : null;
 }
 
+/** The stage's ground, 0x50A010, which a piece out of the ring drops to:
+ * the f32 0x248FC copies from 0x6CE3564 by stage, the profile's
+ * `shadow.grounds` that shadowSetting (js/fightershadow.js) reads for the
+ * fighters' shadows. Undefined without it, for fvdebris' default. */
+export function debrisGround(rom, stage) {
+    const G = rom.game.rig?.shadow?.grounds;
+    const r = G && dataAt(rom, G + 4 * stage);
+    return r ? r.view.getFloat32(r.off, true) : undefined;
+}
+
 /** Whether the stage draws the pieces' floor shadows (0x76A70's test of the
  * stage flags, `debris.gates`). */
 export function debrisShadowStage(rom, stage) {

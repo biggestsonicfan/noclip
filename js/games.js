@@ -4013,7 +4013,8 @@ const doab = {
          * against row 2 but then draws row 2's place: a copy-paste slip that
          * leaves a row hanging 80 below the rest for a quarter of the cycle.
          * The fix loads the two heights the other way round (g7 = row 3's,
-         * the one drawn) and row 3's x and z. */
+         * the one drawn) and row 3's x and z. Only with "fix errors" on,
+         * as DAYTONA_PATCHES (doa.js fixedProgram). */
         fixes: doaConveyorFix(0),
         /* The sky: four scroll pictures a stage, named in the program, out of
          * the table of pictures in the data (js/scroll.js buildDoaSky).

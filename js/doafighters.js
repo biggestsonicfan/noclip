@@ -43,6 +43,12 @@ function busOf(rom) {
     return buses.get(rom);
 }
 
+/* The bus reads the program the "fix errors" switch picked when it was made;
+ * app.js drops it when the switch flips. */
+export function dropDoaBus(rom) {
+    buses.delete(rom);
+}
+
 const s16 = (b, a) => (b.read16(a) << 16) >> 16;
 
 const bankRow = (id) => (id & 0x7f) + (id & 0x80 ? 13 : 0);

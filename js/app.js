@@ -62,7 +62,7 @@ import {
 } from './bodies.js';
 import {
     readFighters, readFighterMotions, fighterMotionList, poseFighter, poseBout, opponentMatrix,
-    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
+    armouredFighter, armourHalves, hipModels, fighterDebrisTables, fighterBodyBalls, debrisShadowStage, debrisGround, OPPONENT_DISTANCE, flashMaterial, partMaterial, moveFlags,
     trailScript, hitSparkScript, brokenSlots, headPieceReflection, flightClocks, motionTiming as vf2MotionTiming, mirrorSample,
 } from './vf2fighters.js';
 import { readHitSpark, hitSparkModels, hitSparkDraws } from './fvhitspark.js';
@@ -77,7 +77,7 @@ import {
 } from './fvtrails.js';
 import { REACTIONS, attackOf, reactionMotion, landingFrame } from './reactions.js';
 import { createDebrisSim, launchDebris, stepDebris, pieceOnScreen, bodyBallsAt, debrisPlace, effectPlace, debrisShadowDraws, DEBRIS_SLOTS, SAMPLE_HIT } from './fvdebris.js';
-import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand } from './doafighters.js';
+import { readDoaFighters, readDoaMotions, doaMotionList, poseDoaFighter, moveCommand, dropDoaBus } from './doafighters.js';
 import { readLastbrnxFighters, readLastbrnxMotions, lastbrnxMotionList, poseLastbrnxFighter } from './lastbrnxfighters.js';
 import { Viewer, buildGeometry, buildEdgeGeometry, boardDrawsFace, THREE } from './viewer.js';
 import { isMobile, setMobile, wireSheet, wireTouchFly } from './mobile.js';
@@ -4193,8 +4193,9 @@ function stepBodyDebris(now) {
     /* 0x316F0 asks the board's screen; here it is the explorer's. */
     const cam = cameraOnCourse();
     const onScreen = (s) => pieceOnScreen(cam.view(...s.p), s.radius, cam.lens);
+    const ground = debrisGround(state.rom, state.sparkStage);
     for (let i = 0; i < n; i++) {
-        stepDebris(d.sim, d.bodies, onScreen);
+        stepDebris(d.sim, d.bodies, onScreen, ground);
         if (lit) latchPieces(d.sim.slots, lit, d.sim.centre);
     }
     sendDebrisCues(d.sim);
@@ -4238,7 +4239,8 @@ function placeDebris(m) {
 function placeDebrisShadows(m) {
     const sim = m.debris.sim;
     const lit = pieceSetting(m);
-    const draws = debrisShadowStage(state.rom, state.sparkStage) ? debrisShadowDraws(sim)
+    const draws = debrisShadowStage(state.rom, state.sparkStage)
+        ? debrisShadowDraws(sim, debrisGround(state.rom, state.sparkStage))
         : lit ? pieceShadowDraws(sim.slots, lit, debrisPlace) : [];
     if (!draws.length && !m.debrisShadowPool) return;
     if (m.debrisShadowGeoms?.rom !== state.rom) m.debrisShadowGeoms = { rom: state.rom, geoms: new Map() };
@@ -6370,6 +6372,7 @@ function wireOptions() {
     $('#opt-fix-errors').addEventListener('change', (e) => {
         useRomFixes(e.target.checked);
         state.modelCache.clear();
+        rerunFixedStages();
         reloadView({ keepCamera: true });
     });
 
@@ -6677,6 +6680,15 @@ function applyGameFeatures() {
     return on;
 }
 
+/* Dead or Alive's fixes are in the program its stage routines run, so the
+ * stages are run again, as loadGameContent runs them on a fresh load, and
+ * the fighters' table bus, made on the old program, is dropped. */
+function rerunFixedStages() {
+    const game = state.rom.game;
+    if (game.doa?.fixes?.length) dropDoaBus(state.rom);
+    if (game.doa?.fixes?.length && game.stageTable?.doa && state.stages.length) state.stages = readDoaStages(state.rom);
+}
+
 /* A new set loads as it shipped, so the switch is carried over to it here. */
 function useRomFixes(on) {
     const failed = setRomPatches(state.rom, on);
@@ -6692,7 +6704,7 @@ function useRomFixes(on) {
  * runs once and this runs again on every swap.
  */
 function loadGameContent() {
-    $('#fix-field').hidden = !state.rom.game.patches?.length;
+    $('#fix-field').hidden = !state.rom.game.patches?.length && !state.rom.game.doa?.fixes?.length;
     useRomFixes($('#opt-fix-errors').checked);
     state.viewer.setDepthProfile(state.rom.game.depth);
     state.viewer.setMipLevels(state.rom.game.texture.mips !== false);
