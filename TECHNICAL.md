@@ -7274,12 +7274,60 @@ pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
 table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
 palette; it is not ported. Luma and palette match MAME.
 
+**Cells** (`banks`, js/bankcells.js). There are no CGM pictures; the 2D is in
+two banks of three tables the program indexes by number:
+
+| bank | CGs {offset, tiles} | cell pointers | palettes | tile data |
+|---|---|---|---|---|
+| data | 0x2C39EB0, 61 | 0x2C89BF0, 441 | 0x2C8A2DC + 4n | 0x2800000 + offset |
+| XTRA (Twin) | 0x64B00C0, 13 | 0x64B83D0, 60 | 0x64B84BC + 4n | 0x6400000 + offset |
+| XTRA (Deluxe) | program 0x9B7B0, 7 | program 0xB34A0, 34 | entry 35 + n of the cell list | 0x6400000 + offset |
+
+A cell is Virtua Cop's record: the width and the height as halfwords, then the
+entries. CG 0 of each bank is empty.
+
+- **Loaders.** 0x53790 loads from the data bank and 0x53890 from XTRA's
+  (0x9EA40 and 0x9EB40 in the Deluxe). They take (count >> 7) + 1 128-tile
+  blocks of character RAM from a free list (0x5EE460, 0x5EE660) and copy the
+  tiles there straight (ldq; the writes are 0x53868 and 0x53968). They note
+  {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860; the Deluxe's
+  0x556130 and 0x556720).
+- **Palette.** 0x55F10/0x55F30 queue the CG's palette through 0x9260; the
+  queue (0x9440) writes a group a block, from the first block's group on.
+- **Draws.** 0x53E60, 0x548A0, 0x55320 and 0x55750 draw a data-bank cell (g0)
+  with a CG (g1). 0x54950 draws three cells. 0x54300 and 0x54550 draw an XTRA
+  cell. Each adds first block << 7 to every entry, so a cell numbers its CG's
+  tiles and groups from 0.
+- **The font.** 0x53278 expands a 1bpp font at char 0, from data 0x2C00000
+  (0x53080 at boot). The panel does not load it, and no cell needs it.
+
+The panel loads a CG from block 0. `screens` are the 48 call sites that name
+both a cell and a CG by constant; one more call gives CG 33 the palette
+0x2C39DF0 with g2 = 1, which the panel does not follow. The tables keep a CG's
+cells together and in CG order. So any other cell takes a CG of its own bank,
+between the CGs named for the nearest named cells before and after it, that
+holds every tile and group it names. Of those, the one whose tiles join up
+best wins (seamScore).
+
+**Checked against MAME.**
+- MAME `indy500to`, frames 300..3000, and `indy500d`, frames 1500 and 2100:
+  every loaded CG (data 1, 8, 9, 13..18, 45, 46, 49, 53, 54, 58; XTRA 1 and on)
+  has the panel's tiles at its first block, byte for byte.
+- The colours match too, except CGs 13 and 14, which MAME fills with flat
+  0xFA0C (a flash), and CG 53, which the game darkens from frame 2100 (a fade).
+- The snapshots' TOP 10 RANKING, NAME/TOTAL TIME, places, AT/MT, VIEW BUTTON
+  text and SEGA logo are the panel's cells.
+
+**What is missing.** The Twin's XTRA cell 59 is really CG 0's palette
+pointer. A few small cells (e.g. 34, a strip of HUD words) take a CG that
+garbles them, so they probably draw with two CGs loaded. The Deluxe's XTRA
+cells have no `screens`; they rank by fit and seams alone.
+
 **Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
 lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
 like the course's segments at two distances; +0x0C points at 16-byte records
 of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
-program table (0x69F60) not read yet. No CGM pictures: the 2D is not AM3's
-format, and its tiles were not looked for. The sound board is the 68000 and
+program table (0x69F60) not read yet. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
 

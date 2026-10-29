@@ -6533,7 +6533,7 @@ const manxtt = {
  * Twin's data with its program moved about; the addresses it changes are
  * `program`'s.
  */
-function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun }) {
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, cells }) {
     const prog = [program[1], program[3]];
     return {
         id, name,
@@ -6612,9 +6612,55 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun 
             solid: true,
         },
         depth: { recede: 0, nearMin: 0.02, layers: true },
-        features: { stages: false, characters: false, motions: false, cells: false },
+        /* The 1 MB pair at 0x1000000, as the cells' second bank names it. */
+        xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+        cells,
+        features: { stages: false, characters: false, motions: false, cells: !!cells },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js `banks`, js/bankcells.js), the Twin's
+ * addresses. Two banks: the data ROM's, its CGs' tiles at 0x2800000 on, and
+ * XTRA's, at 0x6400000 on. Each has a CG table, {offset, tile count}, a cell
+ * table of pointers to Virtua Cop's records, and after the cells a table of
+ * each CG's palette; CG 0 of each is empty. The loaders (0x53790, 0x53890)
+ * take whole 128-tile blocks from the free list at 0x5EE460/0x5EE660 and note
+ * {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860); 0x55F10 and
+ * 0x55F30 queue the CG's colours, a group a block, to the first block's
+ * group. Every entry has bit 15 set; the draws add the first block << 7.
+ *
+ * `screens` are the calls that name both a cell and a CG by constant: 0x53E60,
+ * 0x548A0, 0x55320 and 0x55750 for the data ROM's bank (cell g0, CG g1),
+ * 0x54950 (three cells, CG g3), and 0x54300 and 0x54550 for XTRA's. Bank 1's
+ * cells and CGs come after bank 0's: cell 441 is its cell 0, CG 61 its CG 0.
+ */
+const INDY500_CELLS = {
+    banks: [
+        { name: 'data', cgs: 0x02c39eb0, cgCount: 61, cells: 0x02c89bf0, cellCount: 441, pals: 0x02c8a2dc, data: 0x02800000 },
+        { name: 'XTRA', cgs: 0x064b00c0, cgCount: 13, cells: 0x064b83d0, cellCount: 60, pals: 0x064b84bc, data: 0x06400000 },
+    ],
+    sized: true,
+    base: 0,
+    screens: [
+        { cg: 4, cells: [36, 37, 39] }, { cg: 9, cells: [80] }, { cg: 10, cells: [88, 89, 90, 91, 92] },
+        { cg: 12, cells: [121] }, { cg: 13, cells: [122] }, { cg: 14, cells: [123] }, { cg: 15, cells: [124, 125] },
+        { cg: 16, cells: [128, 129, 130, 131, 132, 133, 134, 135, 136, 137] }, { cg: 17, cells: [187, 188] },
+        { cg: 18, cells: [189, 190, 191, 192, 193, 194] }, { cg: 19, cells: [202] }, { cg: 21, cells: [205] },
+        { cg: 22, cells: [266, 267] }, { cg: 23, cells: [301] }, { cg: 24, cells: [311] }, { cg: 25, cells: [312] },
+        { cg: 27, cells: [343] }, { cg: 29, cells: [346] }, { cg: 30, cells: [347] }, { cg: 32, cells: [350, 351] },
+        { cg: 33, cells: [352, 353, 354] }, { cg: 37, cells: [367] }, { cg: 38, cells: [369] }, { cg: 41, cells: [394] },
+        { cg: 42, cells: [395] }, { cg: 43, cells: [396] }, { cg: 45, cells: [398] }, { cg: 46, cells: [402] },
+        { cg: 47, cells: [404] }, { cg: 50, cells: [408] }, { cg: 51, cells: [419, 420] }, { cg: 52, cells: [421] },
+        { cg: 53, cells: [423, 424] }, { cg: 54, cells: [425] }, { cg: 55, cells: [427] }, { cg: 57, cells: [433, 434] },
+        { cg: 58, cells: [435] }, { cg: 60, cells: [440] },
+        { cg: 62, cells: [441, 442] }, { cg: 63, cells: [451] }, { cg: 64, cells: [452] }, { cg: 65, cells: [453] },
+        { cg: 68, cells: [475, 476] }, { cg: 69, cells: [486] }, { cg: 70, cells: [495] }, { cg: 71, cells: [496] },
+        { cg: 72, cells: [497, 499] }, { cg: 73, cells: [500] },
+    ],
+    charBytes: 0x80000,
+    colorxlat: true,
+};
 
 const indy500 = indy500Build({
     id: 'indy500', name: 'INDY 500 Twin (Revision A)',
@@ -6624,7 +6670,20 @@ const indy500 = indy500Build({
     lumaOver: { data: 0x10b0850, bytes: 0x180 },
     top: { at: 0x1048de0 },
     colorRun: [0x2dd80, [0x2de70, 'set']],
+    cells: INDY500_CELLS,
 });
+/* The Deluxe's data ROM bank is the Twin's, at the same addresses; its XTRA
+ * bank's tables moved into the program ROM (its XTRA loader 0x9EB40 reads
+ * the CG table at 0x9B7B0, its draws the cells at 0xB34A0), and hold 7 CGs
+ * and 34 cells, with each CG's palette the pointer list's entry 35 + n.
+ * The data bank's `screens` stand; XTRA's cells are left to their seams. */
+const INDY500D_CELLS = {
+    ...INDY500_CELLS,
+    programAt0: true,
+    banks: [INDY500_CELLS.banks[0],
+        { name: 'XTRA', cgs: 0x9b7b0, cgCount: 7, cells: 0xb34a0, cellCount: 34, pals: 0xb34a0 + 35 * 4, data: 0x06400000 }],
+    screens: INDY500_CELLS.screens.filter((s) => s.cg < 61),
+};
 /* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
  * epr-18345/18346. The CRCs find either. */
 const indy500d = indy500Build({
@@ -6635,6 +6694,7 @@ const indy500d = indy500Build({
     lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
     top: { source: 'maincpu', at: 0x1b3a4 },
     colorRun: [0x34230, [0x34320, 'set']],
+    cells: INDY500D_CELLS,
 });
 
 /*

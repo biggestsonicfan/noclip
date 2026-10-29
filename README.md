@@ -28,7 +28,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
-Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
+Sega's *INDY 500* has its models and its cells — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
@@ -1286,7 +1286,17 @@ texture banks and its own colour table; set 3 is the pair the game loads for
 its other screens. The cars are on every course's banks; a course model needs
 its course picked, and the race queen is on set 1's.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Cells** tab has the 2D: 501 cells and 74 CGs in the Twin (475 and 68
+in the Deluxe), out of two banks of tables, one in the data ROM and one in
+XTRA (in the Deluxe, in its program ROM). They include the title logo, the FBI
+screen, the select screens, the HUD, the rankings, the messages and the
+credits. Each CG is loaded as the game loads it, and its characters and
+colours match MAME's tile chip byte for byte in both sets, in the attract mode
+and the screens around it. A cell is drawn with the CG the program's calls
+name for it; any other cell takes the CG beside it in the tables whose tiles
+join up best, and a few small ones still come out wrong.
+
+There is no Stages tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#indy-500-jstexturejs-jscolorsjs).
 
 ## Sega Touring Car Championship
