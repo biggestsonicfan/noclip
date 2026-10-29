@@ -6795,6 +6795,8 @@ const sgt24h = jalecoBuild({
  * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
  * and these are the boot's.
  */
+/* The tile chip's CG files: the directory at data 0xD00000 (0x200FDC). */
+const OVERREV_CELLS = { files: { dir: 0x02d00000 }, charBytes: 0x80000, colorxlat: true };
 const OVERREV_DATA = {
     mainData: {
         size: 0x1000000,
@@ -6840,6 +6842,7 @@ const overrev = jalecoBuild({
     palette: 0x32a44,
     texture: overRevTexture(0x200000),
     colors: [0x12760, 0x12850, 0x12950],
+    cells: OVERREV_CELLS,
 });
 /* Known by its program alone, so that overrev.zip missing is said as such. */
 const overrevb = jalecoBuild({
@@ -6857,6 +6860,7 @@ const overrevb = jalecoBuild({
     palette: 0x2a7a4,
     texture: overRevTexture(0x100000),
     colors: [0x12760, 0x12850, 0x12950],
+    cells: OVERREV_CELLS,
 });
 
 /* ---- Dynamite Baseball 97 ------------------------------------------------- */

@@ -7455,6 +7455,21 @@ Course select, SHORT COURSE and the lap buttons render the same as MAME's
 screen pixel for pixel. Files 3 to 6 were not reached in MAME; the loader
 reads them the same way.
 
+Over Rev has the same files and the same routines, in the code the boot
+copies to RAM 0x200000 (ROM 0x60000 on): the directory at data 0xD00000
+holds 15 files, the boot loads the first at 0x200FDC through the loader at
+0x2007E0, which applies a variant record through 0x2000E0, and 0x2013C0 is
+the draw (49 callers; it reads a source window from 0x592E50 as well, which
+the explorer does not need for whole patterns). The boot's file (data
+0xD28A18, 91 patterns) fills characters 0 to 0x1FCB and groups 0 to 63; the
+other fourteen start at character 0x2000, group 64. Both builds read the
+same data ROM, so their 1283 cells are the same. Against MAME on both boards
+(frames 700 to 5200, coined: the Mode Select) the boot's file and file 12
+are in character and palette RAM byte for byte but for colours 0 and 1, which
+the code clears afterwards (the file stores 0x8000), and Mode Select, the
+mode captions and the controls hint render the same as MAME's screen pixel
+for pixel. The other files were not reached.
+
 **Not done, and leads.** No course is put together: the course's model
 lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
 read the model table besides the draw routines, and the pointer list at

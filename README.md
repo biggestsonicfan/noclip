@@ -673,8 +673,8 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids and Super GT 24h have the Cells tab but not the
-music.
+Bronx has both; Pilot Kids, Super GT 24h and Over Rev have the Cells tab
+but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1336,6 +1336,15 @@ in every set. A course piece needs its course's set picked by hand. Colour
 tables and luma match MAME's at the title on both boards byte for byte, and
 the textures in the attract race but for sixteen bytes something later
 writes. Some luma bands change during a race; the viewer shows the boot's.
+
+The **Cells** tab has the game's 1283 tile-chip pictures from its fifteen
+CG files, the same in both builds: the fonts, the coin and start captions,
+the OverREV logo's pieces, the select screens' panels and buttons, the
+race HUD (digits, rev counter, turn arrows, the 3-2-1-GO countdown), the
+results' cartoon characters and full-screen backdrops. As on Super GT
+24h, a CG is a file loaded over the boot's and each cell opens on its own.
+The pictures checked against MAME's Mode Select screen on both boards are
+the same pixel for pixel.
 
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
