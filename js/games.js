@@ -3601,6 +3601,96 @@ function driverSongs({ program, samples, sampleChip, songs, status = 0xa0, boot,
  * called in the same order at boot (0x1EDC..0x1F2C). What differs is listed
  * on the fields below.
  */
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot, moved and
+ * grown. The draw is 0x7928 (0x7970 the same but for skipping zero
+ * entries): the record's address in g0, the tilemap's in g9 and in g1 the
+ * bits it ORs into every entry (`orBase`), 0x8000 from most calls, 0xC000
+ * (bit 14, the group moved on by 0x80) from some and 0 from a few. The
+ * record is Virtua Cop's, the width and the height as halfwords then
+ * halfword entries; they lie end to end in data 0x2B80000..0x2B8E67E and in
+ * the two gaps between the three stage skies (0x8228[stage], which 0x7EAC
+ * and 0x80A8 stream into layer 0x1006000 as Virtua Cop does its own).
+ *
+ * The boot (0x7510) fills the tile chip, and the game fills parts of it
+ * again. The characters, each list a halfword at a time with its bytes
+ * swapped (0x7604), but for the font:
+ *   0x7E10  the font, a list at 0x60AA4: 128 characters from 0x60AB4 into 0
+ *   0x7554  0x2400000 into 0x80..0x67F
+ *   0x8260  0x240C000 into 0x680..0x327F, the game's (called again after
+ *           0x82D8's screens); 0x82D8 has 0x2464000 there instead
+ *   0x8314  the stage's, 0x8394[0x502010]: three lists into 0x3280..0x3FFF,
+ *           and stage 2 one more over 0x3B80 on
+ * and the colours, a count and sixteen colours repeated count groups (0x767C
+ * until its end, 0x76C0 one such run): 0x7E50's list at 0x61AB4 (groups 0
+ * and 0x80), four colours at 0x6068C over 0x80, 0x2B95070 into groups 1..0xC
+ * and again into 0x81..0xFF, runs from the program over 0x82..0x88; 0x8260
+ * 0x2B951A2 into 0xD..0x64 and three runs over 0x41, 0xCD and 0xB4 (0x82D8,
+ * 0x2B95626); the stage's into 0x65..0x7F (and 0x2B95A44 into 0x77.. for
+ * stage 2). So a CG is the boot with one of the two middle fills and one of
+ * the stage fills (`modes`).
+ */
+const VCOP2_STAGE_FILLS = [
+    { name: 'stages 0, 2, 4, 5', chars: 0x02bc0000, pal: 0x02b95978 },
+    { name: 'stage 1', chars: 0x024aa000, pal: 0x02b959de },
+    { name: 'stages 3, 6', chars: 0x02ba0000, pal: 0x02b95a88 },
+    { name: 'stage 2', chars: 0x02bc0000, pal: 0x02b95978, more: [0x02bd6000, 0x02b95a44] },
+];
+const VCOP2_MIDDLE = [
+    {
+        name: 'game (0x8260)', chars: 0x0240c000,
+        palette: [
+            { runs: 0x02b951a2, group: 0xd, until: 0x58 },
+            { runs: 0x0006094e, group: 0x41, lists: 1 },
+            { runs: 0x0006092c, group: 0xcd, lists: 1 },
+            { runs: 0x000608e8, group: 0xb4, lists: 1 },
+        ],
+    },
+    { name: 'title (0x82D8)', chars: 0x02464000, palette: [{ runs: 0x02b95626, group: 0xd, until: 0x58 }] },
+];
+const VCOP2_CELLS = {
+    sized: true,
+    orBase: true,
+    records: [[0x02b80000, 0x02b8e67e], [0x02b9047e, 0x02b90e78], [0x02b92d78, 0x02b93266]],
+    base: 0x8000,
+    bases: {
+        [0x02b805f8]: 0xc000, [0x02b80608]: 0xc000, [0x02b80390]: 0xc000,
+        [0x02b89750]: 0, [0x02b8b644]: 0, [0x02b89c70]: 0, [0x02b8b6c0]: 0,
+        [0x02b899e0]: 0, [0x02b8b746]: 0, [0x02b8c24a]: 0,
+    },
+    boot: {
+        chars: [],
+        palette: [],
+        zeroFills: true,
+        modes: VCOP2_MIDDLE.flatMap((M) => VCOP2_STAGE_FILLS.map((S) => ({
+            name: `${M.name}, ${S.name}`,
+            chars: [
+                [0x00060ab4, 0, 0x80, true],
+                [0x02400000, 0x80, 0x600],
+                [M.chars, 0x680, 0x2c00],
+                [S.chars, 0x3280, 0xd80],
+                ...(S.more ? [[S.more[0], 0x3b80, 0x480]] : []),
+            ],
+            palette: [
+                { set: [[0, 0xb60a], [1, 0xffff], ...Array.from({ length: 14 }, (_, i) => [2 + i, 0])] },
+                { set: [[0x800, 0xfed6], [0x801, 0x83e0], [0x802, 0x8000], [0x803, 0x8000],
+                    ...Array.from({ length: 12 }, (_, i) => [0x804 + i, 0])] },
+                { runs: 0x02b95070, group: 1, until: 0xc },
+                { runs: 0x02b95070, group: 0x81, until: 0x7f },
+                { runs: 0x000608a4, group: 0x82, lists: 1 },
+                { runs: 0x000608c6, group: 0x87, lists: 1 },
+                { runs: 0x0006090a, group: 0x83, lists: 1 },
+                ...M.palette,
+                { runs: S.pal, group: 0x65, until: 0x1b },
+                ...(S.more ? [{ runs: S.more[1], group: 0x77, until: 9 }] : []),
+            ],
+        }))),
+    },
+    programAt0: true,
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+
 const vcop2 = {
     ...daytonaBuild({
         id: 'vcop2',
@@ -3692,13 +3782,14 @@ const vcop2 = {
     },
     patches: [],
     paletteFixes: [],
-    stageTable: null,
+    /* The stage draw's table 0x63374, by stage, route and segment (js/vcop2.js). */
+    stageTable: { flat: true, vcop2: { count: 4 } },
     objects: null,
     area: null,
     sky: null,
-    cells: null,
+    cells: VCOP2_CELLS,
     rig: null,
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Virtua Striker ------------------------------------------------------- */
@@ -3816,15 +3907,89 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
         },
         patches: [],
         paletteFixes: [],
-        stageTable: null,
+        /* The match draw's stadium, 0x64D10 and 0x65070 (js/vstriker.js). */
+        stageTable: { flat: true, vstriker: true },
         objects: null,
         area: null,
         sky: null,
-        cells: null,
+        cells: VSTRIKER_CELLS,
         rig: null,
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js): Virtua Cop's records and boot fill, with
+ * Virtual On's modes. Every address is the same in both builds (their data
+ * ROMs differ only from 0x282DE00 on); the routines are Revision A's, the
+ * first release's 0x80 further up (0x3240, 0x29E0, 0x2F90).
+ *
+ * The draws (0x31C0, and 0x3230, which draws the record with its bottom
+ * right corner at g1) are Virtua Cop's 0x55A0: the width and the height as
+ * halfwords, then halfword entries, g2 added to each, 0x8000 from every call
+ * but four (`bases`). The records lie end to end in three runs of the data
+ * ROM, each straight after the palette list of the fill it is drawn with:
+ * every one of the 61 records a call names by `lda`, and the 18 tables of
+ * them the calls index, lands on a record start.
+ *
+ * The fill (0x2960, g0 the mode) is Virtua Cop's boot: 0x2F10 expands the
+ * 1bpp font at 0x28252B0 to characters 0-0x7F, pen 1, at boot (0x28D4);
+ * 0x2960 copies 0x3F80 characters to 0x80 on out of the data ROM a halfword
+ * at a time with the bytes swapped, from 0x2000000, 0x2080000 or 0x2100000 by
+ * the mode, and the mode's palette runs, {count, 16 colours}, from group 1
+ * until 0x7F groups are written. Mode 0 also copies 38 groups from 0x2825830
+ * to group 0xB4. Nothing else writes the characters (MAME write taps over the
+ * attract), so the three modes are the game's three CGs. Mode 2 is the boot's
+ * (0x13D4): the title, the logo, the FBI and 2002 screens, the credits,
+ * SPECIAL MATCH. Mode 0 is the match's and the attract's: the ranking, the
+ * HUD, the flags and team bars, CHALLENGER COMES. Mode 1 is the team select's
+ * (0x106E0, 0x10D74): the select screen, the tournament roster, name entry.
+ * MAME's characters 0x80-0x3FFF and palette match mode 0 at attract frames
+ * 300-1200 and mode 2 at 1500-3000 byte for byte, and every cell of those
+ * CGs drawn from MAME's tile RAM is pixel-exact against renderCell.
+ *
+ * Two pictures load their own characters over 0x180 on. The Japanese
+ * build's joke picture (cell 762, 0x6C370) copies 0x26C from 0x2891000 and
+ * colours groups 3-5 from 0x2825D90: CG 3. Cell 761 (0x6C2E0, through 0x2D00
+ * and 0x2DE4) copies 0x80 from 0x2890000 but takes its colours, group 0x83,
+ * from a fade in RAM (0x514550, from the table at 0x2825DB0): not built, so
+ * it shows black.
+ */
+const VSTRIKER_CELLS = {
+    sized: true,
+    records: [[0x028008e0, 0x0280a360], [0x0280a73a, 0x02812670], [0x028129f0, 0x028252b0]],
+    base: 0x8000,
+    bases: { [0x02801650]: 0, [0x02801e60]: 0, [0x0280af80]: 0, [0x02824e40]: 0xc000 },
+    boot: {
+        font: { src: 0x028252b0, first: 0, count: 0x80, pen: 1 },
+        modes: [
+            {
+                name: 'mode 0 (0x2960)',
+                chars: [[0x02000000, 0x80, 0x3f80]],
+                palette: [{ runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 }],
+            },
+            { name: 'mode 1 (0x2960)', chars: [[0x02080000, 0x80, 0x3f80]], palette: [{ runs: 0x0280a360, group: 1, until: 0x7f }] },
+            { name: 'mode 2 (0x2960)', chars: [[0x02100000, 0x80, 0x3f80]], palette: [{ runs: 0x02812670, group: 1, until: 0x7f }] },
+            {
+                name: 'mode 0, Japan (0x6C370)',
+                chars: [[0x02000000, 0x80, 0x3f80], [0x02891000, 0x180, 0x26c]],
+                palette: [
+                    { runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 },
+                    { colours: 0x02825d90, group: 3, groups: 3 },
+                ],
+            },
+        ],
+        chars: [],
+        palette: [],
+    },
+    charBytes: 0x80000,
+    colorxlat: true,
+};
+const vstrikerRun = (first, end) => Array.from({ length: end - first }, (_, i) => first + i);
+VSTRIKER_CELLS.screens = [
+    { cg: 3, cells: [762] },
+    { cg: 0, cells: vstrikerRun(0, 337) }, { cg: 1, cells: vstrikerRun(337, 595) }, { cg: 2, cells: vstrikerRun(595, 763) },
+];
 
 /*
  * Revision A: 0x9210 dims the palette and calls 0x93F0, which builds
@@ -6420,7 +6585,31 @@ const motoraid = {
         },
         solid: true,
     },
-    /* No course, rider or motion data is read yet. */
+    /*
+     * The geometry's lighting: 0x305B0 sends the 32 material words at program
+     * 0x2F010 (geometrizer function 6 through 0x30510, each with its
+     * coefficient), and 0x3BED4 makes the light by turning (0, 0, 1) by
+     * 0x2000 about Y and -0x2000 about X (copro 0x15, 0x14, 0x1A), then into
+     * the camera's frame (copro 0x0C), and sends it as function 0x0A. Taken
+     * back through the camera at attract frame 3000 it is (-0.5, -0.7071,
+     * 0.5) in the world. Z negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.5, -0.7071, -0.5],
+        materials: { at: 0x2f010, count: 32 },
+    },
+    /* The courses (js/motoraid.js): each scene's ring of segments. */
+    stageTable: { motoraid: true, flat: true },
+    /*
+     * The 2D is Dead or Alive's pictures (js/cells.js `pictures`): 882
+     * entries of {tiles, colours, map} in the program ROM at 0x87860, the
+     * first 835 pointing into the data ROM and the rest into XTRA. The loader
+     * 0x21BEB0 (ROM 0xCBEB0, in the RAM copy) copies each chunk of tiles to
+     * whole 128-tile blocks from the first block 0x21BB10 found free, and
+     * 0x21BC70 gives every block of a chunk the chunk's 16 colours, straight
+     * or queued (0x21BCF0, 0x21BDA0, as 0x5194B4 says).
+     */
+    cells: { pictures: { table: 0x87860, count: 882 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
     /* CRX_drv 3.2.8's board: 18 songs in group 0x10 (06 is a quiet one,
      * 3 s long). The driver listens 3 s after the reset. */
     sound: driverSongs({
@@ -6432,7 +6621,7 @@ const motoraid = {
         songs: [0x10, 18],
         warmup: 4,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -6527,6 +6716,40 @@ const manxtt = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
+    /*
+     * The materials go up with the TGP's function 6 as Sega Rally's do:
+     * `mov 22, g1; lda 0x4140, g2; bal 0x40D8` (0x4280). The light is a
+     * stand-in, Sega Rally's world light; the race's own was not read.
+     */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x4140, count: 22, stride: 8 },
+    },
+    /* The two courses (js/racers.js), the race's records 1 and 2. */
+    stageTable: {
+        racer: {
+            kind: 'manxtt',
+            records: 0x401e0,
+            courses: [
+                { record: 1, set: 2, name: 'Laxey Coast' },
+                { record: 2, set: 0, name: 'T.T. Course' },
+            ],
+        },
+        flat: true,
+    },
+    /*
+     * The 2D pictures are Sega Rally's "CGM 1.0" files (js/cells.js, `cgm`),
+     * read by Sega Rally's routines at their ROM addresses: the loader 0xB260
+     * compares the string at 0xB250, the reset 0xAF10 sets the free group
+     * (work RAM 0x533080) to 9, and the draw 0xB0A0 adds the group << 7 from
+     * the pattern table at 0x532080. The callers name the files directly
+     * (`lda 0x2C15344, g2` at 0x19C9C). Four files are in the program ROM
+     * past the code (0x76F40 on), the rest in the data ROM's first pair
+     * (0x280000 on) and the last (0xC00000 on), which MAME does not repeat.
+     * The DX cabinet's DANGER screen (0x2BD330) is MAME's character RAM from
+     * group 9 and its palette, byte for byte.
+     */
+    cells: { cgm: {}, programAt0: true, charBytes: 0x80000, colorxlat: true },
     /* 26 songs in group 0x10. A code that comes right behind
      * another is lost, so a stop ahead of a song silences it; a song alone
      * replaces the last. The driver listens from 14 s on. */
@@ -6539,7 +6762,7 @@ const manxtt = {
         songs: [0x10, 26],
         warmup: 14,
     }),
-    features: { stages: false, characters: false, motions: false, cells: false },
+    features: { stages: true, characters: false, motions: false, cells: true },
 };
 
 /*
@@ -6550,7 +6773,7 @@ const manxtt = {
  * Twin's data with its program moved about; the addresses it changes are
  * `program`'s.
  */
-function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, sound }) {
+function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun, courses, materials, cells, sound }) {
     const prog = [program[1], program[3]];
     return {
         id, name,
@@ -6575,8 +6798,7 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
                     [0x800000, 'mpr-18235.18', 0xe7d70d59, 'mpr-18236.22', 0x6ca29e0e],
                 ],
             },
-            /* One 8 MB pair, which the model table's tpa and tha also reach
-             * with bit 22 set: the board mirrors it. */
+            /* One 8 MB pair, repeated as the board's mirror has it. */
             textures: {
                 size: 0x1000000,
                 parts: [
@@ -6593,9 +6815,11 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
         /*
          * 3571 entries of 20 bytes in the data ROM at 0xC00460: tpa, tha, oba,
          * a polygon count and an info pointer. Entry 0 is empty. An oba is a
-         * word index with bit 23 set, which `subtract` takes off.
+         * word index with bit 23 set, which `subtract` takes off. The boot's
+         * copy to RAM 0x200000 (0x3BC20) takes 0x200000 off a tpa or tha
+         * with bit 22 set (`texBit22`): the course-0 models' pointers.
          */
-        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 } },
+        modelTable: { offset: 0xc00460, count: 3571, stride: 20, fields: { uv: 0, mat: 4, mesh: 8 }, texBit22: true },
         meshPtr: { subtract: 0x02000000, add: 0 },
         /* {count, colours} at data 0xC11B5C, 961 of them, to 0x1802000
          * (0x2F0D0), and 0x2DFB0's table of 19 laid down from entry 1023:
@@ -6628,11 +6852,74 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
             luma: { data: 0xc122e0, bytes: 0x4000, over: [lumaOver] },
             solid: true,
         },
-        sound,
         depth: { recede: 0, nearMin: 0.02, layers: true },
-        features: { stages: false, characters: false, motions: false, cells: false },
+        /* Function 6, 31 pairs (Twin: 0x2D728 through 0x2E3D0). The light is
+         * a stand-in, Sega Rally's. */
+        lighting: {
+            light: [-0.707, -0.707, -0.707],
+            materials: { source: 'maincpu', at: materials, count: 31, stride: 8 },
+        },
+        /* The course records (js/racers.js); set k is course k. The attract's
+         * course 0 race is under its "BAY SIDE STREET" leaderboard. */
+        stageTable: {
+            racer: {
+                kind: 'indy500',
+                records: courses,
+                courses: ['Bayside Street', 'Indianapolis Motor Speedway', 'Highland Raceway']
+                    .map((name, record) => ({ record, set: record, name })),
+            },
+            flat: true,
+        },
+        /* The 1 MB pair at 0x1000000, as the cells' second bank names it. */
+        xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+        cells,
+        sound,
+        features: { stages: true, characters: false, motions: false, cells: !!cells },
     };
 }
+
+/*
+ * The 2D pictures (js/cells.js `banks`, js/bankcells.js), the Twin's
+ * addresses. Two banks: the data ROM's, its CGs' tiles at 0x2800000 on, and
+ * XTRA's, at 0x6400000 on. Each has a CG table, {offset, tile count}, a cell
+ * table of pointers to Virtua Cop's records, and after the cells a table of
+ * each CG's palette; CG 0 of each is empty. The loaders (0x53790, 0x53890)
+ * take whole 128-tile blocks from the free list at 0x5EE460/0x5EE660 and note
+ * {first block, blocks} at 0x5EE270 + 8n (XTRA's at 0x5EE860); 0x55F10 and
+ * 0x55F30 queue the CG's colours, a group a block, to the first block's
+ * group. Every entry has bit 15 set; the draws add the first block << 7.
+ *
+ * `screens` are the calls that name both a cell and a CG by constant: 0x53E60,
+ * 0x548A0, 0x55320 and 0x55750 for the data ROM's bank (cell g0, CG g1),
+ * 0x54950 (three cells, CG g3), and 0x54300 and 0x54550 for XTRA's. Bank 1's
+ * cells and CGs come after bank 0's: cell 441 is its cell 0, CG 61 its CG 0.
+ */
+const INDY500_CELLS = {
+    banks: [
+        { name: 'data', cgs: 0x02c39eb0, cgCount: 61, cells: 0x02c89bf0, cellCount: 441, pals: 0x02c8a2dc, data: 0x02800000 },
+        { name: 'XTRA', cgs: 0x064b00c0, cgCount: 13, cells: 0x064b83d0, cellCount: 60, pals: 0x064b84bc, data: 0x06400000 },
+    ],
+    sized: true,
+    base: 0,
+    screens: [
+        { cg: 4, cells: [36, 37, 39] }, { cg: 9, cells: [80] }, { cg: 10, cells: [88, 89, 90, 91, 92] },
+        { cg: 12, cells: [121] }, { cg: 13, cells: [122] }, { cg: 14, cells: [123] }, { cg: 15, cells: [124, 125] },
+        { cg: 16, cells: [128, 129, 130, 131, 132, 133, 134, 135, 136, 137] }, { cg: 17, cells: [187, 188] },
+        { cg: 18, cells: [189, 190, 191, 192, 193, 194] }, { cg: 19, cells: [202] }, { cg: 21, cells: [205] },
+        { cg: 22, cells: [266, 267] }, { cg: 23, cells: [301] }, { cg: 24, cells: [311] }, { cg: 25, cells: [312] },
+        { cg: 27, cells: [343] }, { cg: 29, cells: [346] }, { cg: 30, cells: [347] }, { cg: 32, cells: [350, 351] },
+        { cg: 33, cells: [352, 353, 354] }, { cg: 37, cells: [367] }, { cg: 38, cells: [369] }, { cg: 41, cells: [394] },
+        { cg: 42, cells: [395] }, { cg: 43, cells: [396] }, { cg: 45, cells: [398] }, { cg: 46, cells: [402] },
+        { cg: 47, cells: [404] }, { cg: 50, cells: [408] }, { cg: 51, cells: [419, 420] }, { cg: 52, cells: [421] },
+        { cg: 53, cells: [423, 424] }, { cg: 54, cells: [425] }, { cg: 55, cells: [427] }, { cg: 57, cells: [433, 434] },
+        { cg: 58, cells: [435] }, { cg: 60, cells: [440] },
+        { cg: 62, cells: [441, 442] }, { cg: 63, cells: [451] }, { cg: 64, cells: [452] }, { cg: 65, cells: [453] },
+        { cg: 68, cells: [475, 476] }, { cg: 69, cells: [486] }, { cg: 70, cells: [495] }, { cg: 71, cells: [496] },
+        { cg: 72, cells: [497, 499] }, { cg: 73, cells: [500] },
+    ],
+    charBytes: 0x80000,
+    colorxlat: true,
+};
 
 /*
  * The sound board: Virtua Striker's older driver, the songs AE 01 00 on
@@ -6660,8 +6947,23 @@ const indy500 = indy500Build({
     lumaOver: { data: 0x10b0850, bytes: 0x180 },
     top: { at: 0x1048de0 },
     colorRun: [0x2dd80, [0x2de70, 'set']],
+    courses: 0x6a5b0,
+    materials: 0x2d590,
+    cells: INDY500_CELLS,
     sound: indy500Sound(['epr-18391.31', 0x79579b72], 9),
 });
+/* The Deluxe's data ROM bank is the Twin's, at the same addresses; its XTRA
+ * bank's tables moved into the program ROM (its XTRA loader 0x9EB40 reads
+ * the CG table at 0x9B7B0, its draws the cells at 0xB34A0), and hold 7 CGs
+ * and 34 cells, with each CG's palette the pointer list's entry 35 + n.
+ * The data bank's `screens` stand; XTRA's cells are left to their seams. */
+const INDY500D_CELLS = {
+    ...INDY500_CELLS,
+    programAt0: true,
+    banks: [INDY500_CELLS.banks[0],
+        { name: 'XTRA', cgs: 0x9b7b0, cgCount: 7, cells: 0xb34a0, cellCount: 34, pals: 0xb34a0 + 35 * 4, data: 0x06400000 }],
+    screens: INDY500_CELLS.screens.filter((s) => s.cg < 61),
+};
 /* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
  * epr-18345/18346. The CRCs find either. */
 const indy500d = indy500Build({
@@ -6672,6 +6974,9 @@ const indy500d = indy500Build({
     lumaOver: { source: 'maincpu', data: 0xa8d94, bytes: 0x180 },
     top: { source: 'maincpu', at: 0x1b3a4 },
     colorRun: [0x34230, [0x34320, 'set']],
+    courses: 0xafe90,
+    materials: 0x33a40,
+    cells: INDY500D_CELLS,
     /* Its samples are in indy500.zip, the parent's. */
     sound: indy500Sound(['epr-18253.31', 0x2934e034], 8),
 });
@@ -6782,7 +7087,51 @@ const stcc = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /* Function 6 from 0x736B0, 32 pairs (0x1BA4, 0x10FA4, 0x7C2B0, through
+     * 0x73648). The light is a stand-in, Sega Rally's. */
+    lighting: {
+        light: [-0.707, -0.707, -0.707],
+        materials: { source: 'maincpu', at: 0x736b0, count: 32, stride: 8 },
+    },
+    /*
+     * The course records (js/racers.js), in the order of the course menu's
+     * labels at 0x15B80 (0x15C10 points at them) and of the course table at
+     * 0x57460, {record, ?, list} by choice: NOVICE, INTERMEDIATE, EXPERT,
+     * the three again as SS (records 4 to 6, the same courses on copies of
+     * their models) and OMAKE, the bonus course (record 7). Record 0 is
+     * record 4 again. The attract runs records 1, 2, 3 in turn (0x202630).
+     */
+    stageTable: {
+        racer: {
+            kind: 'stcc',
+            records: 0xbeb0,
+            stride: 0x3f4,
+            courses: [
+                { record: 1, set: 0, name: 'Country Circuit (Novice)' },
+                { record: 2, set: 1, name: 'Grunwald Circuit (Intermediate)' },
+                { record: 3, set: 2, name: 'Brickwall Town (Expert)' },
+                { record: 4, set: 0, name: 'Country Circuit (Novice SS)' },
+                { record: 5, set: 1, name: 'Grunwald Circuit (Intermediate SS)' },
+                { record: 6, set: 2, name: 'Brickwall Town (Expert SS)' },
+                { record: 7, set: 3, name: 'Omake (the bonus course)' },
+            ],
+        },
+        flat: true,
+    },
+    /*
+     * The 2D pictures are Sega Rally's "CGM 1.0" files (js/cells.js, `cgm`):
+     * the loader 0x74650 compares the string at 0x74600, the reset 0x742C0
+     * sets the free group (work RAM 0x219C10) to 9, and the draw 0x74450
+     * adds the group << 7 from the pattern table at 0x218C10. Four files are
+     * in the program ROM past the code (0xC0000 on), the rest in the data
+     * ROM's first pair (0x1FC4BC on) and the 1 MB pair at 0x800000, which the
+     * region repeats at 0xC00000. The program names the repeat (`lda
+     * 0x2C4B210`, the attract's URL line), so the scan reads it and skips
+     * 0x800000..0xBFFFFF (`cgm.data`). The files MAME's attract loads sit
+     * from group 9 in its character RAM with their colours, byte for byte.
+     */
+    cells: { cgm: { data: [[0, 0x800000], [0xc00000, 0xd00000]] }, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    features: { stages: true, characters: false, motions: false, cells: true },
 };
 
 /* ---- Super GT 24h and Over Rev (Jaleco) ----------------------------------- */
@@ -6798,7 +7147,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, sound }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, colorSets, courses, cells, sound }) {
     return {
         id,
         name,
@@ -6809,10 +7158,17 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         paletteProgram: palette,
         paletteOffset: null,
         texture,
-        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* `colorSets`: how many luma variants a course can ask for (Over Rev's
+         * 0x564EF0 step, 'set' in `colors`). */
+        colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors, ...(colorSets ? { sets: colorSets } : {}) }, solid: true },
+        /* The courses (readJalecoStages in js/jaleco.js); flat, so the Models
+         * tab still asks the model for its set. */
+        ...(courses ? { stageTable: { jaleco: courses, flat: true } } : {}),
+        /* The tile chip's CG files (js/jalecocells.js). */
+        cells,
         sound,
-        /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        /* No fighter or motion data is read yet. */
+        features: { stages: !!courses, characters: false, motions: false, bodies: false, cells: !!cells },
     };
 }
 
@@ -6878,6 +7234,25 @@ const sgt24h = jalecoBuild({
         defaultSet: 0,
     },
     colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+    /*
+     * The four courses, in 0x5305F8's order, named as the test menu's
+     * histogram pages name them (0xBF670: bit 0 the long course, 2 and 3
+     * reversed). 0x2FC0's lists and counts; 0x3F4C0 loads sheet 1 from
+     * 0xED8B0[course]. Trackside: 0xEFE60's {model, course} pairs and
+     * 0xF0120's model a course.
+     */
+    courses: {
+        courses: [
+            { name: 'Short course', list: 0xec66c, count: 0xec630 },
+            { name: 'Long course', list: 0xec678, count: 0xec640 },
+            { name: 'Short course, reverse', list: 0xec684, count: 0xec650 },
+            { name: 'Long course, reverse', list: 0xec690, count: 0xec660 },
+        ],
+        textures: 0xed8b0,
+        trackside: [{ at: 0xefe60, count: 16, stride: 8 }, { at: 0xf0120, count: 4, stride: 4 }],
+    },
+    /* The tile chip's CG files: the directory at data 0xE00000 (0x3CF8C). */
+    cells: { files: { dir: 0x02e00000 }, charBytes: 0x80000, colorxlat: true },
     /* One 4 MB sample chip; seven songs in group 0x10. The attract sends
      * A0 00 02, A0 08 04, A0 08 01 and, after its settings, A0 10 04. The
      * driver listens from 14 s on. */
@@ -6911,9 +7286,16 @@ const sgt24h = jalecoBuild({
  *
  * Checked against MAME on both boards: colorxlat and luma at the title
  * (frame 400) no byte different. Colorxlat does not change in the attract
- * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
- * and these are the boot's.
+ * race; luma does: the course set-up (RAM 0x54D960) calls 0x564EF0 (ROM
+ * 0xE4EF0, the 2B build's 0xE4E40) with the course record's +8, v, which
+ * copies the luma table's (0x37F09) v-th 0x4000 bytes over entries 0x4000 on
+ * (bands 128 to 255). Set v of the colours is that copy run after the boot's:
+ * Tsukuba's 2 matches MAME's luma in the attract race (frame 1800), no byte
+ * different. Without it a course's road and grass read the boot's zero bands
+ * and draw black.
  */
+/* The tile chip's CG files: the directory at data 0xD00000 (0x200FDC). */
+const OVERREV_CELLS = { files: { dir: 0x02d00000 }, charBytes: 0x80000, colorxlat: true };
 const OVERREV_DATA = {
     mainData: {
         size: 0x1000000,
@@ -6944,6 +7326,16 @@ const overRevTexture = (window) => ({
     residentSet: null,
     defaultSet: 0,
 });
+/*
+ * The courses: the records {texture source, course, luma variant, name}
+ * (six, 0x1C bytes each), and per course the list and count of its near cells' grid records
+ * (Revision A's 0xCC6D0, RAM 0x54C6D0, points 0x5A16B0 and 0x5A1670 at them;
+ * the 2B build has the same code at 0xCC6A0 and its tables 0xB0 back).
+ */
+const overRevCourses = (records, lists, counts) => ({
+    records: { at: records, count: 6, stride: 0x1c },
+    courses: lists.map((list, i) => ({ list, count: counts + i * 16 })),
+});
 /* Both Over Revs' sound board: two 4 MB sample chips, seven songs in group
  * 0x10. The driver listens from 14 s on; the songs open with 4 s of quiet. */
 const OVERREV_SOUND = driverSongs({
@@ -6967,7 +7359,10 @@ const overrev = jalecoBuild({
     table: [0x80cec0, 1893],
     palette: 0x32a44,
     texture: overRevTexture(0x200000),
-    colors: [0x12760, 0x12850, 0x12950],
+    colors: [0x12760, 0x12850, 0x12950, [0xe4ef0, 'set']],
+    colorSets: 7,
+    courses: overRevCourses(0xcd8b0, [0xedf90, 0xedfa0, 0xedfc0, 0xedfd8], 0xedf50),
+    cells: OVERREV_CELLS,
     sound: OVERREV_SOUND,
 });
 /* Known by its program alone, so that overrev.zip missing is said as such. */
@@ -6985,7 +7380,10 @@ const overrevb = jalecoBuild({
     table: [0x80cec0, 1893],
     palette: 0x2a7a4,
     texture: overRevTexture(0x100000),
-    colors: [0x12760, 0x12850, 0x12950],
+    colors: [0x12760, 0x12850, 0x12950, [0xe4e40, 'set']],
+    colorSets: 7,
+    courses: overRevCourses(0xcd880, [0xedee0, 0xedef0, 0xedf10, 0xedf28], 0xedea0),
+    cells: OVERREV_CELLS,
     sound: OVERREV_SOUND,
 });
 
@@ -7062,7 +7460,13 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
-    /* No stage, player or motion data is read yet. */
+    /* The ballparks: a camera shot's group of three lists, one a stadium,
+     * at 0x1A0C30 (js/dynabb.js). */
+    stageTable: { dynabb: { table: 0x1a0c30, groups: 54, stadiums: 3 }, flat: true },
+    /* The tile chip's pictures: the record table at data 0xBB0000 and the
+     * program's byte per record at 0xAF680 (js/dynabbcells.js). */
+    cells: { slots: { table: 0x02bb0000, count: 0x938, kinds: 0xaf680 }, charBytes: 0x80000, colorxlat: true },
+    /* No player or motion data is read yet. */
     /* CRX_drv 3.2.8's board: 31 songs in group 0x10, the driver listening
      * 3 s after the reset. The zips name the sample chips by other numbers;
      * their CRCs find them. */
@@ -7075,8 +7479,11 @@ const dynabb97 = {
         songs: [0x10, 31],
         warmup: 4,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
+
+/* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */
+const GUNBLADE_CASE_8 = [[0x02b37ff0, 0x01800d00, 0x10, 21], [0x02b38010, 0x010e8000, 0xa230], [0x02b4c490, 0x01800fa0, 0x10], [0x02b4c4b0, 0x010fd000, 0x310]];
 
 /*
  * Sega AM3's 1995 shooter on Model 2B CRX (MAME's `gunblade`). Its library
@@ -7161,6 +7568,45 @@ const gunblade = {
         gunblade: { keys: 0xc75c0 },
         solid: true,
     },
+    /* The Cells tab (js/cells.js `scripts`, `dirs`): Power Sled's tilemap
+     * scripts as Last Bronx runs them, drawn by 0xD1A80 (g0 the tilemap
+     * address, g1 the script, g2 0x8000). The scripts lie in two runs, zero
+     * padding between some of them; every one is named, by `lda` or by the
+     * table of {count, script} at 0x17A20. The boot (0xD20E0) loads the
+     * directory at data 0xA00000 with Last Bronx's loader (0xD2470) and the
+     * 1bpp font at 0xD0E20 into characters 0-0xFF (0xD2A70, pen 1), and
+     * never unloads them. Each scene then copies colours and characters
+     * over them by hand: the switch at 0xD2550 (cases 1-6, the stages),
+     * 0xF1C8C, the attract's 0xDC44/0x2264C and 0xF1DA8 on top of it; the
+     * warning screen (0xF44A0) calls 0xD2260, which puts the font at 0xD09C0
+     * and group 0 from 0xD21D0 in. A scene is the boot plus its `copies`,
+     * [source, destination, halfwords, times]. */
+    cells: {
+        scripts: [[0x02a601a0, 0x02a64c52], [0x02b4caf0, 0x02b4fc50]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        dirs: {
+            boot: 0x02a00000,
+            name: "the boot's (0xD2550 case 0)",
+            fonts: [{ src: 0xd0e20, first: 0, count: 0x80, pen: 1 }, { src: 0xd0e20, first: 0x80, count: 0x80, pen: 1 }],
+            copies: [[0x15530, 0x01800000, 0x10], [0x15550, 0x01800020, 0x10]],
+            scenes: [
+            { name: 'the warning screen (0xF44A0, 0xD2260)', fonts: [{ src: 0xd09c0, first: 0, count: 0x80, pen: 1 }, { src: 0xd09c0, first: 0x80, count: 0x80, pen: 1 }], copies: [[0xd21d0, 0x01800000, 0x10]] },
+            { name: 'stage 1 (0xD2550 case 1)', copies: [[0x02a53f40, 0x01800d00, 0x10, 5], [0x02a53f60, 0x010e8000, 0x2710], [0x02a58da0, 0x01800da0, 0x10], [0x02a58dc0, 0x010ed000, 0x720], [0x02a59c20, 0x01800dc0, 0x10, 2], [0x02a59c40, 0x010ee000, 0xbf0]] },
+            { name: 'stage 2 (0xD2550 case 2)', copies: [[0x02b00270, 0x01800d00, 0x10, 8], [0x02b00290, 0x010e8000, 0x4002]] },
+            { name: 'stage 3 (0xD2550 case 3)', copies: [[0x02b073f0, 0x01800d00, 0x10, 13], [0x02b07410, 0x010e8000, 0x6802]] },
+            { name: 'stage 4 (0xD2550 case 4)', copies: [[0x02b14350, 0x01800d00, 0x10, 13], [0x02b14370, 0x010e8000, 0x6802]] },
+            { name: 'stage 5 (0xD2550 case 5)', copies: [[0x02b210d0, 0x01800d00, 0x10, 6], [0x02b210f0, 0x010e8000, 0x3002]] },
+            { name: 'stage 6 (0xD2550 case 6)', copies: [[0x02b26490, 0x01800d00, 0x10, 12], [0x02b264b0, 0x010e8000, 0x6002]] },
+            { name: 'case 7 (0xF1C8C)', copies: [[0x02b31990, 0x01800d00, 0x10, 7], [0x02b319b0, 0x010e8000, 0x3802]] },
+            { name: 'case 8 (0xDC44, 0x2264C), the attract', copies: GUNBLADE_CASE_8 },
+            { name: 'case 9 (0xF1DA8) over case 8', copies: [...GUNBLADE_CASE_8, [0x02a5b460, 0x01800e00, 0x10], [0x02a5b480, 0x010f0000, 0x200], [0x02a5b8a0, 0x01800e20, 0x10], [0x02a5b8c0, 0x010f1000, 0x1d0], [0x02a5bc80, 0x01800e40, 0x10], [0x02a5bca0, 0x010f2000, 0x170], [0x02a5bfa0, 0x01800e60, 0x10], [0x02a5bfc0, 0x010f3000, 0x1c0], [0x02a5c360, 0x01800e80, 0x10], [0x02a5c380, 0x010f4000, 0x1c0], [0x02a5c720, 0x01800ea0, 0x10], [0x02a5c740, 0x010f5000, 0x230], [0x02a5cbc0, 0x01800ec0, 0x10], [0x02a5cbe0, 0x010f6000, 0x480], [0x02a5d500, 0x01800ee0, 0x10], [0x02a5d520, 0x010f7000, 0x3e0], [0x02a5dd00, 0x01800f00, 0x10], [0x02a5dd20, 0x010f8000, 0x380], [0x02a5e440, 0x01800f20, 0x10], [0x02a5e460, 0x010f9000, 0x3d0], [0x02a5ec20, 0x01800f40, 0x10], [0x02a5ec40, 0x010fa000, 0x420], [0x02a5f4a0, 0x01800f60, 0x10], [0x02a5f4c0, 0x010fb000, 0x240], [0x02a5f960, 0x01800f80, 0x10], [0x02a5f980, 0x010fc000, 0xc0], [0x02a5fb20, 0x01800fa0, 0x10], [0x02a5fb40, 0x010fd000, 0xf0]] },
+            ],
+        },
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
     /* No stage or object record is read yet. */
     /* Two 4 MB sample chips, 23 songs in group 0x10; the attract sends
      * AE 10 0F. The driver listens from 14 s on. */
@@ -7171,7 +7617,61 @@ const gunblade = {
         songs: [0x10, 23],
         warmup: 14,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+};
+
+/*
+ * Zero Gunner's cells, the same in all three builds (the tables are in the
+ * data ROM): Pilot Kids' records and files, a year sooner. The records are
+ * the zero-ended table at data 0x2F49E8 that the check menu's viewer
+ * (0x5C10, program 0x505C10 in RAM) steps through, drawn by 0x55940
+ * (0x55960: width, height, entries; g4 1 sets bit 15). The boot (0x54D50)
+ * draws the 1bpp font at 0xCAFC8 at character 0 with pen 1 (0x54F80), fills
+ * character 1 with pen 15, and loads files 0 and 14 of the viewer's table
+ * at data 0x2F49A8 with 0x558F0: {first block, block count, colour
+ * pointers, characters}, block k's colours (16, from its pointer) going to
+ * group first + k at the next vblank (0x557F0, 0x55840). Every other file
+ * loads from block 41 or 43, over nothing of the boot's, so each is a mode.
+ */
+const ZEROGUN_CELLS = {
+    sized: true,
+    patternTable: 0x022f49e8,
+    base: 0x8000,
+    boot: {
+        font: { src: 0x020cafc8, first: 0, count: 128, pen: 1 },
+        chars: [[0x020ed8f8, 4 << 7, 17 << 7], [0x022d7f58, 21 << 7, 20 << 7]],
+        straight: true,
+        fill: [[1, 1, 0xffff]],
+        palette: [
+            { pointers: 0x020fe9c0, group: 4, groups: 17 },
+            { pointers: 0x022ec1c0, group: 21, groups: 20 },
+        ],
+        modes: [
+        { name: "the boot's" },
+        { name: 'file 1 (0x2100590)', chars: [[0x02100598, 41 << 7, 41 << 7]], palette: [{ pointers: 0x02129640, group: 41, groups: 41 }] },
+        { name: 'file 2 (0x212EB90)', chars: [[0x0212eb98, 43 << 7, 33 << 7]], palette: [{ pointers: 0x0214fbe0, group: 43, groups: 33 }] },
+        { name: 'file 3 (0x21521D0)', chars: [[0x021521d8, 43 << 7, 33 << 7]], palette: [{ pointers: 0x02173220, group: 43, groups: 33 }] },
+        { name: 'file 4 (0x2175A70)', chars: [[0x02175a78, 43 << 7, 36 << 7]], palette: [{ pointers: 0x02199ac0, group: 43, groups: 36 }] },
+        { name: 'file 5 (0x219C320)', chars: [[0x0219c328, 43 << 7, 16 << 7]], palette: [{ pointers: 0x021ac350, group: 43, groups: 16 }] },
+        { name: 'file 6 (0x21ADAF0)', chars: [[0x021adaf8, 41 << 7, 60 << 7]], palette: [{ pointers: 0x021e9b20, group: 41, groups: 60 }] },
+        { name: 'file 7 (0x21F96B0), the attract (scene 0x5786B0)', chars: [[0x021f96b8, 41 << 7, 79 << 7]], palette: [{ pointers: 0x02248700, group: 41, groups: 79 }] },
+        { name: 'file 8 (0x225D040), scene 0x5771FC (the attract at frame 3000)', chars: [[0x0225d048, 41 << 7, 29 << 7]], palette: [{ pointers: 0x0227a090, group: 41, groups: 29 }] },
+        { name: 'file 9 (0x227C210)', chars: [[0x0227c218, 41 << 7, 27 << 7]], palette: [{ pointers: 0x02297260, group: 41, groups: 27 }] },
+        { name: 'file 10 (0x22993D0)', chars: [[0x022993d8, 41 << 7, 30 << 7]], palette: [{ pointers: 0x022b7420, group: 41, groups: 30 }] },
+        { name: 'file 11 (0x22B95A0)', chars: [[0x022b95a8, 41 << 7, 2 << 7]], palette: [{ pointers: 0x022bb5d0, group: 41, groups: 2 }] },
+        { name: 'file 12 (0x22BB7D0)', chars: [[0x022bb7d8, 41 << 7, 14 << 7]], palette: [{ pointers: 0x022c9800, group: 41, groups: 14 }] },
+        { name: 'file 13 (0x22CAF90)', chars: [[0x022caf98, 41 << 7, 11 << 7]], palette: [{ pointers: 0x022d5fe0, group: 41, groups: 11 }] },
+        ],
+    },
+    /* Each file's records lie after its colour pointers, up to the next
+     * file: so a cell opens on the file it was laid out with (the boot's
+     * files 0 and 14 being mode 0). */
+    screens: [
+        [0, 0, 55], [0, 182, 38], [1, 55, 31], [2, 86, 2], [3, 88, 2], [4, 90, 2], [5, 92, 1], [6, 93, 30],
+        [7, 123, 16], [8, 139, 2], [9, 141, 2], [10, 143, 2], [11, 145, 2], [12, 147, 1], [13, 148, 34],
+    ].map(([cg, first, count]) => ({ cg, cells: Array.from({ length: count }, (_, i) => first + i) })),
+    charBytes: 0x80000,
+    colorxlat: true,
 };
 
 /*
@@ -7183,7 +7683,8 @@ const gunblade = {
  * year sooner: the same model table, the same texture loader and colour
  * scheme, so js/texture.js's Pilot Kids section reads it and js/colors.js has
  * a short section of its own. The three programs keep every table at the
- * same offset but the texture load list (`loads`).
+ * same offset but the texture load list (`loads`), the course table and
+ * the material table.
  */
 /*
  * CRX_drv 3.4.9's board: two sample chips, 16 songs in group 0x10, the driver
@@ -7197,7 +7698,7 @@ const ZERO_GUNNER_SOUND = driverSongs({
     warmup: 4,
 });
 
-function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
+function zeroGunnerBuild({ id, name, program, extra = [], loads, courses, materials }) {
     return {
         id,
         name,
@@ -7232,10 +7733,10 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
          * js/texture.js's Pilot Kids section. Load 0 is the common one, and a
          * scene puts in a load of kind 1 and one of kind 2 over it, by the
          * two numbers at +0x24 of its record (0x62F6C). The records are listed
-         * at 0x6EE28 by stage. `sets` are the pairs they name: 0 is what
+         * by course (js/zerogun.js). `sets` are the pairs they name: 0 is what
          * MAME's attract has in at frame 600, 1 at frame 1500, 2 a load on its
-         * own; 3-7 are the first stage's five areas (the attract's frame
-         * 3000 is set 3), 8-12 the second's and 13-17 the third's.
+         * own; 3-7 are the Asia course's five stages (the attract's frame
+         * 3000 is set 3), 8-12 America's and 13-17 Europe's.
          */
         texture: {
             raw: {
@@ -7256,8 +7757,20 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
             solid: true,
         },
         sound: ZERO_GUNNER_SOUND,
-        /* No stage, cell or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        lighting: {
+            /* 0x49210 uploads a copy of this at 0x502260 (0x48298 makes it)
+             * with function 6, start 0, count 31. */
+            materials: { source: 'maincpu', at: materials, count: 32, stride: 8 },
+            /* js/zerogun.js gives each scene the light of the turns 0x2000,
+             * 0x8000 at 0x502566 (0x4362C sends it through function 0xA),
+             * the other way round: an estimate, not derived. */
+            light: [0, -0.707107, -0.707107],
+        },
+        /* js/zerogun.js: the course table's scene records and their two
+         * terrain blocks. No motion data is read yet. */
+        stageTable: { zerogun: { courses }, flat: true },
+        cells: ZEROGUN_CELLS,
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
     };
 }
 
@@ -7265,19 +7778,19 @@ const zerogun = zeroGunnerBuild({
     id: 'zerogun', name: 'Zero Gunner (Export, Model 2B)',
     program: [0x000000, 'epr-20439.15', 0x10125381, 'epr-20440.16', 0xce872747],
     extra: ['mpr-20296.11', 'mpr-20298.17'],
-    loads: 0x48080,
+    loads: 0x48080, courses: 0x6ee28, materials: 0x47fb0,
 });
 /* The clones are known by their programs alone, so that zerogun.zip missing
  * is said as such. */
 const zerogunj = zeroGunnerBuild({
     id: 'zerogunj', name: 'Zero Gunner (Japan, Model 2B)',
     program: [0x000000, 'epr-20290.15', 0x9ce3ad21, 'epr-20291.16', 0x7267a03d],
-    loads: 0x480d0,
+    loads: 0x480d0, courses: 0x6efa8, materials: 0x48000,
 });
 const zeroguna = zeroGunnerBuild({
     id: 'zeroguna', name: 'Zero Gunner (Export, Model 2A)',
     program: [0x000000, 'epr-20437.12', 0xfad30cc0, 'epr-20438.13', 0xca364408],
-    loads: 0x47fa0,
+    loads: 0x47fa0, courses: 0x6e1e8, materials: 0x47ed0,
 });
 
 /*
@@ -7286,16 +7799,18 @@ const zeroguna = zeroGunnerBuild({
  * table entry's first three words to 0x804000. Its data ROM's last megabyte
  * (epr-18404/18405) is what the program reads through the XTRA_DATA mirror at
  * 0x6400000 for its colour, luma and palette tables. A stage is a 24-byte
- * record at 0xF6578 (the index in RAM at 0x5290C0; set up by 0xD1C90):
- * +0 texture bank, +4 colour row list, +8 palette table, +0xC row-21 list,
- * +0x10 a data pointer not yet read. The sets here are its twelve records
- * and the boot (12), which is what the title shows.
+ * record at 0xF6570 (the index in RAM at 0x5290C0; set up by 0xD1C90):
+ * +0 object list (js/skytargt.js), +4 base height, +8 texture bank, +0xC
+ * colour row list, +0x10 palette table, +0x14 row-21 list. The tables here
+ * read it from +8, so their `records` is 0xF6578. The sets are its eighteen
+ * records and the boot (18), which is what the title shows.
  */
 const skytargt = {
     id: 'skytargt',
     name: 'Sky Target',
     identify: ['epr-18406.12', 'epr-18407.13', 'mpr-18415.10', 'mpr-18413.16'],
     identifyCrc: [0xfde9c00a, 0x35f8b529],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: { size: 0x100000, parts: [[0x000000, 'epr-18406.12', 0xfde9c00a, 'epr-18407.13', 0x35f8b529]] },
         mainData: {
@@ -7325,11 +7840,11 @@ const skytargt = {
     /* js/romset.js's `records` layout: {count, colours} at 0x640FB5C from
      * entry 0 (0x232D0), then the stage record's +8 table from entry 500
      * (0x39060). MAME's matches for every stage it showed. */
-    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 12 },
+    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 18 },
     /* js/texture.js's Sky Target section: the boot bank, then the record's. */
     texture: {
-        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 12 },
-        sets: 13,
+        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 18 },
+        sets: 19,
         residentSet: null,
         defaultSet: 0,
     },
@@ -7338,11 +7853,30 @@ const skytargt = {
     colors: {
         luma: { source: 'mainData', data: 0x1000000, bytes: 0x4000, spill: { data: 0x100000, entries: 8 } },
         skytargt: {
-            records: 0xf6578, stride: 24, stages: 12, bootList: 0x6410580,
+            records: 0xf6578, stride: 24, stages: 18, bootList: 0x6410580,
             gain: Math.fround(1.1), flat: [5, 8], fixed: 0x640f85c,
         },
         solid: true,
     },
+    lighting: {
+        /* 0x37DF0 uploads 0x36530 with function 6, start 0, count 31: a
+         * parameter word and a distance coefficient each. */
+        materials: { source: 'maincpu', at: 0x36530, count: 32, stride: 8 },
+        /* 0x31A88 sends the camera's +0x70 through function 0xA every frame,
+         * the vector of two angles a stage reads from 0xE6970 (js/skytargt.js
+         * gives each stage its own). This is records 0 and 1's, (0xA180, 0),
+         * which the attract flies: (0, -0.733, -0.681), z negated for the
+         * explorer. */
+        light: [0, -0.732654, 0.680601],
+    },
+    /* js/skytargt.js: the stage records' object and ground grids. */
+    stageTable: { skytargt: true, flat: true },
+    /* The 2D pictures (js/cells.js `pictures`): the program's table at
+     * 0xEBFB0, 573 of {tiles, colours, map}, Dead or Alive's format; the last
+     * 43 are in the data ROM's last megabyte, through XTRA_DATA (`xtra`). The
+     * loaders 0x78A90 and 0x789F0 put a picture from its scroll group's block,
+     * and the draw 0x78BB0 adds block << 7 to each entry. */
+    cells: { pictures: { table: 0xebfb0, count: 573 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
     /* 39 songs in group 0x10; the attract sends A0 10 10. The driver
      * listens from 14 s on. */
     sound: driverSongs({
@@ -7354,7 +7888,7 @@ const skytargt = {
         songs: [0x10, 39],
         warmup: 14,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* ---- Ski Super G ---------------------------------------------------------- */
@@ -7439,6 +7973,9 @@ const skisuprg = {
         skisuprg: { ramps: 0x43df0, table: 0x44260 },
         solid: true,
     },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0xB05C0, 946 entries (920-945 in the second program chip). */
+    cells: { pictures: { table: 0xb05c0, count: 946 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
     /* CRX_drv 3.2.8's board: two 4 MB sample chips, 18 songs in group 0x10,
      * the driver listening 3 s after the reset. */
     sound: driverSongs({
@@ -7448,7 +7985,7 @@ const skisuprg = {
         songs: [0x10, 18],
         warmup: 4,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7462,6 +7999,7 @@ const waverunr = {
     id: 'waverunr',
     name: 'Wave Runner',
     identify: ['epr-19282a.15', 'epr-19283a.16', 'mpr-19291.11'],
+    xtra: { window: 0x100000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7519,6 +8057,16 @@ const waverunr = {
             { name: 'scene 0x4AF60', bank: 0x02200000, palette: 0x2858fda, colors: 0xa2bd7 },
             { name: 'scene 0x2CBE0', bank: 0x02500000, palette: 0x2859556, colors: 0xa2bd7 },
         ],
+        /* The Stages tab (readWaverunrStages): the grids by course, the two
+         * object lists 0xBF7B0 hands each course, the backdrop maker, the
+         * task makers and the culled draw (in the copy of 0xB0000 the boot
+         * puts at 0x200000), the course in work RAM, the sea. */
+        stages: {
+            count: 4, grids: 0x285e110, course: 0x511f60, backdrop: 0x60f0,
+            objects: [[0xaad0, 0xab40], [0xabb0, 0xac40], [0xaca0, 0xace0], [0xadb0, 0xadd0]],
+            code: { ram: 0x200000, rom: 0xb0000, size: 0x20000 },
+            makers: [0x20f230, 0x20f350], draw: 0x210200, sea: 1907, seaSize: 700,
+        },
     },
     texture: { raw: { layout: 'waverunr' }, sets: 6, residentSet: null, defaultSet: 0 },
     colors: {
@@ -7528,6 +8076,13 @@ const waverunr = {
         waverunr: true,
         solid: true,
     },
+    /* The courses, from their grids and object lists (readWaverunrStages in
+     * js/waverunr.js). */
+    stageTable: { waverunr: true, flat: true },
+    /* The 2D pictures: Sky Target's library (js/cells.js `pictures`). Table
+     * 0x8E1B0, 1059 entries; the last 215 through XTRA_DATA (`xtra`). Load
+     * 0x8D650, draw 0x8D720 (adds block << 7). */
+    cells: { pictures: { table: 0x8e1b0, count: 1059 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
     /* CRX_drv 3.2.7's board: two 4 MB sample chips. Group 0x10 has 15
      * entries; the last plays nothing, so 14 songs. The driver listens 3 s
      * after the reset. */
@@ -7538,7 +8093,7 @@ const waverunr = {
         songs: [0x10, 14],
         warmup: 4,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7551,6 +8106,7 @@ const segawski = {
     id: 'segawski',
     name: 'Sega Water Ski',
     identify: ['epr-19963a.15', 'epr-19964a.16', 'mpr-19980.11'],
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7607,6 +8163,16 @@ const segawski = {
             count: 4, palettes: 0x90970, banks: 0x90990,
             colorTable: 0x4f990, colorIndex: [0, 1, 2, 3], patches: 0x622c390,
         },
+        /* The Stages tab (readWaverunrStages): the near grids by course
+         * (0x9BA10 hands 0x56580 these and a far copy, 0x62E8B90, that drops
+         * some cells), the race's object lists from 0xBB0, the task maker and
+         * the culled draw, the course in work RAM, the sea (0x2D5A0). No
+         * code copy and no backdrop maker. */
+        stages: {
+            count: 4, grids: 0x62e8b70, course: 0x56e094, backdrop: 0,
+            objects: [[0xb320, 0xb910], [0xba80, 0xc130], [0xc150, 0xc970], [0xcca0, 0xccc0]],
+            code: null, makers: [0x91fb0], draw: 0x18f0, sea: 358, seaSize: 1360,
+        },
     },
     texture: { raw: { layout: 'waverunr' }, sets: 4, residentSet: null, defaultSet: 0 },
     colors: {
@@ -7616,7 +8182,12 @@ const segawski = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The courses, read as Wave Runner's (js/waverunr.js). */
+    stageTable: { waverunr: true, flat: true },
+    /* The 2D pictures: Wave Runner's library (js/cells.js `pictures`). Table
+     * 0x724F0, 867 entries, all in the data ROM's second half (`xtra`). */
+    cells: { pictures: { table: 0x724f0, count: 867 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7679,7 +8250,23 @@ const topskatr = {
         topskatr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The courses (js/topskatr.js, readTopskatrStages): the records at
+     * 0x2A660 + 36 * n, the object lists at 0x198D0 + 12 * n, and the two sky
+     * domes 0x3A044 picks between. */
+    stageTable: { topskatr: { records: 0x2a660, count: 3, objects: 0x198d0, skies: [0x945f0, 0x932e0] } },
+    /* Last Bronx's scripts, drawn by 0xA88E0, one run a data ROM bank,
+     * after its CG directory (loaded by 0xA9420); a run ends where a script
+     * names a character its CG does not load. See TECHNICAL.md. */
+    cells: {
+        scripts: [[0x246c804, 0x2471b60], [0x2553b64, 0x2558e10], [0x2654884, 0x265aec0], [0x2719594, 0x271ac20]],
+        scriptPad: true,
+        script: { bias: 0, last: 0x8d, wideMove: true },
+        scriptDirs: [[0x2400000], [0x2500000], [0x2600000, 0xa3980], [0x2700000]],
+        charBytes: 0x80000,
+        programAt0: true,
+        colorxlat: true,
+    },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*
@@ -7752,6 +8339,9 @@ const bel = {
         bel: { ramps: 0x62a70, table: 0x62dd0, scene: 2 },
         solid: true,
     },
+    /* The 2D pictures: Daytona's records (draw 0x76FC0), 393 end to end, and
+     * its CG pairs (loader 0x645F0) in two tables, the boot's first. */
+    cells: { records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true },
     /* 24 songs in group 0x10; the attract starts A0 10 15, then A0 10 12.
      * The driver listens from 13 s on. */
     sound: driverSongs({
@@ -7763,7 +8353,76 @@ const bel = {
         songs: [0x10, 24],
         warmup: 13,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+};
+
+/*
+ * Desert Tank's 2D pictures, for the Cells tab: the title, the mission
+ * briefings, the HUD, the rankings. The draw (0xD380) is Daytona USA's
+ * record: a halfword added to every entry, a halfword 0 for byte entries, the
+ * row count, the column count, then the entries onto 0x80-byte tilemap rows.
+ * 160 records lie end to end from 0x2800180 to the boot's pair at 0x281590C,
+ * and the rest in short runs among the tile data after it, each a run of its
+ * own here (`records`). Every one is named by an `lda` or a pointer table:
+ * the digits 0x43210 and 0x43238, the mission's 0x2891E10, the HUD's
+ * 0x289CF00 and 0x2893AF4.
+ *
+ * The CGs (the loader 0x3C6F0) are Daytona's pairs of lists through a table
+ * of eight pairs at 0x2100000 (`cgTables`). The boot (0x3C7F0) loads pair 0,
+ * then the pair at 0x28159A0, then copies group 3's colours, groups 8-10's,
+ * 0x88-0x8A's and six characters at 0x549 out of 0x289CD40..0x289CE00 by
+ * hand. It never clears the chip after that, so each later CG is loaded over
+ * what the boot left (`stacked`, js/stackcells.js). Pairs 1-7 all start at
+ * character 0x2F80 and group 0x5F. The game's own table of {record, CG}
+ * at 0x2894400, 172 entries, names each record's CG (`screens`).
+ *
+ * Six more pairs head the skies: 0x520C9C points at {CG list, palette list,
+ * then the sky's 36x32 strips} (two in mission 0's, eight in the others),
+ * which 0x3D4E0 loads and draws. A mission's own is the first word of its
+ * bank (0x2200000, 0x2300000, 0x2380000 by the mission byte 0x52106F,
+ * through 0x43204; set at 0xA52C); the code puts three more there itself
+ * (0x281EC5A at 0xCB3C, 0x282ADBE at 0xCB68, 0x2838B0E at 0x9C04). They are
+ * CGs 8 to 13 (`cgPairs`), and their strips the last runs of `records`. The
+ * tables of strips lie on halfword steps (`pointerStep`).
+ */
+const DESERT_CELLS = {
+    records: [
+        [0x02800180, 0x0281590c], [0x028181d4, 0x028185d0], [0x0281a6d4, 0x0281aeb2],
+        [0x0281c1b6, 0x0281c35a], [0x0281c79e, 0x0281c7f2], [0x0281d63a, 0x0281d9c2],
+        [0x0281eba6, 0x0281ec5a],
+        [0x0282655e, 0x0282adbe], [0x028342ae, 0x02838b0e], [0x0284d13e, 0x0285199e],
+        [0x02220cb8, 0x022215d0], [0x0231e5b0, 0x02322e10], [0x023a4544, 0x023a8da4],
+    ],
+    cgTables: [[0x02100000, 8]],
+    cgNames: ['boot'],
+    cgPairs: [
+        [0x0281ec5a, 'sky 0xCB3C'], [0x0282adbe, 'sky 0xCB68'], [0x02838b0e, 'sky 0x9C04'],
+        [0x02220c84, 'mission 0 sky'], [0x0231e564, 'mission 1 sky'], [0x023a4508, 'mission 2 sky'],
+    ],
+    stacked: {
+        base: 0,
+        after: { 0: [0x028159a0] },
+        copies: [
+            [0x0289cd40, 0x01800060, 16],
+            [0x0289cd60, 0x01800100, 16], [0x0289cd60, 0x01800120, 16], [0x0289cd60, 0x01800140, 16],
+            [0x0289cd80, 0x01801100, 16], [0x0289cd80, 0x01801120, 16], [0x0289cd80, 0x01801140, 16],
+            [0x0289cda0, 0x0108a920, 0x60],
+        ],
+    },
+    screens: [
+        { cg: 1, cells: [2] }, { cg: 5, cells: [3] }, { cg: 6, cells: [1] },
+        { cg: 3, cells: [14, 15, 16, 17] }, { cg: 4, cells: [24, 25, 26] },
+        { cg: 2, cells: Array.from({ length: 33 }, (_, i) => 38 + i) },
+        { cg: 8, cells: Array.from({ length: 8 }, (_, i) => 174 + i) },
+        { cg: 9, cells: Array.from({ length: 8 }, (_, i) => 182 + i) },
+        { cg: 10, cells: Array.from({ length: 8 }, (_, i) => 190 + i) },
+        { cg: 11, cells: [198, 199] },
+        { cg: 12, cells: Array.from({ length: 8 }, (_, i) => 200 + i) },
+        { cg: 13, cells: Array.from({ length: 8 }, (_, i) => 208 + i) },
+    ],
+    pointerStep: 2,
+    charBytes: 0x80000,
+    colorxlat: true,
 };
 
 /*
@@ -7852,7 +8511,22 @@ const desert = {
         ramp: { step: 9, span: 0x240, bias: 0x1d00, flat: 0xe8, top: 0x100 },
         solid: true,
     },
-    /* No mission, tank or motion data is read yet. */
+    /*
+     * The geometry's lighting as the boot sends it: 0x2FF4C hands 0x377F0 the
+     * 32 material words at data 0x289188C (geometrizer function 6, each with
+     * a coefficient of 1.0), and the world light is the three singles at
+     * data 0x285A1F8, which 0x13358 turns into the camera's frame (copro
+     * 0x1A) into 0x520A0C for 0xD1D0 to send. Z negated, as for Daytona.
+     */
+    lighting: {
+        light: [-0.45, -0.89, 0.45],
+        materials: { source: 'mainData', at: 0x89188c, count: 32, stride: 4 },
+    },
+    /* The missions (js/desert.js): the block grid and the objects, placed by
+     * the game's own object routines. */
+    stageTable: { desert: true, flat: true },
+    cells: DESERT_CELLS,
+    /* No tank or motion data is read yet. */
     /*
      * Daytona's Model 1 sound board with a program of its own; the first
      * MultiPCM's second socket is empty (the null). The songs
@@ -7875,7 +8549,7 @@ const desert = {
             hint: 'The songs on the sound board, by command: nothing in the game names them',
         },
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
