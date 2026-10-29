@@ -7484,14 +7484,70 @@ answers with a float square root. Colorxlat, luma and the face palette
 Palette RAM below 0x1802000, which 0x82200's callers address, is not the
 face palette; its +0x10000 is colorxlat.
 
-**Not done, and leads.** No stadium is put together and no player
-assembled. If the game finds models by name (0xC2F40), the stadium's
+**Not done, and leads.** No stadium is put together (the players are; see
+the next section). If the game finds models by name (0xC2F40), the stadium's
 and players' lists are likely name lists: look for callers of 0xC2F40 and
 of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions, the tile chip's pictures and the
 sound program (`epr-19849.31`) were not looked at.
+
+### Dynamite Baseball 97's players (`js/dynabbplayers.js`)
+
+The Animation tab's players run the game's own routines in the i960 and
+copro machine of js/doa.js, as Air Walkers' do, rather than port them. All
+addresses are program ROM offsets; data is the data ROM (the XTRA window
+0x6000000 is data 0x1000000).
+
+**Set-up.** 0xCDBE0(obj, team, kit, player) dresses an object: +0x410 team,
++0x414 kit, +0x418 player, +0x434 the bones, +0x424 the player's record
+`0x1A1670[team*2 + kit] + player*0x1CC`. The table has 26 entries: twelve
+teams × two kits × 36 players, then team 12, whose kit 0 is the umpire and
+kit 1 the mascot (GALL), one each. The bones are the 17 × 12 bytes the boot
+(0xCD780) copies from `*0x1A0A60` to 0x5DB430; the umpire takes `*0x1A0A64`.
+With 0x5B9528 clear and a team and player in range, the player goes through
+the roster at data 0x1D00042 first; the explorer sets 0x5B9528 to 1 to see
+every record. The routine calls 0x9AFF0, the face (a halfword model at
+0x5DC100 + 12·slot, from face script 0x1A0B50 and the record's +0x1B8 and
++0x1C0), 0x849B0, the hands (0x5D6500 + 16·slot: a role byte, the gloved
+hands at +2 and +4), and 0xCDCD0(obj, 0, 0).
+
+**Roles.** 0xCDCD0(obj, g1, g2) sets +0x428 to the parts lists at
+0x1A0AA0 + 16·(g1·2 + g2) (near, mid and far pointers and a zero) and
++0x430 to `(*0x1A0A90)[g1]`. g1 is the role (0 fielder, 1 batter, 2
+pitcher, 3 catcher, named from the lists' models: B, P and C hands, YP and
+YC heads), g2 left-handed. The game calls it with g1 1 (0x2E8E0, 0x479FC)
+and 3 (0x2E898, 0x46CC4), g2 always 0; the Role picker offers all eight.
+
+**Skeleton.** 0x857E0(obj) writes 19 matrices at +4 + 0x30·k: the hips,
+joints 1..17 and the base (+0x364), from the place +0x3C4/+0x3C8/+0x3CC,
+heading +0x3D2, motion +0x3DC and frame +0x3E4. A motion is three tables
+indexed by its number, 1900 each: frame counts at data 0x1D52CA0 (0x28AC0
+holds the frame below the count), the hips' path at data 0x1D54A50 (a float
+triple a frame) and the frame records at data 0x1D56800 (0x62 bytes a
+frame). Without root travel the explorer puts the place at minus the path,
+so the player stays on the spot. Parents, measured from the matrices: 1, 9
+on the hips; 2, 3, 6 on 1; 4 on 3, 5 on 4; 7 on 6, 8 on 7; 10..13 a chain
+from 9, 14..17 another.
+
+**Draw.** 0xCEE20 picks a level of detail by +0x3E8; the near draw is
+0xCF7D0, whose team players (kind ≤ 11) go through 0xCF898. Joint 1 draws
++0x1A8, the list's first model and +0x1A4 (number and chest); joint 2 the
+face, the head and the neck (843); the hands go through 0x84D60 and 0x84DE0
+by the role byte (1 the list's model, 4, 15 and 16 the gloved ones, 14 by
+the motion's parity). The explorer reads each draw's model and matrix off
+the geometry FIFO and hangs it on the joint whose matrix it is. 0xA4B70
+stretches skin between joints: copro 0x7A on a joint matrix, then points
+into RAM 0x5DC2E0; the explorer's copro takes 0x7A as a rigid inverse and
+does not draw that skin, only the ROM meshes.
+
+**Checked.** Against MAME's work RAM at attract frame 1500 (objects 7 and
+9, roles batter and pitcher): every joint within 5.2e-4 of the game's,
+relative to the hips, and the same 22 models drawn. MAME's matrices at
++0x3E4 = n are those of frame n − 1 counted from 0. A body's textures are
+set 12 + team (stadium 1), as the attract's teams at 0x5B961C (home) and
+0x5B95F4 (visitor).
 
 ### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 

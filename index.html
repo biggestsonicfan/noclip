@@ -566,6 +566,10 @@
         <select id="held-select" title="What the hands hold: the right hand's model (+0x1CC), the left's (+0x1D0). An enemy's own is the one its spawn records give it" data-i18n-title="held.title"></select>
         <div class="meta" id="held-note"></div>
       </div>
+      <div class="field" id="role-field" hidden>
+        <label data-i18n="f.role">Role</label>
+        <select id="role-select" title="The part list the player is drawn with (0xCDCD0, +0x428): the head's cap, helmet or mask and the hands" data-i18n-title="role.title"></select>
+      </div>
       <div class="field" id="string-field" hidden>
         <label data-i18n="f.string">String &mdash; moves one after another</label>
         <div id="string-chain" class="chain"></div>
@@ -735,6 +739,21 @@
         moves by the speed in the record (0x80 to 0x4C0, 0x100 a frame)
         times the player's <em>pace</em> (<code>+0x16</code>), easing
         between frames as the game does.
+      </div>
+      <div class="note" id="anim-note-dynabb" data-i18n="note.dynabb" hidden>
+        Every player has the same seventeen-joint skeleton, from the bone
+        table the boot copies to <code>0x5DB430</code>, and the explorer
+        runs the game's own routines: <code>0xCDBE0</code> dresses a player
+        (team, kit and roster place, face and hands), <code>0x857E0</code>
+        builds the joints and <code>0xCF7D0</code> draws them. A team has 36
+        players in each kit (<code>0x1A1670</code>); the last two bodies are
+        the umpire and the mascot. A motion is the joints' angles for every
+        frame and the hips' path, from the tables at data
+        <code>0x1D52CA0</code> (frame counts), <code>0x1D54A50</code> (path)
+        and <code>0x1D56800</code> (frames); the game has no names for them.
+        <em>Role</em> swaps the parts as <code>0xCDCD0</code> does: the
+        batter's, pitcher's and catcher's hands and heads. The skin the game
+        stretches between joints (copro <code>0x7A</code>) isn't drawn.
       </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of

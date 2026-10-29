@@ -23,6 +23,7 @@ import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
+import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
@@ -151,6 +152,8 @@ const state = {
     /* Air Walkers: the head's turn toward the play, its turn and tilt
      * (+0xC6, +0xC8) in 0x10000 a turn; see airwlkrsHeadTurn. */
     headTurn: [0, 0],
+    /* Dynamite Baseball 97: the player's part list, DYNABB_ROLES' index. */
+    playerRole: 0,
     /* Virtual-On: the aim the fight gives a robot, the upper body's twist on
      * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
      * 0x10000 a turn; see poseVonRobot. */
@@ -3561,6 +3564,11 @@ const BODY_RIGS = {
     vcop: { read: readVcopBodies, motions: readVcopMotions, list: vcopMotionList, pose: poseVcopBody },
     /* Daytona USA's car: a body and four wheels, playing the attract's runs. */
     daytona: { read: readDaytonaCars, motions: readDaytonaRuns, list: daytonaRunList, pose: poseDaytonaCar },
+    /* Dynamite Baseball 97's players: the game's skeleton and draw, run. */
+    dynabb: {
+        read: readDynabbPlayers, motions: readDynabbMotions, list: dynabbMotionList,
+        pose: (rom, body, motion, frame, opts) => poseDynabbPlayer(rom, body, motion, frame, { role: state.playerRole, travel: opts.travel }),
+    },
 };
 
 function bodyRig() {
@@ -3673,9 +3681,15 @@ function useAirwlkrsPlayerScene(body) {
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
     u.uTint.value.set(1, 1, 1);
     u.uBright.value = 1;
-    body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
-    state.eyeLightAt = null;
-    stepEyeLight(body);
+    /* Dynamite Baseball's players bring no light of their own: the Models
+     * tab's. */
+    if (body.materials) {
+        body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+        state.eyeLightAt = null;
+        stepEyeLight(body);
+    } else {
+        useFigureLight();
+    }
     const set = body.playerSet;
     useRomTexram([set]);
     useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
@@ -6185,6 +6199,11 @@ function wireOptions() {
             poseRig();
         });
     }
+    $('#role-select').replaceChildren(...DYNABB_ROLES.map((r, k) => new Option(t(r), k, false, k === 0)));
+    $('#role-select').addEventListener('change', (e) => {
+        state.playerRole = +e.target.value;
+        poseRig();
+    });
     $('#held-select').addEventListener('change', (e) => {
         state.held = e.target.value;
         noteHeld(state.character);
@@ -6622,6 +6641,8 @@ function applyGameFeatures() {
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
+    /* Dynamite Baseball 97's players: who the part list draws. */
+    $('#role-field').hidden = state.rom.game.rig?.kind !== 'dynabb';
     /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
     $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
     /* Virtua Cop's enemies turn the upper body toward the player. */
@@ -6637,10 +6658,10 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers', Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * Air Walkers', Dynamite Baseball's, Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
      * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop', 'daytona'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;

@@ -6928,8 +6928,10 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
-    /* No stage, player or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The players: the game's set-up, skeleton and draw run (js/dynabbplayers.js). */
+    rig: { kind: 'dynabb' },
+    /* No stage data is read yet. */
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: false },
 };
 
 /*
