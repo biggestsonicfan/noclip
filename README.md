@@ -27,7 +27,7 @@ motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
-AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
+AM3's *Manx TT Superbike* has its models and its cells — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 *Sega Touring Car Championship* has its models — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
@@ -1252,7 +1252,15 @@ The texture picker's sets 0..2 are the three banks the game deals over its
 boot bank; set 0 is the one the boot leaves in. Which course uses which bank
 is not known yet, so a course model may need its set picked by hand.
 
-There is no Stages tab, no Cells tab and no motions yet. See
+The **Cells** tab has the game's 2D art, 376 pictures in 105 files: the DX
+cabinet's DANGER motion-slider screen, the Isle of Man thanks, the course
+and transmission select, the rider pictures, the counters and the
+messages. They are AM3's "CGM 1.0" files, as Sega Rally's, each a CG and each
+picture a cell with its own name (danger, iom16, CREDIT...). 38 files, 85
+pictures, are named nowhere in the program and are marked unused. The DANGER
+screen and the attract's messages match MAME's pixel for pixel.
+
+There is no Stages tab and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#manx-tt-superbike-jstexturejs-jscolorsjs).
 
 ## INDY 500

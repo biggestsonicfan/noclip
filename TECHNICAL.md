@@ -7221,14 +7221,51 @@ RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
 out, so there is no `lighting` block and the lone model gets the placeholder
 light.
 
-**Leads.** The pictures are AM3's "CGM 1.0" files, as Sega Rally's (js/cells.js
-`cgm`): one in the program at 0xB250 and 101 in the data ROM from 0x280000.
-The map of the island is model 1213 to 1216, the leaderboards 1628 and 1629.
-The course is built from segments around 2099..2350, drawn by the race
+**Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
+routines (js/cells.js `cgm`, see [Sega Rally's
+cells](#sega-rally-championships-cells-jscellsjs)) at ROM addresses. The
+loader 0xB260 compares a file's first eight bytes with the string at 0xB250
+(the scan's fifth match in the program, which is no file), loads block k
+into group g + k and its 128 characters, and files the patterns in the table
+at work RAM 0x532080 with g << 7; the draw 0xB0A0 adds it to each entry. g
+is work RAM 0x533080, which the reset 0xAF10 sets to 9, as Sega Rally's
+does; 0xAF50 sets it (up to 0x7F), 0xB490 unloads a file and gives its
+groups back, and 0xB600 keeps 24 groups aside once (its error string is
+"FBT Error !"). The 89 callers of the loader name the files directly (`lda
+0x2C15344, g2` at 0x19C9C). Four files are in the program past the code
+(0x76F40 on), 82 in the first data pair (0x280000 to 0x3A4678) and 19 in
+the last, 1 MB pair at 0xC00000, which noclip's region (and MAME's) does not
+repeat, so the whole data ROM is scanned. That is 105 files and 376
+patterns; 38 files, 85 patterns, are named by no aligned word and marked
+unused (danger_j, the select_* screens, z3696 and others). Colours go
+through colorxlat, as MAME's palette_w puts every tile colour.
+
+Checked against MAME, whose run stops at the DX cabinet's motion-slider
+check on empty NVRAM: the check's state machine (0x5F530) is skipped when
+work RAM byte 0x51405A is 1, and holding it at 1 from a Lua script lets the
+attract run (warning, the races, the title, the Isle of Man screen). On the
+check's DANGER screen (file 0x2BD330, the only picture on screen) MAME's
+character RAM from group 9 and its palette are the file's, byte for byte,
+and noclip's `danger` cell is MAME's snapshot pixel for pixel. In the
+attract at frames 1200 and 4000 every file MAME has loaded (13 of them, from
+groups 9 to 118) sits in its character RAM and palette as the file has it,
+and the tilemap's INSERT, CREDIT and sega patterns, rendered, are MAME's
+pixels exactly. The title's MANX TT lettering is polygons, not the `title`
+pattern (a dotted MANX T.T.), which the attract never drew.
+The Twin title (frame 6500) is the `rogo_x` cell
+(file 0x2D7784, groups 44 to 47) matched to MAME's snapshot except the
+black "Twin" script over it, which is in no CGM file (polygons too); the
+Isle of Man screen is `iom16` with the program file 0x77730's MHK over it,
+both exact.
+
+**Leads.** The map of the island is model 1213 to 1216, the leaderboards
+1628 and 1629. The course is built from segments around 2099..2350, drawn by the race
 code that reads the model table; its course records were not looked for.
-MAME on empty NVRAM stays on the DX cabinet's motion-slider check, so the
-attract never ran there; the bank-to-course mapping needs a run past it
-(the Twin cabinet's settings, or m2-hle2).
+MAME on empty NVRAM stays on the DX cabinet's motion-slider check; holding
+work RAM 0x51405A at 1 gets past it (see Cells), which is the way to a run
+for the bank-to-course mapping. The shared MAME also wants the default NVRAM
+image `manxtt_dx_nvran`, which the zip lacks; 128 bytes of 0xFF in a second
+rompath folder stand in for it.
 
 ### INDY 500 (`js/texture.js`, `js/colors.js`)
 

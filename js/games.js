@@ -6449,7 +6449,20 @@ const manxtt = {
         solid: true,
     },
     depth: { recede: 0, nearMin: 0.02, layers: true },
-    features: { stages: false, characters: false, motions: false, cells: false },
+    /*
+     * The 2D pictures are Sega Rally's "CGM 1.0" files (js/cells.js, `cgm`),
+     * read by Sega Rally's routines at their ROM addresses: the loader 0xB260
+     * compares the string at 0xB250, the reset 0xAF10 sets the free group
+     * (work RAM 0x533080) to 9, and the draw 0xB0A0 adds the group << 7 from
+     * the pattern table at 0x532080. The callers name the files directly
+     * (`lda 0x2C15344, g2` at 0x19C9C). Four files are in the program ROM
+     * past the code (0x76F40 on), the rest in the data ROM's first pair
+     * (0x280000 on) and the last (0xC00000 on), which MAME does not repeat.
+     * The DX cabinet's DANGER screen (0x2BD330) is MAME's character RAM from
+     * group 9 and its palette, byte for byte.
+     */
+    cells: { cgm: {}, programAt0: true, charBytes: 0x80000, colorxlat: true },
+    features: { stages: false, characters: false, motions: false },
 };
 
 /*
