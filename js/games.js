@@ -6945,7 +6945,7 @@ const stcc = {
  * one, odd rows laid over it by the next) and copy luma RAM out of the
  * program ROM, a byte every halfword from 0x11400000.
  */
-function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors }) {
+function jalecoBuild({ id, name, identify, regions, table, palette, texture, colors, cells }) {
     return {
         id,
         name,
@@ -6957,8 +6957,10 @@ function jalecoBuild({ id, name, identify, regions, table, palette, texture, col
         paletteOffset: null,
         texture,
         colors: { i960: { lumaRam: 0x11400000, lumaStep: 2, run: colors }, solid: true },
+        /* The tile chip's CG files (js/jalecocells.js). */
+        cells,
         /* No stage, fighter or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        features: { stages: false, characters: false, motions: false, bodies: false, cells: !!cells },
     };
 }
 
@@ -7024,6 +7026,8 @@ const sgt24h = jalecoBuild({
         defaultSet: 0,
     },
     colors: [0x5a920, 0x5aa10, 0x5ab10, [0x3caf0, 0x02beb860, 128], [0x3caf0, 0xcb2b0, 0]],
+    /* The tile chip's CG files: the directory at data 0xE00000 (0x3CF8C). */
+    cells: { files: { dir: 0x02e00000 }, charBytes: 0x80000, colorxlat: true },
 });
 
 /*
@@ -7050,6 +7054,8 @@ const sgt24h = jalecoBuild({
  * race; luma bands 129 to 196 do (0x13AC0 queues band copies at run time),
  * and these are the boot's.
  */
+/* The tile chip's CG files: the directory at data 0xD00000 (0x200FDC). */
+const OVERREV_CELLS = { files: { dir: 0x02d00000 }, charBytes: 0x80000, colorxlat: true };
 const OVERREV_DATA = {
     mainData: {
         size: 0x1000000,
@@ -7095,6 +7101,7 @@ const overrev = jalecoBuild({
     palette: 0x32a44,
     texture: overRevTexture(0x200000),
     colors: [0x12760, 0x12850, 0x12950],
+    cells: OVERREV_CELLS,
 });
 /* Known by its program alone, so that overrev.zip missing is said as such. */
 const overrevb = jalecoBuild({
@@ -7112,6 +7119,7 @@ const overrevb = jalecoBuild({
     palette: 0x2a7a4,
     texture: overRevTexture(0x100000),
     colors: [0x12760, 0x12850, 0x12950],
+    cells: OVERREV_CELLS,
 });
 
 /* ---- Dynamite Baseball 97 ------------------------------------------------- */
@@ -7187,8 +7195,11 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
+    /* The tile chip's pictures: the record table at data 0xBB0000 and the
+     * program's byte per record at 0xAF680 (js/dynabbcells.js). */
+    cells: { slots: { table: 0x02bb0000, count: 0x938, kinds: 0xaf680 }, charBytes: 0x80000, colorxlat: true },
     /* No stage, player or motion data is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */

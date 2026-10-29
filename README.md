@@ -673,8 +673,9 @@ Of the other games, Daytona USA, Virtua Cop, The House of the Dead (`hotdo`
 and the prototype `hotdp`),
 Sega Rally Championship, Virtual-On, Dynamite Cop, Air Walkers and Power Sled
 have the Cells tab too, and all of them but Air Walkers the music. Last
-Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank, Gunblade NY and Zero
-Gunner have the Cells tab but not the music.
+Bronx has both; Pilot Kids, Virtua Cop 2, Desert Tank, Gunblade NY, Zero
+Gunner, Super GT 24h, Over Rev and Dynamite Baseball 97 have the Cells tab
+but not the music.
 
 The rest are the next ones to do: an opponent for Sonic the Fighters (its
 characters are posed through a rig of their own, not Virtua Fighter 2's
@@ -1364,6 +1365,14 @@ tables are those of the hour the title and the attract use: the race has
 640 versions of two rows, one per stretch of its 24 hours, and the viewer
 shows one.
 
+The **Cells** tab has the game's 521 tile-chip pictures from its seven CG
+files: the fonts, the digits, the captions (INSERT COIN, GAME OVER, FINAL
+LAP, ROLLING START), the course, car and gear select screens with their
+buttons, the rev counters and the results. A CG is a file loaded over the
+boot's, as the game loads them, and each cell opens on its own file's.
+The pictures checked against MAME's screen (Course select, the lap and
+course buttons) are the same pixel for pixel.
+
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
 
@@ -1383,6 +1392,15 @@ in every set. A course piece needs its course's set picked by hand. Colour
 tables and luma match MAME's at the title on both boards byte for byte, and
 the textures in the attract race but for sixteen bytes something later
 writes. Some luma bands change during a race; the viewer shows the boot's.
+
+The **Cells** tab has the game's 1283 tile-chip pictures from its fifteen
+CG files, the same in both builds: the fonts, the coin and start captions,
+the OverREV logo's pieces, the select screens' panels and buttons, the
+race HUD (digits, rev counter, turn arrows, the 3-2-1-GO countdown), the
+results' cartoon characters and full-screen backdrops. As on Super GT
+24h, a CG is a file loaded over the boot's and each cell opens on its own.
+The pictures checked against MAME's Mode Select screen on both boards are
+the same pixel for pixel.
 
 There is no Stages tab, no cars put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#super-gt-24h-and-over-rev-jsjalecojs).
@@ -1405,6 +1423,14 @@ piece on its stadium's with team 0 — and the rest on set 12, stadium 1 and
 team 0, the set MAME's attract opens on. Textures, colour tables, luma and
 face palette match MAME's in the attract mode byte for byte, but for 119
 halfwords of sheet 0 the game copies about at run time.
+
+The **Cells** tab has the game's 2349 tile-chip pictures: the title and its
+captions, the skies and the city at night, the scoreboard digits and
+lettering, the batting and pitching panels, the team and mode menus and the
+messages (CONTINUE?, INSERT COIN(S), the challenger's). The game loads a
+picture's tiles only when it draws it, wherever it finds room; the tab lays
+each set of tiles from the start, which shows the same picture. Those
+checked against MAME's attract are the same pixel for pixel.
 
 There is no Stages tab, no players put together and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).

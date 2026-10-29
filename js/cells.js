@@ -181,6 +181,8 @@ import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { bankTables, loadBankCG, rankBankCGs } from './bankcells.js';
 import { stackCGs, loadStacked, applyCopies } from './stackcells.js';
+import { jalecoCells, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
+import { dynabbCells, dynabbCGs, dynabbCellCG, loadDynabbCG, readDynabbCell } from './dynabbcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
 const MAX_CELLS = 1023;         /* dsp_pattern_new's bound */
@@ -204,6 +206,10 @@ function cellRecords(rom) {
         out = listedCells(rom).map((c) => c.at);
     } else if (C.banks) {
         out = bankTables(rom).cells.map((c) => c.at);
+    } else if (C.files) {
+        out = jalecoCells(rom).map((c) => c.at);
+    } else if (C.slots) {
+        out = dynabbCells(rom).map((c) => c.at);
     } else if (C.pictures) {
         for (let n = 0; n < C.pictures.count; n++) out.push(word(rom, C.pictures.table + n * 12 + 8));
     } else if (C.groups) {
@@ -512,6 +518,11 @@ function cgListsAll(rom) {
         cgCache.set(rom, all);
         return all;
     }
+    if (C.files || C.slots) {
+        all = C.files ? jalecoCGs(rom) : dynabbCGs(rom);
+        cgCache.set(rom, all);
+        return all;
+    }
     if (C.groups) {
         const hex = (a) => `0x${(a - MAIN_DATA_BASE).toString(16).toUpperCase()}`;
         for (let group = 0; group < C.groups.count; group++) {
@@ -611,6 +622,8 @@ export function cgLabel(rom, cg) {
  */
 export function readCell(rom, cell) {
     if (rom.game.cells.cgm || rom.game.cells.maps) return readListed(rom, cell);
+    if (rom.game.cells.files) return readJalecoCell(rom, cell);
+    if (rom.game.cells.slots) return readDynabbCell(rom, cell);
     const p = cellRecords(rom)[cell];
     if (p !== undefined && (rom.game.cells.scripts || rom.game.cells.groups)) return scriptCell(rom, p);
     const h = p === undefined ? null : recordHeader(rom, p);
@@ -760,6 +773,8 @@ function loadTiles(rom, L) {
     if (L.picture) return loadPicture(rom, L, charBytes);
     if (L.banked) return loadBankCG(rom, L.banked, charBytes);
     if (L.cgm) return loadCgm(rom, L.cgm, charBytes);
+    if (L.jaleco) return loadJalecoCG(rom, L, charBytes);
+    if (L.dynabb !== undefined) return loadDynabbCG(rom, L, charBytes);
     if (L.boot) return loadBoot(rom, L, charBytes);
     if (L.stack) return loadStacked(rom, L, charBytes);
     if (L.dirs && (L.fonts || L.copies)) {
@@ -1121,6 +1136,9 @@ export function rankCGs(rom, cell) {
     if (rom.game.cells.groups) return [{ cg: groupCells(rom)[cell].group, cover: 1 }];
     /* An INDY 500 cell is drawn with a CG of its own bank (js/bankcells.js). */
     if (rom.game.cells.banks) return bySeams(rom, cell, rankBankCGs(rom, cell, c, gameCGs(rom)));
+    /* A Jaleco cell is drawn with its own file (js/jalecocells.js). */
+    if (rom.game.cells.files) return [{ cg: jalecoCellCG(rom, cell), cover: 1 }];
+    if (rom.game.cells.slots) return [{ cg: dynabbCellCG(rom, cell), cover: 1 }];
     return rankSharedCGs(rom, cell, c);
 }
 
