@@ -10480,7 +10480,7 @@ Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
 and 0x98's groups (see above).
 
-### Virtua Cop 2 (`js/games.js`, `js/colors.js`)
+### Virtua Cop 2 (`js/games.js`, `js/colors.js`, `js/vcop2.js`)
 
 Virtua Cop 2 (MAME's `vcop2`, Model 2A, 1995) runs Virtua Cop's library
 moved up the program ROM, so the profile is `daytonaBuild`'s with the
@@ -10521,10 +10521,81 @@ the colour tables, luma and the face palette dumped at frames 300, 900 and
 1800: set 0 matches all of them byte for byte. The attract never loads
 banks 1 or 2.
 
+**Stages** (`js/vcop2.js`, `readVcop2Stages`). The layout is Virtua Cop's
+(segments drawn one at a time, the next brought up as the rail passes a
+mark), with the tables in the program ROM and a second level: each stage
+forks into two routes. The player shoots one of two signs, and the shot
+object's +0x10, less 10 (0x22668) or 27 (0x431E8), goes to the route
+0x5060EC. The stage draw 0x1D6B8 (called from the play scene 0x57C4) walks
+`0x63374[stage 0x502010][route 0x5060EC][segment 0x50A06C]`, 24-byte
+records up to -1:
+
+| offset | what |
+|---|---|
+| +0x00 | model |
+| +0x04 | s16 turn about X (0x10000 a circle) |
+| +0x06 | s16 turn about Y |
+| +0x08 | turn about Z (low half of the word) |
+| +0x0C | x, y, z (floats) |
+
+Each record is drawn as push, translate (command word 0x3000606), then
+the +8, +6 and +4 turns, each sent only when it isn't 0 (0x5000A0A,
+0x4800909, 0x4000808), then the model (0x160A4) and pop. That is Virtua
+Cop's order of turns, so the explorer uses the same ops (Z mirrored).
+0x63374 has four stages: the three the select screen offers
+(0x3EE28..0x3EE88, picked by where the gun points, stores 1, 2, 0) and
+stage 3, which 0x5820 sets when scene 0xD's 120 frames (0x5758) run out.
+The attract's 4 and 5 (0x8CC4, 0x2E2C) reuse stage 0's tables. There are
+no stage names in ROM, so the tab names stages by what they show.
+
+A route's segment k+1 comes up when the rail count 0x5060C8 reaches
+`0xCA378[stage][route][k]` (0x68C8, 0x719C bump 0x50A070 and 0x50A06C,
+then call 0x1D7B8 for the objects and 0x2DB70 for 0xBC584's lists). A mark
+of 20000 (or -1) is never reached, so a route has one more segment than
+marks: 43/43, 37/10, 36/38 and 3. Stage 3's two routes are the same lists.
+The tab merges both routes (key: model, place, turns), and each route's
+segment is a zone.
+
+The rail: the stage start 0x1B884 takes `0xC9D08[stage]`, four 12-byte
+pieces {look-at path, eye path, count} (paths are three floats a count, in
+either ROM), and the speed `0x1D364[stage]` (34, 38, 34, 34). 0x1BC98..0x1BD40
+go from piece 0 to piece 1 + route and from that to piece 3. The count runs on
+across pieces. 0x5060E4 is the count within the piece and 0x5060E0 the
+piece. The look-at path comes first: the other way round, the camera at
+count 102 of stage 0 looks away from the street MAME shows there.
+`0xC9DE4[stage][route]` holds the shoot-out stop counts and `0xCA254`
+per-stop flags (0x1BAB0). The zone cameras are the rail at each segment's
+first count.
+
+Texture set: 0x16594 puts `0x18D14[stage]` on sheet 0, so stages 0..2
+take sets 0..2 and stage 3 takes set 0. A model that only one stage draws
+opens on that set in the Models tab. readVcop2Stages fills
+`rom.courseNamed`, the map the Daytona-layout rule in programTextureSets
+reads, which is otherwise empty for this game.
+
+Checked against MAME: `vcop2` attract snapshots, with a write tap holding
+0x502010 at 1, 2 or 3 so the attract plays that stage's tables. Stage 0
+was checked at count 102 (the street with the "Max" store), stage 1 at
+count 0 (the subway stairs under the VIRTUA CITY sign), stage 2 at count 0
+(the pier) and stage 3 at count 349 (cranes and containers at sunset). The
+explorer was rendered from the same rail point. The pieces, their
+turns and the textures agree with MAME. Turns about X and Z (539 and 525
+of 5849 records) were not checked one by one.
+
+Not read: the objects. 0x1D7B8 walks `0x8C87C[stage][route][seg]`,
+56-byte records, one per object slot (stride 0x1800). Type 9999 keeps the
+slot, 10000 clears it, and a type of 0 or less ends the list. The spawn
+0x1D874 takes +0 type (`0x96B54[type]` is a descriptor like Virtua Cop's,
+stored at slot +0xBB0), +4 xyz, +0x10 three turns (to slot
++0x2C/+0x2E/+0x30), +0x20 the parent, +0x30 data and +0x34 the routine.
+The sky and the light 0x3169C sends per piece when 0x50A0F0 is set
+(towards 0x50A0F4, through 0x15FC4) aren't read either.
+
 **Leads.** The stage number is 0x502010; 0x516C is a table by it the stage
 start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
 SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
-pair 18520/18521) is not read by anything here.
+pair 18520/18521) is not read by anything here. Objects (enemies, the
+characters' motions) start at 0x1D874 and the descriptors at 0x96B54.
 
 ### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
 

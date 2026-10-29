@@ -12,6 +12,7 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, readRallyStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
+import { readVcop2Stages } from './vcop2.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readLastbrnxStages, lastbrnxPaletteCycles } from './lastbrnx.js';
@@ -6724,6 +6725,7 @@ function loadGameContent() {
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
+        else if (T.vcop2) state.stages = readVcop2Stages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
         else if (T.von) {

@@ -25,7 +25,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 *Last Bronx* has its models, its stages, its cells and its fighters posed by their
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
-*Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Cop 2* has its models and its stages — see [Virtua Cop 2](#virtua-cop-2).
 *Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
@@ -1213,10 +1213,20 @@ and Virtua Cop's ramp and band.
 The texture picker's sets 0..2 are the three banks a stage puts on sheet 0,
 over the bank the boot puts on sheet 1. With set 0, the sheets, the palette,
 luma and the colour tables match MAME's in the attract byte for byte. Sets 1
-and 2 were not reached in MAME.
+and 2 are checked only by eye, on MAME pictures of their stages.
 
-There is no Stages tab, no characters, no motions, no cells and no music yet.
-See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+The **Stages** tab has the four stages the stage draw's table holds, by what
+they show (the game has no names for them): *City streets and the bay*, the
+*Virtua City subway*, *Pier 10 and the liner* and *Cranes at sunset*. Each
+stage forks: halfway through, the player shoots one of two signs and the rail
+takes one of two routes. A stage is every piece of both routes once, on the
+stage's own texture set. The **Zone** select shows one segment of a route,
+seen from the rail camera where the game brings that segment up. A model that
+only one stage draws opens on that stage's set in the Models tab.
+
+The enemies, the cars and the props you can shoot, the sky behind the scenery
+and the stage's light are not there yet. There are no characters, motions,
+cells or music yet. See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs-jsvcop2js).
 
 ## Virtua Striker
 
