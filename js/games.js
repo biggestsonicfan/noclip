@@ -7368,6 +7368,7 @@ const segawski = {
     id: 'segawski',
     name: 'Sega Water Ski',
     identify: ['epr-19963a.15', 'epr-19964a.16', 'mpr-19980.11'],
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
     regions: {
         maincpu: {
             size: 0x100000,
@@ -7433,7 +7434,10 @@ const segawski = {
         waverunr: true,
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The 2D pictures: Wave Runner's library (js/cells.js `pictures`). Table
+     * 0x724F0, 867 entries, all in the data ROM's second half (`xtra`). */
+    cells: { pictures: { table: 0x724f0, count: 867 }, charBytes: 0x80000, programAt0: true, colorxlat: true },
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
 };
 
 /*

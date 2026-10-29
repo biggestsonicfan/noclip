@@ -7888,6 +7888,15 @@ two rows left from the pointer table 0xA1ED0, three to each value of work
 RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
 2500: sheets, colorxlat, luma and palette the same.
 
+Water Ski's cells are Wave Runner's library (its SCROLL GROUP ERROR string
+at 0x6FA40, the table read at 0x6F9A8 and 0x6FAC0): table program 0x724F0,
+867 {tiles, colours, map} entries to the zeros at 0x74D94, every pointer
+through XTRA_DATA (0x64xxxxx, data 0x14xxxxx; `xtra` window 0x1000000).
+Graded against MAME's tile and palette RAM at frames 1100, 2500 and 4000:
+the backdrops 863 (62 x 48) and 251 (64 x 48) and the INSERT COIN and CREDIT
+pieces 47, 55, 65, 68 and 74 pixel for pixel. Cells 10 to 37 are the same
+tiles under another picture's colours, which is why they half match.
+
 ### Top Skater (`js/topskatr.js`)
 
 Sega's 1997 skateboard game on Model 2C (MAME's `topskatr`, Revision A,

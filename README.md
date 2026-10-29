@@ -37,7 +37,7 @@ Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models and its cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
-*Wave Runner* and *Sega Water Ski* have their models — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
+*Wave Runner* and *Sega Water Ski* have their models and their cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models — see [Behind Enemy Lines](#behind-enemy-lines).
 
@@ -1480,7 +1480,11 @@ match MAME's RAM in the attract byte for byte. Three colour rows of every
 course come from a table picked by a value in work RAM (0 in the attract,
 which is the one used here; it may be the player's choice of skier).
 
-There is no Stages tab, no cells, no characters and no music yet. See
+The **Cells** tab has the game's 867 2D pictures, each with its own colours.
+The attract's backdrops and its INSERT COIN pieces match MAME's tile RAM
+pixel for pixel.
+
+There is no Stages tab, no characters and no music yet. See
 [TECHNICAL.md](TECHNICAL.md#wave-runner-and-sega-water-ski-jswaverunrjs).
 
 ## Top Skater
