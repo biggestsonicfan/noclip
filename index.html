@@ -770,6 +770,21 @@
         <em>Far models</em> are the ones drawn 18 or more away, the rows
         not blended. The hips carry the walk; <em>root travel</em> shows it.
       </div>
+      <div class="note" id="anim-note-gunblade" data-i18n="note.gunblade" hidden>
+        The soldiers, gangsters and hostages are figure types (the table at
+        <code>0x9D670</code>: each type's meshes and its skeleton), fifteen
+        parts in a fixed tree. Every type plays the one motion table at
+        <code>0x95E80</code>: a motion is a list of key poses (the root's
+        turn and place and each part's three turns), each held for a count
+        of frames the game moves to it in straight lines (<code>0x96D40</code>).
+        A motion with flag 1 plays once; the rest loop, and start here from
+        their last key, as they look the second time round. The motions the
+        attract plays on a type lead; the game has no names for them. The
+        explorer runs the game's draw (<code>0x9DC70</code>, types 32 and 33
+        <code>0xA3140</code>). The shadow, muzzle flash, wounds, the head
+        turned to the player and the far models are left out; 18 motions
+        whose keys the game builds in RAM are not listed.
+      </div>
       <div class="note" id="anim-note-powsled" data-i18n="note.powsled" hidden>
         The figures: ten tables in the data ROM, each a list of
         frames and a count of parts, every part a model of its own. A frame is

@@ -33,7 +33,7 @@ Sega's *INDY 500* has its models — see [INDY 500](#indy-500).
 Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models and players — see [Dynamite Baseball 97](#dynamite-baseball-97).
-*Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
+*Gunblade NY* has its models and figures — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
@@ -1374,8 +1374,16 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
+The **Animation** tab has the street figures: 119 types of soldier,
+gangster and hostage, fifteen parts each, and the 454 motions of the
+game's one motion table, key poses it moves between in straight lines.
+It runs the game's own draw; the parts match MAME's to 3e-4 and the
+playback matches MAME's frame by frame. Shadows, muzzle flashes, wounds
+and the far models are not shown, and the motions have no names.
+
+There is no Stages tab, no cells and no music yet. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs) and
+[the figures](TECHNICAL.md#gunblade-nys-figures-jsgunbladeplayersjs).
 
 ## Zero Gunner
 

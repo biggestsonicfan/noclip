@@ -23,6 +23,7 @@ import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
+import { readGunbladeBodies, readGunbladeMotions, gunbladeMotionList, poseGunblade } from './gunbladeplayers.js';
 import { readBelBodies, readBelMotions, belMotionList, poseBel } from './belplayers.js';
 import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
@@ -3581,6 +3582,12 @@ const BODY_RIGS = {
             opts.clock != null ? opts.clock / 256 + 1 : frame, { travel: opts.travel, far: state.belFar }),
         clocks: (rom, motion, { backward }) => airwlkrsClocks(motion, motion.rate * 4, backward),
     },
+    /* Gunblade NY's figures: key poses of one table moved between in
+     * straight lines, the game's draw run. */
+    gunblade: {
+        read: readGunbladeBodies, motions: readGunbladeMotions, list: gunbladeMotionList,
+        pose: (rom, body, motion, frame, opts) => poseGunblade(rom, body, motion, frame, { travel: opts.travel }),
+    },
 };
 
 function bodyRig() {
@@ -6675,10 +6682,11 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers', Dynamite Baseball's, Behind Enemy Lines', Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * Air Walkers', Dynamite Baseball's, Behind Enemy Lines', Gunblade NY's,
+     * Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
      * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'powsled', 'vcop', 'daytona'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'gunblade', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;

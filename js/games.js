@@ -7017,8 +7017,10 @@ const gunblade = {
         gunblade: { keys: 0xc75c0 },
         solid: true,
     },
-    /* No stage or object record is read yet. */
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    /* The figures: the motion table played, the game's draw run
+     * (js/gunbladeplayers.js). No stage or object record is read yet. */
+    rig: { kind: 'gunblade' },
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: false },
 };
 
 /*

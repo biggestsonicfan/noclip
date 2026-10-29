@@ -7622,9 +7622,64 @@ model the fade.
 0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
 0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
 model to its set. The objects' records (which triple, where) are not found.
-Gunblade NY has no fighters or motions. Its enemies and vehicles move by
-script, and that script is not read. The tile chip (cells) and the music
+Its people are posed from a motion table (see the next section); what
+places and moves them in a scene, and its vehicles, are not read. The tile chip (cells) and the music
 are not looked at.
+
+### Gunblade NY's figures (`js/gunbladeplayers.js`)
+
+Every person the game shows (soldiers, gangsters, hostages) is a figure of
+fifteen parts, posed from one motion table and drawn by one unrolled
+routine. The format is not Virtual-On's: whole-body key poses in floats,
+moved between in straight lines, and copro command 0x2C rather than VON's
+0x2F. The Animation tab runs the game's draw on js/i960.js with a small
+copro of its own.
+
+**Objects.** A figure object (0x502340 is one of the attract's): +0x00 the
+place, +0x0E the heading (the draw sends it less 0x8000), +0x4C the muzzle
+flash, +0x58 the distance (part list 0 below 150, 1 below 300, else 2 or
+3; the object at `*0x508BF0` always list 0), +0x60 the animation record,
++0x90 24 for a waist twist, +0x94 the type, +0x98 the kind (its draw, from
+the table at 0x24E30, 16 bytes a kind), +0xB8 the scale (1.2 on the
+attract's), +0xC0 the shadow's distance, +0x118 the hand's scale (copro
+0x2A), +0x158 + 0x3C·l the part lists (word k part k's mesh triple).
+0xA2E20 swaps wounded meshes in (tables 0xA2DD0, 0xA2DE0, 0xA2E00).
+
+**Types.** 0x9D670 + 8·type: {meshes, skeleton}, 120 types (67 empty);
+meshes + 12k is part k's mesh triple (part 0 unused), skeleton + 12k its
+bone. 0x9DB10 + 4·type scales the root's place (0.81 for types 18..24).
+Types 32 and 33 are drawn by 0xA3140 with 27 parts; the rest by 0x9DC70.
+
+**Motions.** 0x95E80 + 8n, n = 0..471: {step list, u8 count, u8 flags},
+flags 1 to play once, else loop. A step is {key, u8 frames}; a key is 17
+float triples (0xCC bytes), the root's turns, the fifteen parts' X, Y and Z
+turns (0x10000 a turn) and the root's place, in the program or the data
+ROM. Motions 0x1C7..0x1D7 point at keys built in RAM and are left out,
+leaving 454. The animation record: +0 the motion's entry, +4 the step's,
++8 the motion, +0xC the step, +0x10 the frame in it, +0x14 its frames,
++0x18 done, +0x20 the speed, +0x24 + 12k the values, +0x114 + 12k the step
+a frame, +0x204 + 12k the target. 0x97020 starts a motion from all values
+0, 0x97080 without clearing them; 0x96EF0 starts a step (frames times the
+speed when over 1, delta = (key − value) / frames); 0x96D40, copied to RAM
+0x532E50 by the boot, is the tick: add the delta until the step's frames
+run out, then land on the key and go on, looping or holding at the end.
+The explorer starts a looping motion from its last key, as it looks the
+second time round.
+
+**Draw.** 0x9DC70: push; copro 0x87 with the heading, place and scale;
+0x2C for the root (triple 0's turns, triple 16 × the type's scale); then
+for each part 0x2C with its turns (truncated to shorts, Z, Y, X) and its
+bone, then 0x39 and the mesh triple to the geometrizer; 0x51 lights it.
+0x2C is M = M·T(bone)·Rz(−z)·Ry(−y)·Rx(−x). The shadow (0x9F2F0), the muzzle
+flash, the waist twist, the head turned to the camera, the wounds and the
+far lists are left out; the figures are drawn at scale 1.
+
+**Checked.** At MAME attract frame 1500, the five figures on screen (types
+18 and 20..23): every part relative to the hips within 2.8e-4 of MAME's.
+Motion 0x197's values match MAME's frame by frame within 4.9e-6, 248
+frames from a step's start and 188 from the loop's. The heading (0x87) and
+hand scale (0x2A) are not checked; the explorer sends 0 and 1. The figures
+open on set 6, the stage film's sheets, where the attract shows them.
 
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 
