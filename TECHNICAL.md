@@ -7860,16 +7860,71 @@ screen (the batter panels 1860 and 1872, 1515, 1604 and 2179) match it pixel
 for pixel. Blocks 0 to 7 (characters below 0x400) are not the allocator's;
 0xAF0BC to 0xAF208 write characters there, and were not followed.
 
-**Not done, and leads.** No player is assembled. Who fills 0x5D4CD0's
+**Not done, and leads.** The players are put together (see the next
+section). Who fills 0x5D4CD0's
 slots each frame (the crowd and flag clocks, the scoreboard by home team)
-was not followed, nor the special set-up of `Q1_SOTO`. If the game finds
-models by name (0xC2F40), the players' lists are likely name lists: look
-for callers of 0xC2F40 and of the stadium draws 0xA5380 and 0xA5510; the players are drawn with a
-matrix by 0xA5300 (from 0xCFB84 on in the attract). The game's set-up of a match is 0x99B60 and 0x99C60
+was not followed, nor the special set-up of `Q1_SOTO`. The game's set-up
+of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions and the sound program
 (`epr-19849.31`) were not looked at.
+
+### Dynamite Baseball 97's players (`js/dynabbplayers.js`)
+
+The Animation tab's players run the game's own routines in the i960 and
+copro machine of js/doa.js, as Air Walkers' do, rather than port them. All
+addresses are program ROM offsets; data is the data ROM (the XTRA window
+0x6000000 is data 0x1000000).
+
+**Set-up.** 0xCDBE0(obj, team, kit, player) dresses an object: +0x410 team,
++0x414 kit, +0x418 player, +0x434 the bones, +0x424 the player's record
+`0x1A1670[team*2 + kit] + player*0x1CC`. The table has 26 entries: twelve
+teams × two kits × 36 players, then team 12, whose kit 0 is the umpire and
+kit 1 the mascot (GALL), one each. The bones are the 17 × 12 bytes the boot
+(0xCD780) copies from `*0x1A0A60` to 0x5DB430; the umpire takes `*0x1A0A64`.
+With 0x5B9528 clear and a team and player in range, the player goes through
+the roster at data 0x1D00042 first; the explorer sets 0x5B9528 to 1 to see
+every record. The routine calls 0x9AFF0, the face (a halfword model at
+0x5DC100 + 12·slot, from face script 0x1A0B50 and the record's +0x1B8 and
++0x1C0), 0x849B0, the hands (0x5D6500 + 16·slot: a role byte, the gloved
+hands at +2 and +4), and 0xCDCD0(obj, 0, 0).
+
+**Roles.** 0xCDCD0(obj, g1, g2) sets +0x428 to the parts lists at
+0x1A0AA0 + 16·(g1·2 + g2) (near, mid and far pointers and a zero) and
++0x430 to `(*0x1A0A90)[g1]`. g1 is the role (0 fielder, 1 batter, 2
+pitcher, 3 catcher, named from the lists' models: B, P and C hands, YP and
+YC heads), g2 left-handed. The game calls it with g1 1 (0x2E8E0, 0x479FC)
+and 3 (0x2E898, 0x46CC4), g2 always 0; the Role picker offers all eight.
+
+**Skeleton.** 0x857E0(obj) writes 19 matrices at +4 + 0x30·k: the hips,
+joints 1..17 and the base (+0x364), from the place +0x3C4/+0x3C8/+0x3CC,
+heading +0x3D2, motion +0x3DC and frame +0x3E4. A motion is three tables
+indexed by its number, 1900 each: frame counts at data 0x1D52CA0 (0x28AC0
+holds the frame below the count), the hips' path at data 0x1D54A50 (a float
+triple a frame) and the frame records at data 0x1D56800 (0x62 bytes a
+frame). Without root travel the explorer puts the place at minus the path,
+so the player stays on the spot. Parents, measured from the matrices: 1, 9
+on the hips; 2, 3, 6 on 1; 4 on 3, 5 on 4; 7 on 6, 8 on 7; 10..13 a chain
+from 9, 14..17 another.
+
+**Draw.** 0xCEE20 picks a level of detail by +0x3E8; the near draw is
+0xCF7D0, whose team players (kind ≤ 11) go through 0xCF898. Joint 1 draws
++0x1A8, the list's first model and +0x1A4 (number and chest); joint 2 the
+face, the head and the neck (843); the hands go through 0x84D60 and 0x84DE0
+by the role byte (1 the list's model, 4, 15 and 16 the gloved ones, 14 by
+the motion's parity). The explorer reads each draw's model and matrix off
+the geometry FIFO and hangs it on the joint whose matrix it is. 0xA4B70
+stretches skin between joints: copro 0x7A on a joint matrix, then points
+into RAM 0x5DC2E0; the explorer's copro takes 0x7A as a rigid inverse and
+does not draw that skin, only the ROM meshes.
+
+**Checked.** Against MAME's work RAM at attract frame 1500 (objects 7 and
+9, roles batter and pitcher): every joint within 5.2e-4 of the game's,
+relative to the hips, and the same 22 models drawn. MAME's matrices at
++0x3E4 = n are those of frame n − 1 counted from 0. A body's textures are
+set 12 + team (stadium 1), as the attract's teams at 0x5B961C (home) and
+0x5B95F4 (visitor).
 
 ### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
@@ -7959,8 +8014,9 @@ set-up gave it. A Stages tab would have to run that program (js/sharc.js)
 on the scene set-up's uploads, or find the world data it walks. Task
 routines run from 0x318C0 (the list at RAM 0x50A03C) draw the enemies and
 vehicles, through the sender at 0x14C4.
-Gunblade NY has no fighters or motions. Its enemies and vehicles move by
-script, and that script is not read. Cells: see [Gunblade NY's
+Its people are posed from a motion table (see [the
+figures](#gunblade-nys-figures-jsgunbladeplayersjs)); what places and moves
+them in a scene, and its vehicles, are not read. Cells: see [Gunblade NY's
 cells](#gunblade-nys-cells-jscellsjs-jsstackcellsjs). The music is not
 looked at.
 
@@ -8012,6 +8068,61 @@ scene's cell is covered by all nine scenes alike; the ranking (`rankCGs`
 goes the shared way when `dirs` is set) picks among them by seams, and some
 of the stage briefings in five languages open on another stage's scene.
 Cells 418 and 419 are covered by no CG in full.
+
+### Gunblade NY's figures (`js/gunbladeplayers.js`)
+
+Every person the game shows (soldiers, gangsters, hostages) is a figure of
+fifteen parts, posed from one motion table and drawn by one unrolled
+routine. The format is not Virtual-On's: whole-body key poses in floats,
+moved between in straight lines, and copro command 0x2C rather than VON's
+0x2F. The Animation tab runs the game's draw on js/i960.js with a small
+copro of its own.
+
+**Objects.** A figure object (0x502340 is one of the attract's): +0x00 the
+place, +0x0E the heading (the draw sends it less 0x8000), +0x4C the muzzle
+flash, +0x58 the distance (part list 0 below 150, 1 below 300, else 2 or
+3; the object at `*0x508BF0` always list 0), +0x60 the animation record,
++0x90 24 for a waist twist, +0x94 the type, +0x98 the kind (its draw, from
+the table at 0x24E30, 16 bytes a kind), +0xB8 the scale (1.2 on the
+attract's), +0xC0 the shadow's distance, +0x118 the hand's scale (copro
+0x2A), +0x158 + 0x3C·l the part lists (word k part k's mesh triple).
+0xA2E20 swaps wounded meshes in (tables 0xA2DD0, 0xA2DE0, 0xA2E00).
+
+**Types.** 0x9D670 + 8·type: {meshes, skeleton}, 120 types (67 empty);
+meshes + 12k is part k's mesh triple (part 0 unused), skeleton + 12k its
+bone. 0x9DB10 + 4·type scales the root's place (0.81 for types 18..24).
+Types 32 and 33 are drawn by 0xA3140 with 27 parts; the rest by 0x9DC70.
+
+**Motions.** 0x95E80 + 8n, n = 0..471: {step list, u8 count, u8 flags},
+flags 1 to play once, else loop. A step is {key, u8 frames}; a key is 17
+float triples (0xCC bytes), the root's turns, the fifteen parts' X, Y and Z
+turns (0x10000 a turn) and the root's place, in the program or the data
+ROM. Motions 0x1C7..0x1D7 point at keys built in RAM and are left out,
+leaving 454. The animation record: +0 the motion's entry, +4 the step's,
++8 the motion, +0xC the step, +0x10 the frame in it, +0x14 its frames,
++0x18 done, +0x20 the speed, +0x24 + 12k the values, +0x114 + 12k the step
+a frame, +0x204 + 12k the target. 0x97020 starts a motion from all values
+0, 0x97080 without clearing them; 0x96EF0 starts a step (frames times the
+speed when over 1, delta = (key − value) / frames); 0x96D40, copied to RAM
+0x532E50 by the boot, is the tick: add the delta until the step's frames
+run out, then land on the key and go on, looping or holding at the end.
+The explorer starts a looping motion from its last key, as it looks the
+second time round.
+
+**Draw.** 0x9DC70: push; copro 0x87 with the heading, place and scale;
+0x2C for the root (triple 0's turns, triple 16 × the type's scale); then
+for each part 0x2C with its turns (truncated to shorts, Z, Y, X) and its
+bone, then 0x39 and the mesh triple to the geometrizer; 0x51 lights it.
+0x2C is M = M·T(bone)·Rz(−z)·Ry(−y)·Rx(−x). The shadow (0x9F2F0), the muzzle
+flash, the waist twist, the head turned to the camera, the wounds and the
+far lists are left out; the figures are drawn at scale 1.
+
+**Checked.** At MAME attract frame 1500, the five figures on screen (types
+18 and 20..23): every part relative to the hips within 2.8e-4 of MAME's.
+Motion 0x197's values match MAME's frame by frame within 4.9e-6, 248
+frames from a step's start and 188 from the loop's. The heading (0x87) and
+hand scale (0x2A) are not checked; the explorer sends 0 and 1. The figures
+open on set 6, the stage film's sheets, where the attract shows them.
 
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 
@@ -8158,6 +8269,23 @@ The other files were not loaded in the attract.
 0x5771FC, 0x577668 and 0x577C20, file 12 at 0x57D28C, also loaded by
 `0x54CBC8` and `0x54D258`); the other offsets are not read. `0x54F50`
 animates colour 15 of group 0 (from frame 150); it is not modelled.
+
+**No motions.** Zero Gunner has no motion tables (looked for in #1887).
+These addresses are the program's copy in RAM, 0x500000 on. A
+helicopter, its rotor, a gunship and its turrets are a tree of objects:
+a pool of 128 of 0x200 bytes at 0x5025B0 (0x541780 clears it, 0x5418E0
+hands one out), the root at 0x210000, each object's +4 its parent, +8 its
+first child, +0xC its next sibling, +0x84..+0x8C its place and
++0x90..+0x98 its angles on its parent's (composed by op 0x31, 0x55B610).
+Each object runs its own byte-code script (+0x20, run by 0x556E30, ops
+from the table at 0x55D4E0; a negative word waits that many frames), in
+the program at about 0x574000..0x58A000: op 0x27 sets an angle, op 0x26 a
+turn a frame (the rotor, 0.023 at 0x578A34), and others ease a part to a
+target the script gives. None of the op handlers in 0x55A900..0x55F800
+reads a table from the data ROM; the one read near the draws,
+0x2078700[model] (0x40 bytes a model, to the copro), is bounds, not
+animation. An Animation tab would have to run the objects and their
+scripts frame by frame, not play a motion.
 
 ### Sky Target (`js/texture.js`, `js/colors.js`)
 
@@ -8677,6 +8805,86 @@ characters there; find the caller of 0xA88E0 that passes them. The bytes
 after each run's end look like more scripts with characters from another
 bank.
 
+### Top Skater's skaters (`js/topskatrplayers.js`)
+
+The Animation tab runs the game's own steps, as its motion viewer
+(0x6C1E0, 0x6CADC) does, on js/doa.js's i960 machine: the load, the
+animator, the skeleton, the slots and the draw. Copro command numbers below
+are Top Skater's own.
+
+**Motions.** 718 pointers at 0xC0038 (index 0 null) into the data ROM; the
+game finds one as `0x5019DC[(id >> 10) & 15][id & 0x3FF]`, bank 0 only. A
+motion is three halfwords, its first and last frame and a heading (0x10000
+a turn), 15 group masks (bytes 6..0x14), then key streams from byte 22. A
+key is a time halfword (the frame through the table at 0x57E490, its low
+bits the type: hold, straight, or Hermite through copro 71) and a value
+halfword (an exponent through 0x582490 and 11 bits of mantissa); 0x34550
+builds both tables, and RAM 0x500A40 = {1, 2, 3, 0} maps the types.
+0x339D0(motion, state) loads one into a state of 0x1FE0 bytes (+0x1D80
+first frame, +0x1D84 last, +0x1D88 heading, +0x1D8C the length in
+seconds); 0x343D0(state, t in seconds, pose) brings every channel to t. A
+frame is 1/60 s.
+
+**Skeleton.** `0x6D570[k]` = {the part list in RAM, the skeleton}, the
+skeleton 0xA0 bytes of bone offsets and lengths at 0x99E80 + 0xA0k
+(thigh 4.6045, shin 4.5216, upper arm 2.3551, forearm 2.4598, head
+3.7994). 0x52DD0(pose, skeleton, out) turns the pose into a quaternion and
+a place a bone at 0x5CA900 + 572n; a limb is FK (mode bits 1: copro 59,
+Euler turns 58, the hinge 49) or IK (2: 60, an aim at the end point 72,
+the bend from the bone lengths 73). 0x537B0(out, skeleton, 0) makes 19
+slot matrices at 0x58C540 + 48n, skater-local.
+
+**Draw.** 0x565D0(_, list) draws 18 parts: the board first (0x545C0) from
+slot 0, scaled by the float at 0x5CE8B8 (1.0; zero leaves the board's
+matrix zero), then the hips, legs, chest, head and arms from slot 2 on;
+the shins and forearms (`j02`) turn a quarter about Z and move back a
+bone first. The part lists are at 0xC8AB8 + 0x50k (the boot copies them
+to 0x509920 + 0x50k): 18 model records of 16 bytes, copies of the model
+table's, then +0x48 a record for 0x6F4C0. 0xC8A68 repeats skater 5;
+0xC8D38 is the shadow (`skater_kage`). Parents, measured as the frame
+that holds each part's origin still through 8 motions: the board and the
+hips are roots; legs, chest and head off the hips, the arms off the
+chest.
+
+**Board sides.** 0x545C0 turns (0, 1, 0) (0x54480) by the board's matrix
+(copro 9, 60, 36) and, when the result's depth is over 0.2 (0x3E4CCCCD),
+draws the record at RAM 0x500DF0 + 4k instead of the list's: `s1_ita_ura`
+.. `s6_ita_ura` (models 203..208), the undersides; skaters 7 and 8 name
+their one board again (128, 146). The boot copies ROM 0xBFF88 there with
+the rest of the data section (the same 0x440E68 as the part lists). Both
+sides are whole boards with the same bounds, so the viewer shows one, by
+the same test on its own camera. Left empty, the table is what the bus
+showed as the "garbled" board of motions 125, 225 and 236.
+
+**Second matrix.** Top Skater's geometrizer program (m2-hle2 420e7ba,
+after m2emulator's `tops` table) keeps a second matrix: 0x1B writes its 12
+words, 0x1C copies the matrix into it and reads nothing, and it outlives
+the object. A point whose x word has bit 0 set is drawn by it, which skins
+the seams: the chest's waist ring goes by the hips' slot turned half about
+Z, and skaters 2, 3 and 6's ankle rings, on their shins (models 29/30,
+48/49, 103/104), by the foot's slot · copro 46 (16384, a quarter turn
+about Z) · copro 43 (−`[[0x5D52B4] + 0x2C]`, the shin length; 0x54EB8 left,
+0x55138 right). 0x5D52B4 is the skeleton the skater pick (0x6D5B0) stores
+with 0x5CE94C (the index) and 0x5D52B0 (the list). The heads carry bit-0
+points too, under a second matrix equal to their own. These 0x1B writes
+were the four stray singles between the legs and the chest. The viewer
+lays a bent part's points out again in its own frame each frame.
+
+**Checked.** At MAME attract frame 3000 (skater 2): 0x52DD0 on MAME's pose
+within 4e-6 of its out buffer; the slots within 5e-6 but for one arm
+(slots 11..14, within 3.3e-3 of places near 10); the animator gives
+motions 553 and 189's states in MAME's RAM exactly; the draw's 279 copro
+results within 6.6e-5, with the same 18 models. Every motion's first and
+last frame on all eight skaters (11488 poses) draws with no unknown copro
+command, and every bent point lands on a point of the part it joins, but
+one of skater 8's waist ring, 0.058 off the hips' ring in the models
+themselves. Copro 47 and 49 (turns about X and Z in radians) and 59 (the turn
+reset, place kept) are read from the code; that frame doesn't send them.
+The attract's spring on
+some channels after the animator (0x6F8C0) and the motion's heading are
+left out. The sponsor models (151..186) are in no part list. The skaters
+open on set 1, the attract's.
+
 ### Behind Enemy Lines (`js/bel.js`)
 
 Sega / EPL Productions' 1997 game on Model 2C (MAME's `bel`). Its own
@@ -8774,6 +8982,62 @@ saw no writes). The "scene pointers" at 0x2986F60 are floats, not pointers
 and 0x5FA114). A play-through in MAME (coin, start) is needed to see a
 mission's scenery being drawn; on this machine it did not reach a snapshot
 in ten minutes, so the missions' scenery is still to be found.
+
+### Behind Enemy Lines' soldiers (`js/belplayers.js`)
+
+The Animation tab's soldiers are posed by the game's own draw, run on
+js/i960.js with js/doa.js's copro (its command set is DOA's, unchanged).
+There are no creatures: no named object is an animal with a skeleton, and
+the cow `o_hilary` (record 2883) is one rigid model. The soldiers' models
+have no names of their own: they are records 477..770, which the object
+directory files under `o_fireball_01`.
+
+**Actors.** 136 records of 0x1A0 bytes at data 0x2BDDF10..0x2BEBC10, each
+its own compiled unit followed by its SCCS strings (`vars.h`, `event.h`):
++0x04 + 8k the motion slot k plays (k = 0..10), +0x60 + 8k part k's near
+and far model (model table records, 0x28B7C78 + 20i), +0x100 the part
+count, 16. The parts are hips, chest, head, upper arm, forearm and hand
+right, weapon, thigh, shin and foot right, then the left arm and leg; the
+sides were read from a rifle pose. A uniform u (1..23) is records
+493 + 10(u − 1) on; feet and the left hand are 733, the heads 739 or 741,
+the weapons 748, 738 or 745. Only the heads and hands have far models of
+their own. The bodies are the 58 distinct near sets, each with the actors
+that use it; its lead motions are theirs. A live actor in work RAM has
++0x1C/+0x1E/+0x20 its turns X/Y/Z, +0x24 its place, +0x38 the ROM
+record, +0x60 its frame (a float, in rows), +0x6E its slot, and bit 9 of
++0 means no shadow.
+
+**Motions.** 0x40-byte records, 83 distinct among the slots, at data
+0x29DAD30..0x2BDDE50: +0 the rows, +4 an event list (+0xC its count, not
+decoded), +8 the rows less one, +0x10 the rate (0x20 or 0x40: rows a tick
+× 64), +0x14 a turn and +0x18 a step (x y z) that 0x52B54 adds to the
+actor's heading and place when the motion ends. A row is 16 parts of
+`{short rx, ry, rz, x, y, z}`, the angles 0x10000 to the turn and the
+place over 2048. The hips' place carries the travel. Slot 9 holds the
+rate-0x40 falls; what picks a slot was not traced, and the motions have
+no names.
+
+**Draw.** 0x51C20(actor, motion, frame), from 0x52C60 and 0x52D0C: push,
+translate to the place, turn Y, X and Z by the actor's turns; the far list
+(+0x64) when the camera (`*0x5A7E84 + 0x24`) is 18 or more away (0x51EBC),
+else the near one. Near, at rate below 0x40, it blends: the midpoint of
+two rows between 0.4 and 0.6 of a row (angles as 16-bit), else row +
+fraction × (next − row). Unless bit 9, the shadow (record 2260) under the
+hips. Each part: translate (x y z)/2048, turn Z by −rz, Y by ry, X by rx,
+the model (0x11EE0), pop: every part hangs from the actor, none from
+another. The head is drawn again when 0x5FA108 > 0.
+
+**Checked.** MAME's attract gameplay (scene 2) with breakpoints at
+0x51C20 and 0x11EE0 and a write watchpoint on the geometrizer port
+0x8040B0, enabled only inside the draw, gives the board's own matrices.
+Eight calls at frames 4200..4202 and 4500..4502 (three bodies, three
+motions, near and far, whole and half rows): with the camera taken out at
+the hips, all 16 parts match to 1.8e-6 in turn and 8e-6 in place. The
+soldiers' tiles are all on sheet 1 (y ≥ 1024), scene 2's bank 0x2400000,
+so a body opens on set 6; whether scenes 0 and 1's bank 0x2C00000 has them
+was not checked. The `*_data.h` rigid tracks (falling trees, train and
+bridge deaths) and the `*_model_swap.h` flipbooks (`boydley_death`,
+records 887..966) are not characters and not read.
 
 ### Desert Tank (`js/games.js`, `js/desert.js`)
 

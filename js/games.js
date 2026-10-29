@@ -7460,13 +7460,14 @@ const dynabb97 = {
         defaultSet: 12,
     },
     colors: { dynabb: true, solid: true },
+    /* The players: the game's set-up, skeleton and draw run (js/dynabbplayers.js). */
+    rig: { kind: 'dynabb' },
     /* The ballparks: a camera shot's group of three lists, one a stadium,
      * at 0x1A0C30 (js/dynabb.js). */
     stageTable: { dynabb: { table: 0x1a0c30, groups: 54, stadiums: 3 }, flat: true },
     /* The tile chip's pictures: the record table at data 0xBB0000 and the
      * program's byte per record at 0xAF680 (js/dynabbcells.js). */
     cells: { slots: { table: 0x02bb0000, count: 0x938, kinds: 0xaf680 }, charBytes: 0x80000, colorxlat: true },
-    /* No player or motion data is read yet. */
     /* CRX_drv 3.2.8's board: 31 songs in group 0x10, the driver listening
      * 3 s after the reset. The zips name the sample chips by other numbers;
      * their CRCs find them. */
@@ -7479,7 +7480,7 @@ const dynabb97 = {
         songs: [0x10, 31],
         warmup: 4,
     }),
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */
@@ -7607,7 +7608,6 @@ const gunblade = {
         programAt0: true,
         colorxlat: true,
     },
-    /* No stage or object record is read yet. */
     /* Two 4 MB sample chips, 23 songs in group 0x10; the attract sends
      * AE 10 0F. The driver listens from 14 s on. */
     sound: driverSongs({
@@ -7617,7 +7617,10 @@ const gunblade = {
         songs: [0x10, 23],
         warmup: 14,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+    /* The figures: the motion table played, the game's draw run
+     * (js/gunbladeplayers.js). No stage or object record is read yet. */
+    rig: { kind: 'gunblade' },
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /*
@@ -8266,7 +8269,9 @@ const topskatr = {
         programAt0: true,
         colorxlat: true,
     },
-    features: { stages: true, characters: false, motions: false, bodies: false, cells: true },
+    /* The skaters: the game's animator, skeleton and draw run (js/topskatrplayers.js). */
+    rig: { kind: 'topskatr' },
+    features: { stages: true, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /*
@@ -8353,7 +8358,9 @@ const bel = {
         songs: [0x10, 24],
         warmup: 13,
     }),
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
+    /* The soldiers: actor records posed by the game's draw (js/belplayers.js). */
+    rig: { kind: 'bel' },
+    features: { stages: false, characters: false, motions: true, bodies: true, cells: true },
 };
 
 /*

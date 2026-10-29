@@ -32,14 +32,14 @@ Sega's *INDY 500* has its models, its courses and its cells — see [INDY 500](#
 *Sega Touring Car Championship* has its models, its courses and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models, courses and cells — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
-Baseball 97* has its models, ballparks and cells — see [Dynamite Baseball 97](#dynamite-baseball-97).
-*Gunblade NY* has its models and its cells — see [Gunblade NY](#gunblade-ny).
+Baseball 97* has its models, ballparks, cells and players — see [Dynamite Baseball 97](#dynamite-baseball-97).
+*Gunblade NY* has its models, cells and figures — see [Gunblade NY](#gunblade-ny).
 Psikyo's *Zero Gunner* has its models, stages and cells — see [Zero Gunner](#zero-gunner).
 *Sky Target* has its models, stages and cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models, courses and cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models, its three courses and its cells — see [Top Skater](#top-skater).
-*Behind Enemy Lines* has its models and its cells — see [Behind Enemy Lines](#behind-enemy-lines).
+*Top Skater* has its models, its three courses, its cells and its skaters — see [Top Skater](#top-skater).
+*Behind Enemy Lines* has its models, cells and soldiers — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
 
@@ -1504,8 +1504,14 @@ picture's tiles only when it draws it, wherever it finds room; the tab lays
 each set of tiles from the start, which shows the same picture. Those
 checked against MAME's attract are the same pixel for pixel.
 
-There are no players put together and no motions yet. See
-[TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs).
+The **Animation** tab puts the players together with the game's own
+routines: 866 bodies (each team's 36 players in both kits, the umpire and
+the mascot), the 1900 motions, and a **Role** picker that swaps in the
+batter's, pitcher's or catcher's hands and head. The skin the game
+stretches between joints is not drawn.
+
+See [TECHNICAL.md](TECHNICAL.md#dynamite-baseball-97-jsdynabbjs) and
+[the players](TECHNICAL.md#dynamite-baseball-97s-players-jsdynabbplayersjs).
 
 ## Gunblade NY
 
@@ -1530,11 +1536,18 @@ scene's colours and characters copied over it. The warning screen, the
 attract and the scene after it match MAME's tile chip. Some briefings open
 on another stage's CG, as no table says which stage draws them.
 
-There is no Stages tab, no characters and no motions yet. The
-city is not sent as objects by the game's program: its coprocessor program
-draws it, which the explorer does not run for this game. See
-[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs) and
-[Gunblade NY's cells](TECHNICAL.md#gunblade-nys-cells-jscellsjs-jsstackcellsjs).
+The **Animation** tab has the street figures: 119 types of soldier,
+gangster and hostage, fifteen parts each, and the 454 motions of the
+game's one motion table, key poses it moves between in straight lines.
+It runs the game's own draw; the parts match MAME's to 3e-4 and the
+playback matches MAME's frame by frame. Shadows, muzzle flashes, wounds
+and the far models are not shown, and the motions have no names.
+
+There is no Stages tab yet. The city is not sent as objects by the
+game's program: its coprocessor program draws it, which the explorer does not run for this game. See
+[TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs),
+[Gunblade NY's cells](TECHNICAL.md#gunblade-nys-cells-jscellsjs-jsstackcellsjs) and
+[the figures](TECHNICAL.md#gunblade-nys-figures-jsgunbladeplayersjs).
 
 ## Zero Gunner
 
@@ -1748,8 +1761,17 @@ match MAME's tile RAM pixel for pixel with that CG; two (259 and 262) are
 drawn with the last CG instead, so pick CG 3 (0x2700000) for them in the
 second picker.
 
-There are no characters and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs).
+The **Animation** tab plays all 718 of the game's motions on any of the
+eight skaters, posed by the game's own animator, skeleton and draw: the
+skeleton matches MAME's attract to 4e-6, with the same 18 models. A frame
+is 1/60 s. The seams bend as the game's skinning bends them, and the
+board shows its underside when it faces away from the camera, as the
+game draws it. The spring the attract adds to some joints and the motions'
+headings are left out, and the motions have no names.
+
+There is no music yet. See
+[TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs) and
+[the skaters](TECHNICAL.md#top-skaters-skaters-jstopskatrplayersjs).
 
 ## Behind Enemy Lines
 
@@ -1777,10 +1799,18 @@ fits several CGs; pick the one the screen loads in the second picker. The
 attract's backdrops and HUD pieces match MAME's tile RAM pixel for pixel
 with their CG.
 
+The **Animation** tab has the soldiers: 58 bodies (the 23 uniforms with
+their heads and weapons, each sixteen parts with a near and a far model)
+and their 83 motions: aiming, walking, running, falls. It runs the game's
+own draw for every frame, blending between rows as the game does, and
+matches MAME's copro output to 1e-6. The motions have no names in the
+game. There are no creatures to animate: the cow is one rigid model.
+
 There is no Stages tab yet: the attract draws its scenes as whole models
 (the jungle road is `o_intro_hummer`), and where a mission's scenery is
-placed is not found yet. There are no characters and no music yet. See
-[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs).
+placed is not found yet. There is no music yet. See
+[TECHNICAL.md](TECHNICAL.md#behind-enemy-lines-jsbeljs) and
+[the soldiers](TECHNICAL.md#behind-enemy-lines-soldiers-jsbelplayersjs).
 
 ## Desert Tank
 
