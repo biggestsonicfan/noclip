@@ -130,10 +130,12 @@ function readListedSongs(rom, L) {
     }
     if (L.songs) {
         const view = rom.mainCpuView;
-        return Array.from({ length: L.count }, (_, index) => ({
-            label: nameAt(rom.maincpu, view.getUint32(L.names + index * 4, true)),
-            index, code: (L.status << 16) | (L.middle << 8) | (index + 1),
-        }));
+        // L.where[index], when given, is where the game plays the song.
+        return Array.from({ length: L.count }, (_, index) => {
+            const name = nameAt(rom.maincpu, view.getUint32(L.names + index * 4, true));
+            const where = L.where?.[index];
+            return { label: where ? `${name}: ${where}` : name, index, code: (L.status << 16) | (L.middle << 8) | (index + 1) };
+        });
     }
     const view = rom.mainCpuView;
     const bytes = rom.maincpu;

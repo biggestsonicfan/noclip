@@ -1346,7 +1346,9 @@ pictures, are named nowhere in the program and are marked unused. The
 attract's messages match MAME's pixel for pixel.
 
 **music**, on the Models tab, plays the game's 17 songs, by the names the
-program's debug list gives them (SoHigh, DontDropMe, SegaBGM1...). They are
+program's debug list gives them (SoHigh, DontDropMe, SegaBGM1...), each
+labelled with where the game plays it: the attract, the selects, and which
+course with which music select or game mode. They are
 MPEG audio on the game's Digital Sound Board, and the page plays them the way
 that board's program does. See [The Digital Sound
 Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
@@ -1618,7 +1620,9 @@ second picker.
 
 **music**, on the Models tab, plays the game's 12 songs, by the names its
 sound test gives them (EASY_BGM_A, ADV_BGM, HIDE_BGM...), from its Digital
-Sound Board's MPEG ROMs. See [The Digital Sound
+Sound Board's MPEG ROMs, each labelled with where the game plays it. Every
+race plays the next of the three HARD songs, whatever the course; the EASY
+songs and HIDE_BGM are only in the sound test. See [The Digital Sound
 Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
 
 There is no Stages tab and no characters yet. See

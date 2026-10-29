@@ -6935,6 +6935,12 @@ const stcc = {
      * list of sound commands (pointers at 0xFA80) names them: Volume,
      * FadeOut and Stop (AF 6F 00), then the board's 17 songs in its order,
      * SoHigh to GameOver. Three pairs share a stream, one song a channel.
+     * `where` is where the i960 sends each (TECHNICAL.md): the attract's
+     * four (0x26A0), the course select's (0x3960) and the car and music
+     * select's (0x4A00); a championship race's song is row 0x4100 + 16 x
+     * music select (AVEX TRAX, SEGA SOUND, TRANCE; the SS courses default
+     * to row 0) at the race number, Novice to Omake, and a Grand Prix
+     * race's is 0x5F00[course].
      */
     sound: {
         board: 'dsbz80',
@@ -6942,9 +6948,22 @@ const stcc = {
         samples: [['mpr-19262.57s', 0x922aed7a], ['mpr-19263.58s', 0xa256f4cd],
             ['mpr-19264.59s', 0xb6c51d0f], ['mpr-19265.60s', 0x7d98700a]],
         music: {
-            list: { songs: true, status: 0xaf, middle: 0x6f, count: 17, names: 0xfb28 },
+            list: {
+                songs: true, status: 0xaf, middle: 0x6f, count: 17, names: 0xfb28,
+                where: [
+                    'attract, AVEX Novice, GP Novice', 'attract, AVEX Expert, GP Expert',
+                    'attract, AVEX Intermediate, GP Intermediate',
+                    'SEGA Intermediate, SS Intermediate SS, GP Intermediate SS', 'SEGA Omake',
+                    'car and music select, SEGA Expert, SS Expert SS', 'TRANCE Novice, SS Novice SS, GP Novice SS',
+                    'SEGA Novice', 'AVEX Omake, TRANCE Omake, GP Omake', 'TRANCE Expert, SS Omake, GP Expert SS',
+                    'course select', 'after the last race', '', 'TRANCE Intermediate', '', '', 'game over',
+                ],
+            },
             own: 'none',
-            hint: 'The Digital Sound Board\'s songs, by the names the program\'s debug list of sound commands gives them',
+            hint: 'The Digital Sound Board\'s songs, by the names the program\'s debug list of sound commands gives them, '
+                + 'and where the game plays them. AVEX, SEGA and TRANCE: a championship race with that music select, '
+                + 'on that course. SS: the championship after picking an SS course, with its own default music. '
+                + 'GP: the one race of the GRAND PRIX game mode (a test menu setting). Interlude1 to 3 are not played anywhere read yet',
         },
     },
     features: { stages: false, characters: false, motions: false },
@@ -7902,7 +7921,12 @@ const topskatr = {
      * (js/sound/dsb.js), sent AE 10 and the song number; the attract plays
      * song 4. The i960's sound test names them, its pointers at 0xB1300:
      * OFFCODE (0), then the board's 12 songs in its order. The three EASY
-     * and three HARD songs are one track each, started a way in.
+     * and three HARD songs are one track each, started a way in. Every race
+     * starts the next HARD song (0x3B1D0 -> 0xB2210: 0xB220B[0x509E78],
+     * which counts 0, 1, 2 round), whatever the course; the EASY songs and
+     * HIDE_BGM are only in the sound test. SELECT_BGM is the course
+     * select's (0x3A694), NAME_BGM the name entry's (0x3F328), and the
+     * ending plays ENDING_A if 0x5830A4 is 1, else ENDING_B (0x3F1F4).
      */
     sound: {
         board: 'dsb2',
@@ -7911,9 +7935,17 @@ const topskatr = {
             ['mpr-19749.22s', 0x842ca1eb], ['mpr-19750.24s', 0xcd95d0bf]],
         sampleChip: 0x400000,
         music: {
-            list: { songs: true, status: 0xae, middle: 0x10, count: 12, names: 0xb1304 },
+            list: {
+                songs: true, status: 0xae, middle: 0x10, count: 12, names: 0xb1304,
+                where: [
+                    'sound test only', 'sound test only', 'sound test only', 'attract', 'course select',
+                    'name entry', 'races 1, 4, 7...', 'races 2, 5, 8...', 'races 3, 6, 9...',
+                    'ending', 'ending', 'sound test only',
+                ],
+            },
             own: 'none',
-            hint: 'The Digital Sound Board\'s songs, by the names the program\'s sound test gives them',
+            hint: 'The Digital Sound Board\'s songs, by the names the program\'s sound test gives them, and where the game plays them. '
+                + 'The HARD songs take turns, one a race whatever the course, counted on from game to game',
         },
     },
     features: { stages: false, characters: false, motions: false, bodies: false, cells: true },
