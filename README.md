@@ -26,6 +26,7 @@ its cells and the attract's animations — see [Power Sled](#power-sled).
 motions — see [Last Bronx](#last-bronx).
 Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Cop 2* has its models — see [Virtua Cop 2](#virtua-cop-2).
+*Virtua Striker* has its models — see [Virtua Striker](#virtua-striker).
 
 Three views, and a fourth for the 2D art:
 
@@ -1186,6 +1187,25 @@ and 2 were not reached in MAME.
 
 There is no Stages tab, no characters, no motions, no cells and no music yet.
 See [TECHNICAL.md](TECHNICAL.md#virtua-cop-2-jsgamesjs-jscolorsjs).
+
+## Virtua Striker
+
+`vstriker.zip` is Revision A. For the first release, give `vstrikro.zip`
+together with `vstriker.zip`, which holds the data, polygon and texture ROMs
+the two share. The **Models** tab has all 1537 entries of the model table,
+with the textures, palette and colour tables the boot builds for them. The
+game is a Model 2B title, and it uploads its texture bank the way Daytona USA
+does.
+
+noclip runs the game's own colour, luma and texture routines instead of
+porting them. The **Cabinet** select is the game's MONITOR setting:
+PROJECTER or CRT, which is the default on a fresh board. The two settings
+build different colour tables. With either setting, the sheets, the palette,
+luma and the colour tables match MAME's at boot byte for byte.
+
+The kits, the per-team textures and the stadium are set up in play, from
+the team tables, so the models show the boot's look. There is no Stages
+tab, no motions, no cells and no music yet.
 
 ## Running it
 

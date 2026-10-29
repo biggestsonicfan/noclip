@@ -9656,6 +9656,51 @@ start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
 SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
 pair 18520/18521) is not read by anything here.
 
+### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
+
+Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
+keeps Daytona USA's table layouts. The model table is 1537 entries of 16
+bytes at data 0x180800 ({mesh, uv, material}). The material table is 31
+pairs at data 0x825E30, sent by the boot at 0x8448..0x8458 (via 0x3F68). The
+light (0, -0.867, -0.498) is fixed, and it goes out every frame at 0x42A4
+(function 0xA through the copro port 0x880000).
+
+The colour code is not Daytona's, so noclip does not port it. `colors.i960`
+runs the boot's own routines in `js/i960.js`, against the program, the data
+ROM, backup RAM 0x1D00000 and the 2B luma at 0x11400000. Its tables come out
+whole, palette included (`palette.layout: 'i960'`):
+
+| Rev A | first release | what it does |
+|---|---|---|
+| 0x9210 | 0x93E0 | palettes 0x1800000/0x1801000, face palette 0x1802000, colorxlat 0x1810000 (called from 0x842C) |
+| 0x806C | 0x811C | luma 0x11400000 |
+| 0x9E60 | 0xA050 | bank 0x2500000 to sheet 1, then the mip runs from data 0x82E594 (Daytona's upload) |
+| 0x9F70 | 0xA160 | the texture builder that runs after the upload |
+| 0x5D4210 | 0x5D4020 | RAM copy of MONITOR |
+
+Backup byte 0x1D0001A is MONITOR (0 PROJECTER, 1 CRT; the menu is at 0x745A0
+and its strings at 0x283C7C8). The profile writes it and its RAM copy from
+the Cabinet select before the run. 0x1D0001B is COUNTRY (0 USA, 1 JPN, 2 EXP;
+1 on a fresh board). The boot passes it to 0x9F70 in g0: with 1, the routine
+averages a 32x64-texel patch of sheet 1 down to half size on sheet 0
+(sheet 0 0xC8130..). Any other value takes the 0xA104 path, which spreads
+sheet 0 out into sheet 1. `texture.raw.run` always calls it with g0 = 1, so
+noclip shows the JPN board.
+
+**Checked against MAME.** I dumped `vstriker` at frame 300 with a fresh NVRAM
+(CRT) and with MONITOR held at 0 (PROJECTER). Both sheets and their mirrors,
+colorxlat, luma and the face palette match their Cabinet setting byte for
+byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
+24576 entries. Without 0x9F70, 144 halfwords of sheet 0 differed.
+`vstrikero` (CRT) matches as well.
+
+**Leads.** At frames 900 and 1800, play has changed these:
+- The team kits: 0xA708 writes face palette entries 0..178.
+- The per-team texture rectangles: 0x9D10/0x9D58 write sheet 0 0x100000..0x13FFFF, and 0x9DF8/0x9E04 write 0x113C0000.. and 0x111E0200... They are called from 0x9C30, with the tables at data 0x82E560, 0x82E4A0 and 0x82E4B8.
+- A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
+
+There are no model names in ROM.
+
 ## Animation
 
 Motion playback is implemented, and checked against the board — see

@@ -506,25 +506,47 @@ function buildVonColorxlat(rom, field, robots) {
  * came out byte for byte as m2-hle2's board holds them in the attract mode,
  * and neither changes from course to course. The routines take about 220,000
  * instructions between them, once per ROM set.
+ *
+ * Virtua Striker (Model 2B) runs from its program ROM, so there is no `copy`.
+ * Its routines read tables out of the data ROM (`data`, mapped at 0x2000000)
+ * and the test menu's MONITOR setting out of backup RAM 0x1D00000, which the
+ * boot also copies into work RAM: `settings` are the addresses that get the
+ * panel's cabinet choice (0 PROJECTER, 1 CRT). Its luma RAM is the 2B board's,
+ * a byte every halfword from 0x11400000 (`board: '2b'`), which is the layout a
+ * dump has, so it is stored as it is written. The palette RAM the routines
+ * leave is kept too: the face palette is read out of it (i960Palette).
  */
 const COLOR_RAM = 0x01800000;
 const COLOR_RAM_BYTES = 0x20000;
 const LUMA_RAM = 0x12800000;
+const LUMA_RAM_2B = 0x11400000;
+const BACKUP_RAM = 0x01d00000;
+const BACKUP_BYTES = 0x4000;
 function runColorRoutines(rom) {
-    if (rom.i960Colors) return rom.i960Colors;
     const C = rom.game.colors.i960;
+    const setting = rom.cabinet ?? rom.game.colors.cabinet ?? 0;
+    rom.i960Colors ??= new Map();
+    if (rom.i960Colors.has(setting)) return rom.i960Colors.get(setting);
     const prog = rom.maincpu;
-    const [from, to, at] = C.copy;
     const ram = new Uint8Array(0x100000);
-    ram.set(prog.subarray(from, to), at - 0x500000);
+    if (C.copy) {
+        const [from, to, at] = C.copy;
+        ram.set(prog.subarray(from, to), at - 0x500000);
+    }
     const work = new Uint8Array(0x40000);
     const pal = new Uint8Array(COLOR_RAM_BYTES);
     const luma = new Uint8Array(LUMA_BYTES);
+    const backup = new Uint8Array(BACKUP_BYTES);
+    const data = C.data ? rom.mainData : null;
+    const b2 = C.board === '2b';
     const where = (a) => {
         if (a < prog.length) return [prog, a];
         if (a >= 0x200000 && a < 0x240000) return [work, a - 0x200000];
         if (a >= 0x500000 && a < 0x600000) return [ram, a - 0x500000];
         if (a >= COLOR_RAM && a < COLOR_RAM + COLOR_RAM_BYTES) return [pal, a - COLOR_RAM];
+        if (a >= BACKUP_RAM && a < BACKUP_RAM + BACKUP_BYTES) return [backup, a - BACKUP_RAM];
+        if (b2 && a >= LUMA_RAM_2B && a < LUMA_RAM_2B + LUMA_BYTES) return [luma, a - LUMA_RAM_2B];
+        if (data && a >= MAIN_DATA_BASE && a < MAIN_DATA_BASE + data.length) return [data, a - MAIN_DATA_BASE];
         throw new Error(`colour routine read 0x${a.toString(16)}`);
     };
     const read = (a, n) => {
@@ -536,22 +558,40 @@ function runColorRoutines(rom) {
     const write = (a, v, n) => {
         /* One byte lane of a 32-bit unit, stored here as the even byte of a
          * halfword the way a luma dump has it (buildLumaram). */
-        if (a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
+        if (!b2 && a >= LUMA_RAM && a < LUMA_RAM + LUMA_BYTES * 2) {
             luma[((a - LUMA_RAM) >> 2) * 2] = v & 0xff;
             return;
         }
         const [b, o] = where(a);
+        if (b === prog || b === data) throw new Error(`colour routine wrote ROM 0x${a.toString(16)}`);
         for (let k = 0; k < n; k++) b[o + k] = (v >>> (8 * k)) & 0xff;
     };
+    for (const [at, n] of C.settings ?? []) write(at, setting, n);
     const cpu = new I960({
         read8: (a) => read(a, 1), read16: (a) => read(a, 2), read32: (a) => read(a, 4),
         write8: (a, v) => write(a, v, 1), write16: (a, v) => write(a, v, 2), write32: (a, v) => write(a, v, 4),
     });
     for (const entry of C.run) {
-        if (!cpu.call(entry, [], { maxSteps: 2_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
+        if (!cpu.call(entry, [], { maxSteps: 4_000_000 })) throw new Error(`colour routine 0x${entry.toString(16)} did not return`);
     }
     const cxlat = pal.slice(0x10000, 0x10000 + CXLAT_BYTES);
-    return (rom.i960Colors = { cxlat, luma });
+    const out = { cxlat, luma, pal };
+    rom.i960Colors.set(setting, out);
+    return out;
+}
+
+/**
+ * The face palette a game's own colour routines leave in palette RAM 0x1802000
+ * (runColorRoutines), as 1024 BGR555 colours.
+ *
+ * @param {object} rom loaded ROM set
+ * @returns {Int32Array} 1024 colours
+ */
+export function i960Palette(rom) {
+    const { pal } = runColorRoutines(rom);
+    const out = new Int32Array(1024);
+    for (let i = 0; i < 1024; i++) out[i] = pal[0x2000 + i * 2] | (pal[0x2001 + i * 2] << 8);
+    return out;
 }
 
 /*
