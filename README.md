@@ -34,8 +34,8 @@ Jaleco's *Super GT 24h* and *Over Rev* have their models — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models — see [Dynamite Baseball 97](#dynamite-baseball-97).
 *Gunblade NY* has its models — see [Gunblade NY](#gunblade-ny).
-Psikyo's *Zero Gunner* has its models — see [Zero Gunner](#zero-gunner).
-*Sky Target* has its models — see [Sky Target](#sky-target).
+Psikyo's *Zero Gunner* has its models and stages — see [Zero Gunner](#zero-gunner).
+*Sky Target* has its models and stages — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models and courses — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
 *Top Skater* has its models and its three courses — see [Top Skater](#top-skater).
@@ -1415,7 +1415,9 @@ Nothing found yet says which scene a model belongs to, so a scene's part needs
 its set picked by hand. The texture RAM, luma and colour tables match MAME's
 byte for byte in the city, the stage film and the title.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+There is no Stages tab, no cells, no characters and no motions yet. The
+city is not sent as objects by the game's program: its coprocessor program
+draws it, which the explorer does not run for this game. See
 [TECHNICAL.md](TECHNICAL.md#gunblade-ny-jstexturejs-jscolorsjs).
 
 ## Zero Gunner
@@ -1430,16 +1432,26 @@ The texture picker's sets are the scenes the game loads:
 
 - sets 0 and 1 are the two the attract opens with;
 - set 2 is a load on its own;
-- sets 3 to 7 are the first stage's five areas;
-- sets 8 to 12 are the second stage's areas;
-- sets 13 to 17 are the third stage's areas.
+- sets 3 to 7 are the Asia course's five stages;
+- sets 8 to 12 are the America course's stages;
+- sets 13 to 17 are the Europe course's stages.
 
-Nothing found yet says which scene a model belongs to, so a scene's part
-needs its set picked by hand. The colour tables are the same in every scene.
-The textures, palette, luma and colour tables match MAME's byte for byte in
-the attract, in all three builds.
+The colour tables are the same in every scene. The textures, palette, luma
+and colour tables match MAME's byte for byte in the attract, in all three
+builds.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+The **Stages** tab has the fifteen stages of the three courses the title
+offers: Asia, America and Europe, five stages each. The expert course plays
+ten of the same stages, and each stage's notes say which courses use it.
+A stage is the two terrain blocks its scene record names, the ground and
+water and what stands on them (huts, trees, piers), drawn where the game
+draws them and with the stage's own texture set. The Asia course's first
+stage was put beside MAME's attract at frame 3000: the river, the sandy
+shore, the huts and the jungle match. The light is an estimate that lights
+that stage as MAME does; how the game turns it is not worked out.
+
+Not there yet: the boats, tanks and aircraft the stage's script sends, the
+stage's own camera path, and cells, characters and motions. See
 [TECHNICAL.md](TECHNICAL.md#zero-gunner-jstexturejs-jscolorsjs).
 
 ## Sky Target
@@ -1448,16 +1460,32 @@ There is no Stages tab, no cells, no characters and no motions yet. See
 **Models** tab has all 24204 entries of the model table, with the textures,
 palette and colour tables the game loads for them.
 
-The texture picker's sets are the game's twelve stage records, 0 to 11, and
-set 12 is what the boot loads, which the title shows. Records 0, 1 and 9
-share a texture bank and palette, and differ in their colour tables (9 is
-another list). Nothing found yet says which stage a model belongs to, so a
-stage's part needs its set picked by hand.
+The **Stages** tab has the game's stages in the order its four routes fly
+them: the briefing flight (EXPLAIN), Stage 1 UMI, Stage 2 SORA, Stage 3
+HOKKAIDO or TOSHI2, Stage 4 KYUKOKA, Stage 5 GAKE or SKI SKI, Stage 6
+TOSHI, SABAKU, SORA3 or GAKE2, Stage 7 LAST, and the attract's UMI2. The
+names are the game's own, from its stage select; the routes a stage is on
+are given when not all four fly it. Each stage is the scenery the game
+files in its object grid, its ground grid and its sky, with the stage's own
+texture set, palette, colour tables and light. A stage runs for up to 100000
+units and up to 33000 pieces, so the **zone** picker cuts it into stretches
+of 8192 along the flight; *The whole stage* shows it all at once and is slow.
+The sky rides with the camera.
+
+The first stage was put side by side with MAME's attract, from the board's
+own camera: the carrier deck and hangars, the sea, the islands and the
+sand bar sit where MAME draws them. SORA was checked the same way in play.
+
+The texture picker's sets are the game's eighteen stage records, 0 to 17,
+and set 18 is what the boot loads, which the title shows. Records 0, 1 and 9
+share a texture bank and palette, and differ in their colour tables.
 
 The textures, palette, luma and colour tables match MAME's byte for byte at
 the title and in the first stage.
 
-There is no Stages tab, no cells, no characters and no motions yet. See
+Not there yet: the planes, ships and tanks the stage's script sends, the
+far ring of ground past 3072, the snowfall and lightning, and cells,
+characters and motions. See
 [TECHNICAL.md](TECHNICAL.md#sky-target-jstexturejs-jscolorsjs).
 
 ## Ski Super G

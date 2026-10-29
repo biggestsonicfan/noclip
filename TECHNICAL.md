@@ -7651,7 +7651,22 @@ model the fade.
 **Leads.** The scene number is at RAM 0x508C94, and the switch on it at
 0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
 0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
-model to its set. The objects' records (which triple, where) are not found.
+model to its set.
+
+The city is not the program's objects. In MAME's attract at frame 1200
+(Times Square, "2005 JULY 12") the program sends six objects and 137 words
+to 0x804000 in the frame, all from 0x9960: the caption's frame and the
+title strip, under `st 0x303, 0x800030` windows. The frame's draw calls
+the scene's routine at RAM 0x501E1C (0xDAA4), then sends the coprocessor
+(0x884000) function 5, 0x2B with the five words at RAM 0x501E50 to
+0x501E60, and 0x39 with the geometrizer's list address (the word read from
+0x802008, which plus 0x34 goes to 0x801008, the geometrizer's write start),
+calls the overlay's routine at 0x501E20 and ends with function 6. So the scenery is
+written into the list by the SHARC program itself, out of what the scene
+set-up gave it. A Stages tab would have to run that program (js/sharc.js)
+on the scene set-up's uploads, or find the world data it walks. Task
+routines run from 0x318C0 (the list at RAM 0x50A03C) draw the enemies and
+vehicles, through the sender at 0x14C4.
 Gunblade NY has no fighters or motions. Its enemies and vehicles move by
 script, and that script is not read. The tile chip (cells) and the music
 are not looked at.
@@ -7697,10 +7712,10 @@ list points at the records. The pairs are:
 - (20, 21), the attract at frame 600;
 - (22, 23), at frame 1500;
 - (19, none);
-- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
-  8 with 16;
-- (2, 9, 11, 12 or 13, with 17), the second stage;
-- (5, 6, 14, 15 or 7, with 18), the third stage.
+- (8, 3, 10, 4 or 1, with 16), the Asia course; the attract's frame 3000
+  is 8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the America course;
+- (5, 6, 14, 15 or 7, with 18), the Europe course.
 
 Both sheets match MAME's byte for byte at all three frames.
 
@@ -7718,13 +7733,47 @@ lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
 on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
 tables after the boot (frame 51), and they match MAME's entry for entry.
 
+**Stage scenery (`js/zerogun.js`).** The course table is at 0x6EE28
+(`zerogunj` 0x6EFA8, `zeroguna` 0x6E1E8; the pointers in it are RAM, 0x500000
+past the ROM offset). Its five words point at lists of scene records: the
+Asia, America and Europe courses of five (the strings near 0x26DD0,
+全5ステージ), the expert course of ten, which reuses the first three's records,
+and a list of scenes with no terrain (the demo and the ending). A record is
+0x28 bytes and then its script; 0x62EB0, 0x63010 and 0x63130 set it up:
+
+- +4/+8/+0xC, floats: the camera's start, to RAM 0x502520;
+- +0x10 and +0x12: two camera turns, to 0x502564 and 0x502504;
+- +0x20 and +0x22: the terrain blocks, to 0x502512 and 0x502510;
+- +0x24 and +0x26: the texture loads, the pair games.js's sets list by.
+
+0x4367C calls 0x42FC0 every frame both blocks are 0 or more (0x7390 and
+0x4B300 set them to -1). 0x42FC0 walks the list the word at
+0x20C70D0 + 8 * block points at: model numbers up to a negative word, for
++0x20's block and then +0x22's. Each model is culled by the sphere at +0x30
+of the record the word at 0x2078700 + 4 * model points at (copro function
+0x27), and drawn by 0x4D3A0 with only the camera's matrix. So the numbers
+are model table indices and a stage is those models at the origin. The
+first block (its entry's second word is 1) is the ground and water, the
+second the huts, trees and piers.
+
+Materials: 0x49210 uploads, with function 6 and count 31, a copy at RAM
+0x502260 of the 32 entries of 8 bytes at 0x47FB0 (`zerogunj` 0x48000,
+`zeroguna` 0x47ED0); 0x48298 makes the copy. Light: 0x4362C sends function
+0xA a vector the copro makes (function 0x2B, then the 0x1A turn) from the
+turns at 0x502566 and 0x502568, 0x2000 and 0x8000 in MAME's attract. The
+viewer takes the vector those make with `stageLight` and reverses it; that
+lights the Asia course's first stage as MAME does at frame 3000 (MAME sends
+(-0.471, 0.526, 0.708) in camera space there), and is an estimate.
+
+Checked against MAME: the attract at frame 3000 plays the Asia course's
+first stage (blocks 0x25C and 0x25B, loads 8 and 16), with the camera at
+(-23.9, 7.6, -233.9). Seen from above that point, the explorer has the same
+river bend, sandy shore, huts and jungle as MAME's picture.
+
 **Leads.**
 
-- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
-  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
-  0x502512 and 0x502510.
-- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
-  a model to its set.
+- Stages: the scene's script after +0x28 places the boats, tanks and
+  aircraft and moves the camera; it is not read.
 - The tile chip and the music are not looked at.
 
 ### Sky Target (`js/texture.js`, `js/colors.js`)
@@ -7751,9 +7800,67 @@ main RAM do not reach a Lua write tap; watchpoints do.
 - +0xC a list of row-21 tables, taken by an argument (0x374D0);
 - +0x10 a data pointer, not read yet; +0x14 is 0.
 
-There are twelve records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
+There are eighteen records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
 0x2200000, 3 and 11 0x2300000, 4 0x2400000, 5 and 8 0x2500000, 6 0x2600000
 and 7 0x2700000.
+
+**Stage scenery (`js/skytargt.js`).** Counted from 0xF6570, eight bytes
+before the table above, a record's +0 is the object list and +4 a height
+every object stands on (0.0 in all of them). 0x31220 picks the record off
+the route table at 0xE67B0, nine words a route, by the route at 0x5245D4
+and the step at 0x5245C0. The four routes are:
+
+| step | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| route 1 | 0 | 1 | 5 | 3 | 8 | 4 | 2 | 17 |
+| route 2 | 0 | 1 | 5 | 3 | 8 | 4 | 6 | 17 |
+| route 3 | 0 | 1 | 5 | 10 | 8 | 7 | 14 | 17 |
+| route 4 | 0 | 1 | 5 | 10 | 8 | 7 | 12 | 17 |
+
+Step 0 is the briefing flight, 1 to 7 the STAGE 1 to STAGE 7 of the
+strings at 0x82F68. Records 11, 13, 15 and 16 are on no route. The debug
+stage select's 0x79744 names the records out of 0xEDD70, ten bytes each.
+The attract flies record 1 (RAM 0x5290C0 reads 1 through it); record 9 is
+the attract's own (0x17F18).
+
+Every frame draws three things round the camera, whose struct 0x528780
+points at: +0x20..+0x28 its place, +0x2C, +0x30, +0x34 its turns (0x10000
+a turn):
+
+- The object grid. 0xD1D10 walks the record's object list, {A, B, P}
+  blocks of 12 bytes until P is 0. P holds {rows, columns, offsets, limits,
+  +0x20 count}, then count nodes of 20 bytes: int x, y, z, +0xC a model
+  list, +0x10 a hit-list word. 0xD24B0 files a node in the 256-unit cell
+  (x >> 8) + A, (z >> 8) + B (shri, toward zero), and 0xD2790 draws it at
+  the cell's corner, at the node's y plus the record's +4. A model list is
+  {count, then 20 bytes an entry: x, y, z floats off the parent, model,
+  child list or 0}; 0xD29F0 walks it with the offsets added up and sends
+  each as a translation with no turn of its own. 0xD2AC0 swaps a model
+  farther than 1000 for the next table entry, the far one; the explorer
+  draws the near one.
+- The ground. 0xD2B90 draws the grid at the word 0xF6770 + 4s: {columns,
+  rows, x, z, y, then a model a cell}, 1024-unit cells from (x, z); records
+  4 and 12 are raised by 390. Model 0 is an empty cell. 0xD34A0 draws a
+  coarser grid from 0xF67D0 + 4s past 3072, which the explorer leaves out.
+- The sky. 0x31AF0 draws the model at 0xE5E80 + 4s turned by the camera
+  alone, one unit below the eye; records 0 and 1 first draw 0x815 fifty
+  below. Record 14 draws one of seven models from 0xE5F50 a frame
+  (lightning) and record 3 a snowfall from 0xE5ED0; neither is animated
+  here.
+
+The light is two angles a record at 0xE6970 + 8s, which 0x86A68 (and
+0x8B480) copy into the struct the camera's +0xA8 points at; 0x89C40 copies
+them to the camera's +0x68/+0x6C, and 0x31A88 sends the vector they make
+(`stageLight`) through function 0xA. Records 0 and 1 are (0xA180, 0), 5 is
+(0xE800, 0x4800): the vectors MAME's camera +0x70 holds in those stages.
+The materials are 0x36530, 32 {word, float} pairs, which 0x37DF0 uploads
+with function 6.
+
+Checked against MAME by setting the explorer's camera to the board's
+(eye (x, y, -z); look (-sin b cos a, sin a, -cos b cos a), a = +0x2C,
+b = +0x30): attract frames 1500, 1900 and 2300 (sea, islands, sand bar)
+and 1100 (carrier deck, hangars) of record 1, and SORA in play at frames
+1500, 2400 and 3300 with record 5 forced through a write tap on 0x5290C0.
 
 **Model table.** The data ROM at 0xDE3D00 holds 16 bytes an entry: texture
 word, material word, mesh pointer, polygon count. It runs 24204 entries. All
@@ -7800,12 +7907,14 @@ They match MAME's entry for entry, at the boot and in the first stage.
 
 **Leads.**
 
-- Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
-  set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
-  0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
-  or path data and is not read.
+- Stages: the planes, ships and tanks are tasks the stage's script
+  starts; their sources were airship.c, ship.c and tank.c (the strings near
+  0x1BB0). Record +0x10 (counted from 0xF6578) points into the data ROM
+  (0x2CC28F0..0x2CD9740, and 0x6429950 for record 9) and is not read; it is
+  likely their placements or the flight path.
+- Music: sound.c's code is round 0x7D760.
 - Cells: the tile palette table at 0xEBFB0, its loaders 0x789F0 and
-  0x2CF20, and the tile RAM loader 0x78A90.
+  0x2CF20, the tile RAM loader 0x78A90, and the scroll strings at 0x78900.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 

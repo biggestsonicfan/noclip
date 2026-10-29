@@ -7119,9 +7119,10 @@ const gunblade = {
  * year sooner: the same model table, the same texture loader and colour
  * scheme, so js/texture.js's Pilot Kids section reads it and js/colors.js has
  * a short section of its own. The three programs keep every table at the
- * same offset but the texture load list (`loads`).
+ * same offset but the texture load list (`loads`), the course table and
+ * the material table.
  */
-function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
+function zeroGunnerBuild({ id, name, program, extra = [], loads, courses, materials }) {
     return {
         id,
         name,
@@ -7156,10 +7157,10 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
          * js/texture.js's Pilot Kids section. Load 0 is the common one, and a
          * scene puts in a load of kind 1 and one of kind 2 over it, by the
          * two numbers at +0x24 of its record (0x62F6C). The records are listed
-         * at 0x6EE28 by stage. `sets` are the pairs they name: 0 is what
+         * by course (js/zerogun.js). `sets` are the pairs they name: 0 is what
          * MAME's attract has in at frame 600, 1 at frame 1500, 2 a load on its
-         * own; 3-7 are the first stage's five areas (the attract's frame
-         * 3000 is set 3), 8-12 the second's and 13-17 the third's.
+         * own; 3-7 are the Asia course's five stages (the attract's frame
+         * 3000 is set 3), 8-12 America's and 13-17 Europe's.
          */
         texture: {
             raw: {
@@ -7179,8 +7180,19 @@ function zeroGunnerBuild({ id, name, program, extra = [], loads }) {
             zerogun: { table: 0x1050, count: 0x1a10 },
             solid: true,
         },
-        /* No stage, cell or motion data is read yet. */
-        features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+        lighting: {
+            /* 0x49210 uploads a copy of this at 0x502260 (0x48298 makes it)
+             * with function 6, start 0, count 31. */
+            materials: { source: 'maincpu', at: materials, count: 32, stride: 8 },
+            /* js/zerogun.js gives each scene the light of the turns 0x2000,
+             * 0x8000 at 0x502566 (0x4362C sends it through function 0xA),
+             * the other way round: an estimate, not derived. */
+            light: [0, -0.707107, -0.707107],
+        },
+        /* js/zerogun.js: the course table's scene records and their two
+         * terrain blocks. No cell or motion data is read yet. */
+        stageTable: { zerogun: { courses }, flat: true },
+        features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
     };
 }
 
@@ -7188,19 +7200,19 @@ const zerogun = zeroGunnerBuild({
     id: 'zerogun', name: 'Zero Gunner (Export, Model 2B)',
     program: [0x000000, 'epr-20439.15', 0x10125381, 'epr-20440.16', 0xce872747],
     extra: ['mpr-20296.11', 'mpr-20298.17'],
-    loads: 0x48080,
+    loads: 0x48080, courses: 0x6ee28, materials: 0x47fb0,
 });
 /* The clones are known by their programs alone, so that zerogun.zip missing
  * is said as such. */
 const zerogunj = zeroGunnerBuild({
     id: 'zerogunj', name: 'Zero Gunner (Japan, Model 2B)',
     program: [0x000000, 'epr-20290.15', 0x9ce3ad21, 'epr-20291.16', 0x7267a03d],
-    loads: 0x480d0,
+    loads: 0x480d0, courses: 0x6efa8, materials: 0x48000,
 });
 const zeroguna = zeroGunnerBuild({
     id: 'zeroguna', name: 'Zero Gunner (Export, Model 2A)',
     program: [0x000000, 'epr-20437.12', 0xfad30cc0, 'epr-20438.13', 0xca364408],
-    loads: 0x47fa0,
+    loads: 0x47fa0, courses: 0x6e1e8, materials: 0x47ed0,
 });
 
 /*
@@ -7209,10 +7221,11 @@ const zeroguna = zeroGunnerBuild({
  * table entry's first three words to 0x804000. Its data ROM's last megabyte
  * (epr-18404/18405) is what the program reads through the XTRA_DATA mirror at
  * 0x6400000 for its colour, luma and palette tables. A stage is a 24-byte
- * record at 0xF6578 (the index in RAM at 0x5290C0; set up by 0xD1C90):
- * +0 texture bank, +4 colour row list, +8 palette table, +0xC row-21 list,
- * +0x10 a data pointer not yet read. The sets here are its twelve records
- * and the boot (12), which is what the title shows.
+ * record at 0xF6570 (the index in RAM at 0x5290C0; set up by 0xD1C90):
+ * +0 object list (js/skytargt.js), +4 base height, +8 texture bank, +0xC
+ * colour row list, +0x10 palette table, +0x14 row-21 list. The tables here
+ * read it from +8, so their `records` is 0xF6578. The sets are its eighteen
+ * records and the boot (18), which is what the title shows.
  */
 const skytargt = {
     id: 'skytargt',
@@ -7248,11 +7261,11 @@ const skytargt = {
     /* js/romset.js's `records` layout: {count, colours} at 0x640FB5C from
      * entry 0 (0x232D0), then the stage record's +8 table from entry 500
      * (0x39060). MAME's matches for every stage it showed. */
-    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 12 },
+    palette: { layout: 'records', base: 0x640fb5c, records: 0xf6578, stride: 24, field: 8, first: 500, sets: 18 },
     /* js/texture.js's Sky Target section: the boot bank, then the record's. */
     texture: {
-        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 12 },
-        sets: 13,
+        raw: { layout: 'skytargt', bootBank: 0x2000000, records: 0xf6578, stride: 24, boot: 18 },
+        sets: 19,
         residentSet: null,
         defaultSet: 0,
     },
@@ -7261,12 +7274,25 @@ const skytargt = {
     colors: {
         luma: { source: 'mainData', data: 0x1000000, bytes: 0x4000, spill: { data: 0x100000, entries: 8 } },
         skytargt: {
-            records: 0xf6578, stride: 24, stages: 12, bootList: 0x6410580,
+            records: 0xf6578, stride: 24, stages: 18, bootList: 0x6410580,
             gain: Math.fround(1.1), flat: [5, 8], fixed: 0x640f85c,
         },
         solid: true,
     },
-    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+    lighting: {
+        /* 0x37DF0 uploads 0x36530 with function 6, start 0, count 31: a
+         * parameter word and a distance coefficient each. */
+        materials: { source: 'maincpu', at: 0x36530, count: 32, stride: 8 },
+        /* 0x31A88 sends the camera's +0x70 through function 0xA every frame,
+         * the vector of two angles a stage reads from 0xE6970 (js/skytargt.js
+         * gives each stage its own). This is records 0 and 1's, (0xA180, 0),
+         * which the attract flies: (0, -0.733, -0.681), z negated for the
+         * explorer. */
+        light: [0, -0.732654, 0.680601],
+    },
+    /* js/skytargt.js: the stage records' object and ground grids. */
+    stageTable: { skytargt: true, flat: true },
+    features: { stages: true, characters: false, motions: false, bodies: false, cells: false },
 };
 
 /* ---- Ski Super G ---------------------------------------------------------- */
