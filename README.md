@@ -1171,6 +1171,23 @@ the boot fills it, so there is one CG.
 There is no Stages tab, no characters and no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#pilot-kids-jstexturejs-jscolorsjs).
 
+## Motor Raid
+
+`motoraid.zip` is Sega's 1997 bike race on Model 2A CRX. The **Models** tab
+has the 7671 entries of the model table (7669 with a mesh), with the textures,
+face palette and colour tables the game builds for them.
+
+The texture picker's sets 0..7 are the eight scenes the game loads, each its
+bank on sheet 1 over the boot's on sheet 0; set 1, the attract's second scene,
+is the one a model opens on. The colour tables and palette of a set are made
+by running the game's own boot and scene routines. Nothing read yet says which
+scene a model belongs to, so a course's part needs its set picked by hand.
+The sheets, luma and colour tables of set 1 match MAME's at attract frame 1800
+byte for byte, and the boot's colours match it at frame 600.
+
+There is no Stages tab, no riders and no motions yet. See
+[TECHNICAL.md](TECHNICAL.md#motor-raid-jsmotoraidjs).
+
 ## Running it
 
 Tick the acknowledgement on the loading screen — the project was generated with

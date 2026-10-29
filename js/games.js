@@ -6034,6 +6034,92 @@ const pltkidsa = pilotKidsBuild({
     colorTables: 0x82280,
 });
 
+/*
+ * Sega's 1997 bike race on Model 2A CRX (MAME's `motoraid`). Not of the AM2
+ * library: the model table is in the program
+ * ROM, the sheets are raw banks the program copies in itself, and its colour
+ * tables are its own routines, run (js/motoraid.js).
+ */
+const motoraid = {
+    id: 'motoraid',
+    name: 'Motor Raid',
+    identify: ['epr-20007.12', 'epr-20008.13', 'mpr-20023.16', 'mpr-20022.25'],
+    regions: {
+        maincpu: {
+            size: 0x200000,
+            parts: [[0x000000, 'epr-20007.12', 0xf040c108, 'epr-20008.13', 0x78976e1a]],
+        },
+        /* The EPROM pair is a megabyte, repeated to fill its 8 MB slot. */
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-20019.10', 0x49053727, 'mpr-20020.11', 0xcc5ddb15],
+                [0x0800000, 'mpr-20017.8', 0x4e206acd, 'mpr-20018.9', 0xe7ed0e85],
+                [0x1000000, 'mpr-20015.6', 0x23427339, 'mpr-20016.7', 0xc99a83f4],
+                ...Array.from({ length: 8 }, (_, i) =>
+                    [0x1800000 + i * 0x100000, 'epr-20013.4', 0xa4478f52, 'epr-20014.5', 0x1aa541be]),
+            ],
+        },
+        polygons: {
+            size: 0x1800000,
+            parts: [
+                [0x0000000, 'mpr-20023.16', 0x016be8d6, 'mpr-20026.20', 0x20044a30],
+                [0x0800000, 'mpr-20024.17', 0x62fd2d5b, 'mpr-20027.21', 0xb2504ea6],
+                [0x1000000, 'mpr-20025.18', 0xd4ecd0be, 'mpr-20028.22', 0x3147e0e1],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [[0x000000, 'mpr-20022.25', 0x9e47b3c2, 'mpr-20021.24', 0x3cbf36cb]],
+        },
+    },
+    /*
+     * 7671 entries of 16 bytes in the program ROM at 0x4F500 (`lda 0x4F500`
+     * at 0x4F4E0), up to the data-pointer table at 0x6D480: texture word,
+     * material word, mesh pointer, polygon count. Entries 0 and 1 are empty.
+     */
+    modelTable: { source: 'maincpu', offset: 0x4f500, count: 7671, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+    /* XTRA_DATA (0x06000000) is main_data from 0x1000000; set 6's bank is
+     * 0x06700000. */
+    xtra: { window: 0x1000000, banks: [{ region: 'mainData', base: 0x1000000 }] },
+    /* Laid by the boot and the scene's set-up, run (js/motoraid.js). */
+    paletteOffset: null,
+    palette: { layout: 'motoraid' },
+    /*
+     * Raw banks, copied by 0x2F990 (HOTD's arrangement, uploadRawBank): the
+     * boot (0x2FB00) puts 0x02000000 on sheet 0 and 0x02100000 on sheet 1,
+     * and a scene's set-up (0x21C9B0) bank 0x21C910[n] on sheet 1, n the
+     * scene number at 0x517AE0. The program's copy of that table is 0xCC910.
+     * Set 1 is the attract's second scene, checked against MAME.
+     */
+    texture: {
+        raw: { bankTable: 0xcc910, bootBank: 0x02000000 },
+        sets: 8,
+        residentSet: null,
+        defaultSet: 1,
+    },
+    /*
+     * Luma: 0x30060 clears the 0x8000 entries and copies the 0x2800 bytes at
+     * data 0x98DD40 from entry 0x3200 on (0x19050 animates 0x3200..0x327F,
+     * still here). Colorxlat: js/motoraid.js.
+     */
+    colors: {
+        luma: { source: 'mainData', data: 0x98dd40, bytes: 0x2800, at: 0x3200 },
+        motoraid: {
+            /* ROM 0xB0000.. is RAM 0x200000.. */
+            copy: 0xb0000,
+            boot: [[0x2fc70], [0x2fe40, 0], [0x31270, 0, 0x0297a0f4], [0x31270, 0x1f4, 0x0297a366], [0x2ffa0, 0]],
+            sceneSlot: 0x517ae0,
+            sceneSetup: 0x21c930,
+            taskSlots: [0x37630, 0x37660],
+        },
+        solid: true,
+    },
+    /* No course, rider or motion data is read yet. */
+    features: { stages: false, characters: false, motions: false, bodies: false, cells: false },
+};
+
 /* Revision C first: a merged set is MAME's parent with its clones beside it,
  * and the parent is the one it is named for. Then the build with the most to
  * show, and the 2A builds, which have no fighters yet. */
@@ -6041,7 +6127,7 @@ export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
     daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
     doa, doab, doaa, doaab, doaae, vonj, vonu, srallyc,
     dynamcop, dyndeka2, dynamcopb, dyndeka2b, dynamcopc, airwlkrs, powsled, lastbrnx, lastbrnxu, lastbrnxj,
-    pltkids, pltkidsa];
+    pltkids, pltkidsa, motoraid];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

@@ -7138,6 +7138,48 @@ layer 0 record 10 (INSERT COINS!).
 to, and the colour tables of four scenes. The 2A build's texture and colour
 code was not stepped, only its tables compared with the 2B build's.
 
+### Motor Raid (`js/motoraid.js`)
+
+Sega's 1997 bike race (MAME's `motoraid`) keeps none of the AM2 tables. Each
+was found from the code that uses it, with MAME's write taps on the texture,
+palette, colorxlat and luma windows naming the routines.
+
+- **Models.** 7671 entries of {texture word, material word, mesh pointer,
+  polygon count} in the program ROM at 0x4F500 (`lda 0x4F500` at 0x4F4E0),
+  up to a table of data pointers at 0x6D480. The mesh pointers are word
+  indices into the polygon ROM as in the other 2A games.
+- **Textures.** Raw banks, copied by 0x2F990 (source, sheet), which is The
+  House of the Dead's arrangement (`uploadRawBank`). The boot (0x2FB00) puts
+  0x02000000 on sheet 0 and 0x02100000 on sheet 1. A scene's set-up,
+  0x21C9B0, puts bank 0x21C910[n] on sheet 1, n the scene number at 0x517AE0;
+  RAM 0x200000 on is the program's copy of ROM 0xB0000 on, so the table is
+  ROM 0xCC910. Set 6's bank is 0x06700000, through the XTRA_DATA window
+  (data 0x1700000). Several routines load a bank directly (0x2300000 at
+  0x28DB8 and 0x8A224, 0x2700000 at 0x47078, 0x6700000 at 0x85C5C), each
+  a bank of the same table. A streaming loader (0x2F7B4/0x2F960, 38 steps of
+  the rectangle table 0x2F3E0) was not seen called.
+- **Luma.** 0x30060 clears the 0x8000 entries and copies 0x2800 bytes from
+  data 0x98DD40 to entry 0x3200 on. 0x19050/0x191BC animate 0x3200..0x327F;
+  the viewer keeps the copy.
+- **Colorxlat and the face palette** are made by running the routines on
+  js/i960.js, as Sega Rally's are. The boot builds the 32 rows with float
+  arithmetic and a gamma (0x2FC70, helpers 0x2FC20 and 0x2FBD0), then
+  0x2FE40(0) lays scene table 0 over the odd rows at luma 0..63: eight tables
+  at 0x2FE20, each a row count and then 64 (r, g, b) bytes a row. The palette
+  is {count, colours} from data 0x297A0F4 at entry 0 and 0x297A366 at entry
+  0x1F4 (0x13B48, 0x31270), and the top filled downward from entry 1023 out
+  of 0x16350 (0x2FFA0). A scene's set-up 0x21C930 lays 0x31270(0x1F4,
+  0x21C8F0[n]) and its colours: scenes 0 and 1 through 0x21CBE0 (every row
+  rebuilt, the table scaled; scene 1's red by 1.25), the rest through
+  0x21CA50(n). Those lay a row a frame through the task slots 0x37630 and
+  0x37660, which the viewer hooks to queue the task and run the queue dry.
+- **Checked.** MAME, attract mode: frame 600 is the boot's state (sheets,
+  colorxlat, palette, luma byte for byte) and frame 1800 scene 1's (sheets,
+  colorxlat and luma byte for byte, the face palette all but entries
+  0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
+  which 0x16E38 animates). The other scenes' tables are the same routines
+  run with another n and were not held against MAME.
+
 ### Polygon decoding (`js/model.js`)
 
 A port of the index-array decoder from

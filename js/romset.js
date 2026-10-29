@@ -14,6 +14,7 @@ import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
 import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
+import { motoraidScene } from './motoraid.js';
 
 /* MAME's ROM_LOAD32_WORD: dest[n*4..] = lo[n*2..], hi[n*2..] */
 function interleave32(dest, lo, hi, baseOffset) {
@@ -419,6 +420,11 @@ export function facePalette(rom) {
 
     if (p?.layout === 'dynamcop') {
         const out = dynamcopPalette(rom, set);
+        rom.facePalettes.set(set, out);
+        return out;
+    }
+    if (p?.layout === 'motoraid') {
+        const out = motoraidScene(rom, set).face;
         rom.facePalettes.set(set, out);
         return out;
     }

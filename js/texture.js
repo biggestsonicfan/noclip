@@ -1274,11 +1274,13 @@ function buildRawTexram(rom, texSets) {
     let pages = 1;
     if (set !== null) {
         const bank = cv.getUint32(raw.bankTable + set * 4, true);
-        if (bank >= MAIN_DATA_BASE && off(bank) + SHEET_BYTES <= md.length) {
-            uploadRawBank(md, off(bank), tex, true);
+        /* Motor Raid's set 6 is 0x06700000, through the XTRA_DATA window. */
+        const at = bank >= 0x06000000 ? xtraResolve(rom, bank).off : off(bank);
+        if (bank >= MAIN_DATA_BASE && at + SHEET_BYTES <= md.length) {
+            uploadRawBank(md, at, tex, true);
             pages++;
         }
-        for (let i = 0; i < RAW_PATCH_AT.length; i++) {
+        for (let i = 0; raw.patchTable !== undefined && i < RAW_PATCH_AT.length; i++) {
             const src = cv.getUint32(raw.patchTable + set * 32 + i * 4, true);
             if (!src || off(src) + 0x2000 > md.length) continue;
             /* The source is packed: 64 rows of 128 bytes, back to back. */

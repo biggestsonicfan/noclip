@@ -31,6 +31,7 @@
 
 import { MAIN_DATA_BASE } from './romset.js';
 import { dynamcopScene } from './dynamcop.js';
+import { motoraidScene } from './motoraid.js';
 import { I960 } from './i960.js';
 
 /* Sizes as the hardware presents them, so a build and a capture are
@@ -632,6 +633,8 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
     if (rom.game.colors.pltkids) return buildPltkidsColorxlat(rom, colorSet);
+    /* Motor Raid: its boot and scene routines, run (js/motoraid.js). */
+    if (rom.game.colors.motoraid) return motoraidScene(rom, colorSet).cxlat.slice();
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
