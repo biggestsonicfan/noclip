@@ -99,7 +99,7 @@
   <div class="splash">
     <header class="splash-head">
       <h1 data-i18n="splash.title">Sega Model 2 <span>3D Explorer</span></h1>
-      <p class="sub" data-i18n="splash.sub">Fly through the arenas, courses, fighters and monsters of fourteen Model&nbsp;2
+      <p class="sub" data-i18n="splash.sub">Fly through the arenas, courses, fighters and monsters of thirty-two Model&nbsp;2
          arcade games, built in this tab from your own ROM set.</p>
     </header>
 
@@ -122,6 +122,10 @@
         <button type="button" class="reel-play" id="reel-play" aria-label="Play the clips" data-i18n-aria="reel.play" hidden>&#9654;</button>
       </div>
 
+      <!-- The cards scroll sideways a page at a time; js/splash.js keeps the one
+           the reel is on in view. -->
+      <div class="carousel">
+        <button type="button" class="car-btn prev" id="games-prev" aria-label="Previous games" data-i18n-aria="games.prev">&#8249;</button>
       <ul class="games" id="games">
         <li class="game" data-game="stf" data-zip="sfight.zip" tabindex="0">
           <div class="thumb"></div>
@@ -279,7 +283,171 @@
             <li data-clip="pltkids-dog" data-i18n="pltkids.clip.dog">A dog</li>
           </ol>
         </li>
+        <li class="game" data-game="motoraid" data-zip="motoraid.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="motoraid.name">Motor Raid</div>
+          <div class="g-meta" data-i18n="motoraid.meta">Its seven course scenes and 7671 models &middot; <code>motoraid</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="motoraid-snow" data-i18n="motoraid.clip.snow">Down the snow mountain, scene&nbsp;0 of the course</li>
+            <li data-clip="motoraid-island" data-i18n="motoraid.clip.island">Over scene&nbsp;3, the island and the sea</li>
+          </ol>
+        </li>
+        <li class="game" data-game="vcop2" data-zip="vcop2.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="vcop2.name">Virtua Cop 2</div>
+          <div class="g-meta" data-i18n="vcop2.meta">Its four stages, 2994 models and the cells &middot; <code>vcop2</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="vcop2-city" data-i18n="vcop2.clip.city">The city streets above the bay</li>
+            <li data-clip="vcop2-pier" data-i18n="vcop2.clip.pier">Pier&nbsp;10 and the liner</li>
+          </ol>
+        </li>
+        <li class="game" data-game="vstriker" data-zip="vstriker.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="vstriker.name">Virtua Striker</div>
+          <div class="g-meta" data-i18n="vstriker.meta">Its stadium, 1537 models and the cells &middot; <code>vstriker</code> / <code>vstrikro</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="vstriker-stands" data-i18n="vstriker.clip.stands">The pitch under the stands</li>
+            <li data-clip="vstriker-pitch" data-i18n="vstriker.clip.pitch">Low across the grass to the far stand</li>
+          </ol>
+        </li>
+        <li class="game" data-game="manxtt" data-zip="manxtt.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="manxtt.name">Manx TT Superbike</div>
+          <div class="g-meta" data-i18n="manxtt.meta">Laxey Coast, the T.T. course and 3532 models &middot; <code>manxtt</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="manxtt-laxey" data-i18n="manxtt.clip.laxey">Along Laxey Coast</li>
+            <li data-clip="manxtt-tt" data-i18n="manxtt.clip.tt">Down the T.T. course</li>
+          </ol>
+        </li>
+        <li class="game" data-game="indy500" data-zip="indy500.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="indy500.name">INDY 500</div>
+          <div class="g-meta" data-i18n="indy500.meta">Its three courses and 3571 models, Twin and Deluxe &middot; <code>indy500</code> / <code>indy500d</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="indy500-bayside" data-i18n="indy500.clip.bayside">Bayside Street past the city</li>
+            <li data-clip="indy500-speedway" data-i18n="indy500.clip.speedway">The Indianapolis Motor Speedway's grandstands</li>
+          </ol>
+        </li>
+        <li class="game" data-game="stcc" data-zip="stcc.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="stcc.name">Sega Touring Car Championship</div>
+          <div class="g-meta" data-i18n="stcc.meta">Its courses, their SS runs, the bonus course and the music &middot; <code>stcc</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="stcc-brickwall" data-i18n="stcc.clip.brickwall">Through Brickwall Town</li>
+            <li data-clip="stcc-country" data-i18n="stcc.clip.country">Round the Country Circuit</li>
+          </ol>
+        </li>
+        <li class="game" data-game="sgt24h" data-zip="sgt24h.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="sgt24h.name">Super GT 24h</div>
+          <div class="g-meta" data-i18n="sgt24h.meta">Both courses, each way round, and 2238 models &middot; <code>sgt24h</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="sgt24h-short" data-i18n="sgt24h.clip.short">The short course past the pits</li>
+            <li data-clip="sgt24h-long" data-i18n="sgt24h.clip.long">The long course by the lighthouse and the hotels</li>
+          </ol>
+        </li>
+        <li class="game" data-game="overrev" data-zip="overrev.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="overrev.name">Over Rev</div>
+          <div class="g-meta" data-i18n="overrev.meta">Its six courses and 1893 models, on Model&nbsp;2B and 2C &middot; <code>overrev</code> / <code>overrevb</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="overrev-shibuya" data-i18n="overrev.clip.shibuya">Through Shibuya</li>
+            <li data-clip="overrev-futou" data-i18n="overrev.clip.futou">Along the docks of Futou</li>
+          </ol>
+        </li>
+        <li class="game" data-game="dynabb" data-zip="dynabb.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="dynabb.name">Dynamite Baseball 97</div>
+          <div class="g-meta" data-i18n="dynabb.meta">Its three ballparks and the twelve teams' players &middot; <code>dynabb</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="dynabb-dome" data-i18n="dynabb.clip.dome">The domed ballpark and the town round it</li>
+            <li data-clip="dynabb-stadium" data-i18n="dynabb.clip.stadium">Over the ballpark's stands</li>
+          </ol>
+        </li>
+        <li class="game" data-game="gunblade" data-zip="gunblade.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="gunblade.name">Gunblade NY</div>
+          <div class="g-meta" data-i18n="gunblade.meta">5452 models and the figures on their rigs &middot; <code>gunblade</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="gunblade-figure" data-i18n="gunblade.clip.figure">One of the gang on his own rig</li>
+            <li data-clip="gunblade-mohawk" data-i18n="gunblade.clip.mohawk">A mohawked heavy on his own rig</li>
+          </ol>
+        </li>
+        <li class="game" data-game="zerogun" data-zip="zerogun.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="zerogun.name">Zero Gunner</div>
+          <div class="g-meta" data-i18n="zerogun.meta">Fifteen stages over three courses, and 7712 models &middot; <code>zerogun</code> / <code>zerogunj</code> / <code>zeroguna</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="zerogun-asia" data-i18n="zerogun.clip.asia">The Asia course's first stage</li>
+            <li data-clip="zerogun-america" data-i18n="zerogun.clip.america">Over the city of the America course</li>
+          </ol>
+        </li>
+        <li class="game" data-game="skytargt" data-zip="skytargt.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="skytargt.name">Sky Target</div>
+          <div class="g-meta" data-i18n="skytargt.meta">Its stages along the four routes, and 24204 models &middot; <code>skytargt</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="skytargt-hokkaido" data-i18n="skytargt.clip.hokkaido">Low over Hokkaido's hills and river</li>
+            <li data-clip="skytargt-gake" data-i18n="skytargt.clip.gake">Through the cliffs of GAKE</li>
+          </ol>
+        </li>
+        <li class="game" data-game="skisuprg" data-zip="skisuprg.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="skisuprg.name">Ski Super G</div>
+          <div class="g-meta" data-i18n="skisuprg.meta">All 5519 models and the cells &middot; <code>skisuprg</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="skisuprg-slope" data-i18n="skisuprg.clip.slope">A stretch of the slope and its gates</li>
+            <li data-clip="skisuprg-finish" data-i18n="skisuprg.clip.finish">The finish banner</li>
+          </ol>
+        </li>
+        <li class="game" data-game="waverunr" data-zip="waverunr.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="waverunr.name">Wave Runner</div>
+          <div class="g-meta" data-i18n="waverunr.meta">Its four courses and 3457 models &middot; <code>waverunr</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="waverunr-cove" data-i18n="waverunr.clip.cove">Course&nbsp;2 round the cove</li>
+            <li data-clip="waverunr-bay" data-i18n="waverunr.clip.bay">Course&nbsp;3 under the bridge</li>
+          </ol>
+        </li>
+        <li class="game" data-game="segawski" data-zip="segawski.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="segawski.name">Sega Water Ski</div>
+          <div class="g-meta" data-i18n="segawski.meta">Its four courses and 13331 models &middot; <code>segawski</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="segawski-park" data-i18n="segawski.clip.park">Course&nbsp;3 past the Shark Club and the wheel</li>
+            <li data-clip="segawski-lagoon" data-i18n="segawski.clip.lagoon">Course&nbsp;2's lagoon</li>
+          </ol>
+        </li>
+        <li class="game" data-game="topskatr" data-zip="topskatr.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="topskatr.name">Top Skater</div>
+          <div class="g-meta" data-i18n="topskatr.meta">Its three courses, the skaters and the music &middot; <code>topskatr</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="topskatr-easy" data-i18n="topskatr.clip.easy">Down the Easy course</li>
+            <li data-clip="topskatr-hidden" data-i18n="topskatr.clip.hidden">Indoors on the Hidden course</li>
+          </ol>
+        </li>
+        <li class="game" data-game="bel" data-zip="bel.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="bel.name">Behind Enemy Lines</div>
+          <div class="g-meta" data-i18n="bel.meta">3183 models and the soldiers on their rigs &middot; <code>bel</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="bel-run" data-i18n="bel.clip.run">A soldier running with his rifle</li>
+            <li data-clip="bel-soldier" data-i18n="bel.clip.soldier">A soldier on his own rig</li>
+          </ol>
+        </li>
+        <li class="game" data-game="desert" data-zip="desert.zip" tabindex="0">
+          <div class="thumb"></div>
+          <div class="g-name" data-i18n="desert.name">Desert Tank</div>
+          <div class="g-meta" data-i18n="desert.meta">Its three missions' maps and 2092 models &middot; <code>desert</code></div>
+          <ol class="clips" hidden>
+            <li data-clip="desert-desert" data-i18n="desert.clip.desert">Over the Desert Mission's huts and crates</li>
+            <li data-clip="desert-canyon" data-i18n="desert.clip.canyon">The Canyon Mission's rock walls</li>
+          </ol>
+        </li>
       </ul>
+        <button type="button" class="car-btn next" id="games-next" aria-label="More games" data-i18n-aria="games.next">&#8250;</button>
+      </div>
     </section>
 
     <section class="load">
@@ -359,6 +527,24 @@
           <li data-i18n="romnote.powsled"><b>Power Sled</b> (<code>powsled.zip</code>) &mdash; the one course, built by running the race's six scene routines over the whole run; the 494 models the program names; the cells; and the attract's ride scenes.</li>
           <li data-i18n="romnote.lastbrnx"><b>Last Bronx</b> (<code>lastbrnx.zip</code>, with <code>lastbrnj.zip</code> beside it for the Japan build) &mdash; 2544 models, the nine stages run by their own code with their moving pieces and songs, 508 cells, and the eight fighters in both costumes, posed by the game's own fight code.</li>
           <li data-i18n="romnote.pltkids"><b>Pilot Kids</b> (<code>pltkids.zip</code>, and <code>pltkidsa.zip</code> beside it for the 2A build) &mdash; Psikyo's game: all 4185 models, with the textures of the nine scenes it loads, and its 74 cells.</li>
+          <li data-i18n="romnote.motoraid"><b>Motor Raid</b> (<code>motoraid.zip</code>) &mdash; Sega's 1997 bike race on Model&nbsp;2A CRX: 7671 models, with the textures of the eight scenes it loads, and the course's seven scenes.</li>
+          <li data-i18n="romnote.vcop2"><b>Virtua Cop 2</b> (<code>vcop2.zip</code>) &mdash; 2994 models, the four stages and the cells.</li>
+          <li data-i18n="romnote.vstriker"><b>Virtua Striker</b> (<code>vstriker.zip</code>, Revision A, or <code>vstrikro.zip</code> with it for the first release) &mdash; 1537 models, the stadium and the cells.</li>
+          <li data-i18n="romnote.manxtt"><b>Manx TT Superbike</b> (<code>manxtt.zip</code>, Revision D) &mdash; 3532 models: the bikes, the riders, Laxey Coast and the T.T. course; and the cells.</li>
+          <li data-i18n="romnote.indy500"><b>INDY 500</b> (<code>indy500.zip</code>, the Twin cabinet, and <code>indy500d.zip</code> beside it for the Deluxe) &mdash; 3571 models, the three courses and the cells.</li>
+          <li data-i18n="romnote.stcc"><b>Sega Touring Car Championship</b> (<code>stcc.zip</code>, Revision A) &mdash; 2811 models, the courses, the cells and the music.</li>
+          <li data-i18n="romnote.sgt24h"><b>Super GT 24h</b> (<code>sgt24h.zip</code>) &mdash; Jaleco's game: 2238 models, both courses each way round, and the cells.</li>
+          <li data-i18n="romnote.overrev"><b>Over Rev</b> (<code>overrev.zip</code>, and <code>overrevb.zip</code> beside it for the Model&nbsp;2B build) &mdash; Jaleco's game: 1893 models, the six courses and the cells.</li>
+          <li data-i18n="romnote.dynabb"><b>Dynamite Baseball 97</b> (<code>dynabb.zip</code>) &mdash; 7890 models under the game's own names, the three ballparks, the cells and the twelve teams' players.</li>
+          <li data-i18n="romnote.gunblade"><b>Gunblade NY</b> (<code>gunblade.zip</code>) &mdash; 5452 models, the cells and the figures posed by their motions.</li>
+          <li data-i18n="romnote.zerogun"><b>Zero Gunner</b> (<code>zerogun.zip</code>, with <code>zerogunj.zip</code> or <code>zeroguna.zip</code> beside it for the Japanese or Model&nbsp;2A build) &mdash; Psikyo's game: 7712 models, the fifteen stages and the cells.</li>
+          <li data-i18n="romnote.skytargt"><b>Sky Target</b> (<code>skytargt.zip</code>) &mdash; 24204 models, the stages its four routes fly, and the cells.</li>
+          <li data-i18n="romnote.skisuprg"><b>Ski Super G</b> (<code>skisuprg.zip</code>) &mdash; all 5519 models and the cells.</li>
+          <li data-i18n="romnote.waverunr"><b>Wave Runner</b> (<code>waverunr.zip</code>, Revision A) &mdash; 3457 models, the four courses and the cells.</li>
+          <li data-i18n="romnote.segawski"><b>Sega Water Ski</b> (<code>segawski.zip</code>, Revision A) &mdash; 13331 models, the four courses and the cells.</li>
+          <li data-i18n="romnote.topskatr"><b>Top Skater</b> (<code>topskatr.zip</code>) &mdash; 1901 models, the three courses, the cells, the skaters and the music.</li>
+          <li data-i18n="romnote.bel"><b>Behind Enemy Lines</b> (<code>bel.zip</code>) &mdash; 3183 models named from the game's own directory, the cells and the soldiers posed by their motions.</li>
+          <li data-i18n="romnote.desert"><b>Desert Tank</b> (<code>desert.zip</code>) &mdash; 2092 models, the three missions' ground and the objects on it, and 216 cells.</li>
         </ul>
       </details>
     </section>

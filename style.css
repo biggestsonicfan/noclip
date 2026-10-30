@@ -115,11 +115,17 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; f
     background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px);
 }
 
+/* The cards in one row that scrolls sideways, five to a page, with an arrow
+ * at either end. The padding leaves room for a raised card and its glow. */
+.carousel { position: relative; margin-top: 8px; container-type: inline-size; }
 .games {
-    list-style: none; margin: 14px 0 0; padding: 0;
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+    list-style: none; margin: 0 0 -10px; padding: 6px 0 14px;
+    display: flex; gap: 10px; position: relative;
+    overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
 }
+.games::-webkit-scrollbar { display: none; }
 .game {
+    flex: 0 0 calc((100% - 40px) / 5); scroll-snap-align: start;
     position: relative; cursor: pointer; outline: none;
     border: 1px solid var(--line); border-radius: 9px; overflow: hidden;
     background: var(--panel);
@@ -138,6 +144,20 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; f
 .game:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .game.active { border-color: var(--accent); box-shadow: 0 8px 24px -10px rgba(79, 208, 255, 0.6); }
 .game.active .thumb, .game:hover .thumb { filter: none; }
+.car-btn {
+    /* Over the middle of the thumbnails, clear of the names: a card is a
+     * fifth of the row less its gaps, its thumbnail 16:9. */
+    position: absolute; top: calc(50% - 4px); top: calc(6px + (100cqw - 40px) * 9 / 160); z-index: 2;
+    width: 34px; height: 34px; margin-top: -17px; padding: 0 0 3px;
+    border: 1px solid var(--line); border-radius: 50%; cursor: pointer;
+    font-size: 24px; line-height: 1; color: var(--text);
+    background: rgba(10, 13, 22, 0.85); backdrop-filter: blur(4px);
+    transition: opacity 0.18s ease, border-color 0.18s ease;
+}
+.car-btn.prev { left: -14px; }
+.car-btn.next { right: -14px; }
+.car-btn:hover, .car-btn:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.car-btn:disabled { opacity: 0; pointer-events: none; }
 
 .load {
     grid-area: load; text-align: center;
@@ -473,19 +493,15 @@ html.mobile .splash {
     width: calc(100% - 24px); gap: 16px;
     padding: max(20px, env(safe-area-inset-top)) 0 max(32px, env(safe-area-inset-bottom));
 }
+/* Narrow, the strip runs to the screen's edge and is swiped, with no arrows. */
 @media (max-width: 900px) {
-    .games {
-        display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
-        margin-right: -24px; padding-right: 24px; padding-bottom: 4px; scrollbar-width: none;
-    }
-    .games::-webkit-scrollbar { display: none; }
-    .game { flex: 0 0 min(200px, 46%); scroll-snap-align: start; }
+    .games { margin-right: -24px; padding-right: 24px; }
+    .game { flex: 0 0 min(200px, 46%); }
+    .car-btn { display: none; }
 }
-html.mobile .games {
-    display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
-    margin-right: -12px; padding-right: 12px; padding-bottom: 4px; scrollbar-width: none;
-}
-html.mobile .game { flex: 0 0 min(200px, 46%); scroll-snap-align: start; }
+html.mobile .games { margin-right: -12px; padding-right: 12px; }
+html.mobile .game { flex: 0 0 min(200px, 46%); }
+html.mobile .car-btn { display: none; }
 html.mobile .game:hover { transform: none; }
 html.mobile .reel { border-radius: 10px; }
 html.mobile .reel-text { font-size: 13px; }
