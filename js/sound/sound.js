@@ -90,8 +90,9 @@ export function musicChoices(rom) {
  *   as `status`, `middle`, number, and named through the pointer at
  *   `names` + 4 * (number - 1) (Touring Car's and Top Skater's).
  * - `groups`: no names and no table in the i960's program, only the sound
- *   driver's: [middle byte, count] for each of its groups, every sound in
- *   them listed by its command (Power Sled's).
+ *   driver's: [middle byte, count, first entry (0 if left out)] for each of
+ *   its groups, every sound in them listed by its command (Power Sled's),
+ *   labelled `label` and a number ("sound 1" if no `label`).
  *
  * `count` bounds the list; `skip` leaves records out by number; `strip` is
  * a prefix every name has (SDB_, S_BGM_), left off. Read once a
@@ -125,8 +126,8 @@ function nameAt(bytes, at, max = 32, strip) {
 
 function readListedSongs(rom, L) {
     if (L.groups) {
-        return L.groups.flatMap(([mid, count]) => Array.from({ length: count }, (_, n) => (L.status << 16) | (mid << 8) | n))
-            .map((code, index) => ({ label: `sound ${index + 1}`, index, code }));
+        return L.groups.flatMap(([mid, count, first = 0]) => Array.from({ length: count }, (_, n) => (L.status << 16) | (mid << 8) | (first + n)))
+            .map((code, index) => ({ label: `${L.label ?? 'sound'} ${index + 1}`, index, code }));
     }
     if (L.songs) {
         const view = rom.mainCpuView;
@@ -291,11 +292,14 @@ export class SoundBoard {
         const program = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
         parts.reduce((at, p) => (program.set(p, at), at + p.length), 0);
         /* Each chip at its place in the region: 2 MB apart, or `sampleChip`
-         * for a set of bigger chips (House of the Dead's two of 4 MB). */
+         * for a set of bigger chips (House of the Dead's two of 4 MB). A null
+         * is a socket the board leaves empty (Desert Tank's first MultiPCM
+         * has one chip), its place zeros. */
         const chip = spec.sampleChip ?? 0x200000;
         const size = spec.samples.length * chip;
         const samples = new Uint8Array(size);
         for (let i = 0; i < spec.samples.length; i++) {
+            if (!spec.samples[i]) continue;
             onProgress(`reading sample ROM ${i + 1} of ${spec.samples.length}`);
             samples.set(await rom.readChip(...spec.samples[i]), i * chip);
         }

@@ -7182,6 +7182,32 @@ palette, colorxlat and luma windows naming the routines.
   0x306..0x313, left by an earlier scene's longer table 0x297AC3A, and 0x3F7,
   which 0x16E38 animates). The other scenes' tables are the same routines
   run with another n and were not held against MAME.
+- **Courses (the Stages tab).** A scene's course is the record `ld
+  0x2990840[n*4]` (data ROM), read by the course tasks 0x9B660, 0x9B690 and
+  0x9B6C0 (installed at 0x9B5D0 and 0x9B610): a count, then a pointer to
+  that many model numbers, one a segment of the course's ring. Scenes 0 to 6
+  have one (69, 38, 60, 54, 79, 19 and 108 segments, models 2312 on, 2963
+  on, 3106 on, 3545 on, 4092 on, 5327 on and 7332 on); scene 7 has none.
+  0x216A70 draws the course: copro 0x11 gives the camera's matrix, sent to
+  the geometrizer as function 0x0B (0x8000B0); then the segments round the
+  bike's (index mod the count, ahead and behind) go as bare models, function
+  1 (0x800010) and the model's 16-byte entry at 0x4F500, with no matrix of
+  their own. So a segment is already in the world, and js/motoraid.js reads
+  the list as it stands, each on its scene's texture set. 0x2990860[n] is a
+  second record of the same shape (the same for scenes 0 to 4, none for
+  5 to 7) that the course tasks pass as g1 and 0x216A70 does not use.
+- **Lighting.** 0x305B0 sends the 32 materials at program 0x2F010 (8-byte
+  {material word, coefficient} records, function 6 through 0x30510). The
+  light is made by 0x3BED4: (0, 0, 1) turned 0x2000 about Y and -0x2000
+  about X (copro 0x15, 0x14, 0x1A), then into the camera's frame (copro
+  0x0C), and sent as function 0x0A. Taken back through the camera matrix at
+  attract frame 3000 it is (-0.5, -0.7071, 0.5) in the world.
+- **Checked (courses).** A write tap on the geometrizer and copro windows at
+  attract frame 3000 (scene 2) showed 0x216A70's draws and the camera matrix
+  it sends; the explorer put at that camera's eye and heading shows the same
+  picture as MAME's snapshot: the wooden track, the bridge over it, the rock
+  walls and the water. The other six were looked at whole: each is one
+  joined, textured course.
 - **Cells** (`pictures`, as Dead or Alive's and The House of the Dead's). The
   2D is 882 pictures of 12 bytes, {tiles, colours, map}, at program 0x87860.
   Entries 0..834 point into the data ROM, and 835..881 into XTRA
@@ -7206,6 +7232,16 @@ palette, colorxlat and luma windows naming the routines.
     dumped.
   - Not followed: the draw that adds the first block to a map's entries. No
     capture says which pictures share a screen.
+- **Missing.** The sky and the background (MAME's frame 3000 has an orange
+  sky and clouds), the bikes and riders, and anything the race places
+  besides the track. 0x2166A0 sorts draws into buckets at 0x5781D0 and
+  0x578290 (an object pass not read). The course names are pictures; no
+  text names them.
+- **Leads.** Animation: the bike and rider draw at 0x207940-0x207AD0 sends
+  15 parts a bike from 48-byte matrices; the scene number is 0x517AE0 and
+  0x21C930 sets a scene up. Cells: 0x19050/0x191BC animate the luma tables
+  and 0x16E38 the colours; the program has a debug text "CourseNo : %d"
+  (unread). Music: not looked at.
 
 ### Manx TT Superbike (`js/texture.js`, `js/colors.js`)
 
@@ -7229,8 +7265,8 @@ the flag 1. Banks 0..3 (data 0x400000..0x7FFFFF) are the only ones dealt:
 scripts call from their tables at 0x19960 and 0x199F0 (entries {start, end,
 handler, arg1, arg2}), 3, 2 and 1. The explorer's sets are banks 1, 2 and 3
 over bank 0. Set 0 matches MAME's texture RAM after the boot, every byte of
-both sheets. Which course or scene uses which of banks 2 and 3 has not been
-worked out, so a sheet-1 model gets its set from the picker. A second routine,
+both sheets. Laxey Coast uses bank 3 and the T.T. Course bank 1 (Stages,
+below); what uses bank 2 has not been worked out. A second routine,
 0x3CB0/0x3D00, copies a bank straight to sheet 1 (0x12400000), 0xFFF
 halfwords a call; nothing here uses it.
 
@@ -7245,8 +7281,31 @@ colours} from 0x7A404, 738 colours, to 0x1802000 (`paletteProgram`), which
 matches MAME's palette RAM. Luma is 0x3828: main_data bytes 0..0x407F to luma
 RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
 0x3880 to the TGP's registers at 0x800000; what they are has not been worked
-out, so there is no `lighting` block and the lone model gets the placeholder
-light.
+out, so the `lighting` block's light is a stand-in.
+
+**Stages** (`js/racers.js`). The course records are 20 bytes at 0x401E0,
+picked by 0x40258 (g0 the record) into 0x579640: +0 the segment list, +4 and
++8 the first and last segment a walk may start from, +0xC the sky model,
++0x10 the list's length. The draw, 0x40280, walks out from the car's segment
+(0x3AA08) both ways while its polygon budget lasts, each segment with no
+matrix (`st 0x101, 0x800010`), so a segment is in world space where it lies;
+0x40520 draws the sky (`ld 0x401EC[k*20]`). A race's course is 0x513FF0: 0
+is record 1, Laxey Coast, 1 is record 2, the T.T. Course (0x1B56C, the
+attract's 0x274FC); record 3 is record 2 again, record 4 record 1 under sky
+2125. The tab draws every segment of records 1 and 2 (159 and 180) under sky
+2127. Laxey Coast deals bank 3 (set 2), the T.T. Course bank 1 (set 0), and a
+segment opens on that set in the Models tab. MAME's attract (past the
+motion-slider check by entering and leaving the test menu) was tapped for
+model-table reads: under 0x579640 = 1 it reads 64 of record 1's list and none
+of record 2's, under 2 88 of record 2's and none of record 1's; its pictures
+are the sea coast and the T.T. Course's leaderboard. Not in the tab: models
+the race draws outside the lists (1316..1375, 1499..1558 and 1622.. on both,
+1438..1497 and 1560..1619 on the T.T. Course; the bikes, riders and trackside
+objects), the light (Sega Rally's stands in; the boot's (0, -0.707, 0.707)
+is at 0x4338) and Laxey Coast's colour rows: 0x6830's 0x7840 lays the T.T.
+Course's (0x6BE0, 0x6A60), and the race lays 0x76B0(29, 0x6EE0) and (27,
+0x7060) over them for Laxey (0x1B590). Function 6 is 22 pairs from 0x4140
+(`mov 22,g1; lda 0x4140,g2; bal 0x40D8`, 0x4280).
 
 **Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
 routines (js/cells.js `cgm`, see [Sega Rally's
@@ -7286,11 +7345,9 @@ Isle of Man screen is `iom16` with the program file 0x77730's MHK over it,
 both exact.
 
 **Leads.** The map of the island is model 1213 to 1216, the leaderboards
-1628 and 1629. The course is built from segments around 2099..2350, drawn by the race
-code that reads the model table; its course records were not looked for.
-MAME on empty NVRAM stays on the DX cabinet's motion-slider check; holding
-work RAM 0x51405A at 1 gets past it (see Cells), which is the way to a run
-for the bank-to-course mapping. The shared MAME also wants the default NVRAM
+1628 and 1629. The attract is scripted from the tables at 0x19960 and 0x199F0
+({start, end, handler, arg1, arg2}), run by 0x1D940. MAME on empty NVRAM stays on the DX cabinet's motion-slider check; holding
+work RAM 0x51405A at 1 gets past it (see Cells). The shared MAME also wants the default NVRAM
 image `manxtt_dx_nvran`, which the zip lacks; 128 bytes of 0xFF in a second
 rompath folder stand in for it.
 
@@ -7337,6 +7394,23 @@ at data 0xC11B5C, 961 colours, to 0x1802000 (0x2F0D0), then 0x2DFB0 lays
 pointers at 0x6CBF0 (`paletteTop`, table 0: XTRA 0x6448DE0, 19 colours). The
 table was 0 in every MAME run. 0x2EFD0, behind the flag at 0x53C6E8, greys the
 palette; it is not ported. Luma and palette match MAME.
+
+**Stages** (`js/racers.js`). A course record (0x6A5B0 + 24k, through
+0x5447AC; the Deluxe's at 0xAFE90) points at two {count, list} pairs in the
+data ROM: +4 the full-detail segments, +0 the low-detail ones. The draw,
+0x4DD10, asks the TGP (command 0x4D) for the car's segment and draws it and
+the two beside it from +4's list and the rest from +0's, each with no matrix
+(0x101), so in world space. The tab draws +4's list whole: 34 segments for
+course 0, 44 for course 1, 29 for course 2. Model numbers index the RAM copy
+of the table at 0x200000 (0x3BC20), entry for entry; the copy takes 0x200000
+off a tpa or tha with bit 22 set (`texBit22`), which course 0's segments have
+and which left them untextured until it was read. Course 0 is Bayside Street
+(MAME's attract race there shows the "BAY SIDE STREET" leaderboard), course
+1 the Indianapolis Motor Speedway (the oval) and course 2 Highland Raceway.
+Set k is course k's banks and colour table, which a segment opens on in the
+Models tab. Not in the tab: the per-course extra draw 0x4E010, the object
+draw 0x17720 (table 0x176F0), the cars, a sky, and the light (Sega Rally's
+stands in). Function 6 is 31 pairs at 0x2D590 (Deluxe 0x33A40).
 
 **Cells** (`banks`, js/bankcells.js). There are no CGM pictures; the 2D is in
 two banks of three tables the program indexes by number:
@@ -7387,11 +7461,9 @@ pointer. A few small cells (e.g. 34, a strip of HUD words) take a CG that
 garbles them, so they probably draw with two CGs loaded. The Deluxe's XTRA
 cells have no `screens`; they rank by fit and seams alone.
 
-**Leads.** A course record's +0x00 and +0x04 point at {count, model numbers}
-lists in the data ROM, 34 models each (course 0: 0x481.., 0x455..), which look
-like the course's segments at two distances; +0x0C points at 16-byte records
-of {x, z float, a word, 0}, which look like the course line; +0x08 points at a
-program table (0x69F60) not read yet. The sound board is the 68000 and
+**Leads.** A course record's +0x0C points at 16-byte records of {x, z float,
+a word, 0}, which look like the course line; +0x08 points at a program table
+(0x69F60) handed to 0xE40, not read yet. The sound board is the 68000 and
 SCSP of the other Model 2 games (epr-18391.31); its command writes were not
 traced.
 
@@ -7434,6 +7506,24 @@ to 0x1802000 by 0x1C8C0 from the frame hook (0x696C0). 0x1C950, 0x1C9F0 and
 0x1CA90 copy it ANDed with 0x801F, 0x83E0 or 0xFC00 for a moment of the
 attract mode (MAME's frame 6000 is in one of them); not ported.
 
+**Stages** (`js/racers.js`). 0xAA10 sets a course up from its record
+(0x3F4 bytes at 0xBEB0) into 0x202630 (the number) and 0x202634: +0 and +4
+the texture pair, +8 a table of 20-byte {first, last, routine, ?, argument}
+entries the draw calls by segment range, +0xC the sixty segments, +0x100
+their low-detail copies (drawn now and then when +0xFC is set), +0x1F4 a
+second model per segment, drawn with it when +0x1F0 is set. The draw is
+0xAEA0 (`remi 60`), each segment with no matrix, so in world space. The
+course menu's labels at 0x15B80 (pointers at 0x15C10) and the table at
+0x57460 ({record, ?, list} by choice) give NOVICE, INTERMEDIATE, EXPERT
+(records 1, 2, 3), the three as SS (4, 5, 6: the same courses on copies of
+the models, 921.., 1411.., 1838..) and OMAKE (7); record 0 is record 4
+again. The tab has records 1..7, every segment and second model, on the
+record's set. MAME's attract runs 0x202630 = 1, 2, 3 in turn: the grandstand
+circuit, the alpine one and the town, Country Circuit, Grunwald Circuit and
+Brickwall Town. Not in the tab: the +8 scenes, the cars, a sky (none found)
+and the light (Sega Rally's stands in). Function 6 is 32 pairs from 0x736B0
+(0x1BA4, 0x10FA4, 0x7C2B0, through 0x73648).
+
 **Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
 routines (js/cells.js `cgm`, see [Sega Rally's
 cells](#sega-rally-championships-cells-jscellsjs)) at ROM addresses. The
@@ -7457,11 +7547,8 @@ byte for byte, and the rendered stc_url, insert_coins and credit_ patterns are M
 snapshot's pixels exactly where the game draws them, also in the green
 moment of frame 6000 (the tile layer does not take the tint).
 
-**Leads.** A course record's +0x08 points at a program table (0xBB60 for
-record 0) and +0x0C on is a run of consecutive model numbers (0x399.. for
-record 0, 0x48F.. for 2, 0x678.. for 3, 0xA09.. for 7), which look like the
-course's segments. Sound is the 68000 and SCSP (epr-19274.31) with a DSB
-MPEG board (epr-19275.2s, mpr-19262..19265); not traced.
+**Leads.** Sound is the 68000 and SCSP (epr-19274.31) with a DSB MPEG board
+(epr-19275.2s, mpr-19262..19265); not traced.
 
 ### Super GT 24h and Over Rev (`js/jaleco.js`)
 
@@ -7539,10 +7626,54 @@ Shibuya and Touge 0x300000 and 0x700000. Sets 1..6 are those in data order.
 
 Checked against MAME on both boards: colorxlat and luma at the title (frame
 400) no byte different. Colorxlat does not change in the attract race; luma
-bands 129 to 196 do (0x13AC0 queues band copies at run time), and the viewer
-keeps the boot's. Texture RAM matches at the title and in the attract race
+bands 129 to 196 do. The course set-up (RAM 0x54D960) passes the record's
++8, v, to 0x564EF0 (ROM 0xE4EF0, the 2B build's 0xE4E40), which copies the
+luma table's v-th 0x4000 bytes (0x37F09 + 0x4000v) over entries 0x4000 on.
+The viewer runs it as colour set v after the boot's three (`colorSets`), and
+a course's stage asks for its v (Tsukuba 2, Shibuya 4, Touge 6, Futou 5):
+Tsukuba's matches MAME's luma at frame 1800, no byte different. Without it
+the road and grass read zero bands and draw black. Texture RAM matches at the title and in the attract race
 (Tsukuba, data 0x200000 on sheet 1) but for eight halfwords at the start of
 sheet 0 and eight at sheet 1 0xC0000, which code not traced writes later.
+
+**Courses (Stages tab).** Both games draw a course the same way. A course
+is a few grid records, {cell width, cell depth (floats: 50 in Super GT 24h,
+75 in Over Rev), columns, rows, first and last column, first and last row,
+grid pointer at +0x20}, and the grid is a word a cell: the model there, or
+0. The camera's cell picks a list of 6-byte records {column, row, kind},
+ended by 0xFF, and each draws the model in that cell of each grid record of
+that kind under the camera matrix alone. The models are in world space, as
+Daytona USA's blocks are, so `readJalecoStages` draws every non-empty cell
+of the near (kind 0) records at the origin.
+
+Super GT 24h: 0x46B4 calls one of the fourteen band routines at 0xEC6A0
+(0x2450 in the attract), and they draw through 0x72C90 out of
+`(0x517B20[course])[kind]`, `0x517AF0[course][kind]` records; 0x2FC0 points
+those at the lists at 0xEC66C (12 bytes a course) and counts at 0xEC630
+(16). The course is 0x5305F8; the test menu's histogram pages (0xBF670) name
+them: bit 0 the long course, 2 and 3 reversed. Each course has one 128 by
+128 grid (0x282A360, 0x284A3C0, 0x286A420, 0x288A480), and 0x3F4C0 loads
+sheet 1 from 0xED8B0[course], sets 0..3. Trackside: 0x4AC10 draws the 16
+{model, course} pairs at 0xEFE60 (gated by cell bits at 0xEDF60/0xEDDC8)
+and 0x4CDE0 the model `0xF0120[course]` every frame; both are in.
+
+Over Rev runs its race code from RAM (ROM 0x80000 at 0x500000, ROM 0x60000
+at 0x200000). 0x54D660 (ROM 0xCD660), called from 0x54DB4C, draws through
+0x200060 out of `0x5A16B0[course]`, which 0x54C6D0 (ROM 0xCC6D0) points at
+the lists at 0xEDF90, 0xEDFA0, 0xEDFC0 and 0xEDFD8, counts at 0xEDF50 (16
+bytes a course). Kind 0 names two or three records (Tsukuba 0x28166E0 and
+0x2816940; Shibuya 0x2817760, 0x2817050 and 0x2818120; Touge 0x2818EC0 and
+0x2819F70; Futou 0x281AAD0); kinds 1 and 2 are the far cells' with less in
+them. The six stages are the records at 0xCD8B0 {texture source, course,
+luma variant, name}: 0x54D960 takes record 4 or 5 instead of course 1 or 2
+when 0x590DD0 is set. The 2B build has the code at 0xCC6A0 and its tables
+0xB0 back (records 0xCD880, lists 0xEDEE0..., counts 0xEDEA0). The Models
+tab opens a model on the set of the first course whose grid or trackside
+names it (`jalecoCourseSets`).
+
+Checked in headless Chrome from MAME's attract-race camera (Super GT 24h
+frame 1200, Over Rev frame 1800, the eye from the course pieces' matrix):
+the pieces stand where MAME draws them, on the right textures.
 
 **Cells** ([js/jalecocells.js](js/jalecocells.js), `files` in the game's
 cells). The tile chip is filled from CG files, which the data ROM lists in a
@@ -7604,15 +7735,19 @@ the code clears afterwards (the file stores 0x8000), and Mode Select, the
 mode captions and the controls hint render the same as MAME's screen pixel
 for pixel. The other files were not reached.
 
-**Not done, and leads.** No course is put together: the course's model
-lists and placements were not looked for, but 0x2DEC, 0x4B324 and 0xCFE2C
-read the model table besides the draw routines, and the pointer list at
-data 0x818060 is the place to start. The car is single models; which parts
+**Not done, and leads.** Super GT 24h's eight object routines at 0xEFEE0
+(0x47700, 0x4A450, 0x4A760, 0x4B5B0, 0x4B2E0, 0x4BAD0, 0x4B870, 0x4CDB0)
+place the animated trackside: tables at 0x476D0/0x476F0 by 0x510F60 and
+course >> 1 (0x5307E0), rows of 0x4DA from 0x49BA0, the moving 0x4CC..0x4CE
+from 0x4599C, and the Check Point gantry (0x4DB/0x4E3, likely 0x47A5C). The
+sky is 0x2AF0 (models 0x3F7..0x40C, tables 0x29B0, 0x2AB0, 0x2AC0). Over Rev
+draws objects 0x1B1, 0x283, 0x28A, 0x290, 0x125 and 0x159 from 0x55B778,
+0x56176C, 0x5618AC, 0x561B70, 0x556BC0 and 0x557194. The material table is
+not read: stages draw at full ambient. 0x2DEC, 0x4B324 and 0xCFE2C read the
+model table besides the draw routines. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
-read at 0x6000C and 0x7EBAC, and much of the game runs from code the boot
-copies to RAM 0x200000 (calls to 0x2007E0), which a course loader will be
-found in. The sound programs were not looked at.
+read at 0x6000C and 0x7EBAC. The sound programs were not looked at.
 
 ### Dynamite Baseball 97 (`js/dynabb.js`)
 
@@ -7677,6 +7812,27 @@ answers with a float square root. Colorxlat, luma and the face palette
 Palette RAM below 0x1802000, which 0x82200's callers address, is not the
 face palette; its +0x10000 is colorxlat.
 
+**Ballparks (Stages tab, `readDynabbStages`).** The stadium draw is
+0x6BB80 (and its branch at 0x6BD44, taken when 0x5D4A48 is 5 or 6). It
+walks a list of halfword pairs {base model, variant slot}, ended by a 0,
+and draws model base + 0x5D4CD0[slot] through 0xA5380 or 0xA5510: culled
+on the model table entry's sphere, no matrix, the pieces being in world
+space. Model 0x1ABD (`Q1_SOTO`) is preceded by a coprocessor set-up of its
+own (command 0x505 with 0x9001212, 0, 0, 430.0). The list is the one at
++0x5C of the view record, 0x5D4700 + 0x5D397C × 0x60, which a camera shot
+fills from its group in the table at 0x1A0C30 (the shot records from
+0x1B3C8C point at it): 54 groups of four words, the lists of stadiums 0, 1
+and 2 and a 0. A list holds what that shot sees, so the viewer's stadium is
+every piece its column names, 70, 93 and 86 pieces; `stageTable.dynabb` in
+the profile. The slots (frame 3000: slot 4 = 0x11, 9 = 1, 10 = 0x38, the
+rest 0) choose a level of detail (slot 9: `Q2_shita_b`, `_bb`, `_bbb`), a
+frame of the crowd's cheering (`Q3_oen_ey00` on), of a flag (1 to 3) or the
+home team's scoreboard (10, `Q3_sc_baffu00r`, `_baystar00r`, ...); the
+viewer draws slot 0's model, the most detailed and the first. The texture
+set is the stadium's with team 0 (stadium × 12). Checked headless against
+MAME's attract frames: the Q1 outfield wall (navy, the FUJIFILM and maxell
+boards, the crowd above) and the Q2 roof and stands, as the game draws them.
+
 **Cells** ([js/dynabbcells.js](js/dynabbcells.js), `slots` in the game's
 cells). Not Jaleco's files: the tile chip is paged by picture. The table at
 data 0xBB0000 has 0x938 records of 12 bytes, {tile chain, colours, pattern},
@@ -7707,14 +7863,71 @@ screen (the batter panels 1860 and 1872, 1515, 1604 and 2179) match it pixel
 for pixel. Blocks 0 to 7 (characters below 0x400) are not the allocator's;
 0xAF0BC to 0xAF208 write characters there, and were not followed.
 
-**Not done, and leads.** No stadium is put together and no player
-assembled. If the game finds models by name (0xC2F40), the stadium's
-and players' lists are likely name lists: look for callers of 0xC2F40 and
-of the draws above. The game's set-up of a match is 0x99B60 and 0x99C60
+**Not done, and leads.** The players are put together (see the next
+section). Who fills 0x5D4CD0's
+slots each frame (the crowd and flag clocks, the scoreboard by home team)
+was not followed, nor the special set-up of `Q1_SOTO`. The game's set-up
+of a match is 0x99B60 and 0x99C60
 (0x99DB0 the palette), and 0x7B2C8 and 0xC2D60 the loads of a match's
 teams and stadium; 0x9A128 redoes the colours only. 0xC3480 and 0xC3560
 are test-menu colour tweaks. Motions and the sound program
 (`epr-19849.31`) were not looked at.
+
+### Dynamite Baseball 97's players (`js/dynabbplayers.js`)
+
+The Animation tab's players run the game's own routines in the i960 and
+copro machine of js/doa.js, as Air Walkers' do, rather than port them. All
+addresses are program ROM offsets; data is the data ROM (the XTRA window
+0x6000000 is data 0x1000000).
+
+**Set-up.** 0xCDBE0(obj, team, kit, player) dresses an object: +0x410 team,
++0x414 kit, +0x418 player, +0x434 the bones, +0x424 the player's record
+`0x1A1670[team*2 + kit] + player*0x1CC`. The table has 26 entries: twelve
+teams × two kits × 36 players, then team 12, whose kit 0 is the umpire and
+kit 1 the mascot (GALL), one each. The bones are the 17 × 12 bytes the boot
+(0xCD780) copies from `*0x1A0A60` to 0x5DB430; the umpire takes `*0x1A0A64`.
+With 0x5B9528 clear and a team and player in range, the player goes through
+the roster at data 0x1D00042 first; the explorer sets 0x5B9528 to 1 to see
+every record. The routine calls 0x9AFF0, the face (a halfword model at
+0x5DC100 + 12·slot, from face script 0x1A0B50 and the record's +0x1B8 and
++0x1C0), 0x849B0, the hands (0x5D6500 + 16·slot: a role byte, the gloved
+hands at +2 and +4), and 0xCDCD0(obj, 0, 0).
+
+**Roles.** 0xCDCD0(obj, g1, g2) sets +0x428 to the parts lists at
+0x1A0AA0 + 16·(g1·2 + g2) (near, mid and far pointers and a zero) and
++0x430 to `(*0x1A0A90)[g1]`. g1 is the role (0 fielder, 1 batter, 2
+pitcher, 3 catcher, named from the lists' models: B, P and C hands, YP and
+YC heads), g2 left-handed. The game calls it with g1 1 (0x2E8E0, 0x479FC)
+and 3 (0x2E898, 0x46CC4), g2 always 0; the Role picker offers all eight.
+
+**Skeleton.** 0x857E0(obj) writes 19 matrices at +4 + 0x30·k: the hips,
+joints 1..17 and the base (+0x364), from the place +0x3C4/+0x3C8/+0x3CC,
+heading +0x3D2, motion +0x3DC and frame +0x3E4. A motion is three tables
+indexed by its number, 1900 each: frame counts at data 0x1D52CA0 (0x28AC0
+holds the frame below the count), the hips' path at data 0x1D54A50 (a float
+triple a frame) and the frame records at data 0x1D56800 (0x62 bytes a
+frame). Without root travel the explorer puts the place at minus the path,
+so the player stays on the spot. Parents, measured from the matrices: 1, 9
+on the hips; 2, 3, 6 on 1; 4 on 3, 5 on 4; 7 on 6, 8 on 7; 10..13 a chain
+from 9, 14..17 another.
+
+**Draw.** 0xCEE20 picks a level of detail by +0x3E8; the near draw is
+0xCF7D0, whose team players (kind ≤ 11) go through 0xCF898. Joint 1 draws
++0x1A8, the list's first model and +0x1A4 (number and chest); joint 2 the
+face, the head and the neck (843); the hands go through 0x84D60 and 0x84DE0
+by the role byte (1 the list's model, 4, 15 and 16 the gloved ones, 14 by
+the motion's parity). The explorer reads each draw's model and matrix off
+the geometry FIFO and hangs it on the joint whose matrix it is. 0xA4B70
+stretches skin between joints: copro 0x7A on a joint matrix, then points
+into RAM 0x5DC2E0; the explorer's copro takes 0x7A as a rigid inverse and
+does not draw that skin, only the ROM meshes.
+
+**Checked.** Against MAME's work RAM at attract frame 1500 (objects 7 and
+9, roles batter and pitcher): every joint within 5.2e-4 of the game's,
+relative to the hips, and the same 22 models drawn. MAME's matrices at
++0x3E4 = n are those of frame n − 1 counted from 0. A body's textures are
+set 12 + team (stadium 1), as the attract's teams at 0x5B961C (home) and
+0x5B95F4 (visitor).
 
 ### Gunblade NY (`js/texture.js`, `js/colors.js`, `js/romset.js`)
 
@@ -7788,9 +8001,25 @@ model the fade.
 **Leads.** The scene number is at RAM 0x508C94, and the switch on it at
 0xAABA0. The stage list pointer is at RAM 0x5401F4. The scene set-ups at
 0xDE780 and 0xEC544 pick the bank and the colour table, so they would tie a
-model to its set. The objects' records (which triple, where) are not found.
-Gunblade NY has no fighters or motions. Its enemies and vehicles move by
-script, and that script is not read. Cells: see [Gunblade NY's
+model to its set.
+
+The city is not the program's objects. In MAME's attract at frame 1200
+(Times Square, "2005 JULY 12") the program sends six objects and 137 words
+to 0x804000 in the frame, all from 0x9960: the caption's frame and the
+title strip, under `st 0x303, 0x800030` windows. The frame's draw calls
+the scene's routine at RAM 0x501E1C (0xDAA4), then sends the coprocessor
+(0x884000) function 5, 0x2B with the five words at RAM 0x501E50 to
+0x501E60, and 0x39 with the geometrizer's list address (the word read from
+0x802008, which plus 0x34 goes to 0x801008, the geometrizer's write start),
+calls the overlay's routine at 0x501E20 and ends with function 6. So the scenery is
+written into the list by the SHARC program itself, out of what the scene
+set-up gave it. A Stages tab would have to run that program (js/sharc.js)
+on the scene set-up's uploads, or find the world data it walks. Task
+routines run from 0x318C0 (the list at RAM 0x50A03C) draw the enemies and
+vehicles, through the sender at 0x14C4.
+Its people are posed from a motion table (see [the
+figures](#gunblade-nys-figures-jsgunbladeplayersjs)); what places and moves
+them in a scene, and its vehicles, are not read. Cells: see [Gunblade NY's
 cells](#gunblade-nys-cells-jscellsjs-jsstackcellsjs). The music is not
 looked at.
 
@@ -7843,6 +8072,61 @@ goes the shared way when `dirs` is set) picks among them by seams, and some
 of the stage briefings in five languages open on another stage's scene.
 Cells 418 and 419 are covered by no CG in full.
 
+### Gunblade NY's figures (`js/gunbladeplayers.js`)
+
+Every person the game shows (soldiers, gangsters, hostages) is a figure of
+fifteen parts, posed from one motion table and drawn by one unrolled
+routine. The format is not Virtual-On's: whole-body key poses in floats,
+moved between in straight lines, and copro command 0x2C rather than VON's
+0x2F. The Animation tab runs the game's draw on js/i960.js with a small
+copro of its own.
+
+**Objects.** A figure object (0x502340 is one of the attract's): +0x00 the
+place, +0x0E the heading (the draw sends it less 0x8000), +0x4C the muzzle
+flash, +0x58 the distance (part list 0 below 150, 1 below 300, else 2 or
+3; the object at `*0x508BF0` always list 0), +0x60 the animation record,
++0x90 24 for a waist twist, +0x94 the type, +0x98 the kind (its draw, from
+the table at 0x24E30, 16 bytes a kind), +0xB8 the scale (1.2 on the
+attract's), +0xC0 the shadow's distance, +0x118 the hand's scale (copro
+0x2A), +0x158 + 0x3C·l the part lists (word k part k's mesh triple).
+0xA2E20 swaps wounded meshes in (tables 0xA2DD0, 0xA2DE0, 0xA2E00).
+
+**Types.** 0x9D670 + 8·type: {meshes, skeleton}, 120 types (67 empty);
+meshes + 12k is part k's mesh triple (part 0 unused), skeleton + 12k its
+bone. 0x9DB10 + 4·type scales the root's place (0.81 for types 18..24).
+Types 32 and 33 are drawn by 0xA3140 with 27 parts; the rest by 0x9DC70.
+
+**Motions.** 0x95E80 + 8n, n = 0..471: {step list, u8 count, u8 flags},
+flags 1 to play once, else loop. A step is {key, u8 frames}; a key is 17
+float triples (0xCC bytes), the root's turns, the fifteen parts' X, Y and Z
+turns (0x10000 a turn) and the root's place, in the program or the data
+ROM. Motions 0x1C7..0x1D7 point at keys built in RAM and are left out,
+leaving 454. The animation record: +0 the motion's entry, +4 the step's,
++8 the motion, +0xC the step, +0x10 the frame in it, +0x14 its frames,
++0x18 done, +0x20 the speed, +0x24 + 12k the values, +0x114 + 12k the step
+a frame, +0x204 + 12k the target. 0x97020 starts a motion from all values
+0, 0x97080 without clearing them; 0x96EF0 starts a step (frames times the
+speed when over 1, delta = (key − value) / frames); 0x96D40, copied to RAM
+0x532E50 by the boot, is the tick: add the delta until the step's frames
+run out, then land on the key and go on, looping or holding at the end.
+The explorer starts a looping motion from its last key, as it looks the
+second time round.
+
+**Draw.** 0x9DC70: push; copro 0x87 with the heading, place and scale;
+0x2C for the root (triple 0's turns, triple 16 × the type's scale); then
+for each part 0x2C with its turns (truncated to shorts, Z, Y, X) and its
+bone, then 0x39 and the mesh triple to the geometrizer; 0x51 lights it.
+0x2C is M = M·T(bone)·Rz(−z)·Ry(−y)·Rx(−x). The shadow (0x9F2F0), the muzzle
+flash, the waist twist, the head turned to the camera, the wounds and the
+far lists are left out; the figures are drawn at scale 1.
+
+**Checked.** At MAME attract frame 1500, the five figures on screen (types
+18 and 20..23): every part relative to the hips within 2.8e-4 of MAME's.
+Motion 0x197's values match MAME's frame by frame within 4.9e-6, 248
+frames from a step's start and 188 from the loop's. The heading (0x87) and
+hand scale (0x2A) are not checked; the explorer sends 0 and 1. The figures
+open on set 6, the stage film's sheets, where the attract shows them.
+
 ### Zero Gunner (`js/texture.js`, `js/colors.js`)
 
 Psikyo's 1997 shooter runs on Pilot Kids' engine, a year older. The builds
@@ -7884,10 +8168,10 @@ list points at the records. The pairs are:
 - (20, 21), the attract at frame 600;
 - (22, 23), at frame 1500;
 - (19, none);
-- (8, 3, 10, 4 or 1, with 16), the first stage; the attract's frame 3000 is
-  8 with 16;
-- (2, 9, 11, 12 or 13, with 17), the second stage;
-- (5, 6, 14, 15 or 7, with 18), the third stage.
+- (8, 3, 10, 4 or 1, with 16), the Asia course; the attract's frame 3000
+  is 8 with 16;
+- (2, 9, 11, 12 or 13, with 17), the America course;
+- (5, 6, 14, 15 or 7, with 18), the Europe course.
 
 Both sheets match MAME's byte for byte at all three frames.
 
@@ -7905,13 +8189,47 @@ lays the table at 0x1050 over the first 64 slots of odd rows 1, 3, and so
 on: 13 rows (the byte at 0x1A10) of 64 {r, g, b} bytes. Nothing rewrites the
 tables after the boot (frame 51), and they match MAME's entry for entry.
 
+**Stage scenery (`js/zerogun.js`).** The course table is at 0x6EE28
+(`zerogunj` 0x6EFA8, `zeroguna` 0x6E1E8; the pointers in it are RAM, 0x500000
+past the ROM offset). Its five words point at lists of scene records: the
+Asia, America and Europe courses of five (the strings near 0x26DD0,
+全5ステージ), the expert course of ten, which reuses the first three's records,
+and a list of scenes with no terrain (the demo and the ending). A record is
+0x28 bytes and then its script; 0x62EB0, 0x63010 and 0x63130 set it up:
+
+- +4/+8/+0xC, floats: the camera's start, to RAM 0x502520;
+- +0x10 and +0x12: two camera turns, to 0x502564 and 0x502504;
+- +0x20 and +0x22: the terrain blocks, to 0x502512 and 0x502510;
+- +0x24 and +0x26: the texture loads, the pair games.js's sets list by.
+
+0x4367C calls 0x42FC0 every frame both blocks are 0 or more (0x7390 and
+0x4B300 set them to -1). 0x42FC0 walks the list the word at
+0x20C70D0 + 8 * block points at: model numbers up to a negative word, for
++0x20's block and then +0x22's. Each model is culled by the sphere at +0x30
+of the record the word at 0x2078700 + 4 * model points at (copro function
+0x27), and drawn by 0x4D3A0 with only the camera's matrix. So the numbers
+are model table indices and a stage is those models at the origin. The
+first block (its entry's second word is 1) is the ground and water, the
+second the huts, trees and piers.
+
+Materials: 0x49210 uploads, with function 6 and count 31, a copy at RAM
+0x502260 of the 32 entries of 8 bytes at 0x47FB0 (`zerogunj` 0x48000,
+`zeroguna` 0x47ED0); 0x48298 makes the copy. Light: 0x4362C sends function
+0xA a vector the copro makes (function 0x2B, then the 0x1A turn) from the
+turns at 0x502566 and 0x502568, 0x2000 and 0x8000 in MAME's attract. The
+viewer takes the vector those make with `stageLight` and reverses it; that
+lights the Asia course's first stage as MAME does at frame 3000 (MAME sends
+(-0.471, 0.526, 0.708) in camera space there), and is an estimate.
+
+Checked against MAME: the attract at frame 3000 plays the Asia course's
+first stage (blocks 0x25C and 0x25B, loads 8 and 16), with the camera at
+(-23.9, 7.6, -233.9). Seen from above that point, the explorer has the same
+river bend, sandy shore, huts and jungle as MAME's picture.
+
 **Leads.**
 
-- Scene records: from RAM 0x56EE28 by stage. The fields of +0x00 to +0x22
-  are not read; the shorts at +0x20 and +0x22, 603 to 632, go to RAM
-  0x502512 and 0x502510.
-- The routines 0x62EB0, 0x63010 and 0x63130 set a scene up. They would tie
-  a model to its set.
+- Stages: the scene's script after +0x28 places the boats, tanks and
+  aircraft and moves the camera; it is not read.
 - The music is not looked at. Cells: see [Zero Gunner's
   cells](#zero-gunners-cells-jscellsjs-zerogun_cells-in-jsgamesjs).
 
@@ -7955,6 +8273,23 @@ The other files were not loaded in the attract.
 `0x54CBC8` and `0x54D258`); the other offsets are not read. `0x54F50`
 animates colour 15 of group 0 (from frame 150); it is not modelled.
 
+**No motions.** Zero Gunner has no motion tables (looked for in #1887).
+These addresses are the program's copy in RAM, 0x500000 on. A
+helicopter, its rotor, a gunship and its turrets are a tree of objects:
+a pool of 128 of 0x200 bytes at 0x5025B0 (0x541780 clears it, 0x5418E0
+hands one out), the root at 0x210000, each object's +4 its parent, +8 its
+first child, +0xC its next sibling, +0x84..+0x8C its place and
++0x90..+0x98 its angles on its parent's (composed by op 0x31, 0x55B610).
+Each object runs its own byte-code script (+0x20, run by 0x556E30, ops
+from the table at 0x55D4E0; a negative word waits that many frames), in
+the program at about 0x574000..0x58A000: op 0x27 sets an angle, op 0x26 a
+turn a frame (the rotor, 0.023 at 0x578A34), and others ease a part to a
+target the script gives. None of the op handlers in 0x55A900..0x55F800
+reads a table from the data ROM; the one read near the draws,
+0x2078700[model] (0x40 bytes a model, to the copro), is bounds, not
+animation. An Animation tab would have to run the objects and their
+scripts frame by frame, not play a motion.
+
 ### Sky Target (`js/texture.js`, `js/colors.js`)
 
 Sega's 1995 flight shooter on Model 2A CRX (MAME's `skytargt`). It shares
@@ -7979,9 +8314,67 @@ main RAM do not reach a Lua write tap; watchpoints do.
 - +0xC a list of row-21 tables, taken by an argument (0x374D0);
 - +0x10 a data pointer, not read yet; +0x14 is 0.
 
-There are twelve records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
+There are eighteen records. Records 0, 1 and 9 take bank 0x2100000, 2 and 10
 0x2200000, 3 and 11 0x2300000, 4 0x2400000, 5 and 8 0x2500000, 6 0x2600000
 and 7 0x2700000.
+
+**Stage scenery (`js/skytargt.js`).** Counted from 0xF6570, eight bytes
+before the table above, a record's +0 is the object list and +4 a height
+every object stands on (0.0 in all of them). 0x31220 picks the record off
+the route table at 0xE67B0, nine words a route, by the route at 0x5245D4
+and the step at 0x5245C0. The four routes are:
+
+| step | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| route 1 | 0 | 1 | 5 | 3 | 8 | 4 | 2 | 17 |
+| route 2 | 0 | 1 | 5 | 3 | 8 | 4 | 6 | 17 |
+| route 3 | 0 | 1 | 5 | 10 | 8 | 7 | 14 | 17 |
+| route 4 | 0 | 1 | 5 | 10 | 8 | 7 | 12 | 17 |
+
+Step 0 is the briefing flight, 1 to 7 the STAGE 1 to STAGE 7 of the
+strings at 0x82F68. Records 11, 13, 15 and 16 are on no route. The debug
+stage select's 0x79744 names the records out of 0xEDD70, ten bytes each.
+The attract flies record 1 (RAM 0x5290C0 reads 1 through it); record 9 is
+the attract's own (0x17F18).
+
+Every frame draws three things round the camera, whose struct 0x528780
+points at: +0x20..+0x28 its place, +0x2C, +0x30, +0x34 its turns (0x10000
+a turn):
+
+- The object grid. 0xD1D10 walks the record's object list, {A, B, P}
+  blocks of 12 bytes until P is 0. P holds {rows, columns, offsets, limits,
+  +0x20 count}, then count nodes of 20 bytes: int x, y, z, +0xC a model
+  list, +0x10 a hit-list word. 0xD24B0 files a node in the 256-unit cell
+  (x >> 8) + A, (z >> 8) + B (shri, toward zero), and 0xD2790 draws it at
+  the cell's corner, at the node's y plus the record's +4. A model list is
+  {count, then 20 bytes an entry: x, y, z floats off the parent, model,
+  child list or 0}; 0xD29F0 walks it with the offsets added up and sends
+  each as a translation with no turn of its own. 0xD2AC0 swaps a model
+  farther than 1000 for the next table entry, the far one; the explorer
+  draws the near one.
+- The ground. 0xD2B90 draws the grid at the word 0xF6770 + 4s: {columns,
+  rows, x, z, y, then a model a cell}, 1024-unit cells from (x, z); records
+  4 and 12 are raised by 390. Model 0 is an empty cell. 0xD34A0 draws a
+  coarser grid from 0xF67D0 + 4s past 3072, which the explorer leaves out.
+- The sky. 0x31AF0 draws the model at 0xE5E80 + 4s turned by the camera
+  alone, one unit below the eye; records 0 and 1 first draw 0x815 fifty
+  below. Record 14 draws one of seven models from 0xE5F50 a frame
+  (lightning) and record 3 a snowfall from 0xE5ED0; neither is animated
+  here.
+
+The light is two angles a record at 0xE6970 + 8s, which 0x86A68 (and
+0x8B480) copy into the struct the camera's +0xA8 points at; 0x89C40 copies
+them to the camera's +0x68/+0x6C, and 0x31A88 sends the vector they make
+(`stageLight`) through function 0xA. Records 0 and 1 are (0xA180, 0), 5 is
+(0xE800, 0x4800): the vectors MAME's camera +0x70 holds in those stages.
+The materials are 0x36530, 32 {word, float} pairs, which 0x37DF0 uploads
+with function 6.
+
+Checked against MAME by setting the explorer's camera to the board's
+(eye (x, y, -z); look (-sin b cos a, sin a, -cos b cos a), a = +0x2C,
+b = +0x30): attract frames 1500, 1900 and 2300 (sea, islands, sand bar)
+and 1100 (carrier deck, hangars) of record 1, and SORA in play at frames
+1500, 2400 and 3300 with record 5 forced through a write tap on 0x5290C0.
 
 **Model table.** The data ROM at 0xDE3D00 holds 16 bytes an entry: texture
 word, material word, mesh pointer, polygon count. It runs 24204 entries. All
@@ -8060,10 +8453,12 @@ pilots' names and portraits, the story text and the ranking.
 
 **Leads.**
 
-- Stages: the record table at 0xF6578, the index at RAM 0x5290C0 and the
-  set-up 0xD1C90. Record +0x10 points into the data ROM (0x2CC28F0..
-  0x2CD9740, and 0x6429950 for stage 9); it is probably the stage's object
-  or path data and is not read.
+- Stages: the planes, ships and tanks are tasks the stage's script
+  starts; their sources were airship.c, ship.c and tank.c (the strings near
+  0x1BB0). Record +0x10 (counted from 0xF6578) points into the data ROM
+  (0x2CC28F0..0x2CD9740, and 0x6429950 for record 9) and is not read; it is
+  likely their placements or the flight path.
+- Music: sound.c's code is round 0x7D760.
 - Fades: 0x2B55C and the factors at RAM 0x51CA10.
 - The music is not looked at.
 
@@ -8166,6 +8561,51 @@ It is off in the attract and is not followed here.
 **Luma.** 0x35220 clears luma RAM and copies 0x4000 bytes from data
 0x85C408 to the entries from 0x3200.
 
+**Stages** (`readWaverunrStages`). A course is three things:
+
+- The ground: a grid of world-space models drawn under the camera's matrix
+  alone, 0x49A80 called from 0xA38B0 with `ld 0x285e110[course*4]`. A grid
+  record is {cell width, cell depth (both 64.0), columns, rows, first
+  column, last, first row, last, cell list}, the list a word a cell, row by
+  row: the model, or 0 for open water. Cell 64 is the one east and south of
+  the origin, as the models' own coordinates show. The fourth course has the
+  third's grid.
+- The objects: the course start (0xBF840) calls 0xBF7B0 with the course,
+  which hands 0xBFAA0 two lists of 28-byte records {x, y, z, word, yaw,
+  word, maker}, ended by a maker of 0 (0xAAD0/0xAB40, 0xABB0/0xAC40,
+  0xACA0/0xACE0, 0xADB0/0xADD0). 0xBFAA0 calls each maker for a task and
+  0xBFA60 copies the record's first six words to the task's +0x24..+0x38
+  (the yaw 0x10000 to the turn). A maker is `lda handler, g0; call 0x20F230`
+  (or 0x20F350), the handler the task's draw. The boot copies program
+  0xB0000 to 0x200000 and the tasks run there.
+- The backdrop: 0x60F0 makes the course's sky tasks the same way (the first
+  course's clouds, 0x6190, models from 2098). The sea is model 1907, 700
+  wide, which 0x283D0 draws under the camera every frame (its entry copied
+  from 0x71EF0); the explorer lays it in tiles over the grid.
+
+The explorer runs the makers and then each handler once on `js/i960.js`,
+with the copro and geometrizer of `js/doa.js` and no camera, and keeps what
+reaches the geometrizer: the culled draw 0x210200 (model in g0, tested
+against the view first) is answered as a draw under the copro's matrix. So
+each piece stands where its own first frame puts it. Checked against MAME's
+attract at frame 1290 (the first course): the geometrizer's matrices there,
+taken back through the camera's (the grid's, from 0xA38C4), put the check
+gate 2114, the windmill 2516 and the boat 2547 exactly at their records and
+turned by the yaw as js/doa.js turns about Y; the Stages tab seen from that
+camera shows the gate, the windmills and the shore as MAME's picture does.
+
+Not read: the 28-byte buoy lists at 0x8068 and 0x89B8 (function 0x2104E0;
+nothing names them and nothing read them in 1400 attract frames); 0x9390's
+standings board (0x9D80, digits 0x9E7 + n from the list at 0x51BA00, drawn
+only with players); the windmill blades (models 0xD81 on, entries past the
+table's 3457 count, a second table at 0x77FD0..0x78190); the riders; the
+light. Course names are not in the program's text.
+
+**Texture sets by model** (`waverunrModelSets`). The boot's bank is sheet
+0's and no course replaces it, so a model on sheet 0 alone is the boot's; a
+model on sheet 1 that a course's stage draws is on that course's set (the
+first such course).
+
 **Cells.** Sky Target's pictures (`pictures`, Dead or Alive's format): the
 table is program 0x8E1B0, 1059 {tiles, colours, map} entries to the zeros at
 0x91354; the last 215 point at data through XTRA_DATA (0x64xxxxx is data
@@ -8179,9 +8619,9 @@ MAME's tile and palette RAM at frames 1200, 3000, 4200 and 5400: 48 pictures
 found on the layers (the title, the backdrops 111/112/243/244, the course
 map pieces 925-1008, the menus 699/702), all pixel for pixel.
 
-**Leads.** Which models a course draws, so that a model could open on its
-own set, is not found; 0x976A0 (the course's set-up, by 0x511F60) and its
-calls 0x98E20..0x9A5E0 are where to look. The two named scenes are not
+**Leads.** The rider draws at 0x20D124 and 0x20D2B4 (models 207..416) and
+0x2123D8 (models 757..862) are where an Animation tab would start; the
+cloud task 0x6190 steps its models by a clock. The two named scenes are not
 identified.
 
 **Sega Water Ski.** MAME's `segawski` (Revision A) runs the same program,
@@ -8201,6 +8641,27 @@ called. The colour-table writer 0x90A90 takes the rows with four, three and
 two rows left from the pointer table 0xA1ED0, three to each value of work
 RAM 0x56E090 (0 in the attract). Checked against MAME at frames 1100 and
 2500: sheets, colorxlat, luma and palette the same.
+
+Water Ski's **Stages** are read the same way, from its own addresses. A
+course draws its grid through 0x9BA10, which hands 0x56580 two records by
+course: data 0x62E8B70 (near) and 0x62E8B90 (far). 0x56580 takes a cell's
+model from the far grid, and from the near one inside a box round the
+camera; the far grids are the near ones with some cells left out, so the
+explorer lays the near grid. The attract's 0x9BA70 uses 0x62E8BB0/0x62E8BD0
+instead, the same but with the fourth course's grid first. The objects:
+0xBB0(course) picks two lists into 0x5110F0/0x5110F8 (0xB320/0xB910,
+0xBA80/0xC130, 0xC150/0xC970, 0xCCA0/0xCCC0, the fourth empty), or, in the
+attract's demo modes 5 and 6 of work RAM 0x570098, the first two courses'
+other lists (0xCCE0/0xD1F0, 0xDC90/0xDE70, 0xD210/0xD4D0; not read). The
+walker 0x1080 makes and fills tasks as Wave Runner's does (0x1040 copies
+the record). Makers call 0x91FB0 straight, there is no code copy, and the
+culled draw is 0x18F0. Handlers often scale (copro 0x13 from +0x6C/+0x70).
+The sea is model 358 (0x62933C0), 1360 wide, drawn by 0x2D5A0 under the
+camera; 0x5114D0 = 1 picks model 356 instead. No backdrop maker was found.
+Checked: from MAME's camera at attract frame 2000, the fourth course's grid
+puts the grandstand and its boards where MAME draws them, and three buoys
+drawn there by 0x2C40 stand at the first course's list positions (their
+model steps by a clock, so the first frame's model differs).
 
 Water Ski's cells are Wave Runner's library (its SCROLL GROUP ERROR string
 at 0x6FA40, the table read at 0x6F9A8 and 0x6FAC0): table program 0x724F0,
@@ -8264,9 +8725,58 @@ from 0xB7D84 at entry 0x800.
 luma and palette match MAME byte for byte. At frame 3000 all match but 576
 colorxlat entries in rows 25, 27 and 29 and palette entries 8, 9 and 28.
 
-**Leads.** Courses: records at 0x2A66C, 36 bytes (+0 bank, +0x14 model
-run), picked through 0x2A5B0 (from 0x3D1C0). The draw code is 0x3268 to
-0x3370. The colour fade is a state machine at 0x976B0 (shadows at work RAM
+**Courses** (`readTopskatrStages`). A start point (0x2A5A0 + 20 * n: x, y,
+z, heading, course; nine of them, debug names at 0x2A760) names its course;
+0x39F60 keeps it at 0x5830A4 and takes the record at 0x2A660 + 36 * course:
++0 the drop a lap (-4000), +4 the last section (0x582730), +0xC the bank
+for sheet 1 (0x3D1C0 to 0x3F9E0), +0x10 the colour scene (1, 0, 1, the
+scene that goes with the bank), +0x20 the run of model entries
+(0x582734). The section draw at 0x3C040 to 0x3C1D8 sends entry run + 16 * k
+under the camera's matrix alone, so the sections stand at identity; past the
+last section it goes on 4000 lower (copro 0x2A). Course 0 is entries 1319 to
+1513 on bank 2, course 1 entries 1014 to 1189 on bank 1, course 2 entry 1900
+on bank 2. The sky dome is entry 0x932E0 (1013) on course 1 and 0x945F0
+(1318) on the others (0x3A034), sent at 0x35D1C with the camera's turn and
+no translation, so it is drawn at the eye. The names are the bookkeeping
+screen's: 0x16E90 adds a run to 0x1D00384 for course 0, which 0x15290 shows
+as HARD COURSE, to 0x1D002E8 for course 1 (EASY COURSE, 0x14FE0) and to
+0x1D00420 for course 2 (HIDE COURSE, 0x15410).
+
+Props: 0x198F0(course) takes three lists from 0x198D0 + 12 * course (none
+for course 2). The third, {handler, entry, limit} records, spawns one task a
+prop (0x1B170). Every handler sends the camera's matrix and the entry and
+dies when the section 0x5830AC passes the limit's low half (0x3E7: never).
+0x1B450, 0x1B590 and 0x1BF80 draw the entry; 0x1B2F0 is a 120-frame
+flipbook from entry + 16 * (limit >> 16); 0x1B1A0 a 60-frame one on
+0x5830A8; 0x1B6D0 shows the frame 0x57BFA4 names; 0x1BC90 swaps the entry
+and the next every 30 frames; 0x1BB50 draws whichever of six entries
+0x57BF80 holds (set up by 0x1B8B0, each its own until a skater sets it
+off, 0x1B900); 0x1BDE0 is 0x1BC90 4000 lower (copro 10, 0x2A 0, -4000, 0).
+The stage shows each prop's first frame. Entry 401 on course 0 (0x90CA0) is
+left out: MAME draws it from 0x1C348 under its own matrix. The first list
+(section events, {section, handler} to 999, run by 0x19960) and the second
+(group spawns, {count, handler, data}, run by 0x19A30: people walking a path
+at 0x90C70, markers 395 by 0x1AF60) are dynamic and not shown.
+
+Light and materials: 0x3B68C loads the light (0.398, -0.882, 0.252) from
+0x34890 when a course starts; 0x35880 turns it by the camera into the 0x0A
+command each frame. The material slots are the boot's 32 {word, float} at
+0x3F6D0 (0x20F30, to 0x57C1D0, sent as the 0x06 command).
+
+Checked against MAME's geometrizer list (a Lua tap on 0x800000 and
+0x804000): the attract runs course 0 (frames 300 to 6000, every 50th), and
+course 1 was run by copying start point 6 over the attract's five. Every
+section and prop the stage has is sent under the camera's own matrix, the
+sky under its turn with no translation, and the light comes back to 0x34890's
+vector through the camera on every frame. What MAME draws that the stage
+lacks is the HUD, the skaters, entry 401, the 395 markers, 1516 (0x1AF38)
+and flipbook frames. Course 2 stops MAME's attract with an unhandled i960
+opcode, so it was checked from the code only. MAME's own pictures are broken
+(the packed meshes), so the explorer's were checked by eye: the night town,
+the park and the arena come out textured and joined up.
+
+**Leads.** Attract title: 0x3018 to 0x336C draws 1319, 1320, a flipbook of
+1591 to 1710 (0x95700) and 1496 to 1513 4000 lower. The colour fade is a state machine at 0x976B0 (shadows at work RAM
 0x5CF230 and 0x5D2230). A debug PARAM/TEXTURE viewer at 0x9C280 steps banks
 1 to 8. 0x220F0 sets another luma mode, unused in the attract.
 
@@ -8297,6 +8807,86 @@ a character base, so a CG is loaded higher than its directory's first
 characters there; find the caller of 0xA88E0 that passes them. The bytes
 after each run's end look like more scripts with characters from another
 bank.
+
+### Top Skater's skaters (`js/topskatrplayers.js`)
+
+The Animation tab runs the game's own steps, as its motion viewer
+(0x6C1E0, 0x6CADC) does, on js/doa.js's i960 machine: the load, the
+animator, the skeleton, the slots and the draw. Copro command numbers below
+are Top Skater's own.
+
+**Motions.** 718 pointers at 0xC0038 (index 0 null) into the data ROM; the
+game finds one as `0x5019DC[(id >> 10) & 15][id & 0x3FF]`, bank 0 only. A
+motion is three halfwords, its first and last frame and a heading (0x10000
+a turn), 15 group masks (bytes 6..0x14), then key streams from byte 22. A
+key is a time halfword (the frame through the table at 0x57E490, its low
+bits the type: hold, straight, or Hermite through copro 71) and a value
+halfword (an exponent through 0x582490 and 11 bits of mantissa); 0x34550
+builds both tables, and RAM 0x500A40 = {1, 2, 3, 0} maps the types.
+0x339D0(motion, state) loads one into a state of 0x1FE0 bytes (+0x1D80
+first frame, +0x1D84 last, +0x1D88 heading, +0x1D8C the length in
+seconds); 0x343D0(state, t in seconds, pose) brings every channel to t. A
+frame is 1/60 s.
+
+**Skeleton.** `0x6D570[k]` = {the part list in RAM, the skeleton}, the
+skeleton 0xA0 bytes of bone offsets and lengths at 0x99E80 + 0xA0k
+(thigh 4.6045, shin 4.5216, upper arm 2.3551, forearm 2.4598, head
+3.7994). 0x52DD0(pose, skeleton, out) turns the pose into a quaternion and
+a place a bone at 0x5CA900 + 572n; a limb is FK (mode bits 1: copro 59,
+Euler turns 58, the hinge 49) or IK (2: 60, an aim at the end point 72,
+the bend from the bone lengths 73). 0x537B0(out, skeleton, 0) makes 19
+slot matrices at 0x58C540 + 48n, skater-local.
+
+**Draw.** 0x565D0(_, list) draws 18 parts: the board first (0x545C0) from
+slot 0, scaled by the float at 0x5CE8B8 (1.0; zero leaves the board's
+matrix zero), then the hips, legs, chest, head and arms from slot 2 on;
+the shins and forearms (`j02`) turn a quarter about Z and move back a
+bone first. The part lists are at 0xC8AB8 + 0x50k (the boot copies them
+to 0x509920 + 0x50k): 18 model records of 16 bytes, copies of the model
+table's, then +0x48 a record for 0x6F4C0. 0xC8A68 repeats skater 5;
+0xC8D38 is the shadow (`skater_kage`). Parents, measured as the frame
+that holds each part's origin still through 8 motions: the board and the
+hips are roots; legs, chest and head off the hips, the arms off the
+chest.
+
+**Board sides.** 0x545C0 turns (0, 1, 0) (0x54480) by the board's matrix
+(copro 9, 60, 36) and, when the result's depth is over 0.2 (0x3E4CCCCD),
+draws the record at RAM 0x500DF0 + 4k instead of the list's: `s1_ita_ura`
+.. `s6_ita_ura` (models 203..208), the undersides; skaters 7 and 8 name
+their one board again (128, 146). The boot copies ROM 0xBFF88 there with
+the rest of the data section (the same 0x440E68 as the part lists). Both
+sides are whole boards with the same bounds, so the viewer shows one, by
+the same test on its own camera. Left empty, the table is what the bus
+showed as the "garbled" board of motions 125, 225 and 236.
+
+**Second matrix.** Top Skater's geometrizer program (m2-hle2 420e7ba,
+after m2emulator's `tops` table) keeps a second matrix: 0x1B writes its 12
+words, 0x1C copies the matrix into it and reads nothing, and it outlives
+the object. A point whose x word has bit 0 set is drawn by it, which skins
+the seams: the chest's waist ring goes by the hips' slot turned half about
+Z, and skaters 2, 3 and 6's ankle rings, on their shins (models 29/30,
+48/49, 103/104), by the foot's slot · copro 46 (16384, a quarter turn
+about Z) · copro 43 (−`[[0x5D52B4] + 0x2C]`, the shin length; 0x54EB8 left,
+0x55138 right). 0x5D52B4 is the skeleton the skater pick (0x6D5B0) stores
+with 0x5CE94C (the index) and 0x5D52B0 (the list). The heads carry bit-0
+points too, under a second matrix equal to their own. These 0x1B writes
+were the four stray singles between the legs and the chest. The viewer
+lays a bent part's points out again in its own frame each frame.
+
+**Checked.** At MAME attract frame 3000 (skater 2): 0x52DD0 on MAME's pose
+within 4e-6 of its out buffer; the slots within 5e-6 but for one arm
+(slots 11..14, within 3.3e-3 of places near 10); the animator gives
+motions 553 and 189's states in MAME's RAM exactly; the draw's 279 copro
+results within 6.6e-5, with the same 18 models. Every motion's first and
+last frame on all eight skaters (11488 poses) draws with no unknown copro
+command, and every bent point lands on a point of the part it joins, but
+one of skater 8's waist ring, 0.058 off the hips' ring in the models
+themselves. Copro 47 and 49 (turns about X and Z in radians) and 59 (the turn
+reset, place kept) are read from the code; that frame doesn't send them.
+The attract's spring on
+some channels after the animator (0x6F8C0) and the motion's heading are
+left out. The sponsor models (151..186) are in no part list. The skaters
+open on set 1, the attract's.
 
 ### Behind Enemy Lines (`js/bel.js`)
 
@@ -8379,7 +8969,80 @@ strings at 0x28Cxxxx, not yet read. The colour fade is a state machine at
 0x620C0 to 0x62A1C (shadows at work RAM 0x5AC850, 0x5AA850, 0x5A8850 and
 0x5B2850, 0x5B0850, 0x5AE850). Music: the sound program is mpr-20249.
 
-### Desert Tank (`js/games.js`)
+**Stages: not done.** Every model the i960 draws goes through 0x11EE0
+(g0 = a model record): it sends the record's object to the coprocessor,
+reads the matrix back from copro command 0x11 (0x11FAC..0x1202C) and writes
+command 0x0B (matrix) and 0x01 (object: tpa, tha, oba, count + 1) to the
+geometry FIFO. There are 298 calls to it, so there is no one scenery list to
+read. In the attract, the jungle road at frame 3000 is drawn whole: the
+display list in buffer RAM that frame holds just 7 objects (model 2686
+`o_intro_hummer`, 796 polygons, which is the road and the jungle round it,
+model 1094 four times, and models 2760 and 2761), the same 7 the FIFO tap on
+0x804000..0x807FFF sees, so the attract has no placed scenery to read. The
+coprocessor writes nothing to buffer RAM itself (a tap on its external space
+saw no writes). The "scene pointers" at 0x2986F60 are floats, not pointers
+(-50.0, 27.75, 63.75 for scenes 0..2; 0x10CC stores the scene's at 0x5FFDB4
+and 0x5FA114). A play-through in MAME (coin, start) is needed to see a
+mission's scenery being drawn; on this machine it did not reach a snapshot
+in ten minutes, so the missions' scenery is still to be found.
+
+### Behind Enemy Lines' soldiers (`js/belplayers.js`)
+
+The Animation tab's soldiers are posed by the game's own draw, run on
+js/i960.js with js/doa.js's copro (its command set is DOA's, unchanged).
+There are no creatures: no named object is an animal with a skeleton, and
+the cow `o_hilary` (record 2883) is one rigid model. The soldiers' models
+have no names of their own: they are records 477..770, which the object
+directory files under `o_fireball_01`.
+
+**Actors.** 136 records of 0x1A0 bytes at data 0x2BDDF10..0x2BEBC10, each
+its own compiled unit followed by its SCCS strings (`vars.h`, `event.h`):
++0x04 + 8k the motion slot k plays (k = 0..10), +0x60 + 8k part k's near
+and far model (model table records, 0x28B7C78 + 20i), +0x100 the part
+count, 16. The parts are hips, chest, head, upper arm, forearm and hand
+right, weapon, thigh, shin and foot right, then the left arm and leg; the
+sides were read from a rifle pose. A uniform u (1..23) is records
+493 + 10(u − 1) on; feet and the left hand are 733, the heads 739 or 741,
+the weapons 748, 738 or 745. Only the heads and hands have far models of
+their own. The bodies are the 58 distinct near sets, each with the actors
+that use it; its lead motions are theirs. A live actor in work RAM has
++0x1C/+0x1E/+0x20 its turns X/Y/Z, +0x24 its place, +0x38 the ROM
+record, +0x60 its frame (a float, in rows), +0x6E its slot, and bit 9 of
++0 means no shadow.
+
+**Motions.** 0x40-byte records, 83 distinct among the slots, at data
+0x29DAD30..0x2BDDE50: +0 the rows, +4 an event list (+0xC its count, not
+decoded), +8 the rows less one, +0x10 the rate (0x20 or 0x40: rows a tick
+× 64), +0x14 a turn and +0x18 a step (x y z) that 0x52B54 adds to the
+actor's heading and place when the motion ends. A row is 16 parts of
+`{short rx, ry, rz, x, y, z}`, the angles 0x10000 to the turn and the
+place over 2048. The hips' place carries the travel. Slot 9 holds the
+rate-0x40 falls; what picks a slot was not traced, and the motions have
+no names.
+
+**Draw.** 0x51C20(actor, motion, frame), from 0x52C60 and 0x52D0C: push,
+translate to the place, turn Y, X and Z by the actor's turns; the far list
+(+0x64) when the camera (`*0x5A7E84 + 0x24`) is 18 or more away (0x51EBC),
+else the near one. Near, at rate below 0x40, it blends: the midpoint of
+two rows between 0.4 and 0.6 of a row (angles as 16-bit), else row +
+fraction × (next − row). Unless bit 9, the shadow (record 2260) under the
+hips. Each part: translate (x y z)/2048, turn Z by −rz, Y by ry, X by rx,
+the model (0x11EE0), pop: every part hangs from the actor, none from
+another. The head is drawn again when 0x5FA108 > 0.
+
+**Checked.** MAME's attract gameplay (scene 2) with breakpoints at
+0x51C20 and 0x11EE0 and a write watchpoint on the geometrizer port
+0x8040B0, enabled only inside the draw, gives the board's own matrices.
+Eight calls at frames 4200..4202 and 4500..4502 (three bodies, three
+motions, near and far, whole and half rows): with the camera taken out at
+the hips, all 16 parts match to 1.8e-6 in turn and 8e-6 in place. The
+soldiers' tiles are all on sheet 1 (y ≥ 1024), scene 2's bank 0x2400000,
+so a body opens on set 6; whether scenes 0 and 1's bank 0x2C00000 has them
+was not checked. The `*_data.h` rigid tracks (falling trees, train and
+bridge deaths) and the `*_model_swap.h` flipbooks (`boydley_death`,
+records 887..966) are not characters and not read.
+
+### Desert Tank (`js/games.js`, `js/desert.js`)
 
 Sega and Martin Marietta's 1994 game on the original Model 2 (MAME's
 `desert`, flagged not working; it boots and runs its attract, texture RAM,
@@ -8424,11 +9087,71 @@ the high-score tank, and 3590-3600, the training yard: the truck 996, the
 crates 107, the barrel 216, the hut 873, the ground 1053-1145 and 1718-1751)
 draw recognisably, textured and coloured as in MAME's pictures.
 
-**Leads.** Missions: the byte at 0x52106F, read by 0x5CAC, 0x6130, 0x68E0,
-0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C among
-others. The copro data ROM (epr-16980/16981), which MAME calls collision
-and height-map data, is not read. Lighting: the material table and light are
-not read yet. Cells: see [Desert Tank's cells](#desert-tanks-cells-jscellsjs-jsstackcellsjs). Music: the sound board is Daytona's Model 1 board
+**Missions (the Stages tab).** A mission is the byte at 0x52106F; its
+set-up, 0x37860, takes from tables by it the map (0x521170 = `ld
+0x43204[n*4]`: 0x2200000, 0x2300000, 0x2380000), the block table (0x521174 =
+`ld 0x285A528[n*4]`, 256 model records: models 1324-1579 for mission 0,
+1580-1835 for 1, 1836-2091 for 2) and the object lists (0x521188 = `ld
+0x28573B4[n*4]`, none for mission 0). The texture bank is `ld 0x1678[n*4]`,
+so a mission's set is n. The blocks are Daytona's 16x16 grid of 128-unit
+blocks (get_m_block), each model already in world space: 0xEF50 to 0xF120
+draws them through 0xF300 under a bare push. js/desert.js reads them
+straight from the table.
+
+The objects come from running the program on js/i960.js (js/doa.js's
+machine). The spawner 0x16C60 walks the lists of 28-byte records (x, y, z
+singles; angles about X, Y, Z as halfwords at +0xC..+0x10; type at +0x14;
+two halfwords at +0x18, +0x1A) into 0x5C-byte tasks from *(0x520058) (place
+at +0x24, angles at +0x1E..+0x22, type at +0x30, first model at +0x34,
+routine at +0xC; the slot after the last gets 0x168A0). Each task's routine
+is then run with the task in 0x521038, and again when it hands over to
+another. Most are 0x17110, which works out the task's block into +0x3C and
+installs 0x17010: if 0x520100[block] is set, push, translate, turn Y then X
+then Z (copro 0x15, 0x14, 0x16), 0xF300 on +0x34, pop. 0xF300 sends the
+matrix out (copro 0x11) and then the 16-byte {oba, tpa, tha, count} entries
+of its list up to a zero; the explorer hooks it and keeps the copro's
+matrix for each entry. Two copro calls needed help: 0x43 (0x23060, the
+distance between two x, z points), which the collision grid 0x16A20 under
+the spawner uses, is added in js/desert.js; and 0x194A0's objects start
+from the camera matrix at 0x521200 (copro 0x07), which is set to the
+identity. Mission 1 gives 161 tasks and 197 pieces, mission 2 178 and 202;
+none fails and no copro command is left unread.
+
+The board draws only the blocks in view: 0xEDE0 (reached from 0xDCC8 with
+the camera task's block, from its +0x30 and +0x38, and the heading at
+0x5211A0) reads a list pointer at `ld (map + 0x60000)` + (block * 16 +
+heading >> 12) * 4, a count byte then block numbers, clears 0x520100 and
+0x520200, marks the listed blocks in 0x520100 and draws them. On mission 2,
+blocks 0x68, 0x69, 0x75, 0x78 and 0x79 take their list from 0x285AAC4,
+0x285AB04, 0x285AB44, 0x285AB84 and 0x285ABC4 (the jump table at 0xEE30);
+on mission 1 block 0xA7 from 0x285AE50; each 16 lists, one a heading
+sector. With bits 22-25 of 0x521028 set (0xF068 on) the camera's block and
+the four beside it are drawn too. The stage's 'camera' view does this round
+the explorer's camera; where a block has no list it shows the camera's
+block and those four.
+
+Lighting: the 32 material words at data 0x289188C go to the geometrizer
+(func 6, 0x377F0, from 0x2FF4C); the world light (-0.45, -0.89, -0.45) at
+data 0x285A1F8 is turned into camera space by 0x13358 (copro 0x1A) into
+0x520A0C and sent by 0xD1D0.
+
+**Checked (missions).** The board's camera matrix and heading were read
+from MAME at attract frames 1500, 4000 (the training yard, mission 1),
+5000 and 5300 (the canyon, mission 2) and the explorer was put at the same
+eye (fov 75): the huts, the water tower, crates, barrels, pylons and cables,
+fences, the flag and the rock walls stand where MAME draws them, textured.
+In the 'camera' view the canyon's far walls and peak that the whole grid
+shows are gone, as on the board; the lists read for those cameras (seven
+and nine blocks) name the blocks round the camera.
+
+**Missing.** The moving tanks and vehicles (not in the object lists), the
+sky, objects' damage models (the type's other five pointers) and the
+0x521028 neighbour rule.
+
+**Leads.** The mission byte 0x52106F is also read by 0x5CAC, 0x6130,
+0x68E0, 0x6B34, 0x6FF4, 0x72D0, 0x7544, 0x8248, 0x8448, 0x881C and 0x8B7C.
+The copro data ROM (epr-16980/16981), which MAME calls collision and
+height-map data, is not read. Cells: see [Desert Tank's cells](#desert-tanks-cells-jscellsjs-jsstackcellsjs). Music: the sound board is Daytona's Model 1 board
 (epr-16985, mpr-16986/16988/16989); the program writes its latch,
 0x1C00012, in 0x30534 to 0x30718.
 
@@ -10957,7 +11680,7 @@ Three more tables turned up on the way: **0xAA378**, **0xAED40** and
 type. 0xAA378 is class 0x8A's furniture, and 0xAED40 and 0xAF620 classes 0x93
 and 0x98's groups (see above).
 
-### Virtua Cop 2 (`js/games.js`, `js/colors.js`)
+### Virtua Cop 2 (`js/games.js`, `js/colors.js`, `js/vcop2.js`)
 
 Virtua Cop 2 (MAME's `vcop2`, Model 2A, 1995) runs Virtua Cop's library
 moved up the program ROM, so the profile is `daytonaBuild`'s with the
@@ -10998,10 +11721,81 @@ the colour tables, luma and the face palette dumped at frames 300, 900 and
 1800: set 0 matches all of them byte for byte. The attract never loads
 banks 1 or 2.
 
+**Stages** (`js/vcop2.js`, `readVcop2Stages`). The layout is Virtua Cop's
+(segments drawn one at a time, the next brought up as the rail passes a
+mark), with the tables in the program ROM and a second level: each stage
+forks into two routes. The player shoots one of two signs, and the shot
+object's +0x10, less 10 (0x22668) or 27 (0x431E8), goes to the route
+0x5060EC. The stage draw 0x1D6B8 (called from the play scene 0x57C4) walks
+`0x63374[stage 0x502010][route 0x5060EC][segment 0x50A06C]`, 24-byte
+records up to -1:
+
+| offset | what |
+|---|---|
+| +0x00 | model |
+| +0x04 | s16 turn about X (0x10000 a circle) |
+| +0x06 | s16 turn about Y |
+| +0x08 | turn about Z (low half of the word) |
+| +0x0C | x, y, z (floats) |
+
+Each record is drawn as push, translate (command word 0x3000606), then
+the +8, +6 and +4 turns, each sent only when it isn't 0 (0x5000A0A,
+0x4800909, 0x4000808), then the model (0x160A4) and pop. That is Virtua
+Cop's order of turns, so the explorer uses the same ops (Z mirrored).
+0x63374 has four stages: the three the select screen offers
+(0x3EE28..0x3EE88, picked by where the gun points, stores 1, 2, 0) and
+stage 3, which 0x5820 sets when scene 0xD's 120 frames (0x5758) run out.
+The attract's 4 and 5 (0x8CC4, 0x2E2C) reuse stage 0's tables. There are
+no stage names in ROM, so the tab names stages by what they show.
+
+A route's segment k+1 comes up when the rail count 0x5060C8 reaches
+`0xCA378[stage][route][k]` (0x68C8, 0x719C bump 0x50A070 and 0x50A06C,
+then call 0x1D7B8 for the objects and 0x2DB70 for 0xBC584's lists). A mark
+of 20000 (or -1) is never reached, so a route has one more segment than
+marks: 43/43, 37/10, 36/38 and 3. Stage 3's two routes are the same lists.
+The tab merges both routes (key: model, place, turns), and each route's
+segment is a zone.
+
+The rail: the stage start 0x1B884 takes `0xC9D08[stage]`, four 12-byte
+pieces {look-at path, eye path, count} (paths are three floats a count, in
+either ROM), and the speed `0x1D364[stage]` (34, 38, 34, 34). 0x1BC98..0x1BD40
+go from piece 0 to piece 1 + route and from that to piece 3. The count runs on
+across pieces. 0x5060E4 is the count within the piece and 0x5060E0 the
+piece. The look-at path comes first: the other way round, the camera at
+count 102 of stage 0 looks away from the street MAME shows there.
+`0xC9DE4[stage][route]` holds the shoot-out stop counts and `0xCA254`
+per-stop flags (0x1BAB0). The zone cameras are the rail at each segment's
+first count.
+
+Texture set: 0x16594 puts `0x18D14[stage]` on sheet 0, so stages 0..2
+take sets 0..2 and stage 3 takes set 0. A model that only one stage draws
+opens on that set in the Models tab. readVcop2Stages fills
+`rom.courseNamed`, the map the Daytona-layout rule in programTextureSets
+reads, which is otherwise empty for this game.
+
+Checked against MAME: `vcop2` attract snapshots, with a write tap holding
+0x502010 at 1, 2 or 3 so the attract plays that stage's tables. Stage 0
+was checked at count 102 (the street with the "Max" store), stage 1 at
+count 0 (the subway stairs under the VIRTUA CITY sign), stage 2 at count 0
+(the pier) and stage 3 at count 349 (cranes and containers at sunset). The
+explorer was rendered from the same rail point. The pieces, their
+turns and the textures agree with MAME. Turns about X and Z (539 and 525
+of 5849 records) were not checked one by one.
+
+Not read: the objects. 0x1D7B8 walks `0x8C87C[stage][route][seg]`,
+56-byte records, one per object slot (stride 0x1800). Type 9999 keeps the
+slot, 10000 clears it, and a type of 0 or less ends the list. The spawn
+0x1D874 takes +0 type (`0x96B54[type]` is a descriptor like Virtua Cop's,
+stored at slot +0xBB0), +4 xyz, +0x10 three turns (to slot
++0x2C/+0x2E/+0x30), +0x20 the parent, +0x30 data and +0x34 the routine.
+The sky and the light 0x3169C sends per piece when 0x50A0F0 is set
+(towards 0x50A0F4, through 0x15FC4) aren't read either.
+
 **Leads.** The stage number is 0x502010; 0x516C is a table by it the stage
 start reads (0x4FD8). The scene names (WARNING_INT, ADV_TITLE_PIC,
 SEL_INT, ...) are strings in the program ROM. Data 0xC00000 (the 512KB
-pair 18520/18521) is not read by anything here.
+pair 18520/18521) is not read by anything here. Objects (enemies, the
+characters' motions) start at 0x1D874 and the descriptors at 0x96B54.
 
 ### Virtua Cop 2's cells (`js/cells.js`, `VCOP2_CELLS` in `js/games.js`)
 
@@ -11054,7 +11848,7 @@ come out as whole pictures.
 **Leads.** Groups 9 and 0xB's turning colours; the stage fills of stages
 other than 0 were not met in MAME's attract.
 
-### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`)
+### Virtua Striker (`js/games.js`, `js/colors.js`, `js/texture.js`, `js/vstriker.js`)
 
 Virtua Striker (MAME's `vstriker` Revision A and `vstrikero`, Model 2B, 1995)
 keeps Daytona USA's table layouts. The model table is 1537 entries of 16
@@ -11098,6 +11892,46 @@ byte. Graded against the PROJECTER run, CRT's colorxlat differs in 22025 of
 - A colorxlat band redone every frame: 0x9B80 via 0x9A40, from data 0x82DFC0.
 
 There are no model names in ROM.
+
+**The stadium** (`js/vstriker.js`, `readVstrikerStages`). The match draw
+places the ground in code, not from a table. Rev A's 0x64D00 calls 0x64D10
+and 0x65070 every frame:
+- 0x64D10 reads the camera matrix back from the copro (0x80AC, function
+  0x11, then the geometrizer's 0xB0B) and draws the pitch 0x148 and 0x151
+  under it, then the backdrop 0x5F6 in its own window (0x303).
+- 0x65070 draws the stands one side at a time. The copro turns the
+  camera's matrix by the side's quarter turn (function 0x15), and the jump
+  table at 0x65C00 picks the side's models: 0x5FB, 0x5FC and 0x162 on one
+  long side, 0x5FD and 0x5FE on the other, 0x5F4 and 0x5F5 behind each goal.
+- 0x65D00 draws the goals at ±52.38: the frame 0x14F, its other half 0x29B
+  (mirrored at one end), the net 0x150 and 0x164.
+- Flags 0x52CD88..0x52CD8D say which sides the camera can see; the hidden
+  ones are skipped. 0x160 is drawn four times with matrices kept at RAM
+  0x52CD90..0x52CE4F, but the attract never sets its flags.
+
+The explorer doesn't run the copro program (js/doa.js's Copro speaks Model
+2A's), so the turns and places in the module were measured. I dumped every
+geometrizer write in MAME over frames 2600..3800 of the attract match, 25
+frames 50 apart. Each draw's matrix was taken back to the pitch's frame
+through the camera matrix 0x148 is drawn under. Every stadium piece came
+out as a quarter turn or a mirror at 0 or ±52.38, at the same place in
+every frame that drew it.
+
+Checked by eye against MAME's pictures at frames 3000 (looking into a corner
+between two stands) and 3600 (along the touchline), with the explorer
+rendered from the camera at those frames. The stands, the corner gaps,
+the boards and the goals are where MAME has them. MAME's field of view is
+narrower, so the framing differs. `vstrikero` loads the same stadium.
+
+Missing: the flags waving in the crowd, the floodlight towers and the sky.
+None of them comes from the model table: the frames hold 34 draws whose
+pointers aren't in the table, which look like meshes built in RAM. The
+players are also missing. For Animation, 0x63E68..0x63FD8 draws a player
+(the shadow 0x15A, 0x143, ten calls of 0x649A0 for the body parts from
+the slot's +0x268..+0x278), and 0x648C8 is the generic draw by
+`0x522910[g0*16]` (the model table's RAM copy, made by 0xA940). The
+attract's opening flyover (city and stadium) is a separate scene list,
+0xB330 by step `0x282E5C0[0x52C9B0]`; its stadium draw is 0xB670.
 
 **Cells.** The tile chip is Virtua Cop's (`sized` + `boot` in
 `js/cells.js`, with Virtual On's `modes`). Every address is the same in
@@ -13311,5 +14145,5 @@ CPU is not run.
   nothing sends EASY_BGM_A..C or HIDE_BGM but the sound test (0xB28E8). In
   MAME the first race after power-on sends HARD_BGM_A.
 
-Neither game has stages, so the music fields are on the Models tab, as Power
-Sled's are.
+The music fields are on the Stages tab, with the courses. No course has a
+song of its own here (`own: 'none'`): pick one from the list.

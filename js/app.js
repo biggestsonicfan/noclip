@@ -12,9 +12,12 @@ import { decodeModel } from './model.js';
 import { readStageTable, readCourseStages, readRallyStages, stageLight, gameLighting } from './stages.js';
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
+import { readVcop2Stages } from './vcop2.js';
+import { readVstrikerStages } from './vstriker.js';
 import { readVf2Stages } from './vf2.js';
 import { readDoaStages } from './doa.js';
 import { readLastbrnxStages, lastbrnxPaletteCycles } from './lastbrnx.js';
+import { readRacerStages } from './racers.js';
 import { readDynamcopStages, readDynamcopBodies, dynamcopHands, dynamcopShadows, dynamcopItems, dynamcopHeld, poseDynamcopQuad } from './dynamcop.js';
 import { readRallyFigures, readRallyMotions, rallyMotionList, poseRallyFigure } from './srally.js';
 import { readDaytonaCars, readDaytonaRuns, daytonaRunList, poseDaytonaCar } from './daytonacar.js';
@@ -23,7 +26,19 @@ import {
     readAirwlkrsStages, readAirwlkrsBodies, readAirwlkrsMotions, airwlkrsMotionList, poseAirwlkrs,
     airwlkrsSpeed, airwlkrsClocks,
 } from './airwlkrs.js';
+import { readTopskatrBodies, readTopskatrMotions, topskatrMotionList, poseTopskatr } from './topskatrplayers.js';
+import { readGunbladeBodies, readGunbladeMotions, gunbladeMotionList, poseGunblade } from './gunbladeplayers.js';
+import { readBelBodies, readBelMotions, belMotionList, poseBel } from './belplayers.js';
+import { readDynabbPlayers, readDynabbMotions, dynabbMotionList, poseDynabbPlayer, DYNABB_ROLES } from './dynabbplayers.js';
+import { readTopskatrStages } from './topskatr.js';
+import { readDesertStages } from './desert.js';
+import { readMotoraidStages } from './motoraid.js';
+import { readSkytargtStages } from './skytargt.js';
+import { readZerogunStages } from './zerogun.js';
+import { readJalecoStages } from './jaleco.js';
+import { readDynabbStages } from './dynabb.js';
 import { readPowsledStages, readPowsledBodies, readPowsledMotions, powsledMotionList, posePowsledBody } from './powsled.js';
+import { readWaverunrStages } from './waverunr.js';
 import { readVcopBodies, readVcopMotions, vcopMotionList, poseVcopBody } from './vcopbodies.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
@@ -151,6 +166,10 @@ const state = {
     /* Air Walkers: the head's turn toward the play, its turn and tilt
      * (+0xC6, +0xC8) in 0x10000 a turn; see airwlkrsHeadTurn. */
     headTurn: [0, 0],
+    /* Dynamite Baseball 97: the player's part list, DYNABB_ROLES' index. */
+    playerRole: 0,
+    /* Behind Enemy Lines' far models (#char-far). */
+    belFar: false,
     /* Virtual-On: the aim the fight gives a robot, the upper body's twist on
      * the waist (+0x36) and the weapon's turn and tilt (+0x3A, +0x38), in
      * 0x10000 a turn; see poseVonRobot. */
@@ -720,7 +739,7 @@ function useRomColorLuts(stage, fighter = null) {
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
-    const luma = buildLumaram(state.rom);
+    const luma = buildLumaram(state.rom, stage.texSet[1]);
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,
@@ -3561,6 +3580,28 @@ const BODY_RIGS = {
     vcop: { read: readVcopBodies, motions: readVcopMotions, list: vcopMotionList, pose: poseVcopBody },
     /* Daytona USA's car: a body and four wheels, playing the attract's runs. */
     daytona: { read: readDaytonaCars, motions: readDaytonaRuns, list: daytonaRunList, pose: poseDaytonaCar },
+    /* Dynamite Baseball 97's players: the game's skeleton and draw, run. */
+    dynabb: {
+        read: readDynabbPlayers, motions: readDynabbMotions, list: dynabbMotionList,
+        pose: (rom, body, motion, frame, opts) => poseDynabbPlayer(rom, body, motion, frame, { role: state.playerRole, travel: opts.travel }),
+    },
+    /* Behind Enemy Lines' soldiers: sixteen parts off the actor, the game's
+     * draw run. A motion moves at its rate (0x20 half a row a tick, 0x40 a
+     * row), and the draw blends between rows as the game's does. */
+    bel: {
+        read: readBelBodies, motions: readBelMotions, list: belMotionList,
+        pose: (rom, body, motion, frame, opts) => poseBel(rom, body, motion,
+            opts.clock != null ? opts.clock / 256 + 1 : frame, { travel: opts.travel, far: state.belFar }),
+        clocks: (rom, motion, { backward }) => airwlkrsClocks(motion, motion.rate * 4, backward),
+    },
+    /* Gunblade NY's figures: key poses of one table moved between in
+     * straight lines, the game's draw run. */
+    gunblade: {
+        read: readGunbladeBodies, motions: readGunbladeMotions, list: gunbladeMotionList,
+        pose: (rom, body, motion, frame, opts) => poseGunblade(rom, body, motion, frame, { travel: opts.travel }),
+    },
+    /* Top Skater's skaters: the game's animator, skeleton and draw run. */
+    topskatr: { read: readTopskatrBodies, motions: readTopskatrMotions, list: topskatrMotionList, pose: poseTopskatr },
 };
 
 function bodyRig() {
@@ -3673,9 +3714,15 @@ function useAirwlkrsPlayerScene(body) {
     state.viewer.scene.background = new THREE.Color(NEUTRAL_BG);
     u.uTint.value.set(1, 1, 1);
     u.uBright.value = 1;
-    body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
-    state.eyeLightAt = null;
-    stepEyeLight(body);
+    /* Dynamite Baseball's players bring no light of their own: the Models
+     * tab's. */
+    if (body.materials) {
+        body.materials.forEach((m, i) => u.uMaterial.value[i].set(m.diffuse, m.ambient));
+        state.eyeLightAt = null;
+        stepEyeLight(body);
+    } else {
+        useFigureLight();
+    }
     const set = body.playerSet;
     useRomTexram([set]);
     useRomColorLuts({ texSet: [set, set], tint: [1, 1, 1] }, null);
@@ -4775,6 +4822,26 @@ function placeFrameSkins(holder, skins, flash = null) {
     for (const p of pool.slice(skins.length)) showRigPart(p, false);
 }
 
+/*
+ * A part with two sides the game picks between by the camera (pose.viewSides;
+ * Top Skater's board, top and underside, 0x545C0): its second model is shown
+ * when the part's `axis` points away from the camera by more than `over`, its
+ * first otherwise. Picked again as each draw starts, since the camera moves
+ * between frames.
+ */
+const sideAxis = new THREE.Vector3(), sideView = new THREE.Vector3();
+function pickViewSides(camera) {
+    const m = state.motion;
+    for (const s of m?.viewSides ?? []) {
+        const slots = m.parts?.[s.part]?.slots ?? [];
+        if (slots.length < 2 || !slots[0].decoded || !slots[1].decoded) continue;
+        slots[0].mesh.updateWorldMatrix(true, false);
+        sideAxis.set(...s.axis).transformDirection(slots[0].mesh.matrixWorld);
+        const back = sideAxis.dot(camera.getWorldDirection(sideView)) > s.over;
+        slots.forEach((x, k) => showRigPart(x, k === (back ? 1 : 0)));
+    }
+}
+
 function swapRigGeometry(part, d) {
     part.mesh.geometry.dispose();
     part.mesh.geometry = buildGeometry(d);
@@ -4876,6 +4943,8 @@ function poseBodyRig() {
     m.spring = pose.spring;
     m.hips = pose.hips;
     placeBodyParts(m.parts, bouncedDraws(body, pose, m), matrices, pose);
+    m.viewSides = pose.viewSides ?? [];
+    pickViewSides(state.viewer.camera);
     placeExtras(m.extras, body, extras ?? [], null, m.flash, pose.shown);
     followRoot(m, pose.follow);
 
@@ -5527,7 +5596,7 @@ function renderBodyMotionPanel() {
         <span>frames</span><b>${d.frames}</b>
         ${size}
         ${link && times ? `<span>hits from · cancel · free</span><b>${times.hit} · ${times.cancel} · ${times.end}</b>` : ''}
-        ${m.clocks && !m.clocks.air ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
+        ${m.clocks && !m.clocks.air && state.rom.game.rig?.kind === 'airwlkrs' ? `<span>${t('speed')}</span><b>0x${airwlkrsSpeed(state.rom, d, state.pace).toString(16)} · ${m.clocks.length} ${t('draws')}</b>` : ''}
     ` : '<span>motion</span><b>none fits this body</b>');
 
     const scrub = $('#motion-frame');
@@ -6165,6 +6234,10 @@ function wireOptions() {
         state.travel = e.target.checked;
         poseRig();
     });
+    $('#char-far').addEventListener('change', (e) => {
+        state.belFar = e.target.checked;
+        poseRig();
+    });
     $('#char-mirror').addEventListener('change', (e) => {
         state.mirrored = e.target.checked;
         poseRig();
@@ -6185,6 +6258,11 @@ function wireOptions() {
             poseRig();
         });
     }
+    $('#role-select').replaceChildren(...DYNABB_ROLES.map((r, k) => new Option(t(r), k, false, k === 0)));
+    $('#role-select').addEventListener('change', (e) => {
+        state.playerRole = +e.target.value;
+        poseRig();
+    });
     $('#held-select').addEventListener('change', (e) => {
         state.held = e.target.value;
         noteHeld(state.character);
@@ -6609,7 +6687,7 @@ function applyGameFeatures() {
     const solved = ['vf2', 'doa', 'lastbrnx'].includes(state.rom.game.rig?.kind);
     $('#char-label').textContent = t(bodies && !solved ? 'Body' : 'Fighter');
     $('#char-squish-field').hidden = bodies;
-    $('#char-travel-field').hidden = !bodies || solved || state.rom.game.rig?.kind === 'von';
+    $('#char-travel-field').hidden = !bodies || solved || ['von', 'topskatr'].includes(state.rom.game.rig?.kind);
     /* The opponent is Virtua Fighter 2's rig's (VF2 and Fighting Vipers), and
      * Dead or Alive's, whose fight run poses player 2 itself. */
     const rival = ['vf2', 'doa'].includes(state.rom.game.rig?.kind);
@@ -6622,6 +6700,9 @@ function applyGameFeatures() {
     $('#char-backward-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
     /* And turn the head toward the ball. */
     $('#head-field').hidden = state.rom.game.rig?.kind !== 'airwlkrs';
+    /* Dynamite Baseball 97's players: who the part list draws. */
+    $('#role-field').hidden = state.rom.game.rig?.kind !== 'dynabb';
+    $('#char-far-field').hidden = state.rom.game.rig?.kind !== 'bel';
     /* Virtual-On's robots aim at the opponent: the upper body and the weapon. */
     $('#aim-field').hidden = state.rom.game.rig?.kind !== 'von';
     /* Virtua Cop's enemies turn the upper body toward the player. */
@@ -6637,10 +6718,11 @@ function applyGameFeatures() {
     $('#char-p2-field').hidden = true;
     $('#anim-note').hidden = bodies;
     /* The solved rigs' notes, and Dynamite Cop's, Virtual-On's, Sega Rally's,
-     * Air Walkers', Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
+     * Air Walkers', Dynamite Baseball's, Behind Enemy Lines', Gunblade NY's,
+     * Top Skater's, Power Sled's, Virtua Cop's and Daytona's, name the game's own addresses;
      * the plain bodies note is The House of the Dead's. */
     const kind = state.rom.game.rig?.kind;
-    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'powsled', 'vcop', 'daytona'];
+    const own = ['dynamcop', 'von', 'srallyc', 'airwlkrs', 'dynabb', 'bel', 'gunblade', 'topskatr', 'powsled', 'vcop', 'daytona'];
     const note = solved ? state.rom.game.rig.note ?? 'vf2' : own.includes(kind) ? kind : null;
     $('#anim-note-bodies').hidden = !bodies || solved || Boolean(note);
     for (const n of ['vf2', 'fv', 'doa', 'lastbrnx', ...own]) $(`#anim-note-${n}`).hidden = n !== note;
@@ -6724,6 +6806,8 @@ function loadGameContent() {
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.rally) state.stages = readRallyStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
+        else if (T.vcop2) state.stages = readVcop2Stages(state.rom);
+        else if (T.vstriker) state.stages = readVstrikerStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
         else if (T.doa) state.stages = readDoaStages(state.rom);
         else if (T.von) {
@@ -6736,7 +6820,16 @@ function loadGameContent() {
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else if (T.dynamcop) state.stages = readDynamcopStages(state.rom);
         else if (T.powsled) state.stages = readPowsledStages(state.rom);
+        else if (T.waverunr) state.stages = readWaverunrStages(state.rom);
         else if (T.lastbrnx) state.stages = readLastbrnxStages(state.rom);
+        else if (T.topskatr) state.stages = readTopskatrStages(state.rom);
+        else if (T.racer) state.stages = readRacerStages(state.rom);
+        else if (T.desert) state.stages = readDesertStages(state.rom);
+        else if (T.motoraid) state.stages = readMotoraidStages(state.rom);
+        else if (T.skytargt) state.stages = readSkytargtStages(state.rom);
+        else if (T.zerogun) state.stages = readZerogunStages(state.rom);
+        else if (T.jaleco) state.stages = readJalecoStages(state.rom);
+        else if (T.dynabb) state.stages = readDynabbStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }
     if (on.anim && state.rom.game.features.characters) state.frames = readFrameTables(state.rom);
@@ -6919,7 +7012,7 @@ function start() {
      * the loading screen to report itself on. */
     $('#app').hidden = false;
     state.viewer = new Viewer($('#view'), { touch: isMobile() });
-    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); };
+    state.viewer.beforeDraw = (camera) => { followWallShadows(camera); rankFaceLayers(camera); pickViewSides(camera); };
     $('#tool-shot').hidden = false;
     $('#tool-export').hidden = false;
     state.viewer.backfaceCull($('#opt-cull').checked);

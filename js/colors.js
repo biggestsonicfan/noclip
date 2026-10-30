@@ -145,13 +145,16 @@ function trim(v, tint) {
 }
 
 /**
- * Luma RAM for the whole game — it is not per-scene, and the game uploads it
- * once at boot.
+ * Luma RAM for the whole game — for most games it is not per-scene, and the
+ * game uploads it once at boot. A game whose own colour routines take a set
+ * (`colors.i960.sets`) runs them for `colorSet`: Over Rev's courses copy luma
+ * bands of their own.
  *
  * @param {object} rom loaded ROM set
+ * @param {number} [colorSet] the scene's colour set
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
-export function buildLumaram(rom) {
+export function buildLumaram(rom, colorSet = 0) {
     /* Power Sled works its table out (0xC8F0): two bands of 128, entry i
      * (i + 1) >> 1, so a texel's luma halves onto the row's 64 entries. */
     if (rom.game.colors.luma?.halfRamp) {
@@ -161,7 +164,7 @@ export function buildLumaram(rom) {
     }
     /* A game that names its luma table copies it rather than working it out,
      * whatever it runs for colorxlat (Manx TT's 0x3828). */
-    if (rom.game.colors.i960 && !rom.game.colors.luma) return runColorRoutines(rom).luma.slice();
+    if (rom.game.colors.i960 && !rom.game.colors.luma) return runColorRoutines(rom, colorSet).luma.slice();
     /* Dynamite Baseball 97's is the boot's, whichever set (js/dynabb.js). */
     if (rom.game.colors.dynabb) return dynabbColors(rom, rom.game.texture.defaultSet).luma.slice();
     /* Behind Enemy Lines repeats one band (js/bel.js). */
