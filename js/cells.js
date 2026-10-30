@@ -181,7 +181,7 @@ import { palette555ToBytes } from './atlas.js';
 import { MAIN_DATA_BASE } from './romset.js';
 import { bankTables, loadBankCG, rankBankCGs } from './bankcells.js';
 import { stackCGs, loadStacked, applyCopies } from './stackcells.js';
-import { jalecoCells, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
+import { jalecoCells, jalecoCellName, jalecoCGs, jalecoCellCG, loadJalecoCG, readJalecoCell } from './jalecocells.js';
 import { dynabbCells, dynabbCGs, dynabbCellCG, loadDynabbCG, readDynabbCell } from './dynabbcells.js';
 
 const PAL_BASE = 0x01800000;    /* the tile chip's palette RAM */
@@ -376,10 +376,37 @@ function readCgm(u8, o, base) {
 }
 
 /** A cell's name, where the game gives it one: a Sega Rally pattern's own,
- * or what a Virtual On map shows. */
+ * what a Virtual On map shows, a script's in the game's own table, or a
+ * Jaleco item's greyed copy. */
 export function cellName(rom, cell) {
     const C = rom.game.cells;
+    if (C?.scriptNames) return scriptNames(rom).get(cellRecords(rom)[cell]) ?? '';
+    if (C?.files) return jalecoCellName(rom, cell);
     return C?.cgm || C?.maps ? listedCells(rom)[cell]?.name ?? '' : '';
+}
+
+/* Top Skater and Gunblade NY keep a table of {script, name} pairs for a
+ * debug viewer (`scriptNames`), to a zero script; each name is "SMAP_"
+ * and the file the script was made from. The CG directories are in it too
+ * ("SMAP_scr0"), as are a few program addresses; only scripts are cells. */
+const nameCache = new WeakMap();
+function scriptNames(rom) {
+    let out = nameCache.get(rom);
+    if (out) return out;
+    out = new Map();
+    const v = rom.mainCpuView;
+    const text = (p) => {
+        let s = '';
+        for (let c; p < v.byteLength && (c = v.getUint8(p)); p++) s += String.fromCharCode(c);
+        return s;
+    };
+    for (let e = rom.game.cells.scriptNames; ; e += 8) {
+        const at = word(rom, e), name = word(rom, e + 4);
+        if (!at || name >= v.byteLength) break;
+        out.set(at, text(name).replace(/^SMAP_/, ''));
+    }
+    nameCache.set(rom, out);
+    return out;
 }
 
 /* Virtua Cop's zero halfwords between records. */
@@ -399,7 +426,7 @@ function recordHeader(rom, p) {
     const R = scrollAt(rom, p);
     const C = rom.game.cells;
     if (C.pictures) return pictureHeader(R, 0);
-    if (C.sized) return pictureHeader(R, C.bases?.[p] ?? C.base);
+    if (C.sized) return pictureHeader(R, C.bases?.[p] ?? C.base, C.maxSide);
     if (R.off + 0x0c > R.u8.length) return null;
     const rows = R.view.getUint32(R.off + 4, true);
     const cols = R.view.getUint32(R.off + 8, true);
@@ -412,10 +439,10 @@ function recordHeader(rom, p) {
 
 /* A Dead or Alive map, or a Virtua Cop record: the width and the height,
  * then halfword entries. */
-function pictureHeader(R, base) {
+function pictureHeader(R, base, max = MAX_PICTURE_SIDE) {
     const cols = R.view.getUint16(R.off, true);
     const rows = R.view.getUint16(R.off + 2, true);
-    if (!rows || !cols || rows > MAX_PICTURE_SIDE || cols > MAX_PICTURE_SIDE) return null;
+    if (!rows || !cols || rows > max || cols > max) return null;
     const bytes = 4 + rows * cols * 2;
     if (R.off + bytes > R.u8.length) return null;
     return { R, base, wide: true, rows, cols, bytes, head: 4 };
@@ -891,7 +918,7 @@ const unshuffle = (v) => ((v >> 12) & 1) | ((v & 15) << 1) | (((v >> 13) & 1) <<
  * (with `zeroFills`, Virtua Cop 2's, a count of 0 repeats its group to the
  * end, or once in a single entry);
  * `colours`, sixteen colours over `groups` groups; `block`, `groups` groups'
- * colours copied as they are; `copy`, groups copied to others; `shuffled`,
+ * colours copied as they are (or `count` colours); `copy`, groups copied to others; `shuffled`,
  * Virtual On's lists of [colours, groups], one group after another;
  * `pointers`, a table of `groups` pointers, each to one group's colours
  * (Pilot Kids'); `set`, [palette entry, colour] pairs the code stores itself.
@@ -957,7 +984,7 @@ function loadBoot(rom, L, charBytes) {
             put(op.group, op.colours, op.groups);
         } else if (op.block) {
             const S = scrollAt(rom, op.block);
-            const n = Math.min(op.groups * 16, (S.u8.length - S.off) >> 1, pal.length - op.group * 16);
+            const n = Math.min(op.count ?? op.groups * 16, (S.u8.length - S.off) >> 1, pal.length - op.group * 16);
             for (let i = 0; i < n; i++) pal[op.group * 16 + i] = S.view.getUint16(S.off + i * 2, true);
             palRuns.push([op.group * 16, n]);
         } else if (op.copy) {
