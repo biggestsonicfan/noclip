@@ -487,13 +487,24 @@ function renderBuildPicker() {
     const field = $('#build-field');
     if (!field) return;
     const variants = state.rom.variants ?? [];
-    if (variants.length < 2) { field.hidden = true; return; }
+    /* The builds these zips are a chip pair short of are listed too, greyed,
+     * with the chips — otherwise a set dropped as two zips of one build (an
+     * old hotd.zip with today's hotdo.zip) shows no picker and no reason. */
+    const near = state.rom.near ?? [];
+    if (variants.length + near.length < 2) { field.hidden = true; return; }
     const sel = $('#build-select');
     sel.innerHTML = '';
     for (const v of variants) {
         const o = el('option');
         o.value = v.id;
         o.textContent = v.name;
+        sel.appendChild(o);
+    }
+    for (const v of near) {
+        const o = el('option');
+        o.value = v.id;
+        o.disabled = true;
+        o.textContent = t('{name} — needs {chips}', { name: v.name, chips: v.missing.join(', ') });
         sel.appendChild(o);
     }
     sel.value = state.rom.game.id;
