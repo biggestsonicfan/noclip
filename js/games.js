@@ -3687,6 +3687,10 @@ const VCOP2_CELLS = {
         }))),
     },
     programAt0: true,
+    /* Among the title's cells, a few that the game's middle fill draws too
+     * without a seam: the FILE 1 arrow and the 5 and 10 badges. MAME's
+     * attract draws 276 to 278 with the title's (pixel-exact). */
+    screens: [{ cg: 4, cells: [276, 277, 278, 279, 292, 293, 294, 298] }],
     charBytes: 0x80000,
     colorxlat: true,
 };
@@ -3951,9 +3955,11 @@ function vstrikerBuild({ id, name, program, data8, colors, monitorRam, texRoutin
  * Two pictures load their own characters over 0x180 on. The Japanese
  * build's joke picture (cell 762, 0x6C370) copies 0x26C from 0x2891000 and
  * colours groups 3-5 from 0x2825D90: CG 3. Cell 761 (0x6C2E0, through 0x2D00
- * and 0x2DE4) copies 0x80 from 0x2890000 but takes its colours, group 0x83,
- * from a fade in RAM (0x514550, from the table at 0x2825DB0): not built, so
- * it shows black.
+ * and 0x2DE4) copies 0x80 from 0x2890000 and takes its colours, group 0x83,
+ * from a fade in RAM: the vblank's 0x2C00 brightens the 52 colours at
+ * 0x2825D10 towards white into 0x514550, by the factors at 0x2825DB0 (1.0
+ * down to 0 over 30 frames), and 0x2D00 copies them out, the last five to
+ * group 0x83. The fade ends on the ROM's colours, so CG 4 takes those.
  */
 const VSTRIKER_CELLS = {
     sized: true,
@@ -3978,6 +3984,14 @@ const VSTRIKER_CELLS = {
                     { colours: 0x02825d90, group: 3, groups: 3 },
                 ],
             },
+            {
+                name: 'mode 0, faded in (0x6C2E0)',
+                chars: [[0x02000000, 0x80, 0x3f80], [0x02890000, 0x180, 0x80]],
+                palette: [
+                    { runs: 0x02800170, group: 1, until: 0x7f }, { block: 0x02825830, group: 0xb4, groups: 38 },
+                    { block: 0x02825d70, group: 0x83, count: 5 },
+                ],
+            },
         ],
         chars: [],
         palette: [],
@@ -3987,7 +4001,7 @@ const VSTRIKER_CELLS = {
 };
 const vstrikerRun = (first, end) => Array.from({ length: end - first }, (_, i) => first + i);
 VSTRIKER_CELLS.screens = [
-    { cg: 3, cells: [762] },
+    { cg: 3, cells: [762] }, { cg: 4, cells: [761] },
     { cg: 0, cells: vstrikerRun(0, 337) }, { cg: 1, cells: vstrikerRun(337, 595) }, { cg: 2, cells: vstrikerRun(595, 763) },
 ];
 
@@ -6893,23 +6907,36 @@ function indy500Build({ id, name, program, data, rects, lumaOver, top, colorRun,
  * 0x548A0, 0x55320 and 0x55750 for the data ROM's bank (cell g0, CG g1),
  * 0x54950 (three cells, CG g3), and 0x54300 and 0x54550 for XTRA's. Bank 1's
  * cells and CGs come after bank 0's: cell 441 is its cell 0, CG 61 its CG 0.
+ * XTRA's palette table starts on its cell table's last pointer: cell 59
+ * ("SECTION", 0x4F594 with CG 12) is also CG 0's palette, which nothing
+ * loads. Cell 124 is "NAME" with CG 15 and the course name "BAY SIDE STREET"
+ * with CG 46 (MAME's attract draws that); cell 33 is drawn with nothing that
+ * names it, and is "FASTEST LAP TIME" only with CG 2, so it is named by
+ * sight. 0x56624 loads CG 33's tiles a second set of colours, 0x2C39DF0, into
+ * its groups 128 on; 0x56954 draws cell 352 (Bayside's course map) with
+ * them, red (`recolours`, after both banks' own CGs).
  */
 const INDY500_CELLS = {
     banks: [
-        { name: 'data', cgs: 0x02c39eb0, cgCount: 61, cells: 0x02c89bf0, cellCount: 441, pals: 0x02c8a2dc, data: 0x02800000 },
+        {
+            name: 'data', cgs: 0x02c39eb0, cgCount: 61, cells: 0x02c89bf0, cellCount: 441, pals: 0x02c8a2dc, data: 0x02800000,
+            recolours: [{ cg: 33, pal: 0x02c39df0, cells: [352], name: "0x56624's colours" }],
+        },
         { name: 'XTRA', cgs: 0x064b00c0, cgCount: 13, cells: 0x064b83d0, cellCount: 60, pals: 0x064b84bc, data: 0x06400000 },
     ],
     sized: true,
+    /* Cell 394 (CG 41) is 192 entries by 48, three tilemaps wide. */
+    maxSide: 192,
     base: 0,
     screens: [
-        { cg: 4, cells: [36, 37, 39] }, { cg: 9, cells: [80] }, { cg: 10, cells: [88, 89, 90, 91, 92] },
+        { cg: 2, cells: [33] }, { cg: 4, cells: [36, 37, 39] }, { cg: 9, cells: [80] }, { cg: 10, cells: [88, 89, 90, 91, 92] },
         { cg: 12, cells: [121] }, { cg: 13, cells: [122] }, { cg: 14, cells: [123] }, { cg: 15, cells: [124, 125] },
         { cg: 16, cells: [128, 129, 130, 131, 132, 133, 134, 135, 136, 137] }, { cg: 17, cells: [187, 188] },
         { cg: 18, cells: [189, 190, 191, 192, 193, 194] }, { cg: 19, cells: [202] }, { cg: 21, cells: [205] },
         { cg: 22, cells: [266, 267] }, { cg: 23, cells: [301] }, { cg: 24, cells: [311] }, { cg: 25, cells: [312] },
         { cg: 27, cells: [343] }, { cg: 29, cells: [346] }, { cg: 30, cells: [347] }, { cg: 32, cells: [350, 351] },
         { cg: 33, cells: [352, 353, 354] }, { cg: 37, cells: [367] }, { cg: 38, cells: [369] }, { cg: 41, cells: [394] },
-        { cg: 42, cells: [395] }, { cg: 43, cells: [396] }, { cg: 45, cells: [398] }, { cg: 46, cells: [402] },
+        { cg: 42, cells: [395] }, { cg: 43, cells: [396] }, { cg: 45, cells: [398] }, { cg: 46, cells: [399, 400, 401, 402, 124] },
         { cg: 47, cells: [404] }, { cg: 50, cells: [408] }, { cg: 51, cells: [419, 420] }, { cg: 52, cells: [421] },
         { cg: 53, cells: [423, 424] }, { cg: 54, cells: [425] }, { cg: 55, cells: [427] }, { cg: 57, cells: [433, 434] },
         { cg: 58, cells: [435] }, { cg: 60, cells: [440] },
@@ -6954,15 +6981,21 @@ const indy500 = indy500Build({
 });
 /* The Deluxe's data ROM bank is the Twin's, at the same addresses; its XTRA
  * bank's tables moved into the program ROM (its XTRA loader 0x9EB40 reads
- * the CG table at 0x9B7B0, its draws the cells at 0xB34A0), and hold 7 CGs
- * and 34 cells, with each CG's palette the pointer list's entry 35 + n.
- * The data bank's `screens` stand; XTRA's cells are left to their seams. */
+ * the CG table at 0x9B7B0, its draw 0x9F5B0 the cells at 0xB34A0), and hold
+ * 7 CGs and 34 cells, with each CG's palette the pointer list's entry 35 + n
+ * (0xA1020 loads CG 2's and CG 3's from the same 0x9B890 and 0x9B9B0). The
+ * data bank's `screens` stand; XTRA's are 0x9F5B0's calls: cells 0 and 1
+ * with CG 1, cell 10 with CG 2, 11 with CG 3 and 13 with CG 4. Cells 26 to
+ * 33 are the small digits 1 to 8, CG 6's like the car icons before them;
+ * the ranking puts some with CG 4 or 5, so they are named here by sight. */
 const INDY500D_CELLS = {
     ...INDY500_CELLS,
     programAt0: true,
     banks: [INDY500_CELLS.banks[0],
         { name: 'XTRA', cgs: 0x9b7b0, cgCount: 7, cells: 0xb34a0, cellCount: 34, pals: 0xb34a0 + 35 * 4, data: 0x06400000 }],
-    screens: INDY500_CELLS.screens.filter((s) => s.cg < 61),
+    screens: [...INDY500_CELLS.screens.filter((s) => s.cg < 61),
+        { cg: 62, cells: [441, 442] }, { cg: 63, cells: [451] }, { cg: 64, cells: [452] }, { cg: 65, cells: [454] },
+        { cg: 67, cells: [467, 468, 469, 470, 471, 472, 473, 474] }],
 };
 /* MAME calls its data pair epr-18245/18246; the dumps in the wild are named
  * epr-18345/18346. The CRCs find either. */
@@ -7521,6 +7554,8 @@ const dynabb97 = {
 };
 
 /* Gunblade NY's scene 8 copies (0xD2938), which scene 9 lands on in the attract. */
+/* Gunblade NY's cells first to last - 1, one language's captions. */
+const gunbladeRun = (first, end) => Array.from({ length: end - first }, (_, i) => first + i);
 const GUNBLADE_CASE_8 = [[0x02b37ff0, 0x01800d00, 0x10, 21], [0x02b38010, 0x010e8000, 0xa230], [0x02b4c490, 0x01800fa0, 0x10], [0x02b4c4b0, 0x010fd000, 0x310]];
 
 /*
@@ -7618,10 +7653,14 @@ const gunblade = {
      * 0xF1C8C, the attract's 0xDC44/0x2264C and 0xF1DA8 on top of it; the
      * warning screen (0xF44A0) calls 0xD2260, which puts the font at 0xD09C0
      * and group 0 from 0xD21D0 in. A scene is the boot plus its `copies`,
-     * [source, destination, halfwords, times]. */
+     * [source, destination, halfwords, times]. Cases 1 to 6 are the
+     * caption fonts, called with the language (RAM 0x54C0E6) + 1; each
+     * language's captions ("jimaku_jp" to "jimaku_hg" in the script names at
+     * 0xCF810) open on its own (`screens`). */
     cells: {
         scripts: [[0x02a601a0, 0x02a64c52], [0x02b4caf0, 0x02b4fc50]],
         scriptPad: true,
+        scriptNames: 0xcf810,
         script: { bias: 0, last: 0x8d, wideMove: true },
         dirs: {
             boot: 0x02a00000,
@@ -7630,17 +7669,25 @@ const gunblade = {
             copies: [[0x15530, 0x01800000, 0x10], [0x15550, 0x01800020, 0x10]],
             scenes: [
             { name: 'the warning screen (0xF44A0, 0xD2260)', fonts: [{ src: 0xd09c0, first: 0, count: 0x80, pen: 1 }, { src: 0xd09c0, first: 0x80, count: 0x80, pen: 1 }], copies: [[0xd21d0, 0x01800000, 0x10]] },
-            { name: 'stage 1 (0xD2550 case 1)', copies: [[0x02a53f40, 0x01800d00, 0x10, 5], [0x02a53f60, 0x010e8000, 0x2710], [0x02a58da0, 0x01800da0, 0x10], [0x02a58dc0, 0x010ed000, 0x720], [0x02a59c20, 0x01800dc0, 0x10, 2], [0x02a59c40, 0x010ee000, 0xbf0]] },
-            { name: 'stage 2 (0xD2550 case 2)', copies: [[0x02b00270, 0x01800d00, 0x10, 8], [0x02b00290, 0x010e8000, 0x4002]] },
-            { name: 'stage 3 (0xD2550 case 3)', copies: [[0x02b073f0, 0x01800d00, 0x10, 13], [0x02b07410, 0x010e8000, 0x6802]] },
-            { name: 'stage 4 (0xD2550 case 4)', copies: [[0x02b14350, 0x01800d00, 0x10, 13], [0x02b14370, 0x010e8000, 0x6802]] },
-            { name: 'stage 5 (0xD2550 case 5)', copies: [[0x02b210d0, 0x01800d00, 0x10, 6], [0x02b210f0, 0x010e8000, 0x3002]] },
-            { name: 'stage 6 (0xD2550 case 6)', copies: [[0x02b26490, 0x01800d00, 0x10, 12], [0x02b264b0, 0x010e8000, 0x6002]] },
+            { name: 'Japanese captions (0xD2550 case 1)', copies: [[0x02a53f40, 0x01800d00, 0x10, 5], [0x02a53f60, 0x010e8000, 0x2710], [0x02a58da0, 0x01800da0, 0x10], [0x02a58dc0, 0x010ed000, 0x720], [0x02a59c20, 0x01800dc0, 0x10, 2], [0x02a59c40, 0x010ee000, 0xbf0]] },
+            { name: 'English captions (0xD2550 case 2)', copies: [[0x02b00270, 0x01800d00, 0x10, 8], [0x02b00290, 0x010e8000, 0x4002]] },
+            { name: 'Spanish captions (0xD2550 case 3)', copies: [[0x02b073f0, 0x01800d00, 0x10, 13], [0x02b07410, 0x010e8000, 0x6802]] },
+            { name: 'Italian captions (0xD2550 case 4)', copies: [[0x02b14350, 0x01800d00, 0x10, 13], [0x02b14370, 0x010e8000, 0x6802]] },
+            { name: 'Chinese captions (0xD2550 case 5)', copies: [[0x02b210d0, 0x01800d00, 0x10, 6], [0x02b210f0, 0x010e8000, 0x3002]] },
+            { name: 'Korean captions (0xD2550 case 6)', copies: [[0x02b26490, 0x01800d00, 0x10, 12], [0x02b264b0, 0x010e8000, 0x6002]] },
             { name: 'case 7 (0xF1C8C)', copies: [[0x02b31990, 0x01800d00, 0x10, 7], [0x02b319b0, 0x010e8000, 0x3802]] },
             { name: 'case 8 (0xDC44, 0x2264C), the attract', copies: GUNBLADE_CASE_8 },
             { name: 'case 9 (0xF1DA8) over case 8', copies: [...GUNBLADE_CASE_8, [0x02a5b460, 0x01800e00, 0x10], [0x02a5b480, 0x010f0000, 0x200], [0x02a5b8a0, 0x01800e20, 0x10], [0x02a5b8c0, 0x010f1000, 0x1d0], [0x02a5bc80, 0x01800e40, 0x10], [0x02a5bca0, 0x010f2000, 0x170], [0x02a5bfa0, 0x01800e60, 0x10], [0x02a5bfc0, 0x010f3000, 0x1c0], [0x02a5c360, 0x01800e80, 0x10], [0x02a5c380, 0x010f4000, 0x1c0], [0x02a5c720, 0x01800ea0, 0x10], [0x02a5c740, 0x010f5000, 0x230], [0x02a5cbc0, 0x01800ec0, 0x10], [0x02a5cbe0, 0x010f6000, 0x480], [0x02a5d500, 0x01800ee0, 0x10], [0x02a5d520, 0x010f7000, 0x3e0], [0x02a5dd00, 0x01800f00, 0x10], [0x02a5dd20, 0x010f8000, 0x380], [0x02a5e440, 0x01800f20, 0x10], [0x02a5e460, 0x010f9000, 0x3d0], [0x02a5ec20, 0x01800f40, 0x10], [0x02a5ec40, 0x010fa000, 0x420], [0x02a5f4a0, 0x01800f60, 0x10], [0x02a5f4c0, 0x010fb000, 0x240], [0x02a5f960, 0x01800f80, 0x10], [0x02a5f980, 0x010fc000, 0xc0], [0x02a5fb20, 0x01800fa0, 0x10], [0x02a5fb40, 0x010fd000, 0xf0]] },
             ],
         },
+        screens: [
+            { cg: 2, cells: gunbladeRun(396, 412) },
+            { cg: 3, cells: gunbladeRun(430, 441) },
+            { cg: 4, cells: gunbladeRun(441, 456) },
+            { cg: 5, cells: gunbladeRun(456, 471) },
+            { cg: 6, cells: gunbladeRun(471, 487) },
+            { cg: 7, cells: gunbladeRun(487, 502) },
+        ],
         charBytes: 0x80000,
         programAt0: true,
         colorxlat: true,
@@ -8302,6 +8349,7 @@ const topskatr = {
         scriptPad: true,
         script: { bias: 0, last: 0x8d, wideMove: true },
         scriptDirs: [[0x2400000], [0x2500000], [0x2600000, 0xa3980], [0x2700000]],
+        scriptNames: 0xa6f20,
         charBytes: 0x80000,
         programAt0: true,
         colorxlat: true,
@@ -8414,8 +8462,20 @@ const bel = {
         solid: true,
     },
     /* The 2D pictures: Daytona's records (draw 0x76FC0), 393 end to end, and
-     * its CG pairs (loader 0x645F0) in two tables, the boot's first. */
-    cells: { records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true },
+     * its CG pairs (loader 0x645F0) in two tables, the boot's first. Each
+     * screen's routine loads a CG and draws its records, or sets a task
+     * handler that draws them (cell 7 in 0x13BD0, set at 0x14170 after
+     * CG 4); a cell opens on that CG (`screens`). 156 and 167 are drawn
+     * after CG 4 and CG 47, and neither holds all their characters. 342,
+     * a mission's panel, is graded on CG 0 against MAME's chip. */
+    cells: {
+        records: [[0x2800180, 0x2862d50]], cgTables: [[0x2100000, 8], [0x2c00000, 56]], charBytes: 0x80000, colorxlat: true,
+        screens: [
+            { cg: 6, cells: [1, 2, 3] }, { cg: 4, cells: [4, 5, 6, 7, 8, 9] }, { cg: 3, cells: [23, 24] },
+            { cg: 7, cells: [100] }, { cg: 16, cells: [345] }, { cg: 17, cells: [346] }, { cg: 47, cells: [376] },
+            { cg: 0, cells: [342] },
+        ],
+    },
     /* 24 songs in group 0x10; the attract starts A0 10 15, then A0 10 12.
      * The driver listens from 13 s on. */
     sound: driverSongs({
