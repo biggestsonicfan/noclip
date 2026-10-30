@@ -13,6 +13,11 @@
  * - 'model1', the board the original Model 2 kept from Model 1: a 68000, two
  *   MultiPCM sample chips and a YM3438. Daytona USA and Virtua Cop.
  *
+ * Two games keep their music on a Digital Sound Board instead, MPEG audio out
+ * of ROM: 'dsbz80' (Sega Touring Car Championship) and 'dsb2' (Top Skater).
+ * The page reads those boards' song tables and decodes the MPEG itself
+ * (dsb.js); `samples` are then the MPEG ROMs.
+ *
  * Where m2-hle2 knows the driver build — Sonic The Fighters, Virtua Fighter 2,
  * Fighting Vipers, Sega Rally, Dead or Alive, Virtual-On, Dynamite Cop, The
  * House of the Dead, Daytona and Virtua Cop — the driver runs ported to C, in
@@ -30,6 +35,8 @@
  * context is suspended and the board stops with it.
  */
 
+import { dsbSongs } from './dsb.js';
+
 /* What the Model 2 board is sent. ROUND_INT and the boot path send all sound
  * off and two settings the driver wants from the game first (m2-hle2
  * tools/snd_stimuli.py opens every capture with the same three); each new
@@ -41,6 +48,7 @@ const MODEL2 = {
 };
 
 function boardOf(spec) {
+    if (spec.board?.startsWith('dsb')) return { dsb: spec.board, stop: [] };
     if (spec.board !== 'model1') return { model1: false, boot: spec.boot ?? MODEL2.boot, stop: spec.stop ?? MODEL2.stop };
     return { model1: true, boot: spec.boot, stop: spec.stop };
 }
@@ -78,6 +86,9 @@ export function musicChoices(rom) {
  *   `at` + 3 * ID and a name through the pointer at `names` + 4 * ID, the
  *   pointers into the program's copy in RAM, `ramBase` above the ROM (Sega
  *   Rally's).
+ * - `songs`: a Digital Sound Board's song numbers, 1 to `count`, each sent
+ *   as `status`, `middle`, number, and named through the pointer at
+ *   `names` + 4 * (number - 1) (Touring Car's and Top Skater's).
  * - `groups`: no names and no table in the i960's program, only the sound
  *   driver's: [middle byte, count, first entry (0 if left out)] for each of
  *   its groups, every sound in them listed by its command (Power Sled's),
@@ -106,21 +117,32 @@ function findListed(rom, L) {
     return -1;
 }
 
+function nameAt(bytes, at, max = 32, strip) {
+    let s = '';
+    for (let i = 0; i < max && bytes[at + i]; i++) s += String.fromCharCode(bytes[at + i]);
+    s = s.trim();
+    return strip && s.startsWith(strip) ? s.slice(strip.length) : s;
+}
+
 function readListedSongs(rom, L) {
     if (L.groups) {
         return L.groups.flatMap(([mid, count, first = 0]) => Array.from({ length: count }, (_, n) => (L.status << 16) | (mid << 8) | (first + n)))
             .map((code, index) => ({ label: `${L.label ?? 'sound'} ${index + 1}`, index, code }));
     }
+    if (L.songs) {
+        const view = rom.mainCpuView;
+        // L.where[index], when given, is where the game plays the song.
+        return Array.from({ length: L.count }, (_, index) => {
+            const name = nameAt(rom.maincpu, view.getUint32(L.names + index * 4, true));
+            const where = L.where?.[index];
+            return { label: where ? `${name}: ${where}` : name, index, code: (L.status << 16) | (L.middle << 8) | (index + 1) };
+        });
+    }
     const view = rom.mainCpuView;
     const bytes = rom.maincpu;
     const base = L.ids ? 0 : L.at ?? findListed(rom, L);
     if (base < 0) return null;
-    const text = (at, max = 32) => {
-        let s = '';
-        for (let i = 0; i < max && bytes[at + i]; i++) s += String.fromCharCode(bytes[at + i]);
-        s = s.trim();
-        return L.strip && s.startsWith(L.strip) ? s.slice(L.strip.length) : s;
-    };
+    const text = (at, max) => nameAt(bytes, at, max, L.strip);
     const out = [];
     for (let i = 0; i < L.count; i++) {
         if (L.skip?.includes(i)) continue;
@@ -242,12 +264,17 @@ export class SoundBoard {
          * click that switched the music on, which is what lets it start. */
         let ctx;
         try {
-            ctx = new AudioContext({ sampleRate: 44100, latencyHint: 'playback' });
+            ctx = new AudioContext({ sampleRate: this.kind.dsb ? 32000 : 44100, latencyHint: 'playback' });
         } catch {
             ctx = new AudioContext({ latencyHint: 'playback' });
         }
         this.ctx = ctx;
         const resumed = ctx.resume();
+        if (this.kind.dsb) {
+            await this.bootDsb(rom, onProgress);
+            await resumed;
+            return;
+        }
         const [wasm] = await Promise.all([
             fetch(new URL('./board.wasm', import.meta.url)).then((r) => {
                 if (!r.ok) throw new Error(`board.wasm: ${r.status}`);
@@ -304,6 +331,32 @@ export class SoundBoard {
         await resumed;
     }
 
+    /* A Digital Sound Board: its song table out of its program, its MPEG ROMs
+     * end to end, and the player (dsbworklet.js). */
+    async bootDsb(rom, onProgress) {
+        const spec = this.spec, ctx = this.ctx;
+        const loaded = ctx.audioWorklet.addModule(new URL('./dsbworklet.js', import.meta.url));
+        onProgress('reading the sound program');
+        this.songs = dsbSongs(spec.board, await rom.readChip(...spec.program));
+        const chip = spec.sampleChip ?? 0x200000;
+        const mpeg = new Uint8Array(spec.samples.length * chip);
+        for (let i = 0; i < spec.samples.length; i++) {
+            onProgress(`reading MPEG ROM ${i + 1} of ${spec.samples.length}`);
+            mpeg.set(await rom.readChip(...spec.samples[i]), i * chip);
+        }
+        await loaded;
+        const node = new AudioWorkletNode(ctx, 'dsb-sound', { numberOfInputs: 0, outputChannelCount: [2] });
+        const ready = new Promise((resolve) => {
+            node.port.onmessage = (e) => { if (e.data.type === 'ready') resolve(); };
+        });
+        node.port.postMessage({ type: 'init', rom: mpeg.buffer }, [mpeg.buffer]);
+        await ready;
+        this.driver = 'MPEG';
+        this.gain = new GainNode(ctx, { gain: this.volume ?? 2 });
+        node.connect(this.gain).connect(ctx.destination);
+        this.node = node;
+    }
+
     send(bytes) {
         this.node?.port.postMessage({ type: 'send', bytes });
     }
@@ -313,6 +366,11 @@ export class SoundBoard {
      * than the song for some of them (game.sound.after); `then`, the bytes
      * a listed song is followed by (listedSongs). */
     play(code, index = -1, then = []) {
+        /* A DSB's song is the command's last byte, from 1. */
+        if (this.kind.dsb) {
+            this.node?.port.postMessage({ type: 'play', song: code ? this.songs[(code & 0xFF) - 1] ?? null : null });
+            return;
+        }
         const stop = this.kind.stop;
         if (!code) { this.send(stop); return; }
         const after = this.spec.after;

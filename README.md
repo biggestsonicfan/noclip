@@ -29,7 +29,7 @@ Psikyo's *Pilot Kids* has its models — see [Pilot Kids](#pilot-kids).
 *Virtua Striker* has its models, its stadium and its cells — see [Virtua Striker](#virtua-striker).
 AM3's *Manx TT Superbike* has its models, its courses and its cells — see [Manx TT Superbike](#manx-tt-superbike).
 Sega's *INDY 500* has its models, its courses and its cells — see [INDY 500](#indy-500).
-*Sega Touring Car Championship* has its models, its courses and its cells — see [Sega Touring Car Championship](#sega-touring-car-championship).
+*Sega Touring Car Championship* has its models, its courses, its cells and its music — see [Sega Touring Car Championship](#sega-touring-car-championship).
 Jaleco's *Super GT 24h* and *Over Rev* have their models, courses and cells — see
 [Super GT 24h](#super-gt-24h) and [Over Rev](#over-rev). Sega's *Dynamite
 Baseball 97* has its models, ballparks, cells and players — see [Dynamite Baseball 97](#dynamite-baseball-97).
@@ -38,7 +38,7 @@ Psikyo's *Zero Gunner* has its models, stages and cells — see [Zero Gunner](#z
 *Sky Target* has its models, stages and cells — see [Sky Target](#sky-target).
 Sega's *Ski Super G* has its models and its cells — see [Ski Super G](#ski-super-g).
 *Wave Runner* and *Sega Water Ski* have their models, courses and cells — see [Wave Runner](#wave-runner) and [Sega Water Ski](#sega-water-ski).
-*Top Skater* has its models, its three courses, its cells and its skaters — see [Top Skater](#top-skater).
+*Top Skater* has its models, its three courses, its cells, its skaters and its music — see [Top Skater](#top-skater).
 *Behind Enemy Lines* has its models, cells and soldiers — see [Behind Enemy Lines](#behind-enemy-lines).
 
 Three views, and a fourth for the 2D art:
@@ -1393,6 +1393,14 @@ with its own name (NE_PRE, SEGA_only, insert_coins...). 16 files, 173
 pictures, are named nowhere in the program and are marked unused. The
 attract's messages match MAME's pixel for pixel.
 
+**music**, on the Stages tab, plays the game's 17 songs, by the names the
+program's debug list gives them (SoHigh, DontDropMe, SegaBGM1...), each
+labelled with where the game plays it: the attract, the selects, and which
+course with which music select or game mode. They are
+MPEG audio on the game's Digital Sound Board, and the page plays them the way
+that board's program does. See [The Digital Sound
+Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
+
 There are no motions yet. See
 [TECHNICAL.md](TECHNICAL.md#sega-touring-car-championship-jstexturejs-jscolorsjs).
 
@@ -1769,7 +1777,14 @@ board shows its underside when it faces away from the camera, as the
 game draws it. The spring the attract adds to some joints and the motions'
 headings are left out, and the motions have no names.
 
-There is no music yet. See
+**music**, on the Stages tab, plays the game's 12 songs, by the names its
+sound test gives them (EASY_BGM_A, ADV_BGM, HIDE_BGM...), from its Digital
+Sound Board's MPEG ROMs, each labelled with where the game plays it. Every
+race plays the next of the three HARD songs, whatever the course; the EASY
+songs and HIDE_BGM are only in the sound test. See [The Digital Sound
+Boards](TECHNICAL.md#the-digital-sound-boards-touring-car-and-top-skater).
+
+See
 [TECHNICAL.md](TECHNICAL.md#top-skater-jstopskatrjs) and
 [the skaters](TECHNICAL.md#top-skaters-skaters-jstopskatrplayersjs).
 
