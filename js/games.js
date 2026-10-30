@@ -8814,3 +8814,42 @@ export function detectGames(names, nested = null, byCrc = null) {
     const top = all.filter((g) => labels(g).every((m) => !nested?.has(m)));
     return [...top, ...all.filter((g) => !top.includes(g))];
 }
+
+/**
+ * The builds a set comes within a chip pair of, but cannot be loaded as.
+ *
+ * MAME's sets have changed names under the zips: an old `hotd.zip` is the
+ * first revision MAME now calls `hotdo`, and today's `hotdo.zip` is a clone of
+ * two chips that leans on that same parent. Drop the two together and they are
+ * one build, not two, which leaves the picker nothing to offer and the reader
+ * nothing to say why. So the profiles these zips hold nearly all of are named
+ * as well, with the chips they lack: the thing to find is then a pair of
+ * program EPROMs, not another archive of the same game.
+ *
+ * "Nearly all" is at most four chips short and at least twice as many there,
+ * which keeps another game that shares a mask ROM or two out of the list.
+ *
+ * @param {Set<string>} names  every member name across the zips
+ * @param {Map<number, string>} byCrc  a member's name by its checksum
+ * @param {object[]} matched  the profiles detectGames found
+ * @returns {{id: string, name: string, missing: string[]}[]}
+ */
+export function nearGames(names, byCrc, matched) {
+    const out = [];
+    for (const g of GAMES) {
+        if (matched.includes(g) || !g.regions) continue;
+        const chips = new Map();
+        for (const spec of Object.values(g.regions)) {
+            if (spec.optional) continue;
+            for (const [, lo, loCrc, hi, hiCrc] of spec.parts) {
+                chips.set(lo, loCrc);
+                chips.set(hi, hiCrc);
+            }
+        }
+        const missing = [...chips].filter(([n, crc]) => !names.has(n) && !byCrc.has(crc)).map(([n]) => n);
+        if (missing.length && missing.length <= 4 && chips.size - missing.length >= 2 * missing.length) {
+            out.push({ id: g.id, name: g.name, missing });
+        }
+    }
+    return out;
+}

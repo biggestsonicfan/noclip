@@ -10,7 +10,7 @@
  */
 
 import { readZipDirectory, extractZipEntry, crc32 } from './zip.js';
-import { detectGames, detectPrepared, relocate, unrelocate } from './games.js';
+import { detectGames, nearGames, detectPrepared, relocate, unrelocate } from './games.js';
 import { t } from './lang.js';
 import { powsledModels } from './powsled.js';
 import { dynamcopPalette } from './dynamcop.js';
@@ -159,6 +159,9 @@ export async function loadRomSet(zipBuffers, onProgress = () => {}, opts = {}) {
     /* Every build this archive could be loaded as, so the panel can offer them
      * without reading the zip a second time. */
     const out = { game, variants: variants.map((g) => ({ id: g.id, name: g.name })), readChip };
+    /* And the builds it is a chip pair short of, so the panel can say what
+     * would add them (games.js nearGames). */
+    out.near = nearGames(names, byCrc, variants);
     for (const [key, spec] of regions) {
         /* A region the viewer can do without is left null rather than failing
          * the whole set when a zip does not carry its chips. */

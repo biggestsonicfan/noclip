@@ -213,7 +213,10 @@ const JA_PAGE = {
         + '4つのチャプターを18のステージとして、開発時の名前のついた7477個のモデル、そして関節数に合わせて'
         + '焼き込まれた674個のモーションを再生する94体の敵のボディ。リビジョン A（<code>hotd.zip</code>）も'
         + '認識し、両方を含むマージ済みアーカイブも読めます &mdash; セットは zip の名前ではなく、'
-        + '中のチップで見分けます。',
+        + '中のチップで見分けます。今の MAME の <code>hotdo.zip</code> はプログラムの2チップだけなので、'
+        + '<code>hotd.zip</code> と一緒にドロップしてください。古い <code>hotd.zip</code> は初版そのもので、'
+        + 'リビジョン A のチップ（<code>epr-19696a.15</code>/<code>epr-19697a.16</code>）がなければ'
+        + 'ビルドの欄に灰色で表示されます。',
     'romnote.hotdp': '<b>ザ・ハウス・オブ・ザ・デッド（プロトタイプ）</b>（<code>hotdp.zip</code>）&mdash; '
         + '製品版の元になった Model 2C のプロトタイプを同じ方法で読みます。遊べる2つのステージ、'
         + '独自のモデル、そして507個のモーションを持つ68体のボディ。',
@@ -596,6 +599,7 @@ const JA_TEXT = {
     /* app.js: loading */
     'reading {files}…': '{files} を読み込み中…',
     'decompressing {name}': '{name} を展開中',
+    '{name} — needs {chips}': '{name} — {chips} が必要',
     '{game} ROM set ready': '{game} の ROM セットの準備完了',
     'unrecognised ROM set — no supported game found in these zips':
         '認識できない ROM セットです — これらの zip に対応ゲームが見つかりません',
