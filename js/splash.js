@@ -7,7 +7,8 @@
  * game's clips in turn. Hovering a card, focusing it or tapping it hands the
  * reel to that game until the pointer leaves the row of cards; on a phone,
  * where nothing hovers, a tap does it and another tap on the same card lets go.
- * A game with no clips yet takes its turn as a card saying so.
+ * A game with no clips yet takes its turn as a card saying so. The cards are
+ * one row that scrolls sideways, and follows the reel while nobody is using it.
  *
  * Only the clip on screen and the one after it are fetched, and nothing plays once a set has
  * loaded and the loading screen is gone, or while the tab is in the background.
@@ -134,6 +135,7 @@ function show(i) {
     const mine = ++turn;
     clearTimeout(holdTimer);
     for (const g of games) g.card.classList.toggle('active', g === game);
+    follow(game.card);
     renderDots();
     if (!clip) {
         reveal(null, entry);
@@ -166,13 +168,17 @@ function show(i) {
 
 const next = () => show(at + 1);
 
+/* A dot for each clip of the game on screen: the whole reel's would not fit
+ * under it, and the row of cards already says where the reel has got to. */
 function renderDots() {
     const dots = $('#reel-dots');
-    dots.replaceChildren(...playlist.map((e, i) => {
+    const game = playlist[at].game;
+    const its = playlist.map((e, i) => [e, i]).filter(([e]) => e.game === game);
+    dots.replaceChildren(...its.map(([e, i], k) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = i === at ? 'on' : '';
-        b.setAttribute('aria-label', t('Clip {i} of {n}: {game}', { i: i + 1, n: playlist.length, game: e.game.name }));
+        b.setAttribute('aria-label', t('Clip {i} of {n}: {game}', { i: k + 1, n: its.length, game: e.game.name }));
         b.addEventListener('click', (ev) => { ev.stopPropagation(); show(i); });
         return b;
     }));
@@ -213,7 +219,38 @@ for (const v of layers) {
  * every browser's click says what made it. Keyboard focus counts as a hover. */
 const row = $('#games');
 let touch = false;
-row.addEventListener('pointerdown', (e) => { touch = e.pointerType !== 'mouse'; });
+row.addEventListener('pointerdown', (e) => { touch = e.pointerType !== 'mouse'; browsed = performance.now(); });
+
+/*
+ * The row is a carousel: the arrows page it five cards at a time, and are
+ * hidden at its ends. When the reel moves on to a card out of sight, the row
+ * (never the page) scrolls to it, unless someone is looking through the row:
+ * the pointer on it, or a page, swipe or wheel in the last few seconds.
+ */
+const BROWSE_MS = 8000;
+let browsed = -Infinity;
+const back = $('#games-prev');
+const more = $('#games-next');
+function edges() {
+    back.disabled = row.scrollLeft < 2;
+    more.disabled = row.scrollLeft + row.clientWidth > row.scrollWidth - 2;
+}
+function page(dir) {
+    browsed = performance.now();
+    row.scrollBy({ left: dir * row.clientWidth, behavior: reduced ? 'auto' : 'smooth' });
+}
+function follow(card) {
+    if (pinned || row.matches(':hover') || performance.now() - browsed < BROWSE_MS) return;
+    const left = card.offsetLeft;
+    if (left >= row.scrollLeft && left + card.offsetWidth <= row.scrollLeft + row.clientWidth) return;
+    row.scrollTo({ left, behavior: reduced ? 'auto' : 'smooth' });
+}
+back.addEventListener('click', () => page(-1));
+more.addEventListener('click', () => page(1));
+for (const e of ['wheel', 'touchstart']) row.addEventListener(e, () => { browsed = performance.now(); }, { passive: true });
+row.addEventListener('scroll', edges, { passive: true });
+addEventListener('resize', edges);
+edges();
 for (const g of games) {
     g.card.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') pin(g); });
     g.card.addEventListener('focus', () => { if (g.card.matches(':focus-visible')) pin(g); });
@@ -228,6 +265,7 @@ for (const g of games) {
     });
 }
 row.addEventListener('pointerleave', (e) => {
+    browsed = performance.now();
     if (e.pointerType === 'mouse' && !row.contains(document.activeElement)) pin(null);
 });
 row.addEventListener('focusout', (e) => {
