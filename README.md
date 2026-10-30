@@ -1953,8 +1953,11 @@ The finished game takes `hotd.zip`, in either revision — MAME's `hotd`
 each drawn with the textures and palette of the chapter that draws it, across
 thirteen texture sets against the prototype's eleven, and its four chapters come
 out as eighteen stages — every zone a chapter's scripts reach while one texture
-set is loaded, plus the whole of each chapter's table, with its 94 enemy bodies
-playing the 674 motions baked for their joint counts. `BO_devilonx` beats its
+set is loaded, plus the whole of each chapter's table — and the **Ending** makes
+nineteen: the rooms the staff roll passes through, each under the set and light
+it has there, out to the courtyard under a blue sky and back to the entrance
+hall in sunlight. Its 94 enemy bodies play the 674 motions baked for their
+joint counts. `BO_devilonx` beats its
 own hundred wings (`PN_devilonx_hane01` on), as the game's draw callback gives
 it `BO_devilon`'s case.
 

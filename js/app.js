@@ -735,7 +735,9 @@ function useRomColorLuts(stage, fighter = null) {
     /* A stage that poses its own fighters (Dead or Alive's attract fight)
      * names them; their colour rows go in with the stage's. */
     const fighters = fighter == null ? stage.fighters ?? [] : [fighter];
-    const key = `${stage.texSet[1]}:${stage.tint.join(',')}:${JSON.stringify(fighters)}`;
+    /* The colour ramps a House of the Dead zone's scripts have swapped in. */
+    const ramps = stage.placements ? viewZone(stage)?.ramps ?? [] : [];
+    const key = `${stage.texSet[1]}:${stage.tint.join(',')}:${JSON.stringify(fighters)}:${JSON.stringify(ramps)}`;
     /* Still re-arm: the model and rig views turn the ramp off behind us. */
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
@@ -744,6 +746,7 @@ function useRomColorLuts(stage, fighter = null) {
         colorSet: stage.texSet[1],
         tint: stage.tint,
         fighters,
+        ramps,
     });
     setLumaTables(luma, cxlat);
     state.lutKey = key;
@@ -762,7 +765,9 @@ function useRomColorLuts(stage, fighter = null) {
  */
 function materialForSet(set, stage) {
     const v = state.viewer;
-    const key = `${set}:${stage.tint.join(',')}`;
+    /* And the colour ramps the zone picked has swapped in (see useRomColorLuts). */
+    const ramps = stage.placements ? viewZone(stage)?.ramps ?? [] : [];
+    const key = `${set}:${stage.tint.join(',')}:${JSON.stringify(ramps)}`;
     const have = v.setMaterials.get(key);
     if (have) return have;
     const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue([set]));
@@ -771,7 +776,7 @@ function materialForSet(set, stage) {
      * a game with no colour pipeline ported has none to build. */
     const cxlat = state.rom.game.colors && !state.lutsPinned
         ? makeDataTexture(buildColorxlat(state.rom, {
-            colorSet: set, tint: stage.tint, fighters: [],
+            colorSet: set, tint: stage.tint, fighters: [], ramps,
         }), CXLAT_W, CXLAT_H)
         : null;
     return v.setMaterial(key, { atlas, cxlat });
@@ -835,6 +840,12 @@ async function loadTexramFiles(files) {
  */
 function stageView(stage) {
     return state.stageViews[stage.slot] ?? stage.view;
+}
+
+/* The zone a placement stage's view picks, or null for every zone at once. */
+function viewZone(stage) {
+    const m = /^zone:(\d+)$/.exec(stageView(stage) ?? '');
+    return m ? stage.zones?.[+m[1]] ?? null : null;
 }
 
 /*

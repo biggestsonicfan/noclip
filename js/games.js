@@ -1824,10 +1824,17 @@ const hotdo = {
      * table at 0xA9970 and the palette tables at 0xA98F0 two instructions
      * earlier. Starting the array after the zero instead gives every set the
      * next one's ramps and set 12 none at all, which is the bare grey curve.
+     *
+     * `swaps` is where script op 76 takes a ramp from to lay over one of the
+     * set's: sub_13760 reads 64 RGB triples at `lda 0xDA51(g1)`, g1 = 192 x
+     * the table number, the only base it is given. Every set's own ramps are
+     * tables of that array too — set 9's fourteen are tables 24, 2, 66, 31 and
+     * so on, 192 bytes apart from 0xDA51 exactly. The scripts swap in 70-odd
+     * places; the ending's daylight is two of them (see `ending` below).
      */
     colors: {
         luma: { data: 0xe9aac0, bytes: 0x4000 },
-        curve: { sets: { ptrs: 0xa9930, rows: 14, row0: 1, step: 2, gain: 0xa8308 } },
+        curve: { sets: { ptrs: 0xa9930, rows: 14, row0: 1, step: 2, gain: 0xa8308 }, swaps: 0xda51 },
         solid: true,
     },
     /*
@@ -1879,6 +1886,16 @@ const hotdo = {
         placements: {
             chapters: 4,
             maps: 0xc0bc0, zones: 0xc0ba0, scripts: 0xe0000, sectionSets: 0xab0a0,
+            /*
+             * Chapter 4 is the how-to-play (mode 8, 0x21D60), 5 the attract
+             * demo, and 6 the ending, which opens in chapter 3's map under
+             * set 9 and tours the other chapters' rooms behind the staff roll
+             * with two object classes: 0x6C points the map and zone tables at
+             * another chapter's, 0x6F loads a set. It comes out in the car
+             * park in daylight, zone 50 of chapter 0's map, which is where the
+             * stage opens. See readEndingStage in js/placements.js.
+             */
+            ending: { chapter: 6, map: 3, set: 9, classes: { map: 0x6c, set: 0x6f }, opens: { map: 0, zone: 50 } },
             /* The cycle list is in the record's second tail word here, not its
              * first. One placement in the game has one, and it is the same
              * placement as the prototype's — index 55, PN_room5a_CT00a, the
@@ -2486,7 +2503,8 @@ const hotd = {
     },
     colors: {
         ...hotdo.colors,
-        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a0, gain: 0xa8318 } },
+        /* sub_13760 did not move, and still reads its tables at 0xDA51. */
+        curve: { sets: { ...hotdo.colors.curve.sets, ptrs: 0xa99a0, gain: 0xa8318 }, swaps: 0xda51 },
     },
     stageTable: {
         ...hotdo.stageTable,
