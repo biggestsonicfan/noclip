@@ -52,6 +52,13 @@ const OP_SKY_ON = 71;
  * ones on channel 0x10, 0xA010xx, are the music, and a chapter's scripts start
  * its song with one. */
 const OP_SOUND = 90;
+/* 76 swaps one of the set's fourteen colour ramps for another: the handler
+ * (0x67350 in the finished game) hands its two words to sub_13760, which copies
+ * 64 RGB triples from the profile's `colors.curve.swaps` + 192 x the second
+ * word over ramp slot `first`, and queues that row of colorxlat for upload. A
+ * set load (sub_1330) lays all fourteen down again, so a swap lasts until the
+ * next one, or until the next set. See `ramps` in js/colors.js. */
+const OP_RAMP = 76;
 const isSong = (code) => (code >>> 8) === 0xa010;
 const ONE_WORD = new Set([16, 34, 83]);
 const TWO_WORDS = new Set([13, 14, 15, 20, 32, 33, 40, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79,
@@ -1056,12 +1063,15 @@ function placementCount(rom, map) {
  * whichever one is picked, opening on the first. Every zone at once stays as a
  * view of its own, versions and all.
  */
-function zoneViews(zones, zoneOrder, zoneSections, set = null, zoneSet = null) {
+function zoneViews(zones, zoneOrder, zoneSections, set = null, zoneSet = null, zoneRamps = null) {
     return [...zones]
         .sort((a, b) => (zoneOrder.get(a) ?? Infinity) - (zoneOrder.get(b) ?? Infinity))
         .map((zone) => ({
             zone,
             set: set ?? zoneSet.get(zone),
+            /* The ramps the scripts have swapped in by the time the zone is
+             * first made current, as [slot, table] pairs (OP_RAMP). */
+            ramps: zoneRamps?.get(zone) ?? [],
             label: `zone ${zone} · section ${runs(zoneSections.get(zone) ?? [])}`,
         }));
 }
@@ -1095,7 +1105,7 @@ function skyDraws(rom, sky) {
 /* A stage entry in the shape the viewer's stage list takes. The set is the
  * atlas, the palette and the colour tables at once — sub_2B720 loads all three
  * from the one number. */
-function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, zones = [], song, meta, mixedSets = false }) {
+function placementStage(stages, lit, chapter, { name, set, draws, objects = [], sky = null, zones = [], opens = 0, song, meta, mixedSets = false }) {
     stages.push({
         slot: stages.length,
         placements: true,
@@ -1113,7 +1123,7 @@ function placementStage(stages, lit, chapter, { name, set, draws, objects = [], 
          * where it has no zones to choose between. See zoneViews. */
         views: [...zones.map((z, i) => [`zone:${i}`, z.label]),
             ['all', zones.length ? 'Every zone at once' : 'Every placement']],
-        view: zones.length ? 'zone:0' : 'all',
+        view: zones.length ? `zone:${Math.max(opens, 0)}` : 'all',
         union: 'all',
         texSets: [set],
         texSet: [set, set],
@@ -1132,6 +1142,8 @@ function placementStage(stages, lit, chapter, { name, set, draws, objects = [], 
  * Every stage the placement tables make: one per chapter and texture set, and
  * one per chapter with every placement in its table.
  *
+ * And the ending, where the profile names one (see readEndingStage).
+ *
  * @param {object} rom loaded ROM set
  * @returns {object[]} stage objects in the shape the viewer's stage list takes
  */
@@ -1142,6 +1154,8 @@ export function readPlacementStages(rom) {
     const stages = [];
 
     for (let chapter = 0; chapter < T.chapters; chapter++) {
+        /* Ramp slot -> table, as OP_RAMP leaves them. */
+        let ramps = new Map();
         const map = dv.getUint32(T.maps + chapter * 4, true);
         const zoneTable = dv.getUint32(T.zones + chapter * 4, true);
         const sectionSets = dv.getUint32(T.sectionSets + chapter * 4, true);
@@ -1155,6 +1169,7 @@ export function readPlacementStages(rom) {
         const zoneOrder = new Map();
         const zoneSet = new Map();
         const zoneSections = new Map();
+        const zoneRamps = new Map();
         /* The sky is a pair of bytes the scripts write and the drawing task
          * reads, so it carries across sections exactly as it does on the
          * machine: a set's sky is what is standing when its first zone is made
@@ -1169,10 +1184,14 @@ export function readPlacementStages(rom) {
          * loaded when its list ran — the same rule the zones are grouped by. */
         const props = new Map();
         sections.forEach((section, number) => {
+            /* Each section loads its set as it starts (sub_21550), and the
+             * load puts the set's own ramps back. */
             let set = dv.getUint32(sectionSets + number * 4, true);
+            ramps = new Map();
             for (const script of pointerList(rom, section)) {
                 walkScript(rom, script, (op, p) => {
-                    if (op === OP_LOAD_SET) set = dv.getUint32(p + 4, true);
+                    if (op === OP_LOAD_SET) { set = dv.getUint32(p + 4, true); ramps = new Map(); }
+                    if (op === OP_RAMP) { ramps.set(dv.getUint32(p + 4, true), dv.getUint32(p + 8, true)); return; }
                     if (op === OP_SOUND && isSong(dv.getUint32(p + 4, true))) {
                         song = dv.getUint32(p + 4, true);
                         const g = groups.get(set);
@@ -1207,7 +1226,11 @@ export function readPlacementStages(rom) {
                         if (!m.has(zone)) m.set(zone, new Set());
                         m.get(zone).add(number);
                     }
-                    if (!zoneOrder.has(zone)) { zoneOrder.set(zone, zoneOrder.size); zoneSet.set(zone, set); }
+                    if (!zoneOrder.has(zone)) {
+                        zoneOrder.set(zone, zoneOrder.size);
+                        zoneSet.set(zone, set);
+                        zoneRamps.set(zone, [...ramps].sort((a, b) => a[0] - b[0]));
+                    }
                 });
             }
         });
@@ -1276,7 +1299,7 @@ export function readPlacementStages(rom) {
                 objects,
                 sky,
                 song: g.song,
-                zones: zoneViews(g.zones, zoneOrder, g.zoneSections, set),
+                zones: zoneViews(g.zones, zoneOrder, g.zoneSections, set, null, zoneRamps),
                 meta: [
                     ['texture set', set],
                     ['sections', runs(g.sections)],
@@ -1323,7 +1346,7 @@ export function readPlacementStages(rom) {
                 objects: [...props.values()],
                 /* Each zone under the set loaded when it is first made
                  * current, which is the set its pieces are drawn under. */
-                zones: zoneViews(zoneOrder.keys(), zoneOrder, zoneSections, null, zoneSet),
+                zones: zoneViews(zoneOrder.keys(), zoneOrder, zoneSections, null, zoneSet, zoneRamps),
                 mixedSets: true,
                 meta: [
                     ['texture set', `${[...new Set(all.map((d) => d.set))].sort((a, b) => a - b).join(', ')}, per part`],
@@ -1334,7 +1357,119 @@ export function readPlacementStages(rom) {
             });
         }
     }
+    if (T.ending) readEndingStage(rom, T.ending, lit, stages);
     return stages;
+}
+
+/*
+ * The ending, as one stage of the rooms it passes through.
+ *
+ * Once chapter 3 is cleared, 0x217D0 moves the game to submode 7, and
+ * sub_34210 starts chapter 6 (`ending.chapter`) without loading anything: it
+ * opens in chapter 3's map under set 9, the set the last section loaded. Its
+ * section 3 is the staff roll, and it is a tour. Two object classes the spawn
+ * lists name do the moving, each with its argument in the record's second
+ * word: `map` (0x2D580) points the zone and placement tables at another
+ * chapter's — `ld unk_C0BA0[g4*4]` and `unk_C0BC0[g4*4]`, the same arrays
+ * `zones` and `maps` are — and `set` (0x2D560) loads a set, which puts that
+ * set's ramps back as any load does. So the staff roll goes from chapter 3's
+ * rooms back through 2's and 1's to chapter 0's courtyard, each under the
+ * set it was played in, and comes out at the car park in daylight: zone 50 of
+ * chapter 0's map under set 1, sky 0 (PN_skyuv), and ramp 0 swapped for table
+ * 0x15, a pale blue. Sections 5 and 6, two of the three endings, end it in
+ * the entrance hall, zone 51 under set 2, ramp 6 swapped for table 0x5C (the
+ * sunlit floor behind Sophie). A MAME run of the ending puts exactly those ramps in colorxlat (set 1's with 0x15 at row 1,
+ * set 2's with 0x5C at row 13).
+ *
+ * The zones are those of several maps, so a zone's key is its map and number
+ * together, and each carries the set and ramps it is drawn under.
+ */
+function readEndingStage(rom, E, lit, stages) {
+    const T = rom.game.stageTable.placements;
+    const dv = rom.mainCpuView;
+    const sections = pointerList(rom, dv.getUint32(T.scripts + E.chapter * 4, true));
+    let map = E.map;
+    let set = E.set;
+    let ramps = new Map();
+    const sky = { index: 0, on: 0, spin: false };
+    let song = 0;
+    /* Zone key -> what the scripts have set up when it is first made current. */
+    const visits = new Map();
+    const loader = (rec) => {
+        if (!inRom(rom, rec, 8)) return;
+        const cls = dv.getUint32(rec, true);
+        const arg = dv.getUint32(rec + 4, true);
+        if (cls === E.classes.map) map = arg;
+        if (cls === E.classes.set) { set = arg; ramps = new Map(); }
+    };
+    sections.forEach((section, number) => {
+        for (const script of pointerList(rom, section)) {
+            walkScript(rom, script, (op, p) => {
+                if (op === OP_LOAD_SET) { set = dv.getUint32(p + 4, true); ramps = new Map(); }
+                if (op === OP_RAMP) ramps.set(dv.getUint32(p + 4, true), dv.getUint32(p + 8, true));
+                if (op === OP_SOUND && isSong(dv.getUint32(p + 4, true))) song = dv.getUint32(p + 4, true);
+                if (op === OP_SKY) sky.index = rom.maincpu[p + 4];
+                if (op === OP_SKY_ON) { sky.on = rom.maincpu[p + 4]; sky.spin = sky.on === 1; }
+                if (SPAWN_OPS.has(op)) {
+                    for (let q = p + 4; inRom(rom, q) && dv.getUint32(q, true) !== END; q += 4) loader(dv.getUint32(q, true));
+                }
+                if (op !== OP_ZONE) return;
+                const zone = dv.getUint32(p + 4, true);
+                const key = map * 256 + zone;
+                if (!visits.has(key)) {
+                    visits.set(key, {
+                        key, map, zone, set, song, sections: new Set(),
+                        ramps: [...ramps].sort((a, b) => a[0] - b[0]),
+                        sky: { ...sky, on: sky.on !== 0 },
+                    });
+                }
+                visits.get(key).sections.add(number);
+            });
+        }
+    });
+    if (!visits.size) return;
+
+    /* Each placement a zone lists, once per map, with every zone it is in. */
+    const draws = new Map();
+    for (const v of visits.values()) {
+        const placed = dv.getUint32(T.maps + v.map * 4, true);
+        const at = dv.getUint32(T.zones + v.map * 4, true) + v.zone * ZONE_BYTES;
+        if (!inRom(rom, at, ZONE_BYTES)) continue;
+        for (let i = 0; i < ZONE_BYTES && rom.maincpu[at + i] !== 0xff; i++) {
+            const index = rom.maincpu[at + i];
+            const id = v.map * 256 + index;
+            if (!draws.has(id)) {
+                const d = readPlacement(rom, placed, index);
+                if (!d || !(d.model || d.cycle)) continue;
+                draws.set(id, { ...d, set: v.set, zones: new Set() });
+            }
+            draws.get(id).zones.add(v.key);
+        }
+    }
+    const zones = [...visits.values()].map((v) => ({
+        zone: v.key,
+        set: v.set,
+        ramps: v.ramps,
+        label: `zone ${v.zone} of stage ${v.map + 1}'s map · set ${v.set} · section ${runs(v.sections)}`,
+    }));
+    const opens = [...visits.values()].find((v) => v.map === E.opens.map && v.zone === E.opens.zone)
+        ?? visits.values().next().value;
+    placementStage(stages, lit, E.chapter, {
+        name: 'Ending',
+        set: opens.set,
+        draws: [...draws.values()],
+        /* The sky up where the stage opens: in the car park, the day's. */
+        sky: skyDraws(rom, opens.sky),
+        song: opens.song,
+        zones,
+        opens: zones.findIndex((z) => z.zone === opens.key),
+        mixedSets: true,
+        meta: [
+            ['texture set', `${[...new Set(zones.map((z) => z.set))].join(', ')}, per zone`],
+            ['zones', zones.length],
+            ['placements', draws.size],
+        ],
+    });
 }
 
 /*

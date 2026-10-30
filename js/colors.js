@@ -889,9 +889,12 @@ function sendFighterColors(dv, put, rgb, C, fighters, palette) {
  *                                  An empty list leaves those rows at zero,
  *                                  which is what a scene with no fighter in it
  *                                  shows: no stage model names one.
+ * @param {number[][]} [opts.ramps] [slot, table] pairs a House of the Dead
+ *                                  script has swapped in over the set's own
+ *                                  ramps (op 76; see `swaps` in js/games.js)
  * @returns {Uint8Array} CXLAT_BYTES, laid out like a dump of 0x01810000
  */
-export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
+export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [], ramps = [] } = {}) {
     if (rom.game.colors.airwlkrs) return buildAirwlkrsColorxlat(rom, colorSet);
     if (rom.game.colors.lastbrnx) return buildLastbrnxColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.powsled) return buildPowsledColorxlat(rom);
@@ -907,7 +910,7 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
     if (rom.game.colors.bel) return buildBelColorxlat(rom);
     /* Dynamite Cop's ramps are the stage's, whichever of its sets is asked for. */
     if (rom.game.dynamcop) return buildCurveColorxlat(rom, dynamcopScene(rom, colorSet).stage);
-    if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
+    if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet, ramps);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.von) return buildVonColorxlat(rom, colorSet, fighters);
@@ -1193,7 +1196,7 @@ function buildLastbrnxColorxlat(rom, colorSet, wanted) {
  * operation rounds to single, a `long real` one to double — and every result is
  * truncated toward zero and capped at 255.
  */
-function buildCurveColorxlat(rom, colorSet) {
+function buildCurveColorxlat(rom, colorSet, ramps = []) {
     const C = rom.game.colors;
     const cv = rom.mainCpuView;
     const out = new Uint8Array(CXLAT_BYTES);
@@ -1234,6 +1237,16 @@ function buildCurveColorxlat(rom, colorSet) {
                     put(ch, row0 + r * step, luma, cap(f(rom.maincpu[src + luma * 3 + ch] * g)));
                 }
             }
+        }
+    }
+    /* A script's swaps, over the set's own (sub_13760): the table's bytes as
+     * they are, with no gain, onto the same odd rows sub_1330 fills. */
+    const { swaps } = C.curve;
+    for (const [slot, n] of swaps == null ? [] : ramps) {
+        const src = swaps + n * 64 * 3;
+        if (src + 64 * 3 > rom.maincpu.length || row0 + slot * step >= 32) continue;
+        for (let luma = 0; luma < 64; luma++) {
+            for (let ch = 0; ch < 3; ch++) put(ch, row0 + slot * step, luma, rom.maincpu[src + luma * 3 + ch]);
         }
     }
     return out;

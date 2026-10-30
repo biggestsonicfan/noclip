@@ -605,6 +605,45 @@ chapter, which is indoors. Nothing in the placement, zone or script tables knows
 what those names say, so the agreement is a check on the script walk as much as
 on the sky.
 
+#### The ending, which is lit by swapping ramps
+
+The last walk to the car is under a blue sky and a lighter light, and none of
+it is a new set. Two things do it.
+
+The first is op 76 (`0x67350`), which the scripts use in some seventy places.
+It calls `sub_13760(slot, table)`, which copies 64 raw RGB triples from
+`0xDA51 + table*192` over one ramp of the colorxlat shadows (`0x512D20`, three
+banks 0x1000 apart, `+slot*0x100`) and queues the upload — to row `2*slot+1`,
+the same rows `sub_1330` fills when a set loads. Every set's own ramps are
+tables of that same array (set 9's are tables 24, 2, 66, 31, ...), so a swap
+is just another set's ramp in one slot, and the next set load puts the set's
+own ramps back. Revision A has the array at the same address. The profile
+names it `curve.swaps`; `buildColorxlat` takes the swaps as `ramps`, and every
+placement zone carries the swaps its first make-current is drawn under. That
+changes the other chapters too, where a section swaps a ramp before it makes
+a zone current, which is what the board draws there.
+
+The second is that the ending is not a chapter's stage. Mode 4's chapter 6
+(`sub_34210`) starts in chapter 3's map under set 9 with no set load, and
+section 3, the staff roll, tours the game through two spawn classes: 0x6C
+(`0x2D580`) points the map and zone tables at chapter *n*'s, and 0x6F
+(`0x2D560`) loads set *n*. Only chapter 6 and the attract demo use them. So
+the roll goes set 4, chapter 2's map under 9, 8, chapter 1's under 7, 6, 5,
+chapter 0's under 3, and then set 1 with ramp 0 swapped for table 0x15: zone
+50 of chapter 0's map, the courtyard out to the gate, under sky 0
+(`PN_skyuv`). Sections 5 and 6, two of the three endings, finish in the
+entrance hall, zone 51 under set 2 with ramp 6 swapped for table 0x5C — the
+sunlit floor behind Sophie. `readEndingStage` walks that tour into one stage,
+**Ending**, whose zones are keyed by map and zone together and each carry
+their set and ramps; it opens at zone 50.
+
+Colorxlat dumped from MAME during the ending matches what is built here row
+for row at zones 23, 27, 40, 50 and 51. The car at the gate is a spawned object,
+not scenery, and is not drawn. One thing the dumps also showed: `sub_1330`
+multiplies the ramps by `dword_A830C`, 1.0, and MAME's rows match a gain of
+1.0, while the profile's `gain` points at `0xA8308`, which holds 1.1. That has
+not been changed here.
+
 ### Colour and light for a second game
 
 The colour tables carried across as completely as the textures did.
