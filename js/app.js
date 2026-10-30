@@ -2513,7 +2513,8 @@ function stepStageMaterials(frame) {
  * Cop's, which the game keys to the rail's count (js/vcop.js, railLight). Only
  * looked up again once the camera has moved. Fighting Vipers' Bay Side turns
  * its light with the camera's heading instead (js/fvstages.js), and Air
- * Walkers' courts and players point it where the camera looks (js/airwlkrs.js).
+ * Walkers' courts and players point it where the camera looks (js/airwlkrs.js),
+ * as some racers do theirs (`eyeLight`).
  */
 function stepEyeLight(stage = state.stages[state.stageIndex]) {
     /* Air Walkers' light is (0, 0, 1) in the camera's frame: down the view. */
@@ -2522,6 +2523,17 @@ function stepEyeLight(stage = state.stages[state.stageIndex]) {
         if (state.eyeLightAt?.equals?.(d)) return;
         state.eyeLightAt = d;
         state.viewer.material.uniforms.uLight.value.copy(d);
+        return;
+    }
+    /* Any other light kept in the camera's frame (Sega Touring Car
+     * Championship's, Super GT 24h's): the board's eye z is down the view,
+     * the camera's -z. */
+    if (stage?.eyeLight) {
+        const q = state.viewer.camera.getWorldQuaternion(new THREE.Quaternion());
+        if (state.eyeLightAt?.equals?.(q)) return;
+        state.eyeLightAt = q;
+        const [x, y, z] = stage.eyeLight;
+        state.viewer.material.uniforms.uLight.value.set(x, y, -z).applyQuaternion(q);
         return;
     }
     if (stage?.lightFromHeading) {

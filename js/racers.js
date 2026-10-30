@@ -38,7 +38,7 @@
 import { gameLighting } from './stages.js';
 import { MAIN_DATA_BASE } from './romset.js';
 
-function stage(rom, lit, { num, name, draws, set, colorSet = set, meta }) {
+function stage(rom, lit, { num, name, draws, set, colorSet = set, light = lit.light, meta }) {
     return {
         slot: num,
         placements: true,
@@ -55,7 +55,9 @@ function stage(rom, lit, { num, name, draws, set, colorSet = set, meta }) {
         texSet: [set, colorSet],
         tint: [1, 1, 1],
         bright: 1,
-        light: lit.light,
+        light,
+        /* A light the game keeps in the camera's frame (stepEyeLight). */
+        eyeLight: lit.eyeLight,
         materials: lit.materials,
         colorCycles: [],
         flags: 0,
@@ -85,7 +87,7 @@ function readManxCourses(rom, C) {
         const sky = word(rec + 0xc);
         draws.unshift({ model: sky, pos: [0, 0, 0], set: c.set, layer: 'sky', layered: false });
         return stage(rom, lit, {
-            num, name: c.name, draws, set: c.set,
+            num, name: c.name, draws, set: c.set, light: c.light,
             meta: [['record', c.record], ['segments', draws.length - 1], ['sky', sky]],
         });
     });

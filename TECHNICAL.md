@@ -7287,7 +7287,7 @@ colours} from 0x7A404, 738 colours, to 0x1802000 (`paletteProgram`), which
 matches MAME's palette RAM. Luma is 0x3828: main_data bytes 0..0x407F to luma
 RAM 0x12800000, a byte a word; it matches. 0x38B8 sends 22 byte pairs from
 0x3880 to the TGP's registers at 0x800000; what they are has not been worked
-out, so the `lighting` block's light is a stand-in.
+out; they are not the light (below).
 
 **Stages** (`js/racers.js`). The course records are 20 bytes at 0x401E0,
 picked by 0x40258 (g0 the record) into 0x579640: +0 the segment list, +4 and
@@ -7307,11 +7307,19 @@ of record 2's, under 2 88 of record 2's and none of record 1's; its pictures
 are the sea coast and the T.T. Course's leaderboard. Not in the tab: models
 the race draws outside the lists (1316..1375, 1499..1558 and 1622.. on both,
 1438..1497 and 1560..1619 on the T.T. Course; the bikes, riders and trackside
-objects), the light (Sega Rally's stands in; the boot's (0, -0.707, 0.707)
-is at 0x4338) and Laxey Coast's colour rows: 0x6830's 0x7840 lays the T.T.
+objects) and Laxey Coast's colour rows: 0x6830's 0x7840 lays the T.T.
 Course's (0x6BE0, 0x6A60), and the race lays 0x76B0(29, 0x6EE0) and (27,
 0x7060) over them for Laxey (0x1B590). Function 6 is 22 pairs from 0x4140
 (`mov 22,g1; lda 0x4140,g2; bal 0x40D8`, 0x4280).
+
+The light is picked by course at 0x371E4: (-0.6, -0.6, 0.6) when 0x513FEA
+bit 1 is set (a mode not identified), else (-0.6, -0.2, -0.78) for the T.T.
+Course (0x513FF0 bit 0) and (0.19, -0.45, 0.88) for Laxey Coast (literals at
+0x37230..0x37274). Each is in world space and goes to the geometrizer turned
+by the camera; MAME's display lists in the T.T. Course attract (0x51405A = 1,
+frames 1500 and 3000) give the second back through the camera's matrix. Each
+course gives its own (`light` in the course entry, z negated). The boot's
+(0, -0.707, 0.707) at 0x4338 is only the boot's.
 
 **Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
 routines (js/cells.js `cgm`, see [Sega Rally's
@@ -7422,8 +7430,12 @@ and which left them untextured until it was read. Course 0 is Bayside Street
 1 the Indianapolis Motor Speedway (the oval) and course 2 Highland Raceway.
 Set k is course k's banks and colour table, which a segment opens on in the
 Models tab. Not in the tab: the per-course extra draw 0x4E010, the object
-draw 0x17720 (table 0x176F0), the cars, a sky, and the light (Sega Rally's
-stands in). Function 6 is 31 pairs at 0x2D590 (Deluxe 0x33A40).
+draw 0x17720 (table 0x176F0), the cars and a sky. Function 6 is 31 pairs at
+0x2D590 (Deluxe 0x33A40). The light is (0, 0, 1) in world space: the boot
+sends it as it is (0x2E5B0), and every frame 0x31B54 sends it turned by the
+course camera (0x4DD84). MAME's display lists at attract frames 1500 (Bayside
+Street) and 6000 (the Speedway) give (0, 0, 1) back through the camera's
+matrix; Highland Raceway was not measured.
 
 **Cells** (`banks`, js/bankcells.js). There are no CGM pictures; the 2D is in
 two banks of three tables the program indexes by number:
@@ -7564,8 +7576,11 @@ again. The tab has records 1..7, every segment and second model, on the
 record's set. MAME's attract runs 0x202630 = 1, 2, 3 in turn: the grandstand
 circuit, the alpine one and the town, Country Circuit, Grunwald Circuit and
 Brickwall Town. Not in the tab: the +8 scenes, the cars, a sky (none found)
-and the light (Sega Rally's stands in). Function 6 is 32 pairs from 0x736B0
-(0x1BA4, 0x10FA4, 0x7C2B0, through 0x73648).
+Function 6 is 32 pairs from 0x736B0 (0x1BA4, 0x10FA4, 0x7C2B0, through
+0x73648). The light is not in world space: 0x1BD4 sends (0, -0.707, 0.707)
+every frame as it stands, while the course's matrix turns with the camera
+(MAME's display lists, 5407 sends over the attract), so it stays put in the
+camera's frame, above and ahead (`eyeLight`, turned by the view's camera).
 
 **Cells.** The pictures are AM3's "CGM 1.0" files, read by Sega Rally's
 routines (js/cells.js `cgm`, see [Sega Rally's
@@ -7811,8 +7826,13 @@ course >> 1 (0x5307E0), rows of 0x4DA from 0x49BA0, the moving 0x4CC..0x4CE
 from 0x4599C, and the Check Point gantry (0x4DB/0x4E3, likely 0x47A5C). The
 sky is 0x2AF0 (models 0x3F7..0x40C, tables 0x29B0, 0x2AB0, 0x2AC0). Over Rev
 draws objects 0x1B1, 0x283, 0x28A, 0x290, 0x125 and 0x159 from 0x55B778,
-0x56176C, 0x5618AC, 0x561B70, 0x556BC0 and 0x557194. The material table is
-not read: stages draw at full ambient. 0x2DEC, 0x4B324 and 0xCFE2C read the
+0x56176C, 0x5618AC, 0x561B70, 0x556BC0 and 0x557194. Super GT 24h's light is
+(0, 0, 1) in the camera's frame, a headlight, and its material table is
+function 6 from 0x59F50: the upload asks for 31 pairs, but a second upload
+sends the same first 16 and then other data, so 16 are read. Over Rev's is
+not read, and its stages draw at full ambient: its lights are not unit
+vectors ((x, -1, z)) and change between frames of the attract (by the race's
+hour, perhaps). 0x2DEC, 0x4B324 and 0xCFE2C read the
 model table besides the draw routines. The car is single models; which parts
 make one car, and the colour rows per hour (variant by the race clock), are
 open. 0x3DD14 changes palette entries per frame. In Over Rev the table is
