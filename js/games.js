@@ -8348,7 +8348,10 @@ const topskatr = {
     },
     /* {count, colours} at 0x98D5C onto the face palette from entry 0 (0x20AD0). */
     paletteProgram: 0x98d5c,
-    texture: { raw: { layout: 'topskatr' }, sets: 2, residentSet: null, defaultSet: 1 },
+    /* A bank is a whole sheet of full-size textures, edge to edge: the rows
+     * where a mip chain would be hold textures too, so the viewer stays on
+     * the full-size level (Viewer.setMipLevels), as for Behind Enemy Lines. */
+    texture: { raw: { layout: 'topskatr' }, sets: 2, residentSet: null, defaultSet: 1, mips: false },
     colors: {
         /* The boot's 0x47F30: two bands of (k + 1) >> 1, then 0x2080 bytes
          * of the program ROM at 0xB7D84 from entry 0x800 (0x11401000). */
