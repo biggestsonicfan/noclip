@@ -6176,7 +6176,17 @@ function lastbronxBuild(build) {
          * mesh at polygon RAM word 0x4000, which the program fills itself,
          * and are not shown.
          */
-        modelTable: { source: 'maincpu', offset: 0x189b0, count: 2544, stride: 16 },
+        modelTable: {
+            source: 'maincpu', offset: 0x189b0, count: 2544, stride: 16,
+            /* Texture RAM as the boot (0x9DAC0) sends it: ten records at
+             * 0x9DA30 of a count, a texture RAM word (from 0x800000 on, in
+             * order) and a program ROM source, a halfword a word. Red Eye's
+             * skins (0x9B5E0) take their points and headers from there. */
+            textureRam: [
+                [0x00, 0x9c820], [0x04, 0x9c830], [0x2e, 0x9c888], [0x32, 0x9c890], [0x36, 0x9c8a0],
+                [0x42, 0x9c8c0], [0x4e, 0x9c8e0], [0x5a, 0x9c900], [0x66, 0x9c920], [0x72, 0x9c940],
+            ].map(([from, at]) => ({ from, at: at + code, source: 'maincpu' })),
+        },
         meshPtr: { subtract: 0x02000010, add: 0x10 },
         /* {count, colours}: 318 colours at 0x1872E, copied to the face palette
          * (0x1802000) by 0x157F0. Entries 8 to 19 and 40 to 48 cycle on some
@@ -6281,7 +6291,7 @@ function lastbronxBuild(build) {
          */
         rig: {
             kind: 'lastbrnx', note: 'lastbrnx', code, codeFrom: 0x2a680,
-            fighters: 8, names: 0x503f90, chars, setWord: 12,
+            fighters: 9, names: 0x503f90, chars, setWord: 12,
             motions: { names: 0x52cea0, data: 0x511ba0, heads: 0x52b4d0 },
             sharc: { at: 0x99f8, halfwords: 19698 },
             upload: 0x98d8,
