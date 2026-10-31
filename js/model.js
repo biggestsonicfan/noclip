@@ -57,6 +57,9 @@ function bgr555(cw, out) {
  *
  *   Fighting Vipers: five blocks of one material header each, filled at
  *   boot (`textureRamFill`, textureRamImage).
+ *   Last Bronx: 0x7E words from 0 on, in ten runs out of the program ROM
+ *   (`source: 'maincpu'`), sent by the boot (0x9DAC0): the points and
+ *   header of a skin at Red Eye's right knee.
  *
  * A pointer into texture RAM that no run covers has no points to read.
  */
@@ -68,7 +71,7 @@ function textureAt(rom, ptr) {
     if (runs && (ptr & 0x800000) !== 0) {
         const w = ptr & 0xffff;
         const run = runs.findLast((r) => w >= r.from);
-        if (run) return { src: rom.mainData, base: run.at + (w - run.from) * 2 };
+        if (run) return { src: run.source === 'maincpu' ? rom.maincpu : rom.mainData, base: run.at + (w - run.from) * 2 };
         return { src: rom.mainData, base: -1 };
     }
     return { src: rom.textures, base: ptr * 2 };

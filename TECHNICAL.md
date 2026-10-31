@@ -6882,7 +6882,14 @@ program; the wait on the upload, 0x98D8, is answered by loading it), 0x15B0,
 0x39070, then 0x4BC80, 0x452D0, 0x54A40, 0xB71C0, 0xC7760 and 0x231F0 (both
 with 0x1E240) and 0x4F400. 0x3D700, 0x9DAC0 and 0x146D0 wait on hardware or
 add nothing, and are left out: the draws match those of the whole boot
-word for word. It takes ~180 ms. 0xB5E10 (player, fighter, costume, x,
+word for word. It takes ~180 ms. What 0x9DAC0 sends is read without it: texture RAM 0..0x7D,
+ten records at 0x9DA30 (count, texture RAM word from 0x800000 on, program
+ROM source; a halfword a word, through geometrizer function 4), which the
+profile lists as `modelTable.textureRam` runs from the program ROM. Only Red
+Eye uses it: six skins at his right knee take their points and header from
+0x800036.. and 0x80002E. Its second record, polygon RAM 0x4000 on (0x287
+words from 0x9C960), is the mesh of models 1691, 1692, 1772 and 1773, which
+no fighter draws. 0xB5E10 (player, fighter, costume, x,
 bearing) then sets both players up as the round start (0x2F060) does: the
 fighter in player one's place at the centre, its other costume facing it 3 m
 away. 0x49540 (player, id) starts a motion, id = set << 10 | number, and
@@ -6894,18 +6901,20 @@ head, the other arm, and the weapon (models 1016 on). The model is the one
 whose entry the four words are; the parents are worked out from the frames
 (`jointsOf`, as for Dead or Alive).
 
-The fighters are 0..7, by the 9-byte names at RAM 0x503F90 (YOKO, JOE,
-NAGI, KUROSAWA, YUSAKU, TOMMY, LISA, ZAIMOKU; the ninth, REDEYE, is left
-out). The motions go by weapon, not by fighter: sets 1..8 are kon, ton, kan,
-nun, sai, ssk, bok and ham, and a fighter's set is word 12 of its 128-byte
-record (0xB53B0 + 128 * fighter: 2, 4, 5, 7, 6, 1, 3, 8, so Yoko plays the
-tonfa's). Each set has three tables of pointers, indexed by the motion
+The fighters are 0..8, by the 9-byte names at RAM 0x503F90 (YOKO, JOE,
+NAGI, KUROSAWA, YUSAKU, TOMMY, LISA, ZAIMOKU and the final boss, REDEYE).
+The motions go by weapon, not by fighter: sets 1..8 are kon, ton, kan,
+nun, sai, ssk, bok and ham, set 9 the boss's own (`bos_`), and a fighter's
+set is word 12 of its 128-byte record (0xB53B0 + 128 * fighter: 2, 4, 5, 7,
+6, 1, 3, 8, 9, so Yoko plays the tonfa's). Red Eye is models 2466 to 2494
+with 2294 for the chest, the weapon 1047/1048 (1059/1060 in his second
+costume), and 54 skins. Each set has three tables of pointers, indexed by the motion
 number: 0x52CEA0 the names (`kon_kamae_new_5_0`), 0x511BA0 the
 data (a bitstream in the data ROM, unpacked by 0x4B090 to 0x585890 +
 player * 0x19CC), 0x52B4D0 a 16-byte head whose halfwords at +8 and +10 are
 the data's length in 1/30 s and the motion's in frames. 0x47D48 plays it at
 57.5 * h8 / h10 a frame, and a motion holds its last pose once it ends. That
-is 215, 277, 211, 195, 180, 152, 161 and 155 motions by set. A fighter
+is 215, 277, 211, 195, 180, 152, 161, 155 and 69 motions by set. A fighter
 stands on the set of that fighter alone (9 + 2 * fighter + costume).
 
 The Japan build's code at or above 0x2A680 sits 0x120 higher; the code
