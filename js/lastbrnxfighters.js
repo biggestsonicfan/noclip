@@ -45,6 +45,8 @@ const BUFFER = 0x900000, BUFFER_END = 0x920000;
  * the packet the copro is to write. */
 const GEO_PTR_W = 0x801008, GEO_PTR_R = 0x802008;
 const PACKET = 0x48;
+/* The players' records and places (two matrices each). */
+const PLAYERS = 0x5813b0, PLAYER = 0xb8, PLACES = 0x581520;
 
 /* The SHARC's side of the board (MAME model2.cpp copro_sharc_map). */
 const SH_FIFO_IN = 0x400000, SH_FIFO_OUT = 0xc00000, SH_BUFFER = 0x1400000, SH_END = 0x1c00000;
@@ -234,6 +236,14 @@ export function lastbrnxFightMachine(rom, fighters) {
         cpu.call(at(rom, R.setup), [p, char, costume, 0, xw, 0, aw, 0, 0], { maxSteps: 20_000_000 });
     });
 
+    /* Player p's place, as the draw (0x4A940) loads it: one of two matrices
+     * at 0x581520 + 0x60 p, picked by word 0x44 of its record at
+     * 0x5813B0 + 0xB8 p. */
+    const placeOf = (p) => {
+        const pick = rv.getUint32(PLAYERS - RAM_BASE + PLAYER * p + 0x44, true);
+        const at = PLACES - RAM_BASE + 0x60 * p + 0x30 * pick;
+        return Array.from({ length: 12 }, (_, k) => rv.getFloat32(at + 4 * k, true));
+    };
     const byWords = modelsByWords(rom);
     return {
         cpu, sharc, ram,
@@ -250,10 +260,12 @@ export function lastbrnxFightMachine(rom, fighters) {
             push(6);
             const from = geoPtr;
             /* The skins, built on the parts' matrices just drawn: 0x9B3B0
-             * under the camera (identity here, 0x2A pushing it), then
-             * 0x9B5E0 sends them. */
+             * under the player's place, which 0x2A pushes as the fight's
+             * frame (0x25600) and the draw loads with 0x2B, then 0x9B5E0
+             * sends them. Under identity, Lisa's skirt and ribbons hung
+             * 0.1 behind her: the place moves her that far off its own. */
             push(0x2a);
-            for (const v of IDENTITY) push(floatWord(v));
+            for (const v of placeOf(p)) push(floatWord(v));
             cpu.call(at(rom, R.skin.build), [p], { maxSteps: 20_000_000 });
             push(6);
             cpu.call(at(rom, R.skin.draw), [p], { maxSteps: 20_000_000 });
